@@ -1,0 +1,133 @@
+{
+  "name": "lace",
+  "displayName": "lace",
+  "description": "",
+  "version": "0.0.1",
+  "publisher": "lace",
+  "icon": "Lace_Logo.png",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "laceContainer",
+          "title": "Lace",
+          "icon": "images/lace_logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "laceContainer": [
+        {
+          "id": "laceView",
+          "name": "Lace"
+        },
+        {
+          "id": "components",
+          "name": "Components"
+        },
+        {
+          "id": "templates",
+          "name": "Templates"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "extension.fetchData",
+        "title": "Fetch Data"
+      },
+      {
+        "command": "terraformPlayground.openPanel",
+        "title": "Open Terraform Playground"
+      },
+      {
+        "command": "terraformPlayground.startPlayground",
+        "title": "Start Playground"
+      },
+      {
+        "command": "components.addComponent",
+        "title": "Create New Component",
+        "icon": "$(add)"
+      },
+      {
+        "command": "components.removeComponent",
+        "title": "Delete Component",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "components.openComponent",
+        "title": "Open Component"
+      },
+      {
+        "command": "lace.connect",
+        "title": "Connect to Lace"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "components.addComponent",
+          "when": "view == components",
+          "group": "navigation"
+        },
+        {
+          "command": "components.removeComponent",
+          "when": "view == components",
+          "group": "navigation"
+        }
+      ],
+      "menuBar/file": [
+        {
+          "command": "workbench.action.files.saveAs",
+          "when": "false",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "build": "rspack --config rspack.config.js",
+    "watch": "rspack --watch --config rspack.config.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@rspack/cli": "^1.1.8",
+    "@types/mocha": "^10.0.10",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "20.x",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/sqlite3": "^3.1.11",
+    "@types/vscode": "^1.95.0",
+    "@typescript-eslint/eslint-plugin": "^8.10.0",
+    "@typescript-eslint/parser": "^8.7.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "css-loader": "^7.1.2",
+    "eslint": "^9.13.0",
+    "file-loader": "^6.2.0",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "react": "^18.3.1",
+    "react-flow-renderer": "^10.3.17",
+    "reactflow": "^11.11.4",
+    "sqlite3": "^5.1.7"
+  }
+}

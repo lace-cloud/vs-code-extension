@@ -1,0 +1,116 @@
+// const path = require("path");
+
+// module.exports = {
+//   entry: "./src/extension.ts",
+//   output: {
+//     path: path.resolve(__dirname, "dist"),
+//     filename: "extension.js",
+//     libraryTarget: "commonjs2",
+//   },
+//   target: "node",
+//   resolve: {
+//     extensions: [".ts", ".js"],
+//   },
+//   module: {
+//     rules: [
+//       {
+//         test: /\.ts$/,
+//         use: "ts-loader",
+//         exclude: /node_modules/,
+//       },
+//     ],
+//   },
+//   externals: {
+//     vscode: "commonjs vscode",
+//   },
+// };
+
+// const path = require("path");
+
+// module.exports = {
+//   entry: "./src/extension.ts", // Main entry point
+//   output: {
+//     path: path.resolve(__dirname, "out"), // Output folder
+//     filename: "extension.js",
+//     libraryTarget: "commonjs2",
+//   },
+//   target: "node",
+//   resolve: {
+//     extensions: [".ts", ".js"], // Resolve TypeScript and JavaScript files
+//   },
+//   module: {
+//     rules: [
+//       {
+//         test: /\.ts$/, // Match TypeScript files
+//         use: "ts-loader",
+//         exclude: /node_modules/, // Exclude node_modules
+//       },
+//     ],
+//   },
+//   externals: {
+//     vscode: "commonjs vscode", // Exclude VSCode modules from bundling
+//   },
+//   devtool: "source-map", // Enable source maps for easier debugging
+// };
+
+const path = require("path");
+
+module.exports = [
+  {
+    // Backend (Node.js)
+    entry: "./src/extension.ts",
+    output: {
+      path: path.resolve(__dirname, "out"),
+      filename: "extension.js",
+      libraryTarget: "commonjs2",
+    },
+    target: "node",
+    resolve: {
+      extensions: [".ts", ".js"],
+    },
+    module: {
+      rules: [
+        {
+          test: /\.ts$/,
+          use: "ts-loader",
+          exclude: /node_modules/,
+        },
+      ],
+    },
+    externals: {
+      vscode: "commonjs vscode",
+      sqlite3: "commonjs sqlite3", // Exclude SQLite3 from bundling
+    },
+    devtool: "source-map",
+  },
+  {
+    // Frontend (Webview)
+    entry: "./src/webview/index.tsx",
+    output: {
+      path: path.resolve(__dirname, "out"),
+      filename: "webview.js",
+    },
+    target: "web",
+    resolve: {
+      extensions: [".ts", ".tsx", ".js", ".jsx"],
+    },
+    module: {
+      rules: [
+        {
+          test: /\.tsx?$/,
+          use: "ts-loader",
+          exclude: /node_modules/,
+        },
+        {
+          test: /\.css$/,
+          use: ["style-loader", "css-loader"],
+        },
+      ],
+    },
+    devtool: "source-map",
+  },
+];
+
+
+
+
