@@ -7,5 +7,6 @@ export function getWebviewUri(
   webview: vscode.Webview
 ): vscode.Uri {
   const filePath = vscode.Uri.file(path.join(context.extensionPath, 'images', fileName));
+  console.log(`----${filePath}`);
   return webview.asWebviewUri(filePath);
 }

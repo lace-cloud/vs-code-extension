@@ -107,9 +107,22 @@ module.exports = [
         },
       ],
     },
+    optimization: {
+      runtimeChunk: false,
+      splitChunks: false,
+    },
+  
+    experiments: {
+      css: false,
+    },
     devtool: "source-map",
   },
+  
 ];
+
+
+
+
 
 
 

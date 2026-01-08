@@ -10,20 +10,10 @@ import ReactFlow, {
   EdgeChange,
 } from 'react-flow-renderer';
 
-// declare global {
-//   interface Window {
-//     vscode: {
-//       postMessage: (message: any) => void;
-//     };
-//     iconPaths: { [key: string]: string };
-//   }
-// }
-
 export const Canvas: React.FC = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
-  // Refs to ensure latest state is captured
   const nodesRef = useRef<Node[]>([]);
   const edgesRef = useRef<Edge[]>([]);
 
@@ -32,59 +22,52 @@ export const Canvas: React.FC = () => {
     edgesRef.current = edges;
   }, [nodes, edges]);
 
+  // ✅ SINGLE, STABLE message handler
   useEffect(() => {
-    window.addEventListener('message', (event) => {
+    const handler = (event: MessageEvent) => {
       const { command, state } = event.data || {};
-      if (command === 'loadState' && state) {
-        console.log('Restoring state from extension:', state);
-        setNodes(state.nodes || []);
-        setEdges(state.edges || []);
-      } else if (command === 'triggerSave') {
-        handleSave(); // Trigger save on File > Save
+
+      if (command === 'loadState') {
+        console.log('Restoring canvas state:', state);
+        setNodes(state?.nodes ?? []);
+        setEdges(state?.edges ?? []);
       }
-    });
 
-    // Request initial state load
-    window.vscode.postMessage({ command: 'requestLoadState' });
+      if (command === 'triggerSave') {
+        handleSave();
+      }
+    };
 
-    return () => window.removeEventListener('message', () => {});
+    window.addEventListener('message', handler);
+
+    // 🔥 handshake (this is correct)
+    window.vscode.postMessage({ command: 'webviewReady' });
+
+    return () => {
+      window.removeEventListener('message', handler);
+    };
   }, []);
 
-  useEffect(() => {
-    // Post updated state to the WebView whenever nodes or edges change
-    const state = { nodes, edges };
-    console.log('Posting updated state to WebView:', state);
-    window.vscode.postMessage({ command: 'updateState', state: { nodes: nodesRef.current, edges: edgesRef.current } });
-  }, [nodes, edges]);
-
   const markDirty = useCallback(() => {
-    console.log('Marking canvas as dirty');
     window.vscode.postMessage({ command: 'markDirty' });
   }, []);
 
   const handleSave = useCallback(() => {
-    console.log('Saving canvas state:', { nodes: nodesRef.current, edges: edgesRef.current });
     window.vscode.postMessage({
       command: 'saveState',
-      state: { nodes: nodesRef.current, edges: edgesRef.current },
+      state: {
+        nodes: nodesRef.current,
+        edges: edgesRef.current,
+      },
     });
   }, []);
-
-  // const handleautoSave = useCallback(() => {
-  //   console.log('Saving canvas state:', { nodes: nodesRef.current, edges: edgesRef.current });
-  //   window.vscode.postMessage({
-  //     command: 'autosave',
-  //     state: { nodes: nodesRef.current, edges: edgesRef.current },
-  //   });
-  // }, []);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       setNodes((nds) => {
-        const updatedNodes = applyNodeChanges(changes, nds);
-        console.log('Nodes updated:', updatedNodes);
+        const updated = applyNodeChanges(changes, nds);
         markDirty();
-        return updatedNodes;
+        return updated;
       });
     },
     [markDirty]
@@ -93,10 +76,9 @@ export const Canvas: React.FC = () => {
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       setEdges((eds) => {
-        const updatedEdges = applyEdgeChanges(changes, eds);
-        console.log('Edges updated:', updatedEdges);
+        const updated = applyEdgeChanges(changes, eds);
         markDirty();
-        return updatedEdges;
+        return updated;
       });
     },
     [markDirty]
@@ -105,35 +87,30 @@ export const Canvas: React.FC = () => {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      const nodeType = event.dataTransfer.getData('application/reactflow');
-      const position = { x: event.clientX - 200, y: event.clientY - 50 };
 
-      const newNode: Node = {
-        id: `${nodeType}-${nodes.length + 1}`,
-        type: 'default',
-        position,
-        data: { label: nodeType },
+      const type = event.dataTransfer.getData('application/reactflow');
+      if (!type) return;
+
+      const position = {
+        x: event.clientX - 250,
+        y: event.clientY - 100,
       };
 
-      console.log('Node dropped:', newNode);
+      const newNode: Node = {
+        id: `${type}-${Date.now()}`,
+        type: 'default',
+        position,
+        data: { label: type },
+      };
 
-      setNodes((nds) => {
-        const updatedNodes = [...nds, newNode];
-        console.log('Nodes after drop:', updatedNodes);
-        markDirty();
-        return updatedNodes;
-      });
+      setNodes((nds) => [...nds, newNode]);
+      markDirty();
     },
-    [nodes, markDirty]
+    [markDirty]
   );
 
-  const onDragOver = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  };
-
   return (
-    <div className="canvas" onDrop={onDrop} onDragOver={onDragOver}>
+    <div className="canvas" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
