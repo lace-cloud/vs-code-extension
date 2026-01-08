@@ -10,6 +10,13 @@ import ReactFlow, {
   EdgeChange,
 } from 'react-flow-renderer';
 
+import AwsNode from './nodes/AwsNode';
+
+const nodeTypes = {
+  awsNode: AwsNode,
+};
+
+
 export const Canvas: React.FC = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -96,12 +103,23 @@ export const Canvas: React.FC = () => {
         y: event.clientY - 100,
       };
 
+      // const newNode: Node = {
+      //   id: `${type}-${Date.now()}`,
+      //   type: 'default',
+      //   position,
+      //   data: { label: type },
+      // };
+
       const newNode: Node = {
         id: `${type}-${Date.now()}`,
-        type: 'default',
+        type: 'awsNode',
         position,
-        data: { label: type },
+        data: {
+          label: type.toUpperCase(),
+          icon: window.iconPaths[type], // 🔥 same image as sidebar
+        },
       };
+
 
       setNodes((nds) => [...nds, newNode]);
       markDirty();
@@ -111,9 +129,17 @@ export const Canvas: React.FC = () => {
 
   return (
     <div className="canvas" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+      {/* <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        fitView
+      > */}
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
