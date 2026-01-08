@@ -18,14 +18,6 @@ export async function createWebviewPanel(
     return;
   }
 
-  // Create a new webview panel
-  // const panel = vscode.window.createWebviewPanel(
-  //   'lace',
-  //   componentName,
-  //   vscode.ViewColumn.One,
-  //   { enableScripts: true }
-  // );
-
   const panel = vscode.window.createWebviewPanel(
     'lace',
     componentName,
@@ -54,54 +46,48 @@ export async function createWebviewPanel(
   panel.webview.html = getWebviewContent(context, panel.webview, ec2Uri, s3Uri, lambdaUri);
 
   const componentId = await getComponentIdByName(componentName);
-  // if (componentId) {
-  //   const canvasState = await loadCanvasState(componentId);
-  //   console.log('Loaded canvas state1:', canvasState);
-  //   panel.webview.postMessage({ command: 'loadState', state: canvasState });
 
-    
-  // }
 
   let cachedState = null;
 
-if (componentId) {
-  cachedState = await loadCanvasState(componentId);
-  console.log('cached state loaded:', cachedState);
-}
-
-panel.webview.onDidReceiveMessage(async (message) => {
-  console.log('EXTENSION RECEIVED:', message.command);
-
-  const componentId = await getComponentIdByName(componentName);
-  if (!componentId) return;
-
-  switch (message.command) {
-    case 'webviewReady':
-      panel.webview.postMessage({
-        command: 'loadState',
-        state: cachedState ?? { nodes: [], edges: [] },
-      });
-      break;
-
-    case 'saveState':
-      await saveCanvasState(componentId, message.state);
-      panel.title = componentName;
-      break;
-
-    case 'markDirty':
-      panel.title = `${componentName} ●`;
-      panel.webview.postMessage({ command: 'triggerSave' });
-      break;
-
-    case 'requestLoadState':
-      const state = await loadCanvasState(componentId);
-      panel.webview.postMessage({
-        command: 'loadState',
-        state: state ?? { nodes: [], edges: [] },
-      });
-      break;
+  if (componentId) {
+    cachedState = await loadCanvasState(componentId);
+    console.log('cached state loaded:', cachedState);
   }
-});
+
+  panel.webview.onDidReceiveMessage(async (message) => {
+    console.log('EXTENSION RECEIVED:', message.command);
+
+    const componentId = await getComponentIdByName(componentName);
+    if (!componentId) return;
+
+    switch (message.command) {
+      case 'webviewReady':
+        panel.webview.postMessage({
+          command: 'loadState',
+          state: cachedState ?? { nodes: [], edges: [] },
+        });
+        break;
+
+      case 'saveState':
+        await saveCanvasState(componentId, message.state);
+        panel.title = componentName;
+        break;
+
+      case 'markDirty':
+        panel.title = `${componentName} ●`;
+        panel.webview.postMessage({ command: 'triggerSave' });
+        break;
+
+      case 'requestLoadState':
+        const state = await loadCanvasState(componentId);
+        panel.webview.postMessage({
+          command: 'loadState',
+          state: state ?? { nodes: [], edges: [] },
+        });
+        break;
+    }
+  });
 
 
   // Clean up when the panel is closed

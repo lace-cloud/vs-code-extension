@@ -103,12 +103,6 @@ export const Canvas: React.FC = () => {
         y: event.clientY - 100,
       };
 
-      // const newNode: Node = {
-      //   id: `${type}-${Date.now()}`,
-      //   type: 'default',
-      //   position,
-      //   data: { label: type },
-      // };
 
       const newNode: Node = {
         id: `${type}-${Date.now()}`,
@@ -129,13 +123,7 @@ export const Canvas: React.FC = () => {
 
   return (
     <div className="canvas" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
-      {/* <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        fitView
-      > */}
+      
       <ReactFlow
         nodes={nodes}
         edges={edges}
