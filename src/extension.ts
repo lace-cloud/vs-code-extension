@@ -7,6 +7,8 @@ import {updateStatusBar} from './statusbar/UpdateStatusBar';
 import { addComponent, getComponents, removeComponent, initializeDatabase, saveCanvasState, getComponentIdByName, loadCanvasState } from './database';
 import { createWebviewPanel } from './webview/createWebviewPanel';
 
+import {syncModulesFromCLI} from './utilities/cli';
+
 
 let componentsProvider: ComponentsTreeDataProvider | undefined;
 let templatesProvider: TemplatesTreeDataProvider | undefined;
@@ -45,6 +47,8 @@ export async function activate(context: vscode.ExtensionContext) {
   console.log('Lace Extension Activated');
 
   console.log('Ensure the database schema is ready');
+  const output=await syncModulesFromCLI();
+  console.log(`-----Executing lace cli------ ${output}` );
   await initializeDatabase(); // Ensure the database schema is ready
 
   // Assign to global variables to ensure they can be accessed in refreshTreeViews
