@@ -39,11 +39,13 @@ export async function createWebviewPanel(
   const ec2Uri = getWebviewUri(context, 'EC2.png', panel.webview);
   const s3Uri = getWebviewUri(context, 's3.svg', panel.webview);
   const lambdaUri = getWebviewUri(context, 'lambda.svg', panel.webview);
+  const iamUri = getWebviewUri(context, 'iam-role.svg', panel.webview);
+  const iampolicyUri=getWebviewUri(context, 'iam-policy.svg', panel.webview);
 
-  console.log(`---s3uri-----${s3Uri}`);
+  console.log(`---iamUri-----${iamUri}`);
 
   // Set webview HTML content
-  panel.webview.html = getWebviewContent(context, panel.webview, ec2Uri, s3Uri, lambdaUri);
+  panel.webview.html = getWebviewContent(context, panel.webview, ec2Uri, s3Uri, lambdaUri,iamUri,iampolicyUri);
 
   const componentId = await getComponentIdByName(componentName);
 

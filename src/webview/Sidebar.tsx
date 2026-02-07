@@ -10,6 +10,8 @@ const icons = [
   { id: 'ec2', label: 'EC2', icon: 'ec2' },
   { id: 's3', label: 'S3', icon: 's3' },
   { id: 'lambda', label: 'Lambda', icon: 'lambda' },
+  { id: 'iam_role', label: 'IAM_Role', icon: 'iam_role' },
+  { id: 'iam_policy', label: 'IAM_Policy', icon: 'iam_policy' }
 ];
 
 const Sidebar: React.FC = () => {

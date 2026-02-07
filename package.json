@@ -69,8 +69,30 @@
       {
         "command": "lace.connect",
         "title": "Connect to Lace"
-      }
+      },
+      { "command": "lace.startEngine", "title": "Lace: Start Engine" },
+      { "command": "lace.stopEngine", "title": "Lace: Stop Engine" },
+      { "command": "lace.restartEngine", "title": "Lace: Restart Engine" }
     ],
+    "configuration": {
+      "title": "Lace",
+      "properties": {
+        "lace.binaryPath": {
+          "type": "string",
+          "default": "/usr/local/bin/lace",
+          "description": "Path to the lace CLI binary"
+        },
+        "lace.autoStart": {
+          "type": "boolean",
+          "default": true
+        },
+        "lace.autoRestart": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    
     "menus": {
       "view/title": [
         {
@@ -93,6 +115,7 @@
       ]
     }
   },
+  
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",

@@ -1,0 +1,9 @@
+{
+  "module_id": "simple-role-with-policy",
+  "version": "v1.0.0",
+  "instance_mappings": {
+    "attachment": "aws/iam/policy_attachment",
+    "policy": "aws/iam/policy",
+    "role": "aws/iam/role"
+  }
+}

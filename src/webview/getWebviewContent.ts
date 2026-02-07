@@ -10,7 +10,9 @@ export function getWebviewContent(
   webview: vscode.Webview,
   ec2Uri: vscode.Uri,
   s3Uri: vscode.Uri,
-  lambdaUri: vscode.Uri
+  lambdaUri: vscode.Uri,
+  iamroleUri: vscode.Uri,
+  iampolicyUri: vscode.Uri
 ): string {
   const nonce = getNonce();
 
@@ -83,7 +85,9 @@ export function getWebviewContent(
     window.iconPaths = {
       ec2: "${ec2Uri}",
       s3: "${s3Uri}",
-      lambda: "${lambdaUri}"
+      lambda: "${lambdaUri}",
+      iam_role: "${iamroleUri}",
+      iam_policy: "${iampolicyUri}"
     };
 
     // window.vscode.postMessage({ command: 'webviewReady' });
