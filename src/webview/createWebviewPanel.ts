@@ -1,20 +1,28 @@
 import * as vscode from 'vscode';
 import { getWebviewUri } from './getWebviewUri';
 import { getWebviewContent } from './getWebviewContent';
-import { getComponentIdByName, loadCanvasState, saveCanvasState } from '../database';
+import {
+  getComponentIdByName,
+  loadCanvasState,
+  saveCanvasState
+} from '../database';
 import path from 'path';
 
+/**
+ * 🔑 Central registry of open component panels
+ */
 const panels: Map<string, vscode.WebviewPanel> = new Map();
-let autoSaveEnabled = true;
 
+/**
+ * Open (or reveal) a component webview
+ */
 export async function createWebviewPanel(
   componentName: string,
   context: vscode.ExtensionContext
 ) {
-  // Check if a panel already exists
+  // 🔁 If already open, just reveal
   if (panels.has(componentName)) {
-    const panel = panels.get(componentName)!;
-    panel.reveal();
+    panels.get(componentName)!.reveal();
     return;
   }
 
@@ -26,12 +34,10 @@ export async function createWebviewPanel(
       enableScripts: true,
       localResourceRoots: [
         vscode.Uri.file(path.join(context.extensionPath, 'out')),
-        vscode.Uri.joinPath(context.extensionUri, 'images')
-
+        vscode.Uri.joinPath(context.extensionUri, 'images'),
       ],
     }
   );
-  
 
   panels.set(componentName, panel);
 
@@ -40,26 +46,26 @@ export async function createWebviewPanel(
   const s3Uri = getWebviewUri(context, 's3.svg', panel.webview);
   const lambdaUri = getWebviewUri(context, 'lambda.svg', panel.webview);
   const iamUri = getWebviewUri(context, 'iam-role.svg', panel.webview);
-  const iampolicyUri=getWebviewUri(context, 'iam-policy.svg', panel.webview);
+  const iamPolicyUri = getWebviewUri(context, 'iam-policy.svg', panel.webview);
 
-  console.log(`---iamUri-----${iamUri}`);
-
-  // Set webview HTML content
-  panel.webview.html = getWebviewContent(context, panel.webview, ec2Uri, s3Uri, lambdaUri,iamUri,iampolicyUri);
+  panel.webview.html = getWebviewContent(
+    context,
+    panel.webview,
+    ec2Uri,
+    s3Uri,
+    lambdaUri,
+    iamUri,
+    iamPolicyUri
+  );
 
   const componentId = await getComponentIdByName(componentName);
-
-
   let cachedState = null;
 
   if (componentId) {
     cachedState = await loadCanvasState(componentId);
-    console.log('cached state loaded:', cachedState);
   }
 
   panel.webview.onDidReceiveMessage(async (message) => {
-    console.log('EXTENSION RECEIVED:', message.command);
-
     const componentId = await getComponentIdByName(componentName);
     if (!componentId) return;
 
@@ -91,9 +97,19 @@ export async function createWebviewPanel(
     }
   });
 
-
-  // Clean up when the panel is closed
+  // 🧹 Cleanup on close
   panel.onDidDispose(() => {
     panels.delete(componentName);
   });
+}
+
+/**
+ * 🔥 CLOSE an open component panel (used on delete)
+ */
+export function closeComponentPanel(componentName: string) {
+  const panel = panels.get(componentName);
+  if (panel) {
+    panel.dispose();
+    panels.delete(componentName);
+  }
 }

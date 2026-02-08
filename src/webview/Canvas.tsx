@@ -16,7 +16,6 @@ const nodeTypes = {
   awsNode: AwsNode,
 };
 
-
 export const Canvas: React.FC = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -24,18 +23,18 @@ export const Canvas: React.FC = () => {
   const nodesRef = useRef<Node[]>([]);
   const edgesRef = useRef<Edge[]>([]);
 
+  // keep refs in sync for save
   useEffect(() => {
     nodesRef.current = nodes;
     edgesRef.current = edges;
   }, [nodes, edges]);
 
-  // ✅ SINGLE, STABLE message handler
+  // VS Code messaging
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const { command, state } = event.data || {};
 
       if (command === 'loadState') {
-        console.log('Restoring canvas state:', state);
         setNodes(state?.nodes ?? []);
         setEdges(state?.edges ?? []);
       }
@@ -46,13 +45,9 @@ export const Canvas: React.FC = () => {
     };
 
     window.addEventListener('message', handler);
-
-    // 🔥 handshake (this is correct)
     window.vscode.postMessage({ command: 'webviewReady' });
 
-    return () => {
-      window.removeEventListener('message', handler);
-    };
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   const markDirty = useCallback(() => {
@@ -69,10 +64,27 @@ export const Canvas: React.FC = () => {
     });
   }, []);
 
+  // 🔥 Node changes (including delete)
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       setNodes((nds) => {
         const updated = applyNodeChanges(changes, nds);
+
+        // detect removed nodes
+        const removedIds = changes
+          .filter((c) => c.type === 'remove')
+          .map((c) => c.id);
+
+        if (removedIds.length) {
+          setEdges((eds) =>
+            eds.filter(
+              (e) =>
+                !removedIds.includes(e.source) &&
+                !removedIds.includes(e.target)
+            )
+          );
+        }
+
         markDirty();
         return updated;
       });
@@ -91,6 +103,7 @@ export const Canvas: React.FC = () => {
     [markDirty]
   );
 
+  // drag from sidebar
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
@@ -103,17 +116,15 @@ export const Canvas: React.FC = () => {
         y: event.clientY - 100,
       };
 
-
       const newNode: Node = {
         id: `${type}-${Date.now()}`,
         type: 'awsNode',
         position,
         data: {
           label: type.toUpperCase(),
-          icon: window.iconPaths[type], // 🔥 same image as sidebar
+          icon: window.iconPaths[type],
         },
       };
-
 
       setNodes((nds) => [...nds, newNode]);
       markDirty();
@@ -122,8 +133,11 @@ export const Canvas: React.FC = () => {
   );
 
   return (
-    <div className="canvas" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
-      
+    <div
+      className="canvas"
+      onDrop={onDrop}
+      onDragOver={(e) => e.preventDefault()}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}

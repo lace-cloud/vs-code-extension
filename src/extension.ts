@@ -9,17 +9,17 @@ import {
   removeComponent,
   initializeDatabase
 } from './database';
-import { createWebviewPanel } from './webview/createWebviewPanel';
+import {
+  createWebviewPanel,
+  closeComponentPanel
+} from './webview/createWebviewPanel';
 import { ServerManager } from './utilities/engine/server-manager';
 import { syncModulesFromCLI } from './utilities/cli';
 
 let componentsProvider: ComponentsTreeDataProvider | undefined;
 let templatesProvider: TemplatesTreeDataProvider | undefined;
 
-// Auth state
 let isAuthenticated = false;
-
-// Lace engine
 let server: ServerManager;
 let engineStatusBar: vscode.StatusBarItem;
 
@@ -66,14 +66,12 @@ export async function activate(context: vscode.ExtensionContext) {
   await syncModulesFromCLI();
   await initializeDatabase();
 
-  // Tree views
   componentsProvider = new ComponentsTreeDataProvider();
   templatesProvider = new TemplatesTreeDataProvider();
 
   vscode.window.registerTreeDataProvider('components', componentsProvider);
   vscode.window.registerTreeDataProvider('templates', templatesProvider);
 
-  // Lace Engine
   server = new ServerManager(context);
   engineStatusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
@@ -114,7 +112,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       const name = await vscode.window.showInputBox({
-        prompt: 'Enter component name'
+        prompt: 'Enter component name',
       });
 
       if (!name) return;
@@ -131,7 +129,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
       const components = await getComponents();
       const pick = await vscode.window.showQuickPick(
-        components.map(c => c.name)
+        components.map(c => c.name),
+        { placeHolder: 'Select component to delete' }
       );
 
       if (!pick) return;
@@ -139,7 +138,13 @@ export async function activate(context: vscode.ExtensionContext) {
       const component = components.find(c => c.name === pick);
       if (!component) return;
 
+      // 🔥 CLOSE OPEN EDITOR FIRST
+      closeComponentPanel(component.name);
+
+      // 🔥 DELETE FROM DB
       await removeComponent(component.id);
+
+      // 🔄 REFRESH TREE
       componentsProvider?.refresh();
     })
   );
