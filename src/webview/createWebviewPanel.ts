@@ -1,26 +1,22 @@
+// src/panels/createWebviewPanel.ts
 import * as vscode from 'vscode';
-import { getWebviewUri } from './getWebviewUri';
+import path from 'path';
 import { getWebviewContent } from './getWebviewContent';
+import { getWebviewUri } from './getWebviewUri';
 import {
   getComponentIdByName,
   loadCanvasState,
-  saveCanvasState
+  saveCanvasState,
 } from '../database';
-import path from 'path';
+import { ServerManager } from '../utilities/engine/server-manager';
 
-/**
- * 🔑 Central registry of open component panels
- */
-const panels: Map<string, vscode.WebviewPanel> = new Map();
+const panels = new Map<string, vscode.WebviewPanel>();
 
-/**
- * Open (or reveal) a component webview
- */
 export async function createWebviewPanel(
   componentName: string,
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
+  server: ServerManager
 ) {
-  // 🔁 If already open, just reveal
   if (panels.has(componentName)) {
     panels.get(componentName)!.reveal();
     return;
@@ -41,44 +37,102 @@ export async function createWebviewPanel(
 
   panels.set(componentName, panel);
 
-  // Resolve image URIs
-  const ec2Uri = getWebviewUri(context, 'EC2.png', panel.webview);
-  const s3Uri = getWebviewUri(context, 's3.svg', panel.webview);
-  const lambdaUri = getWebviewUri(context, 'lambda.svg', panel.webview);
-  const iamUri = getWebviewUri(context, 'iam-role.svg', panel.webview);
-  const iamPolicyUri = getWebviewUri(context, 'iam-policy.svg', panel.webview);
-
   panel.webview.html = getWebviewContent(
     context,
     panel.webview,
-    ec2Uri,
-    s3Uri,
-    lambdaUri,
-    iamUri,
-    iamPolicyUri
+    getWebviewUri(context, 'EC2.png', panel.webview),
+    getWebviewUri(context, 's3.svg', panel.webview),
+    getWebviewUri(context, 'lambda.svg', panel.webview),
+    getWebviewUri(context, 'iam-role.svg', panel.webview),
+    getWebviewUri(context, 'iam-policy.svg', panel.webview)
   );
 
   const componentId = await getComponentIdByName(componentName);
-  let cachedState = null;
+  let cachedState: any = null;
 
   if (componentId) {
-    cachedState = await loadCanvasState(componentId);
+    const raw = await loadCanvasState(componentId);
+    cachedState = typeof raw === 'string' ? JSON.parse(raw) : raw;
   }
 
-  panel.webview.onDidReceiveMessage(async (message) => {
-    const componentId = await getComponentIdByName(componentName);
+  /* --------------------------------------------- */
+  /* Registry List                                 */
+  /* --------------------------------------------- */
+  async function sendRegistryList() {
+    const rpc = server.rpcClient;
+
+    if (!rpc) {
+      panel.webview.postMessage({
+        command: 'registryList',
+        modules: {},
+        error: 'Lace engine not running',
+      });
+      return;
+    }
+
+    const list = await rpc.listRegistryModules();
+    console.log('[registry/list]', list);
+
+    const tree: Record<string, any[]> = {};
+
+    for (const m of list.modules ?? []) {
+      const categories: string[] =
+        Array.isArray(m.categories) && m.categories.length > 0
+          ? m.categories
+          : ['misc'];
+
+      for (const cat of categories) {
+        if (!tree[cat]) tree[cat] = [];
+        if (!tree[cat].some((x) => x.id === m.id)) {
+          tree[cat].push(m);
+        }
+      }
+    }
+
+    panel.webview.postMessage({
+      command: 'registryList',
+      modules: tree,
+      pagination: list.pagination,
+    });
+  }
+
+  /* --------------------------------------------- */
+  /* Webview messages                              */
+  /* --------------------------------------------- */
+  panel.webview.onDidReceiveMessage(async (msg) => {
     if (!componentId) return;
 
-    switch (message.command) {
+    switch (msg.command) {
       case 'webviewReady':
         panel.webview.postMessage({
           command: 'loadState',
           state: cachedState ?? { nodes: [], edges: [] },
         });
+        await sendRegistryList();
         break;
 
+      case 'fetchModuleVersion': {
+        const rpc = server.rpcClient;
+        if (!rpc) return;
+
+        const data = await rpc.getRegistryVersion({
+          name: msg.name,
+          system: msg.system,
+          version: msg.version,
+        });
+
+        panel.webview.postMessage({
+          command: 'moduleVersionData',
+          requestId: msg.requestId,
+          ok: true,
+          data,
+        });
+        break;
+      }
+
       case 'saveState':
-        await saveCanvasState(componentId, message.state);
+        await saveCanvasState(componentId, msg.state);
+        cachedState = msg.state;
         panel.title = componentName;
         break;
 
@@ -86,30 +140,13 @@ export async function createWebviewPanel(
         panel.title = `${componentName} ●`;
         panel.webview.postMessage({ command: 'triggerSave' });
         break;
-
-      case 'requestLoadState':
-        const state = await loadCanvasState(componentId);
-        panel.webview.postMessage({
-          command: 'loadState',
-          state: state ?? { nodes: [], edges: [] },
-        });
-        break;
     }
   });
 
-  // 🧹 Cleanup on close
-  panel.onDidDispose(() => {
-    panels.delete(componentName);
-  });
+  panel.onDidDispose(() => panels.delete(componentName));
 }
 
-/**
- * 🔥 CLOSE an open component panel (used on delete)
- */
 export function closeComponentPanel(componentName: string) {
-  const panel = panels.get(componentName);
-  if (panel) {
-    panel.dispose();
-    panels.delete(componentName);
-  }
+  panels.get(componentName)?.dispose();
+  panels.delete(componentName);
 }

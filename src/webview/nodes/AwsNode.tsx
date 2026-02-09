@@ -4,29 +4,35 @@ import { Handle, Position, NodeProps, useReactFlow } from 'react-flow-renderer';
 const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
   const { setNodes, setEdges } = useReactFlow();
 
-  const handleDelete = () => {
-    setNodes((nds) => nds.filter((n) => n.id !== id));
-    setEdges((eds) =>
-      eds.filter((e) => e.source !== id && e.target !== id)
+  const onDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNodes((n) => n.filter((x) => x.id !== id));
+    setEdges((e) =>
+      e.filter((x) => x.source !== id && x.target !== id)
     );
+    data?.onDirty?.();
   };
 
   return (
     <div
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        data?.onOpenConfig?.(id);
+      }}
       style={{
-        position: 'relative',
         background: '#1e1e1e',
         border: '1px solid #333',
         borderRadius: 8,
         padding: 10,
-        width: 120,
-        textAlign: 'center',
+        width: 140,
         color: '#fff',
+        textAlign: 'center',
+        cursor: 'pointer',
+        position: 'relative',
       }}
     >
-      {/* ❌ Delete button */}
       <button
-        onClick={handleDelete}
+        onClick={onDelete}
         style={{
           position: 'absolute',
           top: 4,
@@ -34,27 +40,17 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
           width: 18,
           height: 18,
           borderRadius: '50%',
-          border: 'none',
           background: '#e5484d',
+          border: 'none',
           color: '#fff',
           fontSize: 12,
-          cursor: 'pointer',
-          lineHeight: '18px',
         }}
       >
         ✕
       </button>
 
       <Handle type="target" position={Position.Top} />
-
-      <img
-        src={data.icon}
-        alt={data.label}
-        style={{ width: 36, height: 36, marginBottom: 6 }}
-      />
-
       <div style={{ fontSize: 12 }}>{data.label}</div>
-
       <Handle type="source" position={Position.Bottom} />
     </div>
   );

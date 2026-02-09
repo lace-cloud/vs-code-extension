@@ -1,46 +1,144 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import ReactFlow, {
+  ReactFlowProvider,
   applyNodeChanges,
   applyEdgeChanges,
   Background,
   Controls,
-  Node,
-  Edge,
-  NodeChange,
-  EdgeChange,
 } from 'react-flow-renderer';
 
 import AwsNode from './nodes/AwsNode';
+import ModuleConfigPanel from './panels/ModuleConfigPanel';
 
-const nodeTypes = {
-  awsNode: AwsNode,
+const nodeTypes = { awsNode: AwsNode };
+
+/* ---------------------------------- */
+/* Types                              */
+/* ---------------------------------- */
+
+type RegistryModule = {
+  id: string;
+  name: string;
+  system: string;
+  version: string;
+  kind: 'leaf' | 'composite';
+  categories?: string[];
 };
 
-export const Canvas: React.FC = () => {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+type RegistryTree = {
+  [system: string]: {
+    [category: string]: RegistryModule[];
+  };
+};
 
-  const nodesRef = useRef<Node[]>([]);
-  const edgesRef = useRef<Edge[]>([]);
+/* ---------------------------------- */
+/* Helpers                            */
+/* ---------------------------------- */
 
-  // keep refs in sync for save
+function buildRegistryTree(modules: RegistryModule[]): RegistryTree {
+  const tree: RegistryTree = {};
+
+  modules.forEach((m) => {
+    const system = m.system ?? 'unknown';
+    const categories =
+      Array.isArray(m.categories) && m.categories.length > 0
+        ? m.categories
+        : ['misc'];
+
+    if (!tree[system]) tree[system] = {};
+
+    categories.forEach((cat) => {
+      if (!tree[system][cat]) tree[system][cat] = [];
+      if (!tree[system][cat].some((x) => x.id === m.id)) {
+        tree[system][cat].push(m);
+      }
+    });
+  });
+
+  return tree;
+}
+
+/* ---------------------------------- */
+/* Canvas Inner                       */
+/* ---------------------------------- */
+
+function CanvasInner() {
+  const [nodes, setNodes] = useState<any[]>([]);
+  const [edges, setEdges] = useState<any[]>([]);
+  const [registryTree, setRegistryTree] = useState<RegistryTree>({});
+  const [activeNode, setActiveNode] = useState<any>(null);
+
+  const nodesRef = useRef<any[]>([]);
+  const edgesRef = useRef<any[]>([]);
+  const pending = useRef<Record<number, string>>({});
+
+  /* ---------- helpers ---------- */
+
+  const markDirty = () =>
+    window.vscode.postMessage({ command: 'markDirty' });
+
+  const hydrate = (nodes: any[]) =>
+    nodes.map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        onDirty: markDirty,
+        onOpenConfig: (id: string) =>
+          setActiveNode(nodes.find((x) => x.id === id)),
+      },
+    }));
+
   useEffect(() => {
     nodesRef.current = nodes;
     edgesRef.current = edges;
   }, [nodes, edges]);
 
-  // VS Code messaging
-  useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      const { command, state } = event.data || {};
+  /* ---------- message handler ---------- */
 
-      if (command === 'loadState') {
-        setNodes(state?.nodes ?? []);
-        setEdges(state?.edges ?? []);
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const m = e.data;
+
+      if (m.command === 'loadState') {
+        setNodes(hydrate(m.state?.nodes ?? []));
+        setEdges(m.state?.edges ?? []);
       }
 
-      if (command === 'triggerSave') {
-        handleSave();
+      if (m.command === 'registryList') {
+        const modulesArray: RegistryModule[] = Array.isArray(m.modules)
+          ? m.modules
+          : Object.values(m.modules ?? {}).flat();
+
+        const tree = buildRegistryTree(modulesArray);
+        setRegistryTree(tree);
+      }
+
+      if (m.command === 'triggerSave') {
+        window.vscode.postMessage({
+          command: 'saveState',
+          state: {
+            nodes: nodesRef.current,
+            edges: edgesRef.current,
+          },
+        });
+      }
+
+      if (m.command === 'moduleVersionData') {
+        const id = pending.current[m.requestId];
+        if (!id) return;
+
+        setNodes((n) =>
+          hydrate(
+            n.map((x) =>
+              x.id === id
+                ? {
+                    ...x,
+                    data: { ...x.data, schema: m.data?.schema },
+                  }
+                : x
+            )
+          )
+        );
       }
     };
 
@@ -50,107 +148,183 @@ export const Canvas: React.FC = () => {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const markDirty = useCallback(() => {
-    window.vscode.postMessage({ command: 'markDirty' });
-  }, []);
+  /* ---------- drag / drop ---------- */
 
-  const handleSave = useCallback(() => {
-    window.vscode.postMessage({
-      command: 'saveState',
-      state: {
-        nodes: nodesRef.current,
-        edges: edgesRef.current,
-      },
-    });
-  }, []);
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
 
-  // 🔥 Node changes (including delete)
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((nds) => {
-        const updated = applyNodeChanges(changes, nds);
+    const raw = e.dataTransfer.getData('application/reactflow');
+    if (!raw) return;
 
-        // detect removed nodes
-        const removedIds = changes
-          .filter((c) => c.type === 'remove')
-          .map((c) => c.id);
+    const mod: RegistryModule = JSON.parse(raw);
 
-        if (removedIds.length) {
-          setEdges((eds) =>
-            eds.filter(
-              (e) =>
-                !removedIds.includes(e.source) &&
-                !removedIds.includes(e.target)
-            )
-          );
-        }
+    if (mod.kind !== 'leaf') return;
 
-        markDirty();
-        return updated;
-      });
-    },
-    [markDirty]
-  );
+    const id = `${mod.system}-${mod.name}-${Date.now()}`;
 
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      setEdges((eds) => {
-        const updated = applyEdgeChanges(changes, eds);
-        markDirty();
-        return updated;
-      });
-    },
-    [markDirty]
-  );
-
-  // drag from sidebar
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-
-      const type = event.dataTransfer.getData('application/reactflow');
-      if (!type) return;
-
-      const position = {
-        x: event.clientX - 250,
-        y: event.clientY - 100,
-      };
-
-      const newNode: Node = {
-        id: `${type}-${Date.now()}`,
-        type: 'awsNode',
-        position,
-        data: {
-          label: type.toUpperCase(),
-          icon: window.iconPaths[type],
+    setNodes((n) =>
+      hydrate([
+        ...n,
+        {
+          id,
+          type: 'awsNode',
+          position: {
+            x: e.clientX - 320,
+            y: e.clientY - 120,
+          },
+          data: {
+            label: mod.name,
+            moduleRef: mod,
+          },
         },
-      };
+      ])
+    );
 
-      setNodes((nds) => [...nds, newNode]);
-      markDirty();
-    },
-    [markDirty]
-  );
+    const reqId = Date.now();
+    pending.current[reqId] = id;
+
+    window.vscode.postMessage({
+      command: 'fetchModuleVersion',
+      requestId: reqId,
+      name: mod.name,
+      system: mod.system,
+      version: mod.version,
+    });
+
+    markDirty();
+  };
+
+  /* ---------------------------------- */
+  /* Render                             */
+  /* ---------------------------------- */
 
   return (
-    <div
-      className="canvas"
-      onDrop={onDrop}
-      onDragOver={(e) => e.preventDefault()}
-    >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        fitView
+    <div style={{ display: 'flex', height: '100vh' }}>
+      {/* ---------- REGISTRY SIDEBAR ---------- */}
+      <div
+        style={{
+          width: 300,
+          padding: 8,
+          borderRight: '1px solid #333',
+          overflowY: 'auto',
+        }}
       >
-        <Controls />
-        <Background />
-      </ReactFlow>
+        {Object.keys(registryTree).length === 0 && (
+          <div style={{ opacity: 0.6 }}>No modules available</div>
+        )}
+
+        {Object.entries(registryTree).map(([system, categories]) => (
+          <div key={system} style={{ marginBottom: 14 }}>
+            <div
+              style={{
+                fontWeight: 'bold',
+                textTransform: 'uppercase',
+                marginBottom: 6,
+              }}
+            >
+              {system}
+            </div>
+
+            {Object.entries(categories).map(([category, modules]) => (
+              <details key={category} open style={{ marginLeft: 8 }}>
+                <summary style={{ cursor: 'pointer' }}>
+                  {category}
+                </summary>
+
+                {modules.map((m) => (
+                  <div
+                    key={m.id}
+                    draggable={m.kind === 'leaf'}
+                    onDragStart={(e) => {
+                      if (m.kind !== 'leaf') return;
+
+                      e.dataTransfer.setData(
+                        'application/reactflow',
+                        JSON.stringify({
+                          id: m.id,
+                          name: m.name,
+                          system: m.system,
+                          version: m.version,
+                          kind: m.kind,
+                        })
+                      );
+                    }}
+                    style={{
+                      marginLeft: 20,
+                      padding: '4px 6px',
+                      cursor:
+                        m.kind === 'leaf' ? 'grab' : 'default',
+                      opacity: m.kind === 'leaf' ? 1 : 0.5,
+                      userSelect: 'none',
+                    }}
+                  >
+                    📦 {m.name} <span style={{ opacity: 0.6 }}>v{m.version}</span>
+                  </div>
+                ))}
+              </details>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* ---------- CANVAS ---------- */}
+      <div
+        style={{ flex: 1 }}
+        onDrop={onDrop}
+        onDragOver={(e) => e.preventDefault()}
+      >
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={(c) =>
+            setNodes(hydrate(applyNodeChanges(c, nodes)))
+          }
+          onEdgesChange={(c) =>
+            setEdges(applyEdgeChanges(c, edges))
+          }
+        >
+          <Background />
+          <Controls />
+        </ReactFlow>
+
+        {activeNode && (
+          <ModuleConfigPanel
+            title={activeNode.data.label}
+            inputs={activeNode.data.schema?.inputs ?? []}
+            initialValues={activeNode.data.config ?? {}}
+            onSave={(v: any) => {
+              setNodes((n) =>
+                hydrate(
+                  n.map((x) =>
+                    x.id === activeNode.id
+                      ? {
+                          ...x,
+                          data: { ...x.data, config: v },
+                        }
+                      : x
+                  )
+                )
+              );
+              setActiveNode(null);
+              markDirty();
+            }}
+            onClose={() => setActiveNode(null)}
+          />
+        )}
+      </div>
     </div>
   );
-};
+}
 
-export default Canvas;
+/* ---------------------------------- */
+/* Export                             */
+/* ---------------------------------- */
+
+export default function Canvas() {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner />
+    </ReactFlowProvider>
+  );
+}

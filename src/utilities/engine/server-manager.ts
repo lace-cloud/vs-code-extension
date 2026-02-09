@@ -34,14 +34,16 @@ export class ServerManager extends EventEmitter {
       .get<string>('binaryPath', '/usr/local/bin/lace');
 
     try {
-      console.log(`--------Binary Path-----${binaryPath}`)
+      console.log(`--------Binary Path-----${binaryPath}`);
       this.process = spawn(binaryPath, ['module', 'serve'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
+    //   console.log(`-------this process-----${this.process}`);
+
       this.process.stderr?.on('data', (d) =>
         
-        console.error('[lace]', d.toString())
+        console.log('[lace]', d.toString())
       );
 
       this.process.on('exit', (code) => {

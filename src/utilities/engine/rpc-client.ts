@@ -17,7 +17,6 @@ interface RPCResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
-// Internal pending request shape (generic-safe)
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -56,7 +55,9 @@ export class JSONRPCClient extends EventEmitter {
         if (msg.error) {
           pending.reject(
             new Error(
-              `${msg.error.message}${msg.error.data ? `: ${JSON.stringify(msg.error.data)}` : ''}`
+              `${msg.error.message}${
+                msg.error.data ? `: ${JSON.stringify(msg.error.data)}` : ''
+              }`
             )
           );
         } else {
@@ -83,7 +84,6 @@ export class JSONRPCClient extends EventEmitter {
         reject(new Error(`RPC timeout: ${method}`));
       }, this.timeoutMs);
 
-      // 🔥 Wrap resolve so it matches `(value: unknown) => void`
       this.pending.set(id, {
         resolve: (value: unknown) => resolve(value as T),
         reject,
@@ -94,8 +94,7 @@ export class JSONRPCClient extends EventEmitter {
     });
   }
 
-  // ---------- Convenience methods ----------
-
+  // ---------- Core ----------
   initialize(clientVersion: string) {
     return this.call<{ serverVersion: string; capabilities?: string[] }>(
       'initialize',
@@ -103,33 +102,33 @@ export class JSONRPCClient extends EventEmitter {
     );
   }
 
-  parse(path: string, bundle = false) {
-    return this.call<{ bundle?: unknown; diagnostics?: unknown[] }>(
-      'parse',
-      { path, bundle }
-    );
-  }
-
-  generate(
-    bundle: unknown,
-    outputDir: string,
-    options?: { dryRun?: boolean; format?: boolean }
-  ) {
-    return this.call<{ filesWritten?: string[]; files?: Record<string, string> }>(
-      'generate',
-      { bundle, outputDir, options }
-    );
-  }
-
-  validate(bundle: unknown) {
-    return this.call<{ valid: boolean; diagnostics?: unknown[] }>(
-      'validate',
-      { bundle }
-    );
-  }
-
   shutdown() {
     return this.call<{ status: string }>('shutdown');
+  }
+
+  // ---------- Registry ----------
+  listRegistryModules(params?: {
+    system?: string;
+    search?: string;
+    category?: string;
+    kind?: string;
+    page?: number;
+    limit?: number;
+    organization?: string;
+  }) {
+    return this.call<{
+      modules: any[];
+      pagination?: any;
+    }>('registry/list', params);
+  }
+
+  getRegistryVersion(params: {
+    name: string;
+    system: string;
+    version: string;
+    organization?: string;
+  }) {
+    return this.call<any>('registry/version', params);
   }
 
   dispose(): void {
