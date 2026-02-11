@@ -44,8 +44,17 @@ export class JSONRPCClient extends EventEmitter {
     });
 
     this.rl.on('line', (line) => {
-      try {
+    line = line.trim();
+
+    // 🔒 Ignore non-JSON output (logs, debug, etc.)
+    if (!line.startsWith('{')) {
+        console.warn('[lace][stdout]', line);
+        return;
+    }
+
+    try {
         const msg: RPCResponse = JSON.parse(line);
+
         const pending = this.pending.get(msg.id);
         if (!pending) return;
 

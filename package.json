@@ -73,6 +73,7 @@
       { "command": "lace.startEngine", "title": "Lace: Start Engine" },
       { "command": "lace.stopEngine", "title": "Lace: Stop Engine" },
       { "command": "lace.restartEngine", "title": "Lace: Restart Engine" }
+
     ],
     "configuration": {
       "title": "Lace",

@@ -1,4 +1,3 @@
-// src/panels/createWebviewPanel.ts
 import * as vscode from 'vscode';
 import path from 'path';
 import { getWebviewContent } from './getWebviewContent';
@@ -11,6 +10,21 @@ import {
 import { ServerManager } from '../utilities/engine/server-manager';
 
 const panels = new Map<string, vscode.WebviewPanel>();
+
+let activeRegistrySystem: 'aws' | 'azure' | 'gcp' = 'aws';
+
+export function setRegistrySystem(
+  system: 'aws' | 'azure' | 'gcp'
+) {
+  activeRegistrySystem = system;
+
+  for (const panel of panels.values()) {
+    panel.webview.postMessage({
+      command: 'setRegistrySystem',
+      system,
+    });
+  }
+}
 
 export async function createWebviewPanel(
   componentName: string,
@@ -55,50 +69,19 @@ export async function createWebviewPanel(
     cachedState = typeof raw === 'string' ? JSON.parse(raw) : raw;
   }
 
-  /* --------------------------------------------- */
-  /* Registry List                                 */
-  /* --------------------------------------------- */
-  async function sendRegistryList() {
+  async function sendRegistryList(system: string) {
     const rpc = server.rpcClient;
+    if (!rpc) return;
 
-    if (!rpc) {
-      panel.webview.postMessage({
-        command: 'registryList',
-        modules: {},
-        error: 'Lace engine not running',
-      });
-      return;
-    }
-
-    const list = await rpc.listRegistryModules();
-    console.log('[registry/list]', list);
-
-    const tree: Record<string, any[]> = {};
-
-    for (const m of list.modules ?? []) {
-      const categories: string[] =
-        Array.isArray(m.categories) && m.categories.length > 0
-          ? m.categories
-          : ['misc'];
-
-      for (const cat of categories) {
-        if (!tree[cat]) tree[cat] = [];
-        if (!tree[cat].some((x) => x.id === m.id)) {
-          tree[cat].push(m);
-        }
-      }
-    }
+    const list = await rpc.listRegistryModules({ system });
 
     panel.webview.postMessage({
       command: 'registryList',
-      modules: tree,
-      pagination: list.pagination,
+      system,
+      modules: list.modules ?? [],
     });
   }
 
-  /* --------------------------------------------- */
-  /* Webview messages                              */
-  /* --------------------------------------------- */
   panel.webview.onDidReceiveMessage(async (msg) => {
     if (!componentId) return;
 
@@ -108,14 +91,15 @@ export async function createWebviewPanel(
           command: 'loadState',
           state: cachedState ?? { nodes: [], edges: [] },
         });
-        await sendRegistryList();
+        await sendRegistryList(activeRegistrySystem);
+        break;
+
+      case 'requestRegistryModules':
+        await sendRegistryList(msg.system);
         break;
 
       case 'fetchModuleVersion': {
-        const rpc = server.rpcClient;
-        if (!rpc) return;
-
-        const data = await rpc.getRegistryVersion({
+        const data = await server.rpcClient?.getRegistryVersion({
           name: msg.name,
           system: msg.system,
           version: msg.version,
@@ -124,7 +108,6 @@ export async function createWebviewPanel(
         panel.webview.postMessage({
           command: 'moduleVersionData',
           requestId: msg.requestId,
-          ok: true,
           data,
         });
         break;

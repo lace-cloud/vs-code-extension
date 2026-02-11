@@ -58,6 +58,20 @@ function buildRegistryTree(modules: RegistryModule[]): RegistryTree {
   return tree;
 }
 
+/**
+ * IMPORTANT:
+ * - Never persist functions inside node.data (structured clone will fail)
+ * - We attach runtime-only handlers under data.__runtime
+ * - Before saving, we strip data.__runtime
+ */
+function stripRuntime(nodes: any[]) {
+  return (nodes ?? []).map((n) => {
+    const data = n?.data ?? {};
+    const { __runtime, ...cleanData } = data;
+    return { ...n, data: cleanData };
+  });
+}
+
 /* ---------------------------------- */
 /* Canvas Inner                       */
 /* ---------------------------------- */
@@ -77,14 +91,23 @@ function CanvasInner() {
   const markDirty = () =>
     window.vscode.postMessage({ command: 'markDirty' });
 
-  const hydrate = (nodes: any[]) =>
-    nodes.map((n) => ({
+  /**
+   * Attach non-serializable handlers in a dedicated runtime namespace.
+   * This keeps persisted state JSON-safe.
+   */
+  const attachRuntimeHandlers = (inputNodes: any[]) =>
+    (inputNodes ?? []).map((n) => ({
       ...n,
       data: {
-        ...n.data,
-        onDirty: markDirty,
-        onOpenConfig: (id: string) =>
-          setActiveNode(nodes.find((x) => x.id === id)),
+        ...(n.data ?? {}),
+        __runtime: {
+          onDirty: () => markDirty(),
+          onOpenConfig: (id: string) => {
+            // Use refs (latest nodes), not stale closure
+            const found = nodesRef.current.find((x) => x.id === id);
+            setActiveNode(found ?? null);
+          },
+        },
       },
     }));
 
@@ -100,7 +123,7 @@ function CanvasInner() {
       const m = e.data;
 
       if (m.command === 'loadState') {
-        setNodes(hydrate(m.state?.nodes ?? []));
+        setNodes(attachRuntimeHandlers(m.state?.nodes ?? []));
         setEdges(m.state?.edges ?? []);
       }
 
@@ -113,11 +136,19 @@ function CanvasInner() {
         setRegistryTree(tree);
       }
 
+      if (m.command === 'setRegistrySystem') {
+        window.vscode.postMessage({
+          command: 'requestRegistryModules',
+          system: m.system,
+        });
+      }
+
       if (m.command === 'triggerSave') {
+        // 🔥 strip runtime functions before posting to extension
         window.vscode.postMessage({
           command: 'saveState',
           state: {
-            nodes: nodesRef.current,
+            nodes: stripRuntime(nodesRef.current),
             edges: edgesRef.current,
           },
         });
@@ -127,13 +158,13 @@ function CanvasInner() {
         const id = pending.current[m.requestId];
         if (!id) return;
 
-        setNodes((n) =>
-          hydrate(
-            n.map((x) =>
+        setNodes((curr) =>
+          attachRuntimeHandlers(
+            curr.map((x) =>
               x.id === id
                 ? {
                     ...x,
-                    data: { ...x.data, schema: m.data?.schema },
+                    data: { ...(x.data ?? {}), schema: m.data?.schema },
                   }
                 : x
             )
@@ -146,6 +177,7 @@ function CanvasInner() {
     window.vscode.postMessage({ command: 'webviewReady' });
 
     return () => window.removeEventListener('message', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---------- drag / drop ---------- */
@@ -157,14 +189,13 @@ function CanvasInner() {
     if (!raw) return;
 
     const mod: RegistryModule = JSON.parse(raw);
-
     if (mod.kind !== 'leaf') return;
 
     const id = `${mod.system}-${mod.name}-${Date.now()}`;
 
-    setNodes((n) =>
-      hydrate([
-        ...n,
+    setNodes((curr) =>
+      attachRuntimeHandlers([
+        ...curr,
         {
           id,
           type: 'awsNode',
@@ -227,9 +258,7 @@ function CanvasInner() {
 
             {Object.entries(categories).map(([category, modules]) => (
               <details key={category} open style={{ marginLeft: 8 }}>
-                <summary style={{ cursor: 'pointer' }}>
-                  {category}
-                </summary>
+                <summary style={{ cursor: 'pointer' }}>{category}</summary>
 
                 {modules.map((m) => (
                   <div
@@ -252,13 +281,13 @@ function CanvasInner() {
                     style={{
                       marginLeft: 20,
                       padding: '4px 6px',
-                      cursor:
-                        m.kind === 'leaf' ? 'grab' : 'default',
+                      cursor: m.kind === 'leaf' ? 'grab' : 'default',
                       opacity: m.kind === 'leaf' ? 1 : 0.5,
                       userSelect: 'none',
                     }}
                   >
-                    📦 {m.name} <span style={{ opacity: 0.6 }}>v{m.version}</span>
+                    📦 {m.name}{' '}
+                    <span style={{ opacity: 0.6 }}>v{m.version}</span>
                   </div>
                 ))}
               </details>
@@ -268,20 +297,16 @@ function CanvasInner() {
       </div>
 
       {/* ---------- CANVAS ---------- */}
-      <div
-        style={{ flex: 1 }}
-        onDrop={onDrop}
-        onDragOver={(e) => e.preventDefault()}
-      >
+      <div style={{ flex: 1 }} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          onNodesChange={(c) =>
-            setNodes(hydrate(applyNodeChanges(c, nodes)))
+          onNodesChange={(changes) =>
+            setNodes((curr) => attachRuntimeHandlers(applyNodeChanges(changes, curr)))
           }
-          onEdgesChange={(c) =>
-            setEdges(applyEdgeChanges(c, edges))
+          onEdgesChange={(changes) =>
+            setEdges((curr) => applyEdgeChanges(changes, curr))
           }
         >
           <Background />
@@ -290,17 +315,17 @@ function CanvasInner() {
 
         {activeNode && (
           <ModuleConfigPanel
-            title={activeNode.data.label}
-            inputs={activeNode.data.schema?.inputs ?? []}
-            initialValues={activeNode.data.config ?? {}}
+            title={activeNode.data?.label}
+            inputs={activeNode.data?.schema?.inputs ?? []}
+            initialValues={activeNode.data?.config ?? {}}
             onSave={(v: any) => {
-              setNodes((n) =>
-                hydrate(
-                  n.map((x) =>
+              setNodes((curr) =>
+                attachRuntimeHandlers(
+                  curr.map((x) =>
                     x.id === activeNode.id
                       ? {
                           ...x,
-                          data: { ...x.data, config: v },
+                          data: { ...(x.data ?? {}), config: v },
                         }
                       : x
                   )
