@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 
 /* ---------------------------------- */
 /* Types                              */
@@ -41,13 +41,21 @@ export default function ModuleConfigPanel({
   onSave,
   onClose,
 }: Props) {
-  const [values, setValues] = useState<Record<string, any>>(
-    initialValues ?? {}
-  );
+  const [values, setValues] = useState<Record<string, any>>(initialValues ?? {});
+  const [showOptional, setShowOptional] = useState(false);
 
   const updateValue = (key: string, value: any) => {
     setValues((prev) => ({ ...prev, [key]: value }));
   };
+
+  /* ---------- Split Inputs ---------- */
+
+  const { requiredInputs, optionalInputs } = useMemo(() => {
+    return {
+      requiredInputs: inputs.filter((i) => i.required),
+      optionalInputs: inputs.filter((i) => !i.required),
+    };
+  }, [inputs]);
 
   return (
     <div
@@ -64,38 +72,6 @@ export default function ModuleConfigPanel({
         zIndex: 20,
       }}
     >
-      {/* ---------- GLOBAL STYLES ---------- */}
-      <style>
-        {`
-          input, select {
-            background: #0f172a;
-            color: #fff;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 6px 8px;
-            font-size: 13px;
-          }
-
-          input:focus, select:focus {
-            outline: none;
-            border-color: #1f6feb;
-          }
-
-          button {
-            background: #2a2a2a;
-            color: #fff;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 4px 8px;
-            cursor: pointer;
-          }
-
-          button:hover {
-            background: #333;
-          }
-        `}
-      </style>
-
       {/* ---------- HEADER ---------- */}
       <header
         style={{
@@ -111,30 +87,69 @@ export default function ModuleConfigPanel({
         <button onClick={onClose}>✕</button>
       </header>
 
-      {/* ---------- SCROLLABLE BODY ---------- */}
+      {/* ---------- BODY ---------- */}
       <div
         style={{
           flex: 1,
           overflowY: 'auto',
           padding: 16,
-          paddingBottom: 96, // ✅ reserves space for footer
+          paddingBottom: 96,
         }}
       >
-        {/* ---------- INPUTS ---------- */}
-        <h4 style={{ marginTop: 0, marginBottom: 12 }}>Inputs</h4>
+        {/* ---------- REQUIRED INPUTS ---------- */}
+        {requiredInputs.length > 0 && (
+          <>
+            <SectionTitle label="Required Inputs" />
 
-        {inputs.map((input) =>
-          renderInput({
-            input,
-            value: values[input.name],
-            onChange: (v) => updateValue(input.name, v),
-          })
+            {requiredInputs.map((input) =>
+              renderInput({
+                input,
+                value: values[input.name],
+                onChange: (v) => updateValue(input.name, v),
+              })
+            )}
+          </>
+        )}
+
+        {/* ---------- OPTIONAL INPUTS ---------- */}
+        {optionalInputs.length > 0 && (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: 24,
+                marginBottom: 8,
+              }}
+            >
+              <SectionTitle label="Optional Inputs" />
+              <button
+                style={{
+                  fontSize: 12,
+                  opacity: 0.8,
+                }}
+                onClick={() => setShowOptional((v) => !v)}
+              >
+                {showOptional ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            {showOptional &&
+              optionalInputs.map((input) =>
+                renderInput({
+                  input,
+                  value: values[input.name],
+                  onChange: (v) => updateValue(input.name, v),
+                })
+              )}
+          </>
         )}
 
         {/* ---------- OUTPUTS ---------- */}
         {outputs.length > 0 && (
           <>
-            <h4 style={{ marginTop: 32, marginBottom: 12 }}>Outputs</h4>
+            <SectionTitle label="Outputs" style={{ marginTop: 32 }} />
 
             {outputs.map((o) => (
               <div
@@ -155,7 +170,7 @@ export default function ModuleConfigPanel({
         )}
       </div>
 
-      {/* ---------- STICKY FOOTER ---------- */}
+      {/* ---------- FOOTER ---------- */}
       <footer
         style={{
           padding: 16,
@@ -164,7 +179,6 @@ export default function ModuleConfigPanel({
           position: 'sticky',
           bottom: 0,
           zIndex: 30,
-          flexShrink: 0,
         }}
       >
         <button
@@ -188,7 +202,36 @@ export default function ModuleConfigPanel({
 }
 
 /* ---------------------------------- */
-/* Input Renderer                     */
+/* Section Title                      */
+/* ---------------------------------- */
+
+function SectionTitle({
+  label,
+  style = {},
+}: {
+  label: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <h4
+      style={{
+        margin: 0,
+        marginBottom: 12,
+        fontSize: 13,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+        opacity: 0.85,
+        ...style,
+      }}
+    >
+      {label}
+    </h4>
+  );
+}
+
+/* ---------------------------------- */
+/* Input Renderer (UNCHANGED)         */
 /* ---------------------------------- */
 
 function renderInput({
@@ -375,13 +418,7 @@ function field(input: TerraformInput, body: React.ReactNode) {
       {body}
 
       {input.description && (
-        <div
-          style={{
-            fontSize: 11,
-            opacity: 0.6,
-            lineHeight: 1.4,
-          }}
-        >
+        <div style={{ fontSize: 11, opacity: 0.6 }}>
           {input.description}
         </div>
       )}
