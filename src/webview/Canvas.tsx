@@ -347,20 +347,18 @@ function CanvasInner() {
           <Controls />
         </ReactFlow>
 
-        {activeNode && (
+        {activeNode && activeNode.data?.schema && (
           <ModuleConfigPanel
-            title={activeNode.data?.label}
-            inputs={activeNode.data?.schema?.inputs ?? []}
-            initialValues={activeNode.data?.config ?? {}}
+            title={activeNode.data.label}
+            inputs={activeNode.data.schema.inputs}
+            outputs={activeNode.data.schema.outputs ?? []}
+            initialValues={activeNode.data.config ?? {}}
             onSave={(v: any) => {
               setNodes((curr) =>
                 attachRuntimeHandlers(
                   curr.map((x) =>
                     x.id === activeNode.id
-                      ? {
-                          ...x,
-                          data: { ...(x.data ?? {}), config: v },
-                        }
+                      ? { ...x, data: { ...x.data, config: v } }
                       : x
                   )
                 )
@@ -371,6 +369,8 @@ function CanvasInner() {
             onClose={() => setActiveNode(null)}
           />
         )}
+
+
       </div>
     </div>
   );

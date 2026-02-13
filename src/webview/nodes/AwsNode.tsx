@@ -26,10 +26,16 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
 
   return (
     <div
+      // onDoubleClick={(e) => {
+      //   e.stopPropagation();
+      //   data?.onOpenConfig?.(id);
+      // }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        data?.onOpenConfig?.(id);
+        console.log('Double clicked node:', id, data);
+        data?.__runtime?.onOpenConfig?.(id);
       }}
+
       style={{
         background: '#1e1e1e',
         border: '1px solid #333',
