@@ -1,3 +1,4 @@
+// src/webview/getWebviewContent.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
 
@@ -53,29 +54,69 @@ export function getWebviewContent(
 
     #menu-bar {
       display: flex;
+      align-items: center;
       background: #333;
       color: white;
       padding: 6px 10px;
       font-size: 13px;
     }
 
+    .menu-left {
+      display: flex;
+    }
+
     .menu-item {
       margin-right: 16px;
       cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
     }
 
     .menu-item:hover {
       background: #444;
     }
+
+    .menu-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+    }
+
   </style>
 </head>
 
 <body>
   <div id="menu-bar">
+  <!-- LEFT: File / Edit / View -->
+  <div class="menu-left">
     <div class="menu-item">File</div>
     <div class="menu-item">Edit</div>
     <div class="menu-item">View</div>
   </div>
+
+  <!-- RIGHT: Generate -->
+  <div class="menu-right">
+    <button
+      id="generate-btn"
+      style="
+        padding: 4px 12px;
+        border-radius: 4px;
+        background: #2ea043;
+        border: 1px solid #2ea043;
+        color: white;
+        font-size: 12px;
+        cursor: pointer;
+      "
+    >
+    Generate
+    </button>
+    </div>
+  </div>
+
+
+  
+
+  
 
   <div id="root"></div>
 
@@ -89,6 +130,16 @@ export function getWebviewContent(
       iam_role: "${iamroleUri}",
       iam_policy: "${iampolicyUri}"
     };
+
+    // 🔹 Generate button handler
+  window.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('generate-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        window.vscode.postMessage({ command: 'generate' });
+      });
+    }
+  });
 
     // window.vscode.postMessage({ command: 'webviewReady' });
   </script>

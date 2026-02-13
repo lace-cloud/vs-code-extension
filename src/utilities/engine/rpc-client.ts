@@ -140,6 +140,20 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<any>('registry/version', params);
   }
 
+  // ---------- Registry ----------
+    getRegistryModule(params: {
+        name: string;
+        system: string;
+        organization?: string;
+    }) {
+    return this.call<{
+        name: string;
+        system: string;
+        versions: any[];
+    }>('registry/get', params);
+    }
+
+
   dispose(): void {
     this.rl?.close();
     for (const [, pending] of this.pending) {

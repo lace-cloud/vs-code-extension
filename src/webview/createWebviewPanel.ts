@@ -98,6 +98,14 @@ export async function createWebviewPanel(
         await sendRegistryList(msg.system);
         break;
 
+      case 'generate': {
+        panel.webview.postMessage({
+          command: 'generateSuccess',
+        });
+        break;
+      }
+
+
       case 'fetchModuleVersion': {
         const data = await server.rpcClient?.getRegistryVersion({
           name: msg.name,
@@ -112,6 +120,21 @@ export async function createWebviewPanel(
         });
         break;
       }
+
+      case 'fetchModuleInfo': {
+      const data = await server.rpcClient?.getRegistryModule({
+        name: msg.name,
+        system: msg.system,
+      });
+
+      panel.webview.postMessage({
+        command: 'moduleInfoData',
+        requestId: msg.requestId,
+        data,
+      });
+      break;
+    }
+
 
       case 'saveState':
         await saveCanvasState(componentId, msg.state);

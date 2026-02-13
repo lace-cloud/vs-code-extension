@@ -58,12 +58,6 @@ function buildRegistryTree(modules: RegistryModule[]): RegistryTree {
   return tree;
 }
 
-/**
- * IMPORTANT:
- * - Never persist functions inside node.data (structured clone will fail)
- * - We attach runtime-only handlers under data.__runtime
- * - Before saving, we strip data.__runtime
- */
 function stripRuntime(nodes: any[]) {
   return (nodes ?? []).map((n) => {
     const data = n?.data ?? {};
@@ -82,6 +76,9 @@ function CanvasInner() {
   const [registryTree, setRegistryTree] = useState<RegistryTree>({});
   const [activeNode, setActiveNode] = useState<any>(null);
 
+  // ✅ STATUS MESSAGE STATE
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
   const nodesRef = useRef<any[]>([]);
   const edgesRef = useRef<any[]>([]);
   const pending = useRef<Record<number, string>>({});
@@ -91,10 +88,6 @@ function CanvasInner() {
   const markDirty = () =>
     window.vscode.postMessage({ command: 'markDirty' });
 
-  /**
-   * Attach non-serializable handlers in a dedicated runtime namespace.
-   * This keeps persisted state JSON-safe.
-   */
   const attachRuntimeHandlers = (inputNodes: any[]) =>
     (inputNodes ?? []).map((n) => ({
       ...n,
@@ -103,7 +96,6 @@ function CanvasInner() {
         __runtime: {
           onDirty: () => markDirty(),
           onOpenConfig: (id: string) => {
-            // Use refs (latest nodes), not stale closure
             const found = nodesRef.current.find((x) => x.id === id);
             setActiveNode(found ?? null);
           },
@@ -132,8 +124,7 @@ function CanvasInner() {
           ? m.modules
           : Object.values(m.modules ?? {}).flat();
 
-        const tree = buildRegistryTree(modulesArray);
-        setRegistryTree(tree);
+        setRegistryTree(buildRegistryTree(modulesArray));
       }
 
       if (m.command === 'setRegistrySystem') {
@@ -143,8 +134,18 @@ function CanvasInner() {
         });
       }
 
+      if (m.command === 'moduleInfoData') {
+        const id = pending.current[m.requestId];
+        if (!id) return;
+
+        console.group('[registry/get]');
+        console.log('Node ID:', id);
+        console.log('Module info:', m.data);
+        console.log('Versions:', m.data?.versions);
+        console.groupEnd();
+      }
+
       if (m.command === 'triggerSave') {
-        // 🔥 strip runtime functions before posting to extension
         window.vscode.postMessage({
           command: 'saveState',
           state: {
@@ -154,9 +155,20 @@ function CanvasInner() {
         });
       }
 
+      // ✅ GENERATE SUCCESS HANDLER
+      if (m.command === 'generateSuccess') {
+        setStatusMessage('Successfully generated');
+        setTimeout(() => setStatusMessage(null), 3000);
+      }
+
       if (m.command === 'moduleVersionData') {
         const id = pending.current[m.requestId];
         if (!id) return;
+
+        console.group('[registry/version]');
+        console.log('Node ID:', id);
+        console.log('Full response:', m.data);
+        console.groupEnd();
 
         setNodes((curr) =>
           attachRuntimeHandlers(
@@ -177,7 +189,6 @@ function CanvasInner() {
     window.vscode.postMessage({ command: 'webviewReady' });
 
     return () => window.removeEventListener('message', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---------- drag / drop ---------- */
@@ -213,6 +224,13 @@ function CanvasInner() {
 
     const reqId = Date.now();
     pending.current[reqId] = id;
+
+    window.vscode.postMessage({
+      command: 'fetchModuleInfo',
+      requestId: reqId,
+      name: mod.name,
+      system: mod.system,
+    });
 
     window.vscode.postMessage({
       command: 'fetchModuleVersion',
@@ -264,26 +282,16 @@ function CanvasInner() {
                   <div
                     key={m.id}
                     draggable={m.kind === 'leaf'}
-                    onDragStart={(e) => {
-                      if (m.kind !== 'leaf') return;
-
+                    onDragStart={(e) =>
                       e.dataTransfer.setData(
                         'application/reactflow',
-                        JSON.stringify({
-                          id: m.id,
-                          name: m.name,
-                          system: m.system,
-                          version: m.version,
-                          kind: m.kind,
-                        })
-                      );
-                    }}
+                        JSON.stringify(m)
+                      )
+                    }
                     style={{
                       marginLeft: 20,
                       padding: '4px 6px',
-                      cursor: m.kind === 'leaf' ? 'grab' : 'default',
-                      opacity: m.kind === 'leaf' ? 1 : 0.5,
-                      userSelect: 'none',
+                      cursor: 'grab',
                     }}
                   >
                     📦 {m.name}{' '}
@@ -297,13 +305,39 @@ function CanvasInner() {
       </div>
 
       {/* ---------- CANVAS ---------- */}
-      <div style={{ flex: 1 }} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+      <div
+        style={{ flex: 1, position: 'relative' }}
+        onDrop={onDrop}
+        onDragOver={(e) => e.preventDefault()}
+      >
+        {/* ✅ STATUS MESSAGE */}
+        {statusMessage && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 44,
+              left: 16,
+              zIndex: 20,
+              background: '#1f6feb',
+              color: '#fff',
+              padding: '6px 12px',
+              borderRadius: 6,
+              fontSize: 12,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+            }}
+          >
+            {statusMessage}
+          </div>
+        )}
+
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
           onNodesChange={(changes) =>
-            setNodes((curr) => attachRuntimeHandlers(applyNodeChanges(changes, curr)))
+            setNodes((curr) =>
+              attachRuntimeHandlers(applyNodeChanges(changes, curr))
+            )
           }
           onEdgesChange={(changes) =>
             setEdges((curr) => applyEdgeChanges(changes, curr))
