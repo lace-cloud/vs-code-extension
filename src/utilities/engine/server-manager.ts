@@ -1,3 +1,4 @@
+// src/utilities/engine/server-manager.ts
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as vscode from 'vscode';

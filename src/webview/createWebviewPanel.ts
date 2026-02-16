@@ -1,12 +1,18 @@
+// src/webview/createWebviewPanel.ts
 import * as vscode from 'vscode';
 import path from 'path';
+import fs from 'fs';
+
 import { getWebviewContent } from './getWebviewContent';
 import { getWebviewUri } from './getWebviewUri';
+
 import {
   getComponentIdByName,
   loadCanvasState,
   saveCanvasState,
+  saveBundleState,
 } from '../database';
+
 import { ServerManager } from '../utilities/engine/server-manager';
 
 const panels = new Map<string, vscode.WebviewPanel>();
@@ -98,13 +104,61 @@ export async function createWebviewPanel(
         await sendRegistryList(msg.system);
         break;
 
-      case 'generate': {
-        panel.webview.postMessage({
-          command: 'generateSuccess',
-        });
+      /* ------------------------------------------------ */
+      /* ✅ GENERATE INTO generate-$componentName FOLDER */
+      /* ------------------------------------------------ */
+      case 'generateBundle': {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+          vscode.window.showErrorMessage('No workspace open.');
+          return;
+        }
+
+        const workspacePath = workspaceFolder.uri.fsPath;
+
+        // 🔥 Create folder: generate-$componentName
+        const outputDir = path.join(
+          workspacePath,
+          `generate-${componentName}`
+        );
+
+        // Ensure directory exists
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        // Save bundle JSON to DB
+        await saveBundleState(componentId, msg.bundle);
+
+        try {
+          const result = await server.rpcClient?.generate({
+            bundle: msg.bundle,
+            outputDir,
+            options: {
+              dryRun: false,
+              format: true,
+              validate: true,
+              overwrite: true,
+            },
+          });
+
+          panel.webview.postMessage({
+            command: 'generateSuccess',
+            files: result?.filesWritten,
+          });
+
+          vscode.window.showInformationMessage(
+            `Generated in ${path.basename(outputDir)}`
+          );
+
+        } catch (err: any) {
+          vscode.window.showErrorMessage(err.message);
+        }
+
         break;
       }
 
+      /* ------------------------------------------------ */
 
       case 'fetchModuleVersion': {
         const data = await server.rpcClient?.getRegistryVersion({
@@ -122,19 +176,18 @@ export async function createWebviewPanel(
       }
 
       case 'fetchModuleInfo': {
-      const data = await server.rpcClient?.getRegistryModule({
-        name: msg.name,
-        system: msg.system,
-      });
+        const data = await server.rpcClient?.getRegistryModule({
+          name: msg.name,
+          system: msg.system,
+        });
 
-      panel.webview.postMessage({
-        command: 'moduleInfoData',
-        requestId: msg.requestId,
-        data,
-      });
-      break;
-    }
-
+        panel.webview.postMessage({
+          command: 'moduleInfoData',
+          requestId: msg.requestId,
+          data,
+        });
+        break;
+      }
 
       case 'saveState':
         await saveCanvasState(componentId, msg.state);

@@ -1,4 +1,3 @@
-// src/engine/rpc-client.ts
 import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as readline from 'readline';
@@ -28,10 +27,7 @@ export class JSONRPCClient extends EventEmitter {
   private pending = new Map<number, PendingRequest>();
   private rl: readline.Interface | null = null;
 
-  constructor(
-    private process: ChildProcess,
-    private timeoutMs = 30_000
-  ) {
+  constructor(private process: ChildProcess, private timeoutMs = 30_000) {
     super();
     this.setupReader();
   }
@@ -44,15 +40,14 @@ export class JSONRPCClient extends EventEmitter {
     });
 
     this.rl.on('line', (line) => {
-    line = line.trim();
+      line = line.trim();
 
-    // 🔒 Ignore non-JSON output (logs, debug, etc.)
-    if (!line.startsWith('{')) {
+      if (!line.startsWith('{')) {
         console.warn('[lace][stdout]', line);
         return;
-    }
+      }
 
-    try {
+      try {
         const msg: RPCResponse = JSON.parse(line);
 
         const pending = this.pending.get(msg.id);
@@ -103,7 +98,6 @@ export class JSONRPCClient extends EventEmitter {
     });
   }
 
-  // ---------- Core ----------
   initialize(clientVersion: string) {
     return this.call<{ serverVersion: string; capabilities?: string[] }>(
       'initialize',
@@ -115,7 +109,6 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<{ status: string }>('shutdown');
   }
 
-  // ---------- Registry ----------
   listRegistryModules(params?: {
     system?: string;
     search?: string;
@@ -125,10 +118,7 @@ export class JSONRPCClient extends EventEmitter {
     limit?: number;
     organization?: string;
   }) {
-    return this.call<{
-      modules: any[];
-      pagination?: any;
-    }>('registry/list', params);
+    return this.call<{ modules: any[]; pagination?: any }>('registry/list', params);
   }
 
   getRegistryVersion(params: {
@@ -140,19 +130,33 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<any>('registry/version', params);
   }
 
-  // ---------- Registry ----------
-    getRegistryModule(params: {
-        name: string;
-        system: string;
-        organization?: string;
-    }) {
-    return this.call<{
-        name: string;
-        system: string;
-        versions: any[];
-    }>('registry/get', params);
-    }
+  getRegistryModule(params: {
+    name: string;
+    system: string;
+    organization?: string;
+  }) {
+    return this.call<{ name: string; system: string; versions: any[] }>(
+      'registry/get',
+      params
+    );
+  }
 
+  // ✅ generate
+  generate(params: {
+    bundle: any;
+    outputDir: string;
+    options?: {
+      dryRun?: boolean;
+      format?: boolean;
+      validate?: boolean;
+      overwrite?: boolean;
+    };
+  }) {
+    return this.call<{ filesWritten?: string[]; diagnostics?: any[] }>(
+      'generate',
+      params
+    );
+  }
 
   dispose(): void {
     this.rl?.close();

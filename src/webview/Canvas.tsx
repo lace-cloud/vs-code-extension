@@ -20,7 +20,7 @@ type RegistryModule = {
   id: string;
   name: string;
   system: string;
-  version: string;
+  version: string; // usually "1.0.0"
   kind: 'leaf' | 'composite';
   categories?: string[];
 };
@@ -29,6 +29,18 @@ type RegistryTree = {
   [system: string]: {
     [category: string]: RegistryModule[];
   };
+};
+
+type ModuleSchema = {
+  inputs?: Array<any>;
+  outputs?: Array<any>;
+};
+
+type NodeModuleRef = RegistryModule & {
+  // populated from registry/version response
+  module_path?: string; // e.g. "modules/aws/ec2/instance"
+  git_url?: string;     // e.g. "git::https://github.com/...//modules/aws/ec2/instance?ref=SHA"
+  schema?: ModuleSchema;
 };
 
 /* ---------------------------------- */
@@ -66,6 +78,54 @@ function stripRuntime(nodes: any[]) {
   });
 }
 
+// Turns config into Lace bindings { lit: value } (skips empty)
+function toBindings(config: Record<string, any>) {
+  const result: Record<string, any> = {};
+  Object.entries(config || {}).forEach(([key, value]) => {
+    if (value === undefined || value === '') return;
+    result[key] = { lit: value };
+  });
+  return result;
+}
+
+// Parse terraform-style git:: URL into {repo, subdir, ref}
+function parseTerraformGitSource(gitUrl?: string): {
+  repo: string;
+  subdir?: string;
+  ref?: string;
+} {
+  if (!gitUrl) return { repo: '' };
+
+  // Example:
+  // git::https://github.com/lace-cloud/registry-tf.git//modules/aws/ec2/instance?ref=f687...
+  let s = gitUrl.trim();
+  if (s.startsWith('git::')) s = s.slice('git::'.length);
+
+  // split off query (?ref=...)
+  const [beforeQ, query] = s.split('?');
+  const ref = query?.startsWith('ref=') ? query.slice('ref='.length) : undefined;
+
+  // locate "//" that indicates subdir split:
+  // https://...repo.git//modules/aws/...
+  const marker = '//';
+  const idx = beforeQ.indexOf(marker, beforeQ.indexOf('://') + 3);
+  if (idx === -1) {
+    return { repo: beforeQ, ref };
+  }
+
+  const repo = beforeQ.slice(0, idx);
+  const subdir = beforeQ.slice(idx + marker.length);
+
+  return { repo, subdir, ref };
+}
+
+function sanitizeOutputName(s: string) {
+  return (s || '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
 /* ---------------------------------- */
 /* Canvas Inner                       */
 /* ---------------------------------- */
@@ -76,7 +136,6 @@ function CanvasInner() {
   const [registryTree, setRegistryTree] = useState<RegistryTree>({});
   const [activeNode, setActiveNode] = useState<any>(null);
 
-  // ✅ STATUS MESSAGE STATE
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const nodesRef = useRef<any[]>([]);
@@ -108,6 +167,137 @@ function CanvasInner() {
     edgesRef.current = edges;
   }, [nodes, edges]);
 
+  /* ---------- build bundle ---------- */
+
+  function buildBundle(nodesInput: any[]) {
+    const canvasNodes = (nodesInput ?? []).filter((n) => n?.data?.moduleRef);
+    if (canvasNodes.length === 0) return null;
+
+    const modules: Record<string, any> = {};
+
+    // leaf module defs
+    for (const node of canvasNodes) {
+      const ref: NodeModuleRef = node.data.moduleRef;
+
+      const moduleId = ref.module_path || ref.name; // prefer module_path
+      const version = ref.version?.startsWith('v') ? ref.version : `v${ref.version || '1.0.0'}`;
+      const leafKey = `${moduleId}@${version}`;
+
+      const schema: ModuleSchema | undefined = ref.schema || node.data.schema;
+      const inputs = schema?.inputs ?? [];
+      const outputs = schema?.outputs ?? [];
+
+      const { repo, subdir, ref: gitRef } = parseTerraformGitSource(ref.git_url);
+
+      modules[leafKey] = {
+        schema_version: '1.0',
+        kind: 'module_def',
+        id: moduleId,
+        version,
+        interface: {
+          inputs,
+          outputs,
+        },
+        impl: {
+          kind: 'leaf',
+          source: {
+            kind: 'git',
+            repo,
+            subdir: subdir || ref.module_path,
+            // prefer a clean semver tag when available; otherwise fall back to git sha ref
+            ref: version, // keep "v1.0.0" like your desired example
+            ...(gitRef ? { commit_sha: gitRef } : {}),
+          },
+        },
+      };
+    }
+
+    // composite wrapper (entry)
+    const compositeId = `deploy-${Date.now()}`;
+    const compositeVersion = 'v1.0.0';
+    const compositeKey = `${compositeId}@${compositeVersion}`;
+
+    // outputs export:
+    // - if only 1 node => keep output name (role_arn)
+    // - if multiple nodes => prefix using node id to avoid collisions
+    const exportOutputs: Record<string, any> = {};
+    const compositeInterfaceOutputs: any[] = [];
+
+    const isSingle = canvasNodes.length === 1;
+
+    for (const node of canvasNodes) {
+      const ref: NodeModuleRef = node.data.moduleRef;
+      const schema: ModuleSchema | undefined = ref.schema || node.data.schema;
+      const outs = schema?.outputs ?? [];
+
+      for (const out of outs) {
+        const outName = out?.name;
+        if (!outName) continue;
+
+        const exportedName = isSingle
+          ? outName
+          : `${sanitizeOutputName(node.id)}__${sanitizeOutputName(outName)}`;
+
+        compositeInterfaceOutputs.push({
+          name: exportedName,
+          type: out?.type || 'any',
+          ...(out?.description ? { description: out.description } : {}),
+        });
+
+        exportOutputs[exportedName] = {
+          out: {
+            module: node.id,
+            name: outName,
+          },
+        };
+      }
+    }
+
+    modules[compositeKey] = {
+      schema_version: '1.0',
+      kind: 'module_def',
+      id: compositeId,
+      version: compositeVersion,
+      interface: {
+        inputs: [],
+        outputs: compositeInterfaceOutputs,
+      },
+      impl: {
+        kind: 'composite',
+        graph: {
+          instances: canvasNodes.map((node) => {
+            const ref: NodeModuleRef = node.data.moduleRef;
+            const moduleId = ref.module_path || ref.name;
+            const version = ref.version?.startsWith('v') ? ref.version : `v${ref.version || '1.0.0'}`;
+
+            return {
+              id: node.id, // instance id must be stable (your node id)
+              use: {
+                module_id: moduleId,
+                version,
+              },
+              inputs: toBindings(node.data.config || {}),
+            };
+          }),
+          wires: [],
+          exports: {
+            outputs: exportOutputs,
+          },
+        },
+      },
+    };
+
+    return {
+      schema_version: '1.0',
+      kind: 'module_bundle',
+      entry: {
+        module_id: compositeId,
+        version: compositeVersion,
+      },
+      modules,
+    };
+  }
+
   /* ---------- message handler ---------- */
 
   useEffect(() => {
@@ -134,17 +324,6 @@ function CanvasInner() {
         });
       }
 
-      if (m.command === 'moduleInfoData') {
-        const id = pending.current[m.requestId];
-        if (!id) return;
-
-        console.group('[registry/get]');
-        console.log('Node ID:', id);
-        console.log('Module info:', m.data);
-        console.log('Versions:', m.data?.versions);
-        console.groupEnd();
-      }
-
       if (m.command === 'triggerSave') {
         window.vscode.postMessage({
           command: 'saveState',
@@ -155,20 +334,30 @@ function CanvasInner() {
         });
       }
 
-      // ✅ GENERATE SUCCESS HANDLER
+      // 🔥 generate button: extension tells webview to build + send bundle
+      if (m.command === 'triggerGenerate') {
+        const bundle = buildBundle(nodesRef.current);
+        if (!bundle) return;
+
+        window.vscode.postMessage({
+          command: 'generateBundle',
+          bundle,
+        });
+      }
+
       if (m.command === 'generateSuccess') {
         setStatusMessage('Successfully generated');
         setTimeout(() => setStatusMessage(null), 3000);
       }
 
+      // ✅ IMPORTANT: store registry/version response into the node (module_path, git_url, schema)
       if (m.command === 'moduleVersionData') {
         const id = pending.current[m.requestId];
         if (!id) return;
 
-        console.group('[registry/version]');
-        console.log('Node ID:', id);
-        console.log('Full response:', m.data);
-        console.groupEnd();
+        const schemaFromServer = m.data?.schema;
+        const modulePath = m.data?.module_path; // e.g. "modules/aws/ec2/instance"
+        const gitUrl = m.data?.git_url;         // e.g. git::https://...//modules/aws/...
 
         setNodes((curr) =>
           attachRuntimeHandlers(
@@ -176,7 +365,16 @@ function CanvasInner() {
               x.id === id
                 ? {
                     ...x,
-                    data: { ...(x.data ?? {}), schema: m.data?.schema },
+                    data: {
+                      ...(x.data ?? {}),
+                      schema: schemaFromServer,
+                      moduleRef: {
+                        ...(x.data?.moduleRef ?? {}),
+                        module_path: modulePath,
+                        git_url: gitUrl,
+                        schema: schemaFromServer,
+                      },
+                    },
                   }
                 : x
             )
@@ -216,7 +414,7 @@ function CanvasInner() {
           },
           data: {
             label: mod.name,
-            moduleRef: mod,
+            moduleRef: mod as NodeModuleRef, // partial now, enriched after registry/version
           },
         },
       ])
@@ -224,13 +422,6 @@ function CanvasInner() {
 
     const reqId = Date.now();
     pending.current[reqId] = id;
-
-    window.vscode.postMessage({
-      command: 'fetchModuleInfo',
-      requestId: reqId,
-      name: mod.name,
-      system: mod.system,
-    });
 
     window.vscode.postMessage({
       command: 'fetchModuleVersion',
@@ -310,7 +501,6 @@ function CanvasInner() {
         onDrop={onDrop}
         onDragOver={(e) => e.preventDefault()}
       >
-        {/* ✅ STATUS MESSAGE */}
         {statusMessage && (
           <div
             style={{
@@ -369,8 +559,6 @@ function CanvasInner() {
             onClose={() => setActiveNode(null)}
           />
         )}
-
-
       </div>
     </div>
   );

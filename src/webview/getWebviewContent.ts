@@ -136,7 +136,8 @@ export function getWebviewContent(
     const btn = document.getElementById('generate-btn');
     if (btn) {
       btn.addEventListener('click', () => {
-        window.vscode.postMessage({ command: 'generate' });
+        window.postMessage({ command: 'triggerGenerate' }, '*');
+
       });
     }
   });
