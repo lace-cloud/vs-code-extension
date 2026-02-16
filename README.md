@@ -30,8 +30,10 @@ This will run the extension locally in another window you can see the Lace icon 
 
 ### Creting the graph in VsCode Extension:
 
-On the side panel click create component 
+On the side panel click create component with component name you will get the canvas to crate the graph. Pleaase the see below image for example.
 
 
 
+
+![alt text](image.png)
 
