@@ -33,7 +33,9 @@ export class JSONRPCClient extends EventEmitter {
   }
 
   private setupReader(): void {
-    if (!this.process.stdout) return;
+    if (!this.process.stdout) {
+      return;
+    }
 
     this.rl = readline.createInterface({
       input: this.process.stdout,
@@ -51,7 +53,9 @@ export class JSONRPCClient extends EventEmitter {
         const msg: RPCResponse = JSON.parse(line);
 
         const pending = this.pending.get(msg.id);
-        if (!pending) return;
+        if (!pending) {
+          return;
+        }
 
         clearTimeout(pending.timeout);
         this.pending.delete(msg.id);
@@ -59,10 +63,8 @@ export class JSONRPCClient extends EventEmitter {
         if (msg.error) {
           pending.reject(
             new Error(
-              `${msg.error.message}${
-                msg.error.data ? `: ${JSON.stringify(msg.error.data)}` : ''
-              }`
-            )
+              `${msg.error.message}${msg.error.data ? `: ${JSON.stringify(msg.error.data)}` : ''}`,
+            ),
           );
         } else {
           pending.resolve(msg.result);
@@ -99,10 +101,9 @@ export class JSONRPCClient extends EventEmitter {
   }
 
   initialize(clientVersion: string) {
-    return this.call<{ serverVersion: string; capabilities?: string[] }>(
-      'initialize',
-      { clientVersion }
-    );
+    return this.call<{ serverVersion: string; capabilities?: string[] }>('initialize', {
+      clientVersion,
+    });
   }
 
   shutdown() {

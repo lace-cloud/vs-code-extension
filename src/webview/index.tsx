@@ -21,6 +21,6 @@ if (root) {
   createRoot(root).render(
     <ReactFlowProvider>
       <App />
-    </ReactFlowProvider>
+    </ReactFlowProvider>,
   );
 }

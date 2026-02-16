@@ -1,55 +1,54 @@
-
-const path = require("path");
+const path = require('path');
 
 module.exports = [
   {
     // Backend (Node.js)
-    entry: "./src/extension.ts",
+    entry: './src/extension.ts',
     output: {
-      path: path.resolve(__dirname, "out"),
-      filename: "extension.js",
-      libraryTarget: "commonjs2",
+      path: path.resolve(__dirname, 'out'),
+      filename: 'extension.js',
+      libraryTarget: 'commonjs2',
     },
-    target: "node",
+    target: 'node',
     resolve: {
-      extensions: [".ts", ".js"],
+      extensions: ['.ts', '.js'],
     },
     module: {
       rules: [
         {
           test: /\.ts$/,
-          use: "ts-loader",
+          use: 'ts-loader',
           exclude: /node_modules/,
         },
       ],
     },
     externals: {
-      vscode: "commonjs vscode",
-      sqlite3: "commonjs sqlite3", // Exclude SQLite3 from bundling
+      vscode: 'commonjs vscode',
+      sqlite3: 'commonjs sqlite3', // Exclude SQLite3 from bundling
     },
-    devtool: "source-map",
+    devtool: 'source-map',
   },
   {
     // Frontend (Webview)
-    entry: "./src/webview/index.tsx",
+    entry: './src/webview/index.tsx',
     output: {
-      path: path.resolve(__dirname, "out"),
-      filename: "webview.js",
+      path: path.resolve(__dirname, 'out'),
+      filename: 'webview.js',
     },
-    target: "web",
+    target: 'web',
     resolve: {
-      extensions: [".ts", ".tsx", ".js", ".jsx"],
+      extensions: ['.ts', '.tsx', '.js', '.jsx'],
     },
     module: {
       rules: [
         {
           test: /\.tsx?$/,
-          use: "ts-loader",
+          use: 'ts-loader',
           exclude: /node_modules/,
         },
         {
           test: /\.css$/,
-          use: ["style-loader", "css-loader"],
+          use: ['style-loader', 'css-loader'],
         },
       ],
     },
@@ -57,19 +56,10 @@ module.exports = [
       runtimeChunk: false,
       splitChunks: false,
     },
-  
+
     experiments: {
       css: false,
     },
-    devtool: "source-map",
+    devtool: 'source-map',
   },
-  
 ];
-
-
-
-
-
-
-
-

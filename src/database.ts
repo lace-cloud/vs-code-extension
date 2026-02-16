@@ -10,6 +10,7 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
+// Type definitions
 type Component = {
   id: number;
   name: string;
@@ -143,7 +144,6 @@ export const loadCanvasState = (componentId: number): Promise<CanvasState> => {
     );
   });
 };
-
 // ✅ NEW: save bundle JSON into bundle_state
 export const saveBundleState = (componentId: number, bundle: any): Promise<void> => {
   const db = new sqlite3.Database(dbPath);

@@ -26,7 +26,9 @@ export class ServerManager extends EventEmitter {
   }
 
   async start(): Promise<void> {
-    if (this.state !== 'stopped') return;
+    if (this.state !== 'stopped') {
+      return;
+    }
 
     this.setState('starting');
 
@@ -40,16 +42,15 @@ export class ServerManager extends EventEmitter {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-    //   console.log(`-------this process-----${this.process}`);
+      //   console.log(`-------this process-----${this.process}`);
 
-      this.process.stderr?.on('data', (d) =>
-        
-        console.log('[lace]', d.toString())
-      );
+      this.process.stderr?.on('data', (d) => console.log('[lace]', d.toString()));
 
       this.process.on('exit', (code) => {
         this.setState('stopped');
-        if (code !== 0) {this.maybeRestart();}
+        if (code !== 0) {
+          this.maybeRestart();
+        }
       });
 
       this.client = new JSONRPCClient(this.process);
@@ -91,13 +92,15 @@ export class ServerManager extends EventEmitter {
   }
 
   private maybeRestart(): void {
-    if (this.restartCount >= this.maxRestarts) return;
+    if (this.restartCount >= this.maxRestarts) {
+      return;
+    }
 
-    const autoRestart = vscode.workspace
-      .getConfiguration('lace')
-      .get<boolean>('autoRestart', true);
+    const autoRestart = vscode.workspace.getConfiguration('lace').get<boolean>('autoRestart', true);
 
-    if (!autoRestart) return;
+    if (!autoRestart) {
+      return;
+    }
 
     this.restartCount++;
     setTimeout(() => this.start(), 1000 * this.restartCount);

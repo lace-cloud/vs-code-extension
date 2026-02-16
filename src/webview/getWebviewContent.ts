@@ -13,12 +13,12 @@ export function getWebviewContent(
   s3Uri: vscode.Uri,
   lambdaUri: vscode.Uri,
   iamroleUri: vscode.Uri,
-  iampolicyUri: vscode.Uri
+  iampolicyUri: vscode.Uri,
 ): string {
   const nonce = getNonce();
 
   const reactAppUri = webview.asWebviewUri(
-    vscode.Uri.file(path.join(context.extensionPath, 'out', 'webview.js'))
+    vscode.Uri.file(path.join(context.extensionPath, 'out', 'webview.js')),
   );
 
   return `<!DOCTYPE html>

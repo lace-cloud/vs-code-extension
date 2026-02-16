@@ -7,25 +7,25 @@ export function setAuthenticationStatus(status: boolean): void {
   isAuthenticated = status;
 }
 
-
 export function getAuthenticationStatus(): boolean {
-    console.log('Current Authentication Status:', isAuthenticated);
-    return isAuthenticated;
-  }
-  
+  console.log('Current Authentication Status:', isAuthenticated);
+  return isAuthenticated;
+}
 
 export async function authenticateWithLace(): Promise<void> {
   try {
     const result = await vscode.window.showInformationMessage(
       'Redirecting to Lace for authentication...',
-      'Open Lace'
+      'Open Lace',
     );
 
     if (result === 'Open Lace') {
       await vscode.env.openExternal(vscode.Uri.parse('https://api.lace.cloud/api/auth/github'));
     }
 
-    const token = await vscode.authentication.getSession('github', ['read:user'], { forceNewSession: true });
+    const token = await vscode.authentication.getSession('github', ['read:user'], {
+      forceNewSession: true,
+    });
 
     if (!token) {
       vscode.window.showErrorMessage('Authentication failed. No token retrieved.');

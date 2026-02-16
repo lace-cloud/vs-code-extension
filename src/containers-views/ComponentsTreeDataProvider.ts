@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { getAuthenticationStatus } from '../auth/AuthenticationLace';
-import { getComponents} from '../database';
+import { getComponents } from '../database';
 
 // export class ComponentsTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
 //   private _onDidChangeTreeData: vscode.EventEmitter<void | null> = new vscode.EventEmitter<void | null>();
@@ -32,12 +32,12 @@ import { getComponents} from '../database';
 //   }
 // }
 
-
-
 ///////////////////////
 
 export class ComponentsTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-  private _onDidChangeTreeData: vscode.EventEmitter<void | null> = new vscode.EventEmitter<void | null>();
+  private _onDidChangeTreeData: vscode.EventEmitter<void | null> = new vscode.EventEmitter<
+    void | null
+  >();
   readonly onDidChangeTreeData: vscode.Event<void | null> = this._onDidChangeTreeData.event;
 
   refresh(): void {
@@ -53,7 +53,10 @@ export class ComponentsTreeDataProvider implements vscode.TreeDataProvider<vscod
       // Check if the user is authenticated
       const isAuthenticated = getAuthenticationStatus();
       if (!isAuthenticated) {
-        const loginItem = new vscode.TreeItem('Connect to Lace', vscode.TreeItemCollapsibleState.None);
+        const loginItem = new vscode.TreeItem(
+          'Connect to Lace',
+          vscode.TreeItemCollapsibleState.None,
+        );
         loginItem.iconPath = new vscode.ThemeIcon('plug');
         loginItem.command = {
           command: 'lace.connect',
@@ -65,7 +68,9 @@ export class ComponentsTreeDataProvider implements vscode.TreeDataProvider<vscod
       // Fetch components only if the user is authenticated
       const components = await getComponents();
       if (components.length === 0) {
-        return [new vscode.TreeItem('No components available', vscode.TreeItemCollapsibleState.None)];
+        return [
+          new vscode.TreeItem('No components available', vscode.TreeItemCollapsibleState.None),
+        ];
       }
       return components.map((component) => {
         const item = new vscode.TreeItem(component.name, vscode.TreeItemCollapsibleState.None);

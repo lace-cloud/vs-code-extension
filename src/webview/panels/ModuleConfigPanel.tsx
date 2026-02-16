@@ -123,7 +123,7 @@ export default function ModuleConfigPanel({
                 value: values[input.name],
                 wiredValue: wiredInputs?.[input.name],
                 onChange: (v) => updateValue(input.name, v),
-              })
+              }),
             )}
           </>
         )}
@@ -167,7 +167,7 @@ export default function ModuleConfigPanel({
                   value: values[input.name],
                   wiredValue: wiredInputs?.[input.name],
                   onChange: (v) => updateValue(input.name, v),
-                })
+                }),
               )}
           </>
         )}
@@ -238,13 +238,7 @@ export default function ModuleConfigPanel({
 /* Section Title                      */
 /* ---------------------------------- */
 
-function SectionTitle({
-  label,
-  style = {},
-}: {
-  label: string;
-  style?: React.CSSProperties;
-}) {
+function SectionTitle({ label, style = {} }: { label: string; style?: React.CSSProperties }) {
   return (
     <h4
       style={{
@@ -351,7 +345,7 @@ function renderInput({
       >
         <option value="true">True</option>
         <option value="false">False</option>
-      </select>
+      </select>,
     );
   }
 
@@ -441,9 +435,9 @@ function renderInput({
             input: { ...def, name: key },
             value: objVal[key],
             onChange: (v) => onChange({ ...objVal, [key]: v }),
-          })
+          }),
         )}
-      </fieldset>
+      </fieldset>,
     );
   }
 
@@ -461,9 +455,9 @@ function renderInput({
               copy[idx] = v;
               onChange(copy);
             },
-          })
+          }),
         )}
-      </>
+      </>,
     );
   }
 

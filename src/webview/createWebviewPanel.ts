@@ -19,9 +19,7 @@ const panels = new Map<string, vscode.WebviewPanel>();
 
 let activeRegistrySystem: 'aws' | 'azure' | 'gcp' = 'aws';
 
-export function setRegistrySystem(
-  system: 'aws' | 'azure' | 'gcp'
-) {
+export function setRegistrySystem(system: 'aws' | 'azure' | 'gcp') {
   activeRegistrySystem = system;
 
   for (const panel of panels.values()) {
@@ -35,25 +33,20 @@ export function setRegistrySystem(
 export async function createWebviewPanel(
   componentName: string,
   context: vscode.ExtensionContext,
-  server: ServerManager
+  server: ServerManager,
 ) {
   if (panels.has(componentName)) {
     panels.get(componentName)!.reveal();
     return;
   }
 
-  const panel = vscode.window.createWebviewPanel(
-    'lace',
-    componentName,
-    vscode.ViewColumn.One,
-    {
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.file(path.join(context.extensionPath, 'out')),
-        vscode.Uri.joinPath(context.extensionUri, 'images'),
-      ],
-    }
-  );
+  const panel = vscode.window.createWebviewPanel('lace', componentName, vscode.ViewColumn.One, {
+    enableScripts: true,
+    localResourceRoots: [
+      vscode.Uri.file(path.join(context.extensionPath, 'out')),
+      vscode.Uri.joinPath(context.extensionUri, 'images'),
+    ],
+  });
 
   panels.set(componentName, panel);
 
@@ -64,7 +57,7 @@ export async function createWebviewPanel(
     getWebviewUri(context, 's3.svg', panel.webview),
     getWebviewUri(context, 'lambda.svg', panel.webview),
     getWebviewUri(context, 'iam-role.svg', panel.webview),
-    getWebviewUri(context, 'iam-policy.svg', panel.webview)
+    getWebviewUri(context, 'iam-policy.svg', panel.webview),
   );
 
   const componentId = await getComponentIdByName(componentName);
@@ -77,7 +70,9 @@ export async function createWebviewPanel(
 
   async function sendRegistryList(system: string) {
     const rpc = server.rpcClient;
-    if (!rpc) return;
+    if (!rpc) {
+      return;
+    }
 
     const list = await rpc.listRegistryModules({ system });
 
@@ -89,7 +84,9 @@ export async function createWebviewPanel(
   }
 
   panel.webview.onDidReceiveMessage(async (msg) => {
-    if (!componentId) return;
+    if (!componentId) {
+      return;
+    }
 
     switch (msg.command) {
       case 'webviewReady':

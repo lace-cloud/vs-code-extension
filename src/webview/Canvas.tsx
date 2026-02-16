@@ -410,9 +410,9 @@ function CanvasInner() {
                       },
                     },
                   }
-                : x
-            )
-          )
+                : x,
+            ),
+          ),
         );
       }
     };
@@ -444,7 +444,7 @@ function CanvasInner() {
           position: { x: e.clientX - 320, y: e.clientY - 120 },
           data: { label: mod.name, moduleRef: mod as NodeModuleRef },
         },
-      ])
+      ]),
     );
 
     const reqId = Date.now();

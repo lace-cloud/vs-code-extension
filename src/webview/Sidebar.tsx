@@ -24,14 +24,8 @@ declare global {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ registry }) => {
-  const handleDragStart = (
-    event: React.DragEvent,
-    module: RegistryModule
-  ) => {
-    event.dataTransfer.setData(
-      'application/lace-module',
-      JSON.stringify(module)
-    );
+  const handleDragStart = (event: React.DragEvent, module: RegistryModule) => {
+    event.dataTransfer.setData('application/lace-module', JSON.stringify(module));
     event.dataTransfer.effectAllowed = 'move';
   };
 
@@ -39,9 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ registry }) => {
     <div className="sidebar">
       <h3>Terraform Registry</h3>
 
-      {Object.keys(registry).length === 0 && (
-        <div className="empty">No modules available</div>
-      )}
+      {Object.keys(registry).length === 0 && <div className="empty">No modules available</div>}
 
       {Object.entries(registry).map(([category, modules]) => (
         <div key={category} className="category">

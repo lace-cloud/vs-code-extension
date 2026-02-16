@@ -5,9 +5,10 @@ import { getAuthenticationStatus } from '../auth/AuthenticationLace';
 // Global state for authentication
 // let isAuthenticated = false;
 
-
 export class TemplatesTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-  private _onDidChangeTreeData: vscode.EventEmitter<void | null> = new vscode.EventEmitter<void | null>();
+  private _onDidChangeTreeData: vscode.EventEmitter<void | null> = new vscode.EventEmitter<
+    void | null
+  >();
   readonly onDidChangeTreeData: vscode.Event<void | null> = this._onDidChangeTreeData.event;
 
   refresh(): void {
@@ -20,7 +21,10 @@ export class TemplatesTreeDataProvider implements vscode.TreeDataProvider<vscode
   async getChildren(): Promise<vscode.TreeItem[]> {
     const isAuthenticated = getAuthenticationStatus();
     if (!isAuthenticated) {
-      const loginItem = new vscode.TreeItem('Connect to Lace', vscode.TreeItemCollapsibleState.None);
+      const loginItem = new vscode.TreeItem(
+        'Connect to Lace',
+        vscode.TreeItemCollapsibleState.None,
+      );
       loginItem.iconPath = new vscode.ThemeIcon('plug');
       loginItem.command = {
         command: 'lace.connect',
