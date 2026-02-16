@@ -37,9 +37,7 @@ function get<T>(db: sqlite3.Database, sql: string, params: any[] = []) {
 
 function all<T>(db: sqlite3.Database, sql: string, params: any[] = []) {
   return new Promise<T[]>((resolve, reject) => {
-    db.all(sql, params, (err, rows) =>
-      err ? reject(err) : resolve(rows as T[])
-    );
+    db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows as T[])));
   });
 }
 
@@ -62,7 +60,7 @@ export const initializeDatabase = async (): Promise<void> => {
         name TEXT NOT NULL UNIQUE,
         canvas_state TEXT,
         bundle_state TEXT
-      )`
+      )`,
     );
 
     // migration safety
@@ -97,15 +95,11 @@ export const getComponents = async (): Promise<Component[]> => {
 export const getComponentIdByName = (name: string): Promise<number | null> => {
   const db = new sqlite3.Database(dbPath);
   return new Promise((resolve, reject) => {
-    db.get<{ id: number }>(
-      'SELECT id FROM components WHERE name = ?',
-      [name],
-      (err, row) => {
-        db.close();
-        if (err) reject(err);
-        else resolve(row ? row.id : null);
-      }
-    );
+    db.get<{ id: number }>('SELECT id FROM components WHERE name = ?', [name], (err, row) => {
+      db.close();
+      if (err) reject(err);
+      else resolve(row ? row.id : null);
+    });
   });
 };
 
@@ -120,7 +114,7 @@ export const saveCanvasState = (componentId: number, state: CanvasState): Promis
         db.close();
         if (err) reject(err);
         else resolve();
-      }
+      },
     );
   });
 };
@@ -140,7 +134,7 @@ export const loadCanvasState = (componentId: number): Promise<CanvasState> => {
             : { nodes: [], edges: [] };
           resolve(canvasState);
         }
-      }
+      },
     );
   });
 };
@@ -156,7 +150,7 @@ export const saveBundleState = (componentId: number, bundle: any): Promise<void>
         db.close();
         if (err) reject(err);
         else resolve();
-      }
+      },
     );
   });
 };
@@ -172,7 +166,7 @@ export const loadBundleState = (componentId: number): Promise<any | null> => {
         db.close();
         if (err) reject(err);
         else resolve(row?.bundle_state ? JSON.parse(row.bundle_state) : null);
-      }
+      },
     );
   });
 };

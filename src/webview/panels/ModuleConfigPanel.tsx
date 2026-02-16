@@ -63,20 +63,7 @@ export default function ModuleConfigPanel({
   const optionalCount = optionalInputs.length;
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        right: 0,
-        top: 0,
-        width: 420,
-        height: '100%',
-        background: '#1e1e1e',
-        borderLeft: '1px solid #333',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 20,
-      }}
-    >
+    <div className="absolute right-0 top-0 w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col z-20">
       {/* ---------- HEADER ---------- */}
       <header
         style={{
@@ -203,16 +190,7 @@ export default function ModuleConfigPanel({
       </div>
 
       {/* ---------- FOOTER ---------- */}
-      <footer
-        style={{
-          padding: 16,
-          borderTop: '1px solid #333',
-          background: '#1e1e1e',
-          position: 'sticky',
-          bottom: 0,
-          zIndex: 30,
-        }}
-      >
+      <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-30">
         <button
           style={{
             width: '100%',
@@ -429,7 +407,7 @@ function renderInput({
     const objVal = value ?? {};
     return field(
       input,
-      <fieldset style={{ paddingLeft: 12, borderLeft: '2px solid #333' }}>
+      <fieldset className="pl-3 border-l-2 border-[#333]">
         {Object.entries(input.object).map(([key, def]) =>
           renderInput({
             input: { ...def, name: key },
@@ -473,12 +451,12 @@ function field(input: TerraformInput, body: React.ReactNode) {
     <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
       <label style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
         {input.name}
-        {input.required && <span style={{ color: '#e5484d', marginLeft: 4 }}>*</span>}
+        {input.required && <span className="text-[#e5484d] ml-1">*</span>}
       </label>
 
       {body}
 
-      {input.description && <div style={{ fontSize: 11, opacity: 0.6 }}>{input.description}</div>}
+      {input.description && <div className="text-[11px] opacity-60">{input.description}</div>}
     </div>
   );
 }

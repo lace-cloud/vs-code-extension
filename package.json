@@ -138,6 +138,7 @@
   },
   "devDependencies": {
     "@rspack/cli": "^1.1.8",
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/better-sqlite3": "^7.6.12",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
@@ -156,8 +157,11 @@
     "file-loader": "^6.2.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.2.1",
     "prettier": "^3.8.1",
     "style-loader": "^4.0.0",
+    "tailwindcss": "^4.1.18",
     "ts-loader": "^9.5.1",
     "typescript": "^5.6.3"
   },

@@ -2,14 +2,8 @@
 import React from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from 'react-flow-renderer';
 
-const handleStyle: React.CSSProperties = {
-  width: 10,
-  height: 10,
-  background: 'transparent',
-  border: '2px solid #ffffff',
-  borderRadius: '50%',
-  transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
-};
+const handleGenericStyle =
+  'w-2.5 h-2.5 bg-transparent border-2 border-white rounded-full transition-[box-shadow, border-color] duration-150 ease-in-out';
 
 const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
   const { setNodes, setEdges } = useReactFlow();
@@ -27,17 +21,7 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
         e.stopPropagation();
         data?.__runtime?.onOpenConfig?.(id);
       }}
-      style={{
-        background: '#1e1e1e',
-        border: '1px solid #333',
-        borderRadius: 8,
-        padding: 10,
-        width: 140,
-        color: '#fff',
-        textAlign: 'center',
-        cursor: 'pointer',
-        position: 'relative',
-      }}
+      className="bg-[#1e1e1e] border border-slate-400 shadow-gray-400 shadow-sm rounded-lg p-2.5 w-35 text-white text-center cursor-pointer relative flex items-center justify-center"
     >
       {/* ❌ delete button */}
       <button
@@ -66,7 +50,7 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
       {/* ◀️ LEFT – input */}
       <Handle id="in-left" type="target" position={Position.Left} style={handleStyle} />
 
-      <div style={{ fontSize: 12 }}>{data.label}</div>
+      <div className="text-xs">{data.label}</div>
 
       {/* ▶️ RIGHT – output */}
       <Handle id="out-right" type="source" position={Position.Right} style={handleStyle} />

@@ -487,8 +487,8 @@ function CanvasInner() {
             </div>
 
             {Object.entries(categories).map(([category, modules]) => (
-              <details key={category} open style={{ marginLeft: 8 }}>
-                <summary style={{ cursor: 'pointer' }}>{category}</summary>
+              <details key={category} open className="ml-2">
+                <summary className="cursor-pointer">{category}</summary>
 
                 {modules.map((m) => (
                   <div
@@ -497,7 +497,7 @@ function CanvasInner() {
                     onDragStart={(e) => e.dataTransfer.setData('application/reactflow', JSON.stringify(m))}
                     style={{ marginLeft: 20, padding: '4px 6px', cursor: 'grab' }}
                   >
-                    📦 {m.name} <span style={{ opacity: 0.6 }}>v{m.version}</span>
+                    📦 {m.name} <span className="opacity-60">v{m.version}</span>
                   </div>
                 ))}
               </details>
@@ -513,20 +513,7 @@ function CanvasInner() {
         onDragOver={(e) => e.preventDefault()}
       >
         {statusMessage && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 44,
-              left: 16,
-              zIndex: 20,
-              background: '#1f6feb',
-              color: '#fff',
-              padding: '6px 12px',
-              borderRadius: 6,
-              fontSize: 12,
-              boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-            }}
-          >
+          <div className="absolute top-11 left-4 z-20 bg-[#1f6feb] text-white px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
             {statusMessage}
           </div>
         )}
