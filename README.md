@@ -1,7 +1,37 @@
 # Lace README
 
-Install the required packages
+Lace VS code  extension is installed locally by users locally to generate the Terraform modules with drag and drop approach.
 
-```
+User creates the graph by dragging and dropsping the terrafrem modules to the canvas enters the required inputs to the modules and the generates the terraform configuration.
 
- /usr/local/bin/lace module generate --input single-iam-role2.json --output-dir ./generated/simple-role
+
+
+## Run the Extension locally:
+
+### Install the required packages:
+
+```npm install```
+
+### Complie the code:
+
+```npm run compile```
+
+### Build the code:
+
+```npm run build```
+
+### Run the VS Code extension locally
+
+Press F5
+
+This will run the extension locally in another window you can see the Lace icon on the side Panel. Click the Lace icon you could see the lace UI.
+
+
+
+### Creting the graph in VsCode Extension:
+
+On the side panel click create component 
+
+
+
+
