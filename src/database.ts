@@ -29,6 +29,7 @@ function run(db: sqlite3.Database, sql: string, params: any[] = []) {
   });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function get<T>(db: sqlite3.Database, sql: string, params: any[] = []) {
   return new Promise<T | undefined>((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row as T)));
@@ -77,8 +78,11 @@ export const addComponent = (name: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     db.run('INSERT INTO components (name) VALUES (?)', [name], (err) => {
       db.close();
-      if (err) reject(err);
-      else resolve();
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
     });
   });
 };
@@ -97,8 +101,11 @@ export const getComponentIdByName = (name: string): Promise<number | null> => {
   return new Promise((resolve, reject) => {
     db.get<{ id: number }>('SELECT id FROM components WHERE name = ?', [name], (err, row) => {
       db.close();
-      if (err) reject(err);
-      else resolve(row ? row.id : null);
+      if (err) {
+        reject(err);
+      } else {
+        resolve(row ? row.id : null);
+      }
     });
   });
 };
@@ -112,8 +119,11 @@ export const saveCanvasState = (componentId: number, state: CanvasState): Promis
       [serializedState, componentId],
       (err) => {
         db.close();
-        if (err) reject(err);
-        else resolve();
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
       },
     );
   });
@@ -127,8 +137,9 @@ export const loadCanvasState = (componentId: number): Promise<CanvasState> => {
       [componentId],
       (err, row) => {
         db.close();
-        if (err) reject(err);
-        else {
+        if (err) {
+          reject(err);
+        } else {
           const canvasState = row?.canvas_state
             ? (JSON.parse(row.canvas_state) as CanvasState)
             : { nodes: [], edges: [] };
@@ -148,8 +159,11 @@ export const saveBundleState = (componentId: number, bundle: any): Promise<void>
       [serialized, componentId],
       (err) => {
         db.close();
-        if (err) reject(err);
-        else resolve();
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
       },
     );
   });
@@ -164,8 +178,11 @@ export const loadBundleState = (componentId: number): Promise<any | null> => {
       [componentId],
       (err, row) => {
         db.close();
-        if (err) reject(err);
-        else resolve(row?.bundle_state ? JSON.parse(row.bundle_state) : null);
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row?.bundle_state ? JSON.parse(row.bundle_state) : null);
+        }
       },
     );
   });
@@ -176,8 +193,11 @@ export const removeComponent = (componentId: number): Promise<void> => {
   return new Promise((resolve, reject) => {
     db.run('DELETE FROM components WHERE id = ?', [componentId], (err) => {
       db.close();
-      if (err) reject(err);
-      else resolve();
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
     });
   });
 };
