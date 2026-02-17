@@ -10,9 +10,7 @@
       "version": "v1.0.0",
       "interface": {
         "inputs": [],
-        "outputs": [
-          { "name": "role_arn", "type": "string" }
-        ]
+        "outputs": [{ "name": "role_arn", "type": "string" }]
       },
       "impl": {
         "kind": "composite",
@@ -23,7 +21,9 @@
               "use": { "module_id": "modules/aws/iam/role", "version": "v1.0.0" },
               "inputs": {
                 "name": { "lit": "my-app-role" },
-                "assume_role_policy": { "lit": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}" },
+                "assume_role_policy": {
+                  "lit": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+                },
                 "tags": { "lit": { "Environment": "prod", "Team": "backend" } }
               }
             }
@@ -48,9 +48,7 @@
           { "name": "assume_role_policy", "type": "string", "required": true },
           { "name": "tags", "type": "map(string)", "required": false }
         ],
-        "outputs": [
-          { "name": "role_arn", "type": "string" }
-        ]
+        "outputs": [{ "name": "role_arn", "type": "string" }]
       },
       "impl": {
         "kind": "leaf",

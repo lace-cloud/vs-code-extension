@@ -114,10 +114,7 @@ export async function createWebviewPanel(
         const workspacePath = workspaceFolder.uri.fsPath;
 
         // 🔥 Create folder: generate-$componentName
-        const outputDir = path.join(
-          workspacePath,
-          `generate-${componentName}`
-        );
+        const outputDir = path.join(workspacePath, `generate-${componentName}`);
 
         // Ensure directory exists
         if (!fs.existsSync(outputDir)) {
@@ -144,10 +141,7 @@ export async function createWebviewPanel(
             files: result?.filesWritten,
           });
 
-          vscode.window.showInformationMessage(
-            `Generated in ${path.basename(outputDir)}`
-          );
-
+          vscode.window.showInformationMessage(`Generated in ${path.basename(outputDir)}`);
         } catch (err: any) {
           vscode.window.showErrorMessage(err.message);
         }

@@ -27,7 +27,10 @@ export class JSONRPCClient extends EventEmitter {
   private pending = new Map<number, PendingRequest>();
   private rl: readline.Interface | null = null;
 
-  constructor(private process: ChildProcess, private timeoutMs = 30_000) {
+  constructor(
+    private process: ChildProcess,
+    private timeoutMs = 30_000,
+  ) {
     super();
     this.setupReader();
   }
@@ -131,15 +134,8 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<any>('registry/version', params);
   }
 
-  getRegistryModule(params: {
-    name: string;
-    system: string;
-    organization?: string;
-  }) {
-    return this.call<{ name: string; system: string; versions: any[] }>(
-      'registry/get',
-      params
-    );
+  getRegistryModule(params: { name: string; system: string; organization?: string }) {
+    return this.call<{ name: string; system: string; versions: any[] }>('registry/get', params);
   }
 
   // ✅ generate
@@ -153,10 +149,7 @@ export class JSONRPCClient extends EventEmitter {
       overwrite?: boolean;
     };
   }) {
-    return this.call<{ filesWritten?: string[]; diagnostics?: any[] }>(
-      'generate',
-      params
-    );
+    return this.call<{ filesWritten?: string[]; diagnostics?: any[] }>('generate', params);
   }
 
   dispose(): void {
