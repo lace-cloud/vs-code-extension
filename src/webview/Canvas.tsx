@@ -106,12 +106,18 @@ function parseTerraformGitSource(gitUrl?: string): { repo: string; subdir?: stri
 }
 
 function sanitizeOutputName(s: string) {
-  return (s || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '_');
+  return (s || '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
 // Terraform identifier rules-ish: [a-zA-Z_][a-zA-Z0-9_-]* (we’ll normalize to _)
 function toTerraformModuleName(id: string) {
-  const base = (id || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '_');
+  const base = (id || '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '_');
   if (!base) return 'module_x';
   if (/^[a-zA-Z_]/.test(base)) return base;
   return `m_${base}`;
@@ -319,7 +325,9 @@ function CanvasInner() {
           instances: canvasNodes.map((node) => {
             const ref: NodeModuleRef = node.data.moduleRef;
             const moduleId = ref.module_path || ref.name;
-            const version = ref.version?.startsWith('v') ? ref.version : `v${ref.version || '1.0.0'}`;
+            const version = ref.version?.startsWith('v')
+              ? ref.version
+              : `v${ref.version || '1.0.0'}`;
 
             const litInputs = toLitBindings(node.data.config || {});
             const wired = wiredInputsByTarget[node.id] || {};
@@ -478,7 +486,9 @@ function CanvasInner() {
     <div style={{ display: 'flex', height: '100vh' }}>
       {/* registry sidebar */}
       <div style={{ width: 300, padding: 8, borderRight: '1px solid #333', overflowY: 'auto' }}>
-        {Object.keys(registryTree).length === 0 && <div style={{ opacity: 0.6 }}>No modules available</div>}
+        {Object.keys(registryTree).length === 0 && (
+          <div style={{ opacity: 0.6 }}>No modules available</div>
+        )}
 
         {Object.entries(registryTree).map(([system, categories]) => (
           <div key={system} style={{ marginBottom: 14 }}>
@@ -498,7 +508,9 @@ function CanvasInner() {
                   <div
                     key={m.id}
                     draggable={m.kind === 'leaf'}
-                    onDragStart={(e) => e.dataTransfer.setData('application/reactflow', JSON.stringify(m))}
+                    onDragStart={(e) =>
+                      e.dataTransfer.setData('application/reactflow', JSON.stringify(m))
+                    }
                     style={{ marginLeft: 20, padding: '4px 6px', cursor: 'grab' }}
                   >
                     📦 {m.name} <span className="opacity-60">v{m.version}</span>
@@ -568,8 +580,10 @@ function CanvasInner() {
             onSave={(v: any) => {
               setNodes((curr) =>
                 attachRuntimeHandlers(
-                  curr.map((x) => (x.id === activeNode.id ? { ...x, data: { ...x.data, config: v } } : x))
-                )
+                  curr.map((x) =>
+                    x.id === activeNode.id ? { ...x, data: { ...x.data, config: v } } : x,
+                  ),
+                ),
               );
               setActiveNode(null);
               markDirty();
@@ -600,8 +614,8 @@ function CanvasInner() {
                           mapping,
                         },
                       }
-                    : e
-                )
+                    : e,
+                ),
               );
 
               // ✅ update target node UI (wiredInputs) with Terraform-like reference:
@@ -626,8 +640,8 @@ function CanvasInner() {
                         wiredInputs,
                       },
                     };
-                  })
-                )
+                  }),
+                ),
               );
 
               setActiveEdgeId(null);

@@ -182,7 +182,9 @@ export default function ModuleConfigPanel({
                     {o.type ?? ''}
                   </span>
                 </div>
-                {o.description && <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>{o.description}</div>}
+                {o.description && (
+                  <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>{o.description}</div>
+                )}
               </div>
             ))}
           </>
@@ -286,18 +288,14 @@ function renderInput({
         >
           Wired
         </span>
-      </div>
+      </div>,
     );
   }
 
   if (type === 'string') {
     return field(
       input,
-      <input
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-        style={inputStyle}
-      />
+      <input value={value ?? ''} onChange={(e) => onChange(e.target.value)} style={inputStyle} />,
     );
   }
 
@@ -309,7 +307,7 @@ function renderInput({
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
         style={inputStyle}
-      />
+      />,
     );
   }
 
@@ -355,7 +353,7 @@ function renderInput({
         <button onClick={() => onChange([...items, ''])} style={addBtnStyle}>
           + Add
         </button>
-      </div>
+      </div>,
     );
   }
 
@@ -399,7 +397,7 @@ function renderInput({
         >
           + Add
         </button>
-      </div>
+      </div>,
     );
   }
 

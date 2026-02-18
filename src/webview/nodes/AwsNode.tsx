@@ -75,7 +75,6 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
             🔗 {inputName}
           </div>
         ))}
-
     </div>
   );
 };

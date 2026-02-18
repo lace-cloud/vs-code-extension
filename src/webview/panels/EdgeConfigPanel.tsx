@@ -87,7 +87,8 @@ export default function EdgeConfigPanel({
             <select value={from} onChange={(e) => setFrom(e.target.value)} style={selectStyle}>
               {fromOutputs.map((o) => (
                 <option key={o.name} value={o.name}>
-                  {o.name}{o.type ? ` : ${o.type}` : ''}
+                  {o.name}
+                  {o.type ? ` : ${o.type}` : ''}
                 </option>
               ))}
             </select>
@@ -102,7 +103,8 @@ export default function EdgeConfigPanel({
               {requiredFirst.map((i) => (
                 <option key={i.name} value={i.name}>
                   {i.required ? '★ ' : ''}
-                  {i.name}{i.type ? ` : ${i.type}` : ''}
+                  {i.name}
+                  {i.type ? ` : ${i.type}` : ''}
                 </option>
               ))}
             </select>
