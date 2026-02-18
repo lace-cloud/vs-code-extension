@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+// src/webview/components/panels/ModuleConfigPanel.tsx
+import React, { useMemo, useState } from 'react';
 
 /* ---------------------------------- */
 /* Types                              */
@@ -25,6 +26,7 @@ type Props = {
   inputs: TerraformInput[];
   outputs?: TerraformOutput[];
   initialValues: Record<string, any>;
+  wiredInputs?: Record<string, string>; // inputName -> "module.x.y"
   onSave: (values: Record<string, any>) => void;
   onClose: () => void;
 };
@@ -38,11 +40,12 @@ export default function ModuleConfigPanel({
   inputs,
   outputs = [],
   initialValues,
+  wiredInputs = {},
   onSave,
   onClose,
 }: Props) {
   const [values, setValues] = useState<Record<string, any>>(initialValues ?? {});
-  const [showOptional, setShowOptional] = useState(false);
+  const [showOptional, setShowOptional] = useState(true); // ✅ default show, so fields don't "disappear"
 
   const updateValue = (key: string, value: any) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -52,10 +55,12 @@ export default function ModuleConfigPanel({
 
   const { requiredInputs, optionalInputs } = useMemo(() => {
     return {
-      requiredInputs: inputs.filter((i) => i.required),
-      optionalInputs: inputs.filter((i) => !i.required),
+      requiredInputs: (inputs ?? []).filter((i) => i.required),
+      optionalInputs: (inputs ?? []).filter((i) => !i.required),
     };
   }, [inputs]);
+
+  const optionalCount = optionalInputs.length;
 
   return (
     <div
@@ -83,28 +88,40 @@ export default function ModuleConfigPanel({
           flexShrink: 0,
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
-        <button onClick={onClose}>✕</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>Module</div>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            cursor: 'pointer',
+            border: '1px solid #333',
+            background: '#0f0f0f',
+            color: '#fff',
+            borderRadius: 8,
+            width: 34,
+            height: 34,
+          }}
+          aria-label="Close"
+          title="Close"
+        >
+          ✕
+        </button>
       </header>
 
       {/* ---------- BODY ---------- */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: 16,
-          paddingBottom: 96,
-        }}
-      >
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 96 }}>
         {/* ---------- REQUIRED INPUTS ---------- */}
         {requiredInputs.length > 0 && (
           <>
             <SectionTitle label="Required Inputs" />
-
             {requiredInputs.map((input) =>
               renderInput({
                 input,
                 value: values[input.name],
+                wiredValue: wiredInputs?.[input.name],
                 onChange: (v) => updateValue(input.name, v),
               })
             )}
@@ -116,30 +133,39 @@ export default function ModuleConfigPanel({
           <>
             <div
               style={{
+                marginTop: requiredInputs.length > 0 ? 18 : 0,
                 display: 'flex',
-                justifyContent: 'space-between',
                 alignItems: 'center',
-                marginTop: 24,
-                marginBottom: 8,
+                justifyContent: 'space-between',
               }}
             >
-              <SectionTitle label="Optional Inputs" />
+              <SectionTitle label="Optional Inputs" style={{ marginBottom: 0 }} />
+
               <button
-                style={{
-                  fontSize: 12,
-                  opacity: 0.8,
-                }}
                 onClick={() => setShowOptional((v) => !v)}
+                style={{
+                  cursor: 'pointer',
+                  border: '1px solid #333',
+                  background: '#0f0f0f',
+                  color: '#fff',
+                  borderRadius: 999,
+                  padding: '6px 10px',
+                  fontSize: 12,
+                  opacity: 0.9,
+                }}
               >
-                {showOptional ? 'Hide' : 'Show'}
+                {showOptional ? 'Hide' : 'Show'} ({optionalCount})
               </button>
             </div>
+
+            <div style={{ height: 10 }} />
 
             {showOptional &&
               optionalInputs.map((input) =>
                 renderInput({
                   input,
                   value: values[input.name],
+                  wiredValue: wiredInputs?.[input.name],
                   onChange: (v) => updateValue(input.name, v),
                 })
               )}
@@ -149,21 +175,27 @@ export default function ModuleConfigPanel({
         {/* ---------- OUTPUTS ---------- */}
         {outputs.length > 0 && (
           <>
-            <SectionTitle label="Outputs" style={{ marginTop: 32 }} />
-
+            <SectionTitle label="Outputs" style={{ marginTop: 26 }} />
             {outputs.map((o) => (
               <div
                 key={o.name}
                 style={{
                   marginBottom: 10,
                   fontSize: 12,
-                  opacity: 0.7,
+                  opacity: 0.85,
+                  background: '#0f0f0f',
+                  border: '1px solid #333',
+                  borderRadius: 10,
+                  padding: '10px 10px',
                 }}
               >
-                <strong>{o.name}</strong>
-                {o.description && (
-                  <div style={{ marginTop: 2 }}>{o.description}</div>
-                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                  <strong style={{ fontSize: 12 }}>{o.name}</strong>
+                  <span style={{ fontFamily: 'monospace', opacity: 0.75, fontSize: 11 }}>
+                    {o.type ?? ''}
+                  </span>
+                </div>
+                {o.description && <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>{o.description}</div>}
               </div>
             ))}
           </>
@@ -188,9 +220,10 @@ export default function ModuleConfigPanel({
             background: '#1f6feb',
             color: '#fff',
             border: 'none',
-            borderRadius: 8,
-            fontWeight: 600,
+            borderRadius: 10,
+            fontWeight: 700,
             fontSize: 14,
+            cursor: 'pointer',
           }}
           onClick={() => onSave(values)}
         >
@@ -218,7 +251,7 @@ function SectionTitle({
         margin: 0,
         marginBottom: 12,
         fontSize: 13,
-        fontWeight: 600,
+        fontWeight: 700,
         textTransform: 'uppercase',
         letterSpacing: '0.04em',
         opacity: 0.85,
@@ -231,24 +264,68 @@ function SectionTitle({
 }
 
 /* ---------------------------------- */
-/* Input Renderer (UNCHANGED)         */
+/* Input Renderer                     */
 /* ---------------------------------- */
 
 function renderInput({
   input,
   value,
   onChange,
+  wiredValue,
 }: {
   input: TerraformInput;
   value: any;
   onChange: (v: any) => void;
+  wiredValue?: string;
 }): JSX.Element | null {
-  const type = input.type;
+  const type = input.type || 'string';
+
+  // ✅ If wired, show read-only Terraform expression (module.x.y)
+  if (wiredValue) {
+    return field(
+      input,
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          value={wiredValue}
+          readOnly
+          style={{
+            width: '100%',
+            background: '#0f0f0f',
+            color: '#fff',
+            border: '1px solid #333',
+            borderRadius: 8,
+            padding: '10px 10px',
+            fontSize: 12,
+            fontFamily: 'monospace',
+            opacity: 0.95,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 11,
+            padding: '6px 10px',
+            borderRadius: 999,
+            border: '1px solid #2b4a7a',
+            background: '#0b1f3a',
+            color: '#9ecbff',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Wired
+        </span>
+      </div>
+    );
+  }
 
   if (type === 'string') {
     return field(
       input,
-      <input value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
+      <input
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        style={inputStyle}
+      />
     );
   }
 
@@ -258,7 +335,8 @@ function renderInput({
       <input
         type="number"
         value={value ?? ''}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        style={inputStyle}
       />
     );
   }
@@ -269,6 +347,7 @@ function renderInput({
       <select
         value={String(value ?? false)}
         onChange={(e) => onChange(e.target.value === 'true')}
+        style={selectStyle}
       >
         <option value="true">True</option>
         <option value="false">False</option>
@@ -277,31 +356,34 @@ function renderInput({
   }
 
   if (type.startsWith('list(')) {
-    const items = value ?? [];
+    const items = Array.isArray(value) ? value : [];
     return field(
       input,
-      <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.map((v: any, idx: number) => (
-          <div key={idx} style={{ display: 'flex', gap: 6 }}>
+          <div key={idx} style={{ display: 'flex', gap: 8 }}>
             <input
-              value={v}
+              value={v ?? ''}
               onChange={(e) => {
                 const copy = [...items];
                 copy[idx] = e.target.value;
                 onChange(copy);
               }}
+              style={{ ...inputStyle, flex: 1 }}
             />
             <button
-              onClick={() =>
-                onChange(items.filter((_: any, i: number) => i !== idx))
-              }
+              onClick={() => onChange(items.filter((_: any, i: number) => i !== idx))}
+              style={miniBtnStyle}
+              title="Remove"
             >
               −
             </button>
           </div>
         ))}
-        <button onClick={() => onChange([...items, ''])}>+ Add</button>
-      </>
+        <button onClick={() => onChange([...items, ''])} style={addBtnStyle}>
+          + Add
+        </button>
+      </div>
     );
   }
 
@@ -317,15 +399,14 @@ function renderInput({
     const mapVal = value ?? {};
     return field(
       input,
-      <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {Object.entries(mapVal).map(([k, v]) => (
-          <div key={k} style={{ display: 'flex', gap: 6 }}>
-            <input value={k} disabled />
+          <div key={k} style={{ display: 'flex', gap: 8 }}>
+            <input value={k} disabled style={{ ...inputStyle, flex: 1, opacity: 0.7 }} />
             <input
               value={v as string}
-              onChange={(e) =>
-                onChange({ ...mapVal, [k]: e.target.value })
-              }
+              onChange={(e) => onChange({ ...mapVal, [k]: e.target.value })}
+              style={{ ...inputStyle, flex: 2 }}
             />
             <button
               onClick={() => {
@@ -333,19 +414,20 @@ function renderInput({
                 delete copy[k];
                 onChange(copy);
               }}
+              style={miniBtnStyle}
+              title="Remove"
             >
               −
             </button>
           </div>
         ))}
         <button
-          onClick={() =>
-            onChange({ ...mapVal, [`key_${Date.now()}`]: '' })
-          }
+          onClick={() => onChange({ ...mapVal, [`key_${Date.now()}`]: '' })}
+          style={addBtnStyle}
         >
           + Add
         </button>
-      </>
+      </div>
     );
   }
 
@@ -394,34 +476,50 @@ function renderInput({
 
 function field(input: TerraformInput, body: React.ReactNode) {
   return (
-    <div
-      style={{
-        marginBottom: 16,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-      }}
-    >
-      <label
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          opacity: 0.9,
-        }}
-      >
+    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
         {input.name}
-        {input.required && (
-          <span style={{ color: '#e5484d', marginLeft: 4 }}>*</span>
-        )}
+        {input.required && <span style={{ color: '#e5484d', marginLeft: 4 }}>*</span>}
       </label>
 
       {body}
 
-      {input.description && (
-        <div style={{ fontSize: 11, opacity: 0.6 }}>
-          {input.description}
-        </div>
-      )}
+      {input.description && <div style={{ fontSize: 11, opacity: 0.6 }}>{input.description}</div>}
     </div>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: '#0f0f0f',
+  color: '#fff',
+  border: '1px solid #333',
+  borderRadius: 8,
+  padding: '10px 10px',
+  fontSize: 12,
+};
+
+const selectStyle: React.CSSProperties = {
+  ...inputStyle,
+  padding: '10px 10px',
+};
+
+const miniBtnStyle: React.CSSProperties = {
+  width: 34,
+  borderRadius: 8,
+  border: '1px solid #333',
+  background: '#0f0f0f',
+  color: '#fff',
+  cursor: 'pointer',
+};
+
+const addBtnStyle: React.CSSProperties = {
+  borderRadius: 8,
+  border: '1px dashed #444',
+  background: '#0f0f0f',
+  color: '#fff',
+  padding: '10px 10px',
+  cursor: 'pointer',
+  fontSize: 12,
+  textAlign: 'left',
+};

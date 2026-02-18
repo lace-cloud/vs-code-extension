@@ -1,3 +1,4 @@
+// src/webview/components/nodes/AwsNode.tsx
 import React from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from 'react-flow-renderer';
 
@@ -10,32 +11,22 @@ const handleStyle: React.CSSProperties = {
   transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
 };
 
-
-
 const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
   const { setNodes, setEdges } = useReactFlow();
 
   const onDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setNodes((n) => n.filter((x) => x.id !== id));
-    setEdges((e) =>
-      e.filter((x) => x.source !== id && x.target !== id)
-    );
-    data?.onDirty?.();
+    setEdges((e2) => e2.filter((x) => x.source !== id && x.target !== id));
+    data?.__runtime?.onDirty?.();
   };
 
   return (
     <div
-      // onDoubleClick={(e) => {
-      //   e.stopPropagation();
-      //   data?.onOpenConfig?.(id);
-      // }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        console.log('Double clicked node:', id, data);
         data?.__runtime?.onOpenConfig?.(id);
       }}
-
       style={{
         background: '#1e1e1e',
         border: '1px solid #333',
@@ -62,40 +53,45 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
           border: 'none',
           color: '#fff',
           fontSize: 12,
+          cursor: 'pointer',
         }}
+        title="Delete"
       >
         ✕
       </button>
 
       {/* 🔼 TOP – input */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={handleStyle}
-      />
+      <Handle id="in-top" type="target" position={Position.Top} style={handleStyle} />
 
       {/* ◀️ LEFT – input */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        style={handleStyle}
-      />
+      <Handle id="in-left" type="target" position={Position.Left} style={handleStyle} />
 
       <div style={{ fontSize: 12 }}>{data.label}</div>
 
       {/* ▶️ RIGHT – output */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        style={handleStyle}
-      />
+      <Handle id="out-right" type="source" position={Position.Right} style={handleStyle} />
 
       {/* 🔽 BOTTOM – output */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={handleStyle}
-      />
+      <Handle id="out-bottom" type="source" position={Position.Bottom} style={handleStyle} />
+
+      {/* 🔗 show wired inputs */}
+      {data?.wiredInputs &&
+        Object.keys(data.wiredInputs).map((inputName) => (
+          <div
+            key={inputName}
+            style={{
+              marginTop: 4,
+              fontSize: 10,
+              background: '#0f5132',
+              padding: '2px 4px',
+              borderRadius: 4,
+              color: '#fff',
+            }}
+          >
+            🔗 {inputName}
+          </div>
+        ))}
+
     </div>
   );
 };

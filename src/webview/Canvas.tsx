@@ -1,14 +1,19 @@
+// src/webview/components/Canvas.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   applyNodeChanges,
   applyEdgeChanges,
+  addEdge,
   Background,
   Controls,
+  Connection,
+  Edge,
 } from 'react-flow-renderer';
 
 import AwsNode from './nodes/AwsNode';
 import ModuleConfigPanel from './panels/ModuleConfigPanel';
+import EdgeConfigPanel from './panels/EdgeConfigPanel';
 
 const nodeTypes = { awsNode: AwsNode };
 
@@ -37,9 +42,8 @@ type ModuleSchema = {
 };
 
 type NodeModuleRef = RegistryModule & {
-  // populated from registry/version response
   module_path?: string; // e.g. "modules/aws/ec2/instance"
-  git_url?: string;     // e.g. "git::https://github.com/...//modules/aws/ec2/instance?ref=SHA"
+  git_url?: string; // terraform git:: url
   schema?: ModuleSchema;
 };
 
@@ -53,17 +57,13 @@ function buildRegistryTree(modules: RegistryModule[]): RegistryTree {
   modules.forEach((m) => {
     const system = m.system ?? 'unknown';
     const categories =
-      Array.isArray(m.categories) && m.categories.length > 0
-        ? m.categories
-        : ['misc'];
+      Array.isArray(m.categories) && m.categories.length > 0 ? m.categories : ['misc'];
 
     if (!tree[system]) tree[system] = {};
 
     categories.forEach((cat) => {
       if (!tree[system][cat]) tree[system][cat] = [];
-      if (!tree[system][cat].some((x) => x.id === m.id)) {
-        tree[system][cat].push(m);
-      }
+      if (!tree[system][cat].some((x) => x.id === m.id)) tree[system][cat].push(m);
     });
   });
 
@@ -78,8 +78,7 @@ function stripRuntime(nodes: any[]) {
   });
 }
 
-// Turns config into Lace bindings { lit: value } (skips empty)
-function toBindings(config: Record<string, any>) {
+function toLitBindings(config: Record<string, any>) {
   const result: Record<string, any> = {};
   Object.entries(config || {}).forEach(([key, value]) => {
     if (value === undefined || value === '') return;
@@ -88,42 +87,34 @@ function toBindings(config: Record<string, any>) {
   return result;
 }
 
-// Parse terraform-style git:: URL into {repo, subdir, ref}
-function parseTerraformGitSource(gitUrl?: string): {
-  repo: string;
-  subdir?: string;
-  ref?: string;
-} {
+function parseTerraformGitSource(gitUrl?: string): { repo: string; subdir?: string; ref?: string } {
   if (!gitUrl) return { repo: '' };
 
-  // Example:
-  // git::https://github.com/lace-cloud/registry-tf.git//modules/aws/ec2/instance?ref=f687...
   let s = gitUrl.trim();
   if (s.startsWith('git::')) s = s.slice('git::'.length);
 
-  // split off query (?ref=...)
   const [beforeQ, query] = s.split('?');
   const ref = query?.startsWith('ref=') ? query.slice('ref='.length) : undefined;
 
-  // locate "//" that indicates subdir split:
-  // https://...repo.git//modules/aws/...
   const marker = '//';
   const idx = beforeQ.indexOf(marker, beforeQ.indexOf('://') + 3);
-  if (idx === -1) {
-    return { repo: beforeQ, ref };
-  }
+  if (idx === -1) return { repo: beforeQ, ref };
 
   const repo = beforeQ.slice(0, idx);
   const subdir = beforeQ.slice(idx + marker.length);
-
   return { repo, subdir, ref };
 }
 
 function sanitizeOutputName(s: string) {
-  return (s || '')
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace(/[^a-zA-Z0-9_]/g, '_');
+  return (s || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+// Terraform identifier rules-ish: [a-zA-Z_][a-zA-Z0-9_-]* (we’ll normalize to _)
+function toTerraformModuleName(id: string) {
+  const base = (id || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '_');
+  if (!base) return 'module_x';
+  if (/^[a-zA-Z_]/.test(base)) return base;
+  return `m_${base}`;
 }
 
 /* ---------------------------------- */
@@ -132,20 +123,23 @@ function sanitizeOutputName(s: string) {
 
 function CanvasInner() {
   const [nodes, setNodes] = useState<any[]>([]);
-  const [edges, setEdges] = useState<any[]>([]);
+  const [edges, setEdges] = useState<Edge<any>[]>([]);
   const [registryTree, setRegistryTree] = useState<RegistryTree>({});
   const [activeNode, setActiveNode] = useState<any>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  // ✅ Edge config UI state
+  const [activeEdgeId, setActiveEdgeId] = useState<string | null>(null);
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const nodesRef = useRef<any[]>([]);
-  const edgesRef = useRef<any[]>([]);
+  const edgesRef = useRef<Edge<any>[]>([]);
   const pending = useRef<Record<number, string>>({});
 
   /* ---------- helpers ---------- */
 
-  const markDirty = () =>
-    window.vscode.postMessage({ command: 'markDirty' });
+  const markDirty = () => window.vscode.postMessage({ command: 'markDirty' });
 
   const attachRuntimeHandlers = (inputNodes: any[]) =>
     (inputNodes ?? []).map((n) => ({
@@ -167,9 +161,59 @@ function CanvasInner() {
     edgesRef.current = edges;
   }, [nodes, edges]);
 
-  /* ---------- build bundle ---------- */
+  /* ---------------------------------- */
+  /* Delete Edge with Keyboard         */
+  /* ---------------------------------- */
 
-  function buildBundle(nodesInput: any[]) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' && selectedEdgeId) {
+        setEdges((curr) => curr.filter((edge) => edge.id !== selectedEdgeId));
+        setSelectedEdgeId(null);
+        markDirty();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedEdgeId]);
+
+  /* ---------------------------------- */
+  /* Edge connect + config panel        */
+  /* ---------------------------------- */
+
+  const onConnect = (conn: Connection) => {
+    if (!conn.source || !conn.target) return;
+
+    const edgeId = `e-${conn.source}-${conn.target}-${Date.now()}`;
+
+    const newEdge: Edge<any> = {
+      id: edgeId,
+      source: conn.source,
+      target: conn.target,
+      sourceHandle: conn.sourceHandle,
+      targetHandle: conn.targetHandle,
+      type: 'default',
+      animated: false,
+      data: {},
+    };
+
+    setEdges((eds) => addEdge(newEdge, eds));
+    setActiveEdgeId(edgeId);
+    markDirty();
+  };
+
+  const onEdgeClick = (_: any, edge: Edge<any>) => {
+    setSelectedEdgeId(edge.id);
+  };
+
+  const onEdgeDoubleClick = (_: any, edge: Edge<any>) => {
+    setActiveEdgeId(edge.id);
+  };
+
+  /* ---------- build bundle (WITH WIRES) ---------- */
+
+  function buildBundle(nodesInput: any[], edgesInput: Edge<any>[]) {
     const canvasNodes = (nodesInput ?? []).filter((n) => n?.data?.moduleRef);
     if (canvasNodes.length === 0) return null;
 
@@ -179,7 +223,7 @@ function CanvasInner() {
     for (const node of canvasNodes) {
       const ref: NodeModuleRef = node.data.moduleRef;
 
-      const moduleId = ref.module_path || ref.name; // prefer module_path
+      const moduleId = ref.module_path || ref.name;
       const version = ref.version?.startsWith('v') ? ref.version : `v${ref.version || '1.0.0'}`;
       const leafKey = `${moduleId}@${version}`;
 
@@ -187,26 +231,21 @@ function CanvasInner() {
       const inputs = schema?.inputs ?? [];
       const outputs = schema?.outputs ?? [];
 
-      const { repo, subdir, ref: gitRef } = parseTerraformGitSource(ref.git_url);
+      const { repo, subdir } = parseTerraformGitSource(ref.git_url);
 
       modules[leafKey] = {
         schema_version: '1.0',
         kind: 'module_def',
         id: moduleId,
         version,
-        interface: {
-          inputs,
-          outputs,
-        },
+        interface: { inputs, outputs },
         impl: {
           kind: 'leaf',
           source: {
             kind: 'git',
             repo,
             subdir: subdir || ref.module_path,
-            // prefer a clean semver tag when available; otherwise fall back to git sha ref
-            ref: version, // keep "v1.0.0" like your desired example
-            ...(gitRef ? { commit_sha: gitRef } : {}),
+            ref: version,
           },
         },
       };
@@ -217,9 +256,26 @@ function CanvasInner() {
     const compositeVersion = 'v1.0.0';
     const compositeKey = `${compositeId}@${compositeVersion}`;
 
-    // outputs export:
-    // - if only 1 node => keep output name (role_arn)
-    // - if multiple nodes => prefix using node id to avoid collisions
+    // wires + wired input overrides for each target node
+    const wires: any[] = [];
+    const wiredInputsByTarget: Record<string, Record<string, any>> = {};
+
+    for (const e of edgesInput || []) {
+      const mapping = (e.data as any)?.mapping as { from?: string; to?: string } | undefined;
+      if (!mapping?.from || !mapping?.to) continue;
+
+      wires.push({
+        from: { module: e.source, port: `outputs.${mapping.from}` },
+        to: { module: e.target, port: `inputs.${mapping.to}` },
+      });
+
+      if (!wiredInputsByTarget[e.target]) wiredInputsByTarget[e.target] = {};
+      wiredInputsByTarget[e.target][mapping.to] = {
+        out: { module: e.source, name: mapping.from },
+      };
+    }
+
+    // exports
     const exportOutputs: Record<string, any> = {};
     const compositeInterfaceOutputs: any[] = [];
 
@@ -245,23 +301,18 @@ function CanvasInner() {
         });
 
         exportOutputs[exportedName] = {
-          out: {
-            module: node.id,
-            name: outName,
-          },
+          out: { module: node.id, name: outName },
         };
       }
     }
 
+    // composite module def
     modules[compositeKey] = {
       schema_version: '1.0',
       kind: 'module_def',
       id: compositeId,
       version: compositeVersion,
-      interface: {
-        inputs: [],
-        outputs: compositeInterfaceOutputs,
-      },
+      interface: { inputs: [], outputs: compositeInterfaceOutputs },
       impl: {
         kind: 'composite',
         graph: {
@@ -270,19 +321,18 @@ function CanvasInner() {
             const moduleId = ref.module_path || ref.name;
             const version = ref.version?.startsWith('v') ? ref.version : `v${ref.version || '1.0.0'}`;
 
+            const litInputs = toLitBindings(node.data.config || {});
+            const wired = wiredInputsByTarget[node.id] || {};
+            const mergedInputs = { ...litInputs, ...wired };
+
             return {
-              id: node.id, // instance id must be stable (your node id)
-              use: {
-                module_id: moduleId,
-                version,
-              },
-              inputs: toBindings(node.data.config || {}),
+              id: node.id,
+              use: { module_id: moduleId, version },
+              inputs: mergedInputs,
             };
           }),
-          wires: [],
-          exports: {
-            outputs: exportOutputs,
-          },
+          wires,
+          exports: { outputs: exportOutputs },
         },
       },
     };
@@ -290,10 +340,7 @@ function CanvasInner() {
     return {
       schema_version: '1.0',
       kind: 'module_bundle',
-      entry: {
-        module_id: compositeId,
-        version: compositeVersion,
-      },
+      entry: { module_id: compositeId, version: compositeVersion },
       modules,
     };
   }
@@ -313,36 +360,24 @@ function CanvasInner() {
         const modulesArray: RegistryModule[] = Array.isArray(m.modules)
           ? m.modules
           : Object.values(m.modules ?? {}).flat();
-
         setRegistryTree(buildRegistryTree(modulesArray));
       }
 
       if (m.command === 'setRegistrySystem') {
-        window.vscode.postMessage({
-          command: 'requestRegistryModules',
-          system: m.system,
-        });
+        window.vscode.postMessage({ command: 'requestRegistryModules', system: m.system });
       }
 
       if (m.command === 'triggerSave') {
         window.vscode.postMessage({
           command: 'saveState',
-          state: {
-            nodes: stripRuntime(nodesRef.current),
-            edges: edgesRef.current,
-          },
+          state: { nodes: stripRuntime(nodesRef.current), edges: edgesRef.current },
         });
       }
 
-      // 🔥 generate button: extension tells webview to build + send bundle
       if (m.command === 'triggerGenerate') {
-        const bundle = buildBundle(nodesRef.current);
+        const bundle = buildBundle(nodesRef.current, edgesRef.current);
         if (!bundle) return;
-
-        window.vscode.postMessage({
-          command: 'generateBundle',
-          bundle,
-        });
+        window.vscode.postMessage({ command: 'generateBundle', bundle });
       }
 
       if (m.command === 'generateSuccess') {
@@ -350,14 +385,13 @@ function CanvasInner() {
         setTimeout(() => setStatusMessage(null), 3000);
       }
 
-      // ✅ IMPORTANT: store registry/version response into the node (module_path, git_url, schema)
       if (m.command === 'moduleVersionData') {
         const id = pending.current[m.requestId];
         if (!id) return;
 
         const schemaFromServer = m.data?.schema;
-        const modulePath = m.data?.module_path; // e.g. "modules/aws/ec2/instance"
-        const gitUrl = m.data?.git_url;         // e.g. git::https://...//modules/aws/...
+        const modulePath = m.data?.module_path;
+        const gitUrl = m.data?.git_url;
 
         setNodes((curr) =>
           attachRuntimeHandlers(
@@ -385,7 +419,6 @@ function CanvasInner() {
 
     window.addEventListener('message', handler);
     window.vscode.postMessage({ command: 'webviewReady' });
-
     return () => window.removeEventListener('message', handler);
   }, []);
 
@@ -408,14 +441,8 @@ function CanvasInner() {
         {
           id,
           type: 'awsNode',
-          position: {
-            x: e.clientX - 320,
-            y: e.clientY - 120,
-          },
-          data: {
-            label: mod.name,
-            moduleRef: mod as NodeModuleRef, // partial now, enriched after registry/version
-          },
+          position: { x: e.clientX - 320, y: e.clientY - 120 },
+          data: { label: mod.name, moduleRef: mod as NodeModuleRef },
         },
       ])
     );
@@ -434,34 +461,28 @@ function CanvasInner() {
     markDirty();
   };
 
+  /* ---------- Edge Panel helpers ---------- */
+
+  const activeEdge = activeEdgeId ? edges.find((e) => e.id === activeEdgeId) : undefined;
+  const fromNode = activeEdge ? nodes.find((n) => n.id === activeEdge.source) : undefined;
+  const toNode = activeEdge ? nodes.find((n) => n.id === activeEdge.target) : undefined;
+
+  const fromOutputs = (fromNode?.data?.schema?.outputs ?? []) as any[];
+  const toInputs = (toNode?.data?.schema?.inputs ?? []) as any[];
+
   /* ---------------------------------- */
   /* Render                             */
   /* ---------------------------------- */
 
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
-      {/* ---------- REGISTRY SIDEBAR ---------- */}
-      <div
-        style={{
-          width: 300,
-          padding: 8,
-          borderRight: '1px solid #333',
-          overflowY: 'auto',
-        }}
-      >
-        {Object.keys(registryTree).length === 0 && (
-          <div style={{ opacity: 0.6 }}>No modules available</div>
-        )}
+      {/* registry sidebar */}
+      <div style={{ width: 300, padding: 8, borderRight: '1px solid #333', overflowY: 'auto' }}>
+        {Object.keys(registryTree).length === 0 && <div style={{ opacity: 0.6 }}>No modules available</div>}
 
         {Object.entries(registryTree).map(([system, categories]) => (
           <div key={system} style={{ marginBottom: 14 }}>
-            <div
-              style={{
-                fontWeight: 'bold',
-                textTransform: 'uppercase',
-                marginBottom: 6,
-              }}
-            >
+            <div style={{ fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 6 }}>
               {system}
             </div>
 
@@ -473,20 +494,10 @@ function CanvasInner() {
                   <div
                     key={m.id}
                     draggable={m.kind === 'leaf'}
-                    onDragStart={(e) =>
-                      e.dataTransfer.setData(
-                        'application/reactflow',
-                        JSON.stringify(m)
-                      )
-                    }
-                    style={{
-                      marginLeft: 20,
-                      padding: '4px 6px',
-                      cursor: 'grab',
-                    }}
+                    onDragStart={(e) => e.dataTransfer.setData('application/reactflow', JSON.stringify(m))}
+                    style={{ marginLeft: 20, padding: '4px 6px', cursor: 'grab' }}
                   >
-                    📦 {m.name}{' '}
-                    <span style={{ opacity: 0.6 }}>v{m.version}</span>
+                    📦 {m.name} <span style={{ opacity: 0.6 }}>v{m.version}</span>
                   </div>
                 ))}
               </details>
@@ -495,7 +506,7 @@ function CanvasInner() {
         ))}
       </div>
 
-      {/* ---------- CANVAS ---------- */}
+      {/* canvas */}
       <div
         style={{ flex: 1, position: 'relative' }}
         onDrop={onDrop}
@@ -522,41 +533,115 @@ function CanvasInner() {
 
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={edges.map((e) => {
+            const mapping = (e.data as any)?.mapping as { from?: string; to?: string } | undefined;
+            const hasLabel = Boolean(mapping?.from && mapping?.to);
+
+            return {
+              ...e,
+              animated: selectedEdgeId === e.id,
+              style: {
+                stroke: selectedEdgeId === e.id ? '#1f6feb' : '#888',
+                strokeWidth: selectedEdgeId === e.id ? 3 : 2,
+              },
+
+              // ✅ label shown without the ugly white background box
+              label: hasLabel ? `${mapping!.from} → ${mapping!.to}` : undefined,
+              labelStyle: { fill: '#fff', fontSize: 10 },
+              labelBgPadding: [0, 0],
+              labelBgBorderRadius: 0,
+              labelBgStyle: { fill: 'transparent' },
+            };
+          })}
           nodeTypes={nodeTypes}
+          onConnect={onConnect}
+          onEdgeDoubleClick={onEdgeDoubleClick}
+          onEdgeClick={onEdgeClick}
           onNodesChange={(changes) =>
-            setNodes((curr) =>
-              attachRuntimeHandlers(applyNodeChanges(changes, curr))
-            )
+            setNodes((curr) => attachRuntimeHandlers(applyNodeChanges(changes, curr)))
           }
-          onEdgesChange={(changes) =>
-            setEdges((curr) => applyEdgeChanges(changes, curr))
-          }
+          onEdgesChange={(changes) => setEdges((curr) => applyEdgeChanges(changes, curr))}
         >
           <Background />
           <Controls />
         </ReactFlow>
 
+        {/* Node config panel */}
         {activeNode && activeNode.data?.schema && (
           <ModuleConfigPanel
             title={activeNode.data.label}
             inputs={activeNode.data.schema.inputs}
             outputs={activeNode.data.schema.outputs ?? []}
             initialValues={activeNode.data.config ?? {}}
+            wiredInputs={activeNode.data.wiredInputs ?? {}}
             onSave={(v: any) => {
               setNodes((curr) =>
                 attachRuntimeHandlers(
-                  curr.map((x) =>
-                    x.id === activeNode.id
-                      ? { ...x, data: { ...x.data, config: v } }
-                      : x
-                  )
+                  curr.map((x) => (x.id === activeNode.id ? { ...x, data: { ...x.data, config: v } } : x))
                 )
               );
               setActiveNode(null);
               markDirty();
             }}
             onClose={() => setActiveNode(null)}
+          />
+        )}
+
+        {/* Edge mapping panel */}
+        {activeEdge && fromNode && toNode && (
+          <EdgeConfigPanel
+            title="Connection"
+            fromLabel={fromNode.data?.label ?? fromNode.id}
+            toLabel={toNode.data?.label ?? toNode.id}
+            fromOutputs={fromOutputs}
+            toInputs={toInputs}
+            initial={(activeEdge.data as any)?.mapping}
+            onClose={() => setActiveEdgeId(null)}
+            onSave={(mapping) => {
+              // update edge mapping
+              setEdges((curr) =>
+                curr.map((e) =>
+                  e.id === activeEdge.id
+                    ? {
+                        ...e,
+                        data: {
+                          ...(e.data ?? {}),
+                          mapping,
+                        },
+                      }
+                    : e
+                )
+              );
+
+              // ✅ update target node UI (wiredInputs) with Terraform-like reference:
+              // module.<module_name>.<output_name>
+              const tfModuleName = toTerraformModuleName(activeEdge.source);
+              const tfExpr = `module.${tfModuleName}.${mapping.from}`;
+
+              setNodes((curr) =>
+                attachRuntimeHandlers(
+                  curr.map((n) => {
+                    if (n.id !== activeEdge.target) return n;
+
+                    const wiredInputs = {
+                      ...(n.data?.wiredInputs ?? {}),
+                      [mapping.to]: tfExpr,
+                    };
+
+                    return {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        wiredInputs,
+                      },
+                    };
+                  })
+                )
+              );
+
+              setActiveEdgeId(null);
+              markDirty();
+            }}
           />
         )}
       </div>
