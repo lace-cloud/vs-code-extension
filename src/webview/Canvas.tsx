@@ -487,8 +487,12 @@ function CanvasInner() {
             </div>
 
             {Object.entries(categories).map(([category, modules]) => (
-              <details key={category} open className="ml-2">
-                <summary className="cursor-pointer">{category}</summary>
+              <details
+                key={category}
+                open
+                className="ml-2 border border-[#444] rounded-md p-2 mb-2 hover:bg-[#2d2d2d] transition-colors"
+              >
+                <summary className="cursor-pointer font-medium">{category}</summary>
 
                 {modules.map((m) => (
                   <div
