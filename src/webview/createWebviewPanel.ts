@@ -76,6 +76,8 @@ export async function createWebviewPanel(
 
     const list = await rpc.listRegistryModules({ system });
 
+    console.log(list.modules);
+
     panel.webview.postMessage({
       command: 'registryList',
       system,
@@ -157,6 +159,8 @@ export async function createWebviewPanel(
           system: msg.system,
           version: msg.version,
         });
+
+        console.log(JSON.stringify(data));
 
         panel.webview.postMessage({
           command: 'moduleVersionData',

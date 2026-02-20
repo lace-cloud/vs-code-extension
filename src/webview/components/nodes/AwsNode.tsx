@@ -45,18 +45,28 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
       </button>
 
       {/* 🔼 TOP – input */}
-      <Handle id="in-top" type="target" position={Position.Top} style={handleStyle} />
+      <Handle id="in-top" type="target" position={Position.Top} className={handleGenericStyle} />
 
       {/* ◀️ LEFT – input */}
-      <Handle id="in-left" type="target" position={Position.Left} style={handleStyle} />
+      <Handle id="in-left" type="target" position={Position.Left} className={handleGenericStyle} />
 
       <div className="text-xs">{data.label}</div>
 
       {/* ▶️ RIGHT – output */}
-      <Handle id="out-right" type="source" position={Position.Right} style={handleStyle} />
+      <Handle
+        id="out-right"
+        type="source"
+        position={Position.Right}
+        className={handleGenericStyle}
+      />
 
       {/* 🔽 BOTTOM – output */}
-      <Handle id="out-bottom" type="source" position={Position.Bottom} style={handleStyle} />
+      <Handle
+        id="out-bottom"
+        type="source"
+        position={Position.Bottom}
+        className={handleGenericStyle}
+      />
 
       {/* 🔗 show wired inputs */}
       {data?.wiredInputs &&

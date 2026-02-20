@@ -1,0 +1,762 @@
+{
+    "authors": [
+        {
+            "Email": "team@lace.cloud",
+            "Name": "Lace Platform Team"
+        }
+    ],
+    "bundle": {
+        "entry": {
+            "module_id": "scheduled_sqs",
+            "version": "0.0.1"
+        },
+        "kind": "module_bundle",
+        "modules": {
+            "modules/aws/cloudwatch/log_group@v1.0.0": {
+                "description": "Stub leaf module (parsed from source reference)",
+                "id": "modules/aws/cloudwatch/log_group",
+                "impl": {
+                    "kind": "leaf",
+                    "source": {
+                        "kind": "git",
+                        "ref": "v1.0.0",
+                        "repo": "https://github.com/lace-cloud/registry-tf.git",
+                        "subdir": "modules/aws/cloudwatch/log_group"
+                    }
+                },
+                "interface": {
+                    "inputs": [],
+                    "outputs": []
+                },
+                "kind": "module_def",
+                "schema_version": "1.0",
+                "version": "v1.0.0"
+            },
+            "modules/aws/eventbridge/rule@v1.0.0": {
+                "description": "Stub leaf module (parsed from source reference)",
+                "id": "modules/aws/eventbridge/rule",
+                "impl": {
+                    "kind": "leaf",
+                    "source": {
+                        "kind": "git",
+                        "ref": "v1.0.0",
+                        "repo": "https://github.com/lace-cloud/registry-tf.git",
+                        "subdir": "modules/aws/eventbridge/rule"
+                    }
+                },
+                "interface": {
+                    "inputs": [],
+                    "outputs": []
+                },
+                "kind": "module_def",
+                "schema_version": "1.0",
+                "version": "v1.0.0"
+            },
+            "modules/aws/sqs/queue@v1.0.0": {
+                "description": "Stub leaf module (parsed from source reference)",
+                "id": "modules/aws/sqs/queue",
+                "impl": {
+                    "kind": "leaf",
+                    "source": {
+                        "kind": "git",
+                        "ref": "v1.0.0",
+                        "repo": "https://github.com/lace-cloud/registry-tf.git",
+                        "subdir": "modules/aws/sqs/queue"
+                    }
+                },
+                "interface": {
+                    "inputs": [],
+                    "outputs": []
+                },
+                "kind": "module_def",
+                "schema_version": "1.0",
+                "version": "v1.0.0"
+            },
+            "scheduled_sqs@0.0.1": {
+                "id": "scheduled_sqs",
+                "impl": {
+                    "graph": {
+                        "exports": {
+                            "outputs": {
+                                "log_group_arn": {
+                                    "out": {
+                                        "module": "log_group",
+                                        "name": "log_group_arn"
+                                    }
+                                },
+                                "log_group_name": {
+                                    "out": {
+                                        "module": "log_group",
+                                        "name": "log_group_name"
+                                    }
+                                },
+                                "queue_arn": {
+                                    "out": {
+                                        "module": "event_queue",
+                                        "name": "queue_arn"
+                                    }
+                                },
+                                "queue_name": {
+                                    "out": {
+                                        "module": "event_queue",
+                                        "name": "queue_name"
+                                    }
+                                },
+                                "queue_url": {
+                                    "out": {
+                                        "module": "event_queue",
+                                        "name": "queue_url"
+                                    }
+                                },
+                                "rule_arn": {
+                                    "out": {
+                                        "module": "rule",
+                                        "name": "rule_arn"
+                                    }
+                                },
+                                "rule_name": {
+                                    "out": {
+                                        "module": "rule",
+                                        "name": "rule_name"
+                                    }
+                                }
+                            }
+                        },
+                        "instances": [
+                            {
+                                "id": "event_queue",
+                                "inputs": {
+                                    "message_retention_seconds": {
+                                        "var": "message_retention_seconds"
+                                    },
+                                    "name": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "\"${var.name}-queue\""
+                                        }
+                                    },
+                                    "tags": {
+                                        "var": "tags"
+                                    },
+                                    "visibility_timeout_seconds": {
+                                        "var": "visibility_timeout"
+                                    }
+                                },
+                                "use": {
+                                    "module_id": "modules/aws/sqs/queue",
+                                    "version": "v1.0.0"
+                                }
+                            },
+                            {
+                                "id": "log_group",
+                                "inputs": {
+                                    "name": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "\"/aws/eventbridge/${var.name}\""
+                                        }
+                                    },
+                                    "retention_in_days": {
+                                        "var": "log_retention_days"
+                                    },
+                                    "tags": {
+                                        "var": "tags"
+                                    }
+                                },
+                                "use": {
+                                    "module_id": "modules/aws/cloudwatch/log_group",
+                                    "version": "v1.0.0"
+                                }
+                            },
+                            {
+                                "depends_on": [
+                                    "aws_sqs_queue_policy.eventbridge_send"
+                                ],
+                                "id": "rule",
+                                "inputs": {
+                                    "description": {
+                                        "var": "rule_description != \"\" ? var.rule_description : \"EventBridge rule for ${var.name}\""
+                                    },
+                                    "event_pattern": {
+                                        "var": "event_pattern"
+                                    },
+                                    "name": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "\"${var.name}-rule\""
+                                        }
+                                    },
+                                    "schedule_expression": {
+                                        "var": "schedule_expression"
+                                    },
+                                    "tags": {
+                                        "var": "tags"
+                                    },
+                                    "targets": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "[\n    {\n      arn       = module.event_queue.queue_arn\n      target_id = \"${var.name}-sqs-target\"\n    }\n  ]"
+                                        }
+                                    }
+                                },
+                                "use": {
+                                    "module_id": "modules/aws/eventbridge/rule",
+                                    "version": "v1.0.0"
+                                }
+                            },
+                            {
+                                "id": "resource.aws_sqs_queue_policy.eventbridge_send",
+                                "inputs": {
+                                    "policy": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [\n      {\n        Sid    = \"AllowEventBridgeSend\"\n        Effect = \"Allow\"\n        Principal = {\n          Service = \"events.amazonaws.com\"\n        }\n        Action   = \"sqs:SendMessage\"\n        Resource = module.event_queue.queue_arn\n        Condition = {\n          ArnEquals = {\n            \"aws:SourceArn\" = module.rule.rule_arn\n          }\n        }\n      }\n    ]\n  })"
+                                        }
+                                    },
+                                    "queue_url": {
+                                        "out": {
+                                            "module": "event_queue",
+                                            "name": "queue_url"
+                                        }
+                                    }
+                                },
+                                "kind": "resource",
+                                "type": "aws_sqs_queue_policy"
+                            }
+                        ],
+                        "wires": [
+                            {
+                                "from": {
+                                    "module": "event_queue",
+                                    "port": "outputs.queue_url"
+                                },
+                                "to": {
+                                    "module": "resource.aws_sqs_queue_policy.eventbridge_send",
+                                    "port": "inputs.queue_url"
+                                }
+                            }
+                        ]
+                    },
+                    "kind": "composite"
+                },
+                "interface": {
+                    "inputs": [
+                        {
+                            "default": "",
+                            "description": "Human-readable description for the EventBridge rule",
+                            "name": "rule_description",
+                            "required": false,
+                            "type": "string"
+                        },
+                        {
+                            "default": 30,
+                            "description": "SQS visibility timeout in seconds",
+                            "name": "visibility_timeout",
+                            "required": false,
+                            "type": "number"
+                        },
+                        {
+                            "default": 345600,
+                            "description": "SQS message retention period in seconds (default 4 days)",
+                            "name": "message_retention_seconds",
+                            "required": false,
+                            "type": "number"
+                        },
+                        {
+                            "default": 14,
+                            "description": "CloudWatch log group retention in days (0 = never expire)",
+                            "name": "log_retention_days",
+                            "required": false,
+                            "type": "number"
+                        },
+                        {
+                            "default": {},
+                            "description": "Tags applied to all resources",
+                            "name": "tags",
+                            "required": false,
+                            "type": "map(string)"
+                        },
+                        {
+                            "description": "Base name used for all resources (rule, queue, log group)",
+                            "name": "name",
+                            "required": true,
+                            "type": "string"
+                        },
+                        {
+                            "description": "EventBridge schedule expression (e.g., rate(5 minutes), cron(0 12 * * ? *)). Mutually exclusive with event_pattern.",
+                            "name": "schedule_expression",
+                            "required": false,
+                            "type": "string"
+                        },
+                        {
+                            "description": "EventBridge event pattern JSON string. Mutually exclusive with schedule_expression.",
+                            "name": "event_pattern",
+                            "required": false,
+                            "type": "string"
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "description": "URL of the SQS queue receiving EventBridge events",
+                            "name": "queue_url",
+                            "type": "any"
+                        },
+                        {
+                            "description": "ARN of the SQS queue",
+                            "name": "queue_arn",
+                            "type": "any"
+                        },
+                        {
+                            "description": "Name of the SQS queue",
+                            "name": "queue_name",
+                            "type": "any"
+                        },
+                        {
+                            "description": "ARN of the EventBridge rule",
+                            "name": "rule_arn",
+                            "type": "any"
+                        },
+                        {
+                            "description": "Name of the EventBridge rule",
+                            "name": "rule_name",
+                            "type": "any"
+                        },
+                        {
+                            "description": "CloudWatch log group name for EventBridge observability",
+                            "name": "log_group_name",
+                            "type": "any"
+                        },
+                        {
+                            "description": "ARN of the CloudWatch log group",
+                            "name": "log_group_arn",
+                            "type": "any"
+                        }
+                    ]
+                },
+                "kind": "module_def",
+                "schema_version": "1.0",
+                "terraform": {
+                    "required_providers": {
+                        "aws": {
+                            "source": "hashicorp/aws",
+                            "version": ">= 4.0"
+                        }
+                    },
+                    "required_version": ">= 1.0"
+                },
+                "version": "0.0.1"
+            }
+        },
+        "schema_version": "1.0"
+    },
+    "categories": [
+        "events",
+        "eventbridge",
+        "sqs",
+        "messaging",
+        "serverless",
+        "monitoring"
+    ],
+    "commit_sha": "d783b3aad93fd4553b6fde790a6a2c3c45246957",
+    "deploy_bundle": {
+        "schema_version": "1.0",
+        "kind": "module_bundle",
+        "entry": {
+            "module_id": "scheduled_sqs",
+            "version": "0.0.1"
+        },
+        "modules": {
+            "modules/aws/cloudwatch/log_group@v1.0.0": {
+                "schema_version": "1.0",
+                "kind": "module_def",
+                "id": "modules/aws/cloudwatch/log_group",
+                "version": "v1.0.0",
+                "description": "Stub leaf module (parsed from source reference)",
+                "interface": {
+                    "inputs": [],
+                    "outputs": []
+                },
+                "impl": {
+                    "kind": "leaf",
+                    "source": {
+                        "kind": "git",
+                        "repo": "https://github.com/lace-cloud/registry-tf.git",
+                        "subdir": "modules/aws/cloudwatch/log_group",
+                        "ref": "v1.0.0"
+                    }
+                }
+            },
+            "modules/aws/eventbridge/rule@v1.0.0": {
+                "schema_version": "1.0",
+                "kind": "module_def",
+                "id": "modules/aws/eventbridge/rule",
+                "version": "v1.0.0",
+                "description": "Stub leaf module (parsed from source reference)",
+                "interface": {
+                    "inputs": [],
+                    "outputs": []
+                },
+                "impl": {
+                    "kind": "leaf",
+                    "source": {
+                        "kind": "git",
+                        "repo": "https://github.com/lace-cloud/registry-tf.git",
+                        "subdir": "modules/aws/eventbridge/rule",
+                        "ref": "v1.0.0"
+                    }
+                }
+            },
+            "modules/aws/sqs/queue@v1.0.0": {
+                "schema_version": "1.0",
+                "kind": "module_def",
+                "id": "modules/aws/sqs/queue",
+                "version": "v1.0.0",
+                "description": "Stub leaf module (parsed from source reference)",
+                "interface": {
+                    "inputs": [],
+                    "outputs": []
+                },
+                "impl": {
+                    "kind": "leaf",
+                    "source": {
+                        "kind": "git",
+                        "repo": "https://github.com/lace-cloud/registry-tf.git",
+                        "subdir": "modules/aws/sqs/queue",
+                        "ref": "v1.0.0"
+                    }
+                }
+            },
+            "scheduled_sqs@0.0.1": {
+                "schema_version": "1.0",
+                "kind": "module_def",
+                "id": "scheduled_sqs",
+                "version": "0.0.1",
+                "interface": {
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "name": "queue_url",
+                            "type": "any",
+                            "description": "URL of the SQS queue receiving EventBridge events"
+                        },
+                        {
+                            "name": "queue_arn",
+                            "type": "any",
+                            "description": "ARN of the SQS queue"
+                        },
+                        {
+                            "name": "queue_name",
+                            "type": "any",
+                            "description": "Name of the SQS queue"
+                        },
+                        {
+                            "name": "rule_arn",
+                            "type": "any",
+                            "description": "ARN of the EventBridge rule"
+                        },
+                        {
+                            "name": "rule_name",
+                            "type": "any",
+                            "description": "Name of the EventBridge rule"
+                        },
+                        {
+                            "name": "log_group_name",
+                            "type": "any",
+                            "description": "CloudWatch log group name for EventBridge observability"
+                        },
+                        {
+                            "name": "log_group_arn",
+                            "type": "any",
+                            "description": "ARN of the CloudWatch log group"
+                        }
+                    ]
+                },
+                "impl": {
+                    "kind": "composite",
+                    "graph": {
+                        "instances": [
+                            {
+                                "id": "event_queue",
+                                "use": {
+                                    "module_id": "modules/aws/sqs/queue",
+                                    "version": "v1.0.0"
+                                },
+                                "inputs": {
+                                    "message_retention_seconds": {
+                                        "lit": {}
+                                    },
+                                    "name": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "\"${var.name}-queue\""
+                                        }
+                                    },
+                                    "tags": {
+                                        "lit": {}
+                                    },
+                                    "visibility_timeout_seconds": {
+                                        "lit": {}
+                                    }
+                                }
+                            },
+                            {
+                                "id": "log_group",
+                                "use": {
+                                    "module_id": "modules/aws/cloudwatch/log_group",
+                                    "version": "v1.0.0"
+                                },
+                                "inputs": {
+                                    "name": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "\"/aws/eventbridge/${var.name}\""
+                                        }
+                                    },
+                                    "retention_in_days": {
+                                        "lit": {}
+                                    },
+                                    "tags": {
+                                        "lit": {}
+                                    }
+                                }
+                            },
+                            {
+                                "id": "rule",
+                                "use": {
+                                    "module_id": "modules/aws/eventbridge/rule",
+                                    "version": "v1.0.0"
+                                },
+                                "inputs": {
+                                    "description": {
+                                        "lit": {}
+                                    },
+                                    "event_pattern": {
+                                        "lit": {}
+                                    },
+                                    "name": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "\"${var.name}-rule\""
+                                        }
+                                    },
+                                    "schedule_expression": {
+                                        "lit": {}
+                                    },
+                                    "tags": {
+                                        "lit": {}
+                                    },
+                                    "targets": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "[\n    {\n      arn       = module.event_queue.queue_arn\n      target_id = \"${var.name}-sqs-target\"\n    }\n  ]"
+                                        }
+                                    }
+                                },
+                                "depends_on": [
+                                    "aws_sqs_queue_policy.eventbridge_send"
+                                ]
+                            },
+                            {
+                                "id": "resource.aws_sqs_queue_policy.eventbridge_send",
+                                "kind": "resource",
+                                "type": "aws_sqs_queue_policy",
+                                "inputs": {
+                                    "policy": {
+                                        "expr": {
+                                            "lang": "hcl",
+                                            "value": "jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [\n      {\n        Sid    = \"AllowEventBridgeSend\"\n        Effect = \"Allow\"\n        Principal = {\n          Service = \"events.amazonaws.com\"\n        }\n        Action   = \"sqs:SendMessage\"\n        Resource = module.event_queue.queue_arn\n        Condition = {\n          ArnEquals = {\n            \"aws:SourceArn\" = module.rule.rule_arn\n          }\n        }\n      }\n    ]\n  })"
+                                        }
+                                    },
+                                    "queue_url": {
+                                        "out": {
+                                            "module": "event_queue",
+                                            "name": "queue_url"
+                                        }
+                                    }
+                                }
+                            }
+                        ],
+                        "wires": [
+                            {
+                                "from": {
+                                    "module": "event_queue",
+                                    "port": "outputs.queue_url"
+                                },
+                                "to": {
+                                    "module": "resource.aws_sqs_queue_policy.eventbridge_send",
+                                    "port": "inputs.queue_url"
+                                }
+                            }
+                        ],
+                        "exports": {
+                            "outputs": {
+                                "log_group_arn": {
+                                    "out": {
+                                        "module": "log_group",
+                                        "name": "log_group_arn"
+                                    }
+                                },
+                                "log_group_name": {
+                                    "out": {
+                                        "module": "log_group",
+                                        "name": "log_group_name"
+                                    }
+                                },
+                                "queue_arn": {
+                                    "out": {
+                                        "module": "event_queue",
+                                        "name": "queue_arn"
+                                    }
+                                },
+                                "queue_name": {
+                                    "out": {
+                                        "module": "event_queue",
+                                        "name": "queue_name"
+                                    }
+                                },
+                                "queue_url": {
+                                    "out": {
+                                        "module": "event_queue",
+                                        "name": "queue_url"
+                                    }
+                                },
+                                "rule_arn": {
+                                    "out": {
+                                        "module": "rule",
+                                        "name": "rule_arn"
+                                    }
+                                },
+                                "rule_name": {
+                                    "out": {
+                                        "module": "rule",
+                                        "name": "rule_name"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "terraform": {
+                    "required_version": ">= 1.0",
+                    "required_providers": {
+                        "aws": {
+                            "source": "hashicorp/aws",
+                            "version": ">= 4.0"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "description": "Composite module that creates an EventBridge rule (schedule or event pattern), an SQS queue as the target, and a CloudWatch log group for observability. Includes the SQS resource policy required for EventBridge delivery.",
+    "example": "# Scheduled rule — runs every 5 minutes\nmodule \"heartbeat_queue\" {\n  source  = \"git::https://github.com/lace-cloud/registry-tf.git//composites/eventbridge_scheduled_sqs?ref=v1.0.0\"\n\n  name                = \"heartbeat\"\n  schedule_expression = \"rate(5 minutes)\"\n  log_retention_days  = 7\n  tags = {\n    Team = \"platform\"\n  }\n}\n\n# Event pattern rule — captures all S3 PutObject events\nmodule \"s3_events_queue\" {\n  source  = \"git::https://github.com/lace-cloud/registry-tf.git//composites/eventbridge_scheduled_sqs?ref=v1.0.0\"\n\n  name = \"s3-put-events\"\n  event_pattern = jsonencode({\n    source      = [\"aws.s3\"]\n    detail-type = [\"Object Created\"]\n  })\n  tags = {\n    Team = \"data\"\n  }\n}\n",
+    "git_tag": "eventbridge-scheduled-sqs/v1.0.0",
+    "git_url": "git::https://github.com/lace-cloud/registry-tf.git//modules/aws/eventbridge/scheduled_sqs?ref=d783b3aad93fd4553b6fde790a6a2c3c45246957",
+    "id": "879c4aa4-6952-43f1-87e7-575af1b5a150",
+    "kind": "composite",
+    "module_path": "modules/aws/eventbridge/scheduled_sqs",
+    "module_yaml": "module:\n  id: aws/events/eventbridge-scheduled-sqs\n  name: eventbridge-scheduled-sqs\n  system: aws\n  version: 1.0.0\n  kind: composite\n  registry_visibility: public\n  description: \"Composite module that creates an EventBridge rule (schedule or event pattern), an SQS queue as the target, and a CloudWatch log group for observability. Includes the SQS resource policy required for EventBridge delivery.\"\n\n  categories:\n    - events\n    - eventbridge\n    - sqs\n    - messaging\n    - serverless\n    - monitoring\n\n  authors:\n    - name: \"Lace Platform Team\"\n      email: \"team@lace.cloud\"\n\n  example: |\n    # Scheduled rule — runs every 5 minutes\n    module \"heartbeat_queue\" {\n      source  = \"git::https://github.com/lace-cloud/registry-tf.git//composites/eventbridge_scheduled_sqs?ref=v1.0.0\"\n\n      name                = \"heartbeat\"\n      schedule_expression = \"rate(5 minutes)\"\n      log_retention_days  = 7\n      tags = {\n        Team = \"platform\"\n      }\n    }\n\n    # Event pattern rule — captures all S3 PutObject events\n    module \"s3_events_queue\" {\n      source  = \"git::https://github.com/lace-cloud/registry-tf.git//composites/eventbridge_scheduled_sqs?ref=v1.0.0\"\n\n      name = \"s3-put-events\"\n      event_pattern = jsonencode({\n        source      = [\"aws.s3\"]\n        detail-type = [\"Object Created\"]\n      })\n      tags = {\n        Team = \"data\"\n      }\n    }\n",
+    "name": "eventbridge-scheduled-sqs",
+    "org_id": null,
+    "published_at": "2026-02-18T22:44:18.675Z",
+    "published_by": "keyvhinng",
+    "published_by_user_id": "mUJyjLClBATV1i6B5f7GxyQ3O03R8eFA",
+    "registry_visibility": "public",
+    "schema": {
+        "inputs": [
+            {
+                "default": "\"\"",
+                "description": "Human-readable description for the EventBridge rule",
+                "name": "rule_description",
+                "required": false,
+                "type": "string"
+            },
+            {
+                "default": "30",
+                "description": "SQS visibility timeout in seconds",
+                "name": "visibility_timeout",
+                "required": false,
+                "type": "number"
+            },
+            {
+                "default": "345600",
+                "description": "SQS message retention period in seconds (default 4 days)",
+                "name": "message_retention_seconds",
+                "required": false,
+                "type": "number"
+            },
+            {
+                "default": "14",
+                "description": "CloudWatch log group retention in days (0 = never expire)",
+                "name": "log_retention_days",
+                "required": false,
+                "type": "number"
+            },
+            {
+                "default": "{}",
+                "description": "Tags applied to all resources",
+                "name": "tags",
+                "required": false,
+                "type": "map(string)"
+            },
+            {
+                "description": "Base name used for all resources (rule, queue, log group)",
+                "name": "name",
+                "required": true,
+                "type": "string"
+            },
+            {
+                "description": "EventBridge schedule expression (e.g., rate(5 minutes), cron(0 12 * * ? *)). Mutually exclusive with event_pattern.",
+                "name": "schedule_expression",
+                "required": false,
+                "type": "string"
+            },
+            {
+                "description": "EventBridge event pattern JSON string. Mutually exclusive with schedule_expression.",
+                "name": "event_pattern",
+                "required": false,
+                "type": "string"
+            }
+        ],
+        "outputs": [
+            {
+                "description": "URL of the SQS queue receiving EventBridge events",
+                "name": "queue_url",
+                "sensitive": false
+            },
+            {
+                "description": "ARN of the SQS queue",
+                "name": "queue_arn",
+                "sensitive": false
+            },
+            {
+                "description": "Name of the SQS queue",
+                "name": "queue_name",
+                "sensitive": false
+            },
+            {
+                "description": "ARN of the EventBridge rule",
+                "name": "rule_arn",
+                "sensitive": false
+            },
+            {
+                "description": "Name of the EventBridge rule",
+                "name": "rule_name",
+                "sensitive": false
+            },
+            {
+                "description": "CloudWatch log group name for EventBridge observability",
+                "name": "log_group_name",
+                "sensitive": false
+            },
+            {
+                "description": "ARN of the CloudWatch log group",
+                "name": "log_group_arn",
+                "sensitive": false
+            }
+        ]
+    },
+    "status": "published",
+    "system": "aws",
+    "version": "1.0.0"
+}
