@@ -1,16 +1,16 @@
 import React from 'react';
-import Sidebar from './Sidebar';
-import {Canvas} from './Canvas';
-import './App.css';
+import Canvas from './Canvas';
+
+declare global {
+  interface Window {
+    vscode: {
+      postMessage: (msg: any) => void;
+    };
+  }
+}
 
 const App: React.FC = () => {
-  return (
-    <div className="app">
-      <Sidebar />
-      <Canvas />
-    </div>
-  );
+  return <Canvas />;
 };
 
 export default App;
-

@@ -1,89 +1,206 @@
+// src/webview/createWebviewPanel.ts
 import * as vscode from 'vscode';
-import { getWebviewUri } from './getWebviewUri';
-import { getWebviewContent } from './getWebviewContent';
-import { getComponentIdByName, loadCanvasState, saveCanvasState } from '../database';
+import path from 'path';
+import fs from 'fs';
 
-const panels: Map<string, vscode.WebviewPanel> = new Map();
-let autoSaveEnabled = true;
+import { getWebviewContent } from './getWebviewContent';
+import { getWebviewUri } from './getWebviewUri';
+
+import {
+  getComponentIdByName,
+  loadCanvasState,
+  saveCanvasState,
+  saveBundleState,
+} from '../database';
+
+import { ServerManager } from '../utilities/engine/server-manager';
+
+const panels = new Map<string, vscode.WebviewPanel>();
+
+let activeRegistrySystem: 'aws' | 'azure' | 'gcp' = 'aws';
+
+export function setRegistrySystem(system: 'aws' | 'azure' | 'gcp') {
+  activeRegistrySystem = system;
+
+  for (const panel of panels.values()) {
+    panel.webview.postMessage({
+      command: 'setRegistrySystem',
+      system,
+    });
+  }
+}
 
 export async function createWebviewPanel(
   componentName: string,
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
+  server: ServerManager,
 ) {
-  // Check if a panel already exists
   if (panels.has(componentName)) {
-    const panel = panels.get(componentName)!;
-    panel.reveal();
+    panels.get(componentName)!.reveal();
     return;
   }
 
-  // Create a new webview panel
-  const panel = vscode.window.createWebviewPanel(
-    'lace',
-    componentName,
-    vscode.ViewColumn.One,
-    { enableScripts: true }
-  );
+  const panel = vscode.window.createWebviewPanel('lace', componentName, vscode.ViewColumn.One, {
+    enableScripts: true,
+    localResourceRoots: [
+      vscode.Uri.file(path.join(context.extensionPath, 'out')),
+      vscode.Uri.joinPath(context.extensionUri, 'images'),
+    ],
+  });
 
   panels.set(componentName, panel);
 
-  // Resolve image URIs
-  const ec2Uri = getWebviewUri(context, 'EC2.png', panel.webview);
-  const s3Uri = getWebviewUri(context, 's3.svg', panel.webview);
-  const lambdaUri = getWebviewUri(context, 'lambda.svg', panel.webview);
-
-  // Set webview HTML content
-  panel.webview.html = getWebviewContent(context, panel.webview, ec2Uri, s3Uri, lambdaUri);
+  panel.webview.html = getWebviewContent(
+    context,
+    panel.webview,
+    getWebviewUri(context, 'EC2.png', panel.webview),
+    getWebviewUri(context, 's3.svg', panel.webview),
+    getWebviewUri(context, 'lambda.svg', panel.webview),
+    getWebviewUri(context, 'iam-role.svg', panel.webview),
+    getWebviewUri(context, 'iam-policy.svg', panel.webview),
+  );
 
   const componentId = await getComponentIdByName(componentName);
+  let cachedState: any = null;
+
   if (componentId) {
-    const canvasState = await loadCanvasState(componentId);
-    console.log('Loaded canvas state:', canvasState);
-    panel.webview.postMessage({ command: 'loadState', state: canvasState });
+    const raw = await loadCanvasState(componentId);
+    cachedState = typeof raw === 'string' ? JSON.parse(raw) : raw;
   }
 
-  // Handle messages from the webview
-  panel.webview.onDidReceiveMessage(async (message) => {
-    const componentId = await getComponentIdByName(componentName);
-    if (!componentId) {
-      vscode.window.showErrorMessage(`Component "${componentName}" not found.`);
+  async function sendRegistryList(system: string) {
+    const rpc = server.rpcClient;
+    if (!rpc) {
       return;
     }
 
-    if (message.command === 'saveState') {
-      try {
-        console.log(`Saving state for component: ${componentName}`, message.state);
-        await saveCanvasState(componentId, message.state);
-        panel.title = componentName; // Remove unsaved indicator
-        vscode.window.showInformationMessage('Canvas state saved successfully!');
-      } catch (err) {
-        vscode.window.showErrorMessage(`Failed to save canvas state: ${err}`);
-      }
+    const list = await rpc.listRegistryModules({ system });
+
+    console.log(list.modules);
+
+    panel.webview.postMessage({
+      command: 'registryList',
+      system,
+      modules: list.modules ?? [],
+    });
+  }
+
+  panel.webview.onDidReceiveMessage(async (msg) => {
+    if (!componentId) {
+      return;
     }
 
-    if (message.command === 'markDirty') {
-      panel.title = `${componentName} ●`; // Indicate unsaved changes
-      if (autoSaveEnabled) {
-        panel.webview.postMessage({ command: 'triggerSave' });
-        console.log('Autosave complete.');
-      }
-    }
-
-    if (message.command === 'requestLoadState') {
-      try {
-        const canvasState = await loadCanvasState(componentId);
+    switch (msg.command) {
+      case 'webviewReady':
         panel.webview.postMessage({
           command: 'loadState',
-          state: canvasState || { nodes: [], edges: [] },
+          state: cachedState ?? { nodes: [], edges: [] },
         });
-      } catch (err) {
-        vscode.window.showErrorMessage(`Failed to load canvas state: ${err}`);
+        await sendRegistryList(activeRegistrySystem);
+        break;
+
+      case 'requestRegistryModules':
+        await sendRegistryList(msg.system);
+        break;
+
+      /* ------------------------------------------------ */
+      /* ✅ GENERATE INTO generate-$componentName FOLDER */
+      /* ------------------------------------------------ */
+      case 'generateBundle': {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+          vscode.window.showErrorMessage('No workspace open.');
+          return;
+        }
+
+        const workspacePath = workspaceFolder.uri.fsPath;
+
+        // 🔥 Create folder: generate-$componentName
+        const outputDir = path.join(workspacePath, `generate-${componentName}`);
+
+        // Ensure directory exists
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        // Save bundle JSON to DB
+        await saveBundleState(componentId, msg.bundle);
+
+        try {
+          const result = await server.rpcClient?.generate({
+            bundle: msg.bundle,
+            outputDir,
+            options: {
+              dryRun: false,
+              format: true,
+              validate: true,
+              overwrite: true,
+            },
+          });
+
+          panel.webview.postMessage({
+            command: 'generateSuccess',
+            files: result?.filesWritten,
+          });
+
+          vscode.window.showInformationMessage(`Generated in ${path.basename(outputDir)}`);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(err.message);
+        }
+
+        break;
       }
+
+      /* ------------------------------------------------ */
+
+      case 'fetchModuleVersion': {
+        const data = await server.rpcClient?.getRegistryVersion({
+          name: msg.name,
+          system: msg.system,
+          version: msg.version,
+        });
+
+        console.log(JSON.stringify(data));
+
+        panel.webview.postMessage({
+          command: 'moduleVersionData',
+          requestId: msg.requestId,
+          data,
+        });
+        break;
+      }
+
+      case 'fetchModuleInfo': {
+        const data = await server.rpcClient?.getRegistryModule({
+          name: msg.name,
+          system: msg.system,
+        });
+
+        panel.webview.postMessage({
+          command: 'moduleInfoData',
+          requestId: msg.requestId,
+          data,
+        });
+        break;
+      }
+
+      case 'saveState':
+        await saveCanvasState(componentId, msg.state);
+        cachedState = msg.state;
+        panel.title = componentName;
+        break;
+
+      case 'markDirty':
+        panel.title = `${componentName} ●`;
+        panel.webview.postMessage({ command: 'triggerSave' });
+        break;
     }
   });
 
-  // Clean up when the panel is closed
-  panel.onDidDispose(() => {
-    panels.delete(componentName);
-  });
+  panel.onDidDispose(() => panels.delete(componentName));
+}
+
+export function closeComponentPanel(componentName: string) {
+  panels.get(componentName)?.dispose();
+  panels.delete(componentName);
 }

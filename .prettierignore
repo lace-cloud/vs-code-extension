@@ -1,0 +1,7 @@
+out/
+data/
+.vscode/
+generated/
+package-lock.json
+dist/
+node_modules/

@@ -1,0 +1,292 @@
+{
+    "authors": [
+        {
+            "Email": "team@lace.cloud",
+            "Name": "Lace Team"
+        }
+    ],
+    "categories": [
+        "events",
+        "eventbridge",
+        "scheduling"
+    ],
+    "commit_sha": "f687b3741a2e5ba81b2c4154715ad99fc7970f54",
+    "deploy_bundle": {
+        "schema_version": "1.0",
+        "kind": "module_bundle",
+        "entry": {
+            "module_id": "deploy-eventbridge-rule",
+            "version": "1.0.0"
+        },
+        "modules": {
+            "deploy-eventbridge-rule@1.0.0": {
+                "schema_version": "1.0",
+                "kind": "module_def",
+                "id": "deploy-eventbridge-rule",
+                "version": "1.0.0",
+                "interface": {
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "name": "rule_arn",
+                            "type": "any",
+                            "description": "ARN of the EventBridge rule"
+                        },
+                        {
+                            "name": "rule_name",
+                            "type": "any",
+                            "description": "Name of the EventBridge rule"
+                        }
+                    ]
+                },
+                "impl": {
+                    "kind": "composite",
+                    "graph": {
+                        "instances": [
+                            {
+                                "id": "eventbridge-rule",
+                                "use": {
+                                    "module_id": "eventbridge-rule",
+                                    "version": "1.0.0"
+                                },
+                                "inputs": {
+                                    "description": {
+                                        "lit": {}
+                                    },
+                                    "event_bus_name": {
+                                        "lit": {}
+                                    },
+                                    "event_pattern": {
+                                        "lit": {}
+                                    },
+                                    "name": {
+                                        "lit": {}
+                                    },
+                                    "schedule_expression": {
+                                        "lit": {}
+                                    },
+                                    "state": {
+                                        "lit": {}
+                                    },
+                                    "tags": {
+                                        "lit": {}
+                                    },
+                                    "targets": {
+                                        "lit": {}
+                                    }
+                                }
+                            }
+                        ],
+                        "wires": [],
+                        "exports": {
+                            "outputs": {
+                                "rule_arn": {
+                                    "out": {
+                                        "module": "eventbridge-rule",
+                                        "name": "rule_arn"
+                                    }
+                                },
+                                "rule_name": {
+                                    "out": {
+                                        "module": "eventbridge-rule",
+                                        "name": "rule_name"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "eventbridge-rule@1.0.0": {
+                "schema_version": "1.0",
+                "kind": "module_def",
+                "id": "eventbridge-rule",
+                "version": "1.0.0",
+                "description": "AWS EventBridge rule with schedule or event pattern and configurable targets",
+                "interface": {
+                    "inputs": [
+                        {
+                            "name": "event_pattern",
+                            "type": "string",
+                            "required": true,
+                            "description": "Event pattern JSON string"
+                        },
+                        {
+                            "name": "state",
+                            "type": "string",
+                            "required": false,
+                            "description": "State of the rule (ENABLED or DISABLED)",
+                            "default": "\"ENABLED\""
+                        },
+                        {
+                            "name": "event_bus_name",
+                            "type": "string",
+                            "required": false,
+                            "description": "Event bus name (default for the default bus)",
+                            "default": "\"default\""
+                        },
+                        {
+                            "name": "targets",
+                            "type": "list(object({\n    arn        = string\n    target_id  = optional(string)\n    input      = optional(string)\n    input_path = optional(string)\n    role_arn   = optional(string)\n  }))",
+                            "required": false,
+                            "description": "List of targets for the rule",
+                            "default": "[]"
+                        },
+                        {
+                            "name": "tags",
+                            "type": "map(string)",
+                            "required": false,
+                            "description": "Additional tags",
+                            "default": "{}"
+                        },
+                        {
+                            "name": "name",
+                            "type": "string",
+                            "required": true,
+                            "description": "Name of the EventBridge rule"
+                        },
+                        {
+                            "name": "description",
+                            "type": "string",
+                            "required": false,
+                            "description": "Description of the rule",
+                            "default": "\"\""
+                        },
+                        {
+                            "name": "schedule_expression",
+                            "type": "string",
+                            "required": true,
+                            "description": "Schedule expression (e.g., rate(1 hour), cron(0 12 * * ? *))"
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "name": "rule_arn",
+                            "type": "any",
+                            "description": "ARN of the EventBridge rule"
+                        },
+                        {
+                            "name": "rule_name",
+                            "type": "any",
+                            "description": "Name of the EventBridge rule"
+                        }
+                    ]
+                },
+                "impl": {
+                    "kind": "leaf",
+                    "source": {
+                        "kind": "registry",
+                        "ref": "eventbridge-rule/aws/1.0.0"
+                    }
+                }
+            }
+        }
+    },
+    "description": "AWS EventBridge rule with schedule or event pattern and configurable targets",
+    "example": "module \"rule\" {\n  source              = \"git::https://github.com/lace-cloud/registry-tf.git//modules/aws/eventbridge/rule?ref=v1.0.0\"\n  name                = \"daily-cleanup\"\n  schedule_expression = \"rate(1 day)\"\n  targets = [\n    {\n      arn = \"arn:aws:lambda:us-east-1:123456789:function:cleanup\"\n    }\n  ]\n}\n",
+    "git_tag": "eventbridge-rule/v1.0.0",
+    "git_url": "git::https://github.com/lace-cloud/registry-tf.git//modules/aws/eventbridge/rule?ref=f687b3741a2e5ba81b2c4154715ad99fc7970f54",
+    "id": "7d3c1350-7ea2-423e-845c-04825bca3931",
+    "kind": "leaf",
+    "main_tf": "resource \"aws_cloudwatch_event_rule\" \"this\" {\n  name                = var.name\n  description         = var.description\n  schedule_expression = var.schedule_expression\n  event_pattern       = var.event_pattern\n  state               = var.state\n  event_bus_name      = var.event_bus_name\n\n  tags = merge(\n    {\n      Name = var.name\n    },\n    var.tags\n  )\n}\n\nresource \"aws_cloudwatch_event_target\" \"this\" {\n  for_each = { for idx, target in var.targets : idx => target }\n\n  rule           = aws_cloudwatch_event_rule.this.name\n  arn            = each.value.arn\n  target_id      = lookup(each.value, \"target_id\", null)\n  input          = lookup(each.value, \"input\", null)\n  input_path     = lookup(each.value, \"input_path\", null)\n  role_arn       = lookup(each.value, \"role_arn\", null)\n  event_bus_name = var.event_bus_name\n}\n",
+    "module_path": "modules/aws/eventbridge/rule",
+    "module_yaml": "module:\n  id: aws/eventbridge/rule\n  name: eventbridge-rule\n  system: aws\n  version: 1.0.0\n  description: \"AWS EventBridge rule with schedule or event pattern and configurable targets\"\n  categories:\n    - events\n    - eventbridge\n    - scheduling\n  authors:\n    - name: \"Lace Team\"\n      email: \"team@lace.cloud\"\n  registry_visibility: public\n  example: |\n    module \"rule\" {\n      source              = \"git::https://github.com/lace-cloud/registry-tf.git//modules/aws/eventbridge/rule?ref=v1.0.0\"\n      name                = \"daily-cleanup\"\n      schedule_expression = \"rate(1 day)\"\n      targets = [\n        {\n          arn = \"arn:aws:lambda:us-east-1:123456789:function:cleanup\"\n        }\n      ]\n    }\n",
+    "name": "eventbridge-rule",
+    "org_id": "66f78e69-0432-4d2e-a6e7-c3393b3a5ad0",
+    "outputs_tf": "output \"rule_arn\" {\n  description = \"ARN of the EventBridge rule\"\n  value       = aws_cloudwatch_event_rule.this.arn\n}\n\noutput \"rule_name\" {\n  description = \"Name of the EventBridge rule\"\n  value       = aws_cloudwatch_event_rule.this.name\n}\n",
+    "published_at": "2026-02-09T20:07:01.333Z",
+    "published_by": "keyvhinng",
+    "published_by_user_id": "mUJyjLClBATV1i6B5f7GxyQ3O03R8eFA",
+    "registry_visibility": "public",
+    "schema": {
+        "inputs": [
+            {
+                "description": "Event pattern JSON string",
+                "name": "event_pattern",
+                "required": false,
+                "type": "string"
+            },
+            {
+                "default": "\"ENABLED\"",
+                "description": "State of the rule (ENABLED or DISABLED)",
+                "name": "state",
+                "required": false,
+                "type": "string"
+            },
+            {
+                "default": "\"default\"",
+                "description": "Event bus name (default for the default bus)",
+                "name": "event_bus_name",
+                "required": false,
+                "type": "string"
+            },
+            {
+                "default": "[]",
+                "description": "List of targets for the rule",
+                "name": "targets",
+                "required": false,
+                "type": "list(object({\n    arn        = string\n    target_id  = optional(string)\n    input      = optional(string)\n    input_path = optional(string)\n    role_arn   = optional(string)\n  }))"
+            },
+            {
+                "default": "{}",
+                "description": "Additional tags",
+                "name": "tags",
+                "required": false,
+                "type": "map(string)"
+            },
+            {
+                "description": "Name of the EventBridge rule",
+                "name": "name",
+                "required": true,
+                "type": "string"
+            },
+            {
+                "default": "\"\"",
+                "description": "Description of the rule",
+                "name": "description",
+                "required": false,
+                "type": "string"
+            },
+            {
+                "description": "Schedule expression (e.g., rate(1 hour), cron(0 12 * * ? *))",
+                "name": "schedule_expression",
+                "required": false,
+                "type": "string"
+            }
+        ],
+        "outputs": [
+            {
+                "description": "ARN of the EventBridge rule",
+                "name": "rule_arn",
+                "sensitive": false
+            },
+            {
+                "description": "Name of the EventBridge rule",
+                "name": "rule_name",
+                "sensitive": false
+            }
+        ],
+        "required_providers": [
+            {
+                "source": "hashicorp/aws",
+                "version_constraint": ">= 4.0"
+            }
+        ],
+        "resources": [
+            {
+                "count": 1,
+                "type": "aws_cloudwatch_event_rule"
+            },
+            {
+                "count": 1,
+                "type": "aws_cloudwatch_event_target"
+            }
+        ],
+        "terraform_required_version": ">= 1.0"
+    },
+    "status": "published",
+    "system": "aws",
+    "variables_tf": "variable \"name\" {\n  description = \"Name of the EventBridge rule\"\n  type        = string\n}\n\nvariable \"description\" {\n  description = \"Description of the rule\"\n  type        = string\n  default     = \"\"\n}\n\nvariable \"schedule_expression\" {\n  description = \"Schedule expression (e.g., rate(1 hour), cron(0 12 * * ? *))\"\n  type        = string\n  default     = null\n}\n\nvariable \"event_pattern\" {\n  description = \"Event pattern JSON string\"\n  type        = string\n  default     = null\n}\n\nvariable \"state\" {\n  description = \"State of the rule (ENABLED or DISABLED)\"\n  type        = string\n  default     = \"ENABLED\"\n}\n\nvariable \"event_bus_name\" {\n  description = \"Event bus name (default for the default bus)\"\n  type        = string\n  default     = \"default\"\n}\n\nvariable \"targets\" {\n  description = \"List of targets for the rule\"\n  type = list(object({\n    arn        = string\n    target_id  = optional(string)\n    input      = optional(string)\n    input_path = optional(string)\n    role_arn   = optional(string)\n  }))\n  default = []\n}\n\nvariable \"tags\" {\n  description = \"Additional tags\"\n  type        = map(string)\n  default     = {}\n}\n",
+    "version": "1.0.0",
+    "versions_tf": "terraform {\n  required_version = \">= 1.0\"\n\n  required_providers {\n    aws = {\n      source  = \"hashicorp/aws\"\n      version = \">= 4.0\"\n    }\n  }\n}\n"
+}

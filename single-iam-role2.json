@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "kind": "module_bundle",
+  "entry": { "module_id": "user-iam-role", "version": "v1.0.0" },
+  "modules": {
+    "user-iam-role@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "user-iam-role",
+      "version": "v1.0.0",
+      "interface": {
+        "inputs": [],
+        "outputs": [{ "name": "role_arn", "type": "string" }]
+      },
+      "impl": {
+        "kind": "composite",
+        "graph": {
+          "instances": [
+            {
+              "id": "iam_role",
+              "use": { "module_id": "modules/aws/iam/role", "version": "v1.0.0" },
+              "inputs": {
+                "name": { "lit": "my-app-role" },
+                "assume_role_policy": {
+                  "lit": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+                },
+                "tags": { "lit": { "Environment": "prod", "Team": "backend" } }
+              }
+            }
+          ],
+          "wires": [],
+          "exports": {
+            "outputs": {
+              "role_arn": { "out": { "module": "iam_role", "name": "role_arn" } }
+            }
+          }
+        }
+      }
+    },
+    "modules/aws/iam/role@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "modules/aws/iam/role",
+      "version": "v1.0.0",
+      "interface": {
+        "inputs": [
+          { "name": "name", "type": "string", "required": true },
+          { "name": "assume_role_policy", "type": "string", "required": true },
+          { "name": "tags", "type": "map(string)", "required": false }
+        ],
+        "outputs": [{ "name": "role_arn", "type": "string" }]
+      },
+      "impl": {
+        "kind": "leaf",
+        "source": {
+          "kind": "git",
+          "repo": "https://github.com/lace-cloud/registry-tf.git",
+          "subdir": "modules/aws/iam/role",
+          "ref": "v1.0.0"
+        }
+      }
+    }
+  }
+}

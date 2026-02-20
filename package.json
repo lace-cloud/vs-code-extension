@@ -27,7 +27,7 @@
       "laceContainer": [
         {
           "id": "laceView",
-          "name": "Lace"
+          "name": "Registry"
         },
         {
           "id": "components",
@@ -69,8 +69,38 @@
       {
         "command": "lace.connect",
         "title": "Connect to Lace"
+      },
+      {
+        "command": "lace.startEngine",
+        "title": "Lace: Start Engine"
+      },
+      {
+        "command": "lace.stopEngine",
+        "title": "Lace: Stop Engine"
+      },
+      {
+        "command": "lace.restartEngine",
+        "title": "Lace: Restart Engine"
       }
     ],
+    "configuration": {
+      "title": "Lace",
+      "properties": {
+        "lace.binaryPath": {
+          "type": "string",
+          "default": "/usr/local/bin/lace",
+          "description": "Path to the lace CLI binary"
+        },
+        "lace.autoStart": {
+          "type": "boolean",
+          "default": true
+        },
+        "lace.autoRestart": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
     "menus": {
       "view/title": [
         {
@@ -98,15 +128,19 @@
     "compile": "tsc -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write .",
     "test": "vscode-test",
     "build": "rspack --config rspack.config.js",
     "watch": "rspack --watch --config rspack.config.js",
-    "package": "vsce package"
+    "package": "vsce package",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@rspack/cli": "^1.1.8",
-    "@types/mocha": "^10.0.10",
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/better-sqlite3": "^7.6.12",
+    "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
@@ -118,10 +152,26 @@
     "@vscode/test-electron": "^2.4.1",
     "css-loader": "^7.1.2",
     "eslint": "^9.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
     "file-loader": "^6.2.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.2.1",
+    "prettier": "^3.8.1",
     "style-loader": "^4.0.0",
+    "tailwindcss": "^4.1.18",
     "ts-loader": "^9.5.1",
     "typescript": "^5.6.3"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,json,md}": [
+      "prettier --write"
+    ],
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   },
   "dependencies": {
     "axios": "^1.7.9",

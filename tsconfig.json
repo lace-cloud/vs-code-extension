@@ -17,18 +17,16 @@
 // 	}
 // }
 
-
 {
-	"compilerOptions": {
-	  "target": "ES6",
-	  "module": "commonjs",
-	  "jsx": "react",
-	  "strict": true,
-	  "esModuleInterop": true,
-	  "skipLibCheck": true,
-	  "outDir": "dist"
-	},
-	"include": ["src/**/*", "src/global.d.ts"],
-	"exclude": ["node_modules", "dist"]
-  }
-  
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "commonjs",
+    "jsx": "react",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*", "src/global.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}
