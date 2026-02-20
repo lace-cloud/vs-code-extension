@@ -325,16 +325,12 @@ function CanvasInner() {
   /* ---------------------------------- */
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
+    <div className="flex h-screen">
       {/* registry sidebar */}
       <RegistrySidebar registryTree={registryTree} />
 
       {/* canvas */}
-      <div
-        style={{ flex: 1, position: 'relative' }}
-        onDrop={onDrop}
-        onDragOver={(e) => e.preventDefault()}
-      >
+      <div className="flex-1 relative" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
         {statusMessage && (
           <div className="absolute top-11 left-4 z-20 bg-[#1f6feb] text-white px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
             {statusMessage}

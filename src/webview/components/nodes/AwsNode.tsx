@@ -21,24 +21,12 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
         e.stopPropagation();
         data?.__runtime?.onOpenConfig?.(id);
       }}
-      className="bg-[#1e1e1e] border border-slate-400 shadow-gray-400 shadow-sm rounded-lg p-2.5 w-35 text-white text-center cursor-pointer relative flex items-center justify-center"
+      className="bg-[#1e1e1e] border border-slate-400 shadow-gray-400 shadow-sm rounded-lg p-2.5 max-w-64 text-white text-center cursor-pointer relative flex items-center justify-center"
     >
       {/* ❌ delete button */}
       <button
         onClick={onDelete}
-        style={{
-          position: 'absolute',
-          top: 4,
-          right: 4,
-          width: 18,
-          height: 18,
-          borderRadius: '50%',
-          background: '#e5484d',
-          border: 'none',
-          color: '#fff',
-          fontSize: 12,
-          cursor: 'pointer',
-        }}
+        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[#e5484d] border-none text-white text-xs cursor-pointer flex items-center justify-center"
         title="Delete"
       >
         ✕
@@ -73,14 +61,7 @@ const AwsNode: React.FC<NodeProps> = ({ id, data }) => {
         Object.keys(data.wiredInputs).map((inputName) => (
           <div
             key={inputName}
-            style={{
-              marginTop: 4,
-              fontSize: 10,
-              background: '#0f5132',
-              padding: '2px 4px',
-              borderRadius: 4,
-              color: '#fff',
-            }}
+            className="mt-1 text-[10px] bg-[#0f5132] px-1 py-0.5 rounded text-white"
           >
             🔗 {inputName}
           </div>

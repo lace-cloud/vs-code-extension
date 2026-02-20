@@ -29,22 +29,20 @@ interface RegistrySidebarProps {
 
 const RegistrySidebar: React.FC<RegistrySidebarProps> = ({ registryTree }) => {
   return (
-    <div style={{ width: 300, padding: 8, borderRight: '1px solid #333', overflowY: 'auto' }}>
+    <div className="w-[300px] p-2 border-r border-[#333] overflow-y-auto">
       {Object.keys(registryTree).length === 0 && (
-        <div style={{ opacity: 0.6 }}>No modules available</div>
+        <div className="opacity-60">No modules available</div>
       )}
 
       {Object.entries(registryTree).map(([system, categories]) => (
-        <div key={system} style={{ marginBottom: 14 }}>
-          <div style={{ fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 6 }}>
-            {system}
-          </div>
+        <div key={system} className="mb-3.5">
+          <div className="font-bold uppercase mb-1.5">{system}</div>
 
           {Object.entries(categories).map(([category, modules]) => (
             <details
               key={category}
               open
-              className="ml-2 border border-[#444] rounded-md p-2 mb-2 hover:bg-[#2d2d2d] transition-colors"
+              className="ml-2 border border-[#444] rounded-md p-2 mb-2 transition-colors"
             >
               <summary className="cursor-pointer font-medium">{category}</summary>
 
@@ -52,10 +50,14 @@ const RegistrySidebar: React.FC<RegistrySidebarProps> = ({ registryTree }) => {
                 <div
                   key={m.id}
                   draggable
-                  onDragStart={(e) =>
-                    e.dataTransfer.setData('application/reactflow', JSON.stringify(m))
-                  }
-                  style={{ marginLeft: 20, padding: '4px 6px', cursor: 'grab' }}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow', JSON.stringify(m));
+                    (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
+                  }}
+                  onDragEnd={(e) => {
+                    (e.currentTarget as HTMLElement).style.cursor = 'grab';
+                  }}
+                  className="rounded-md transition-colors hover:bg-[#2d2d2d] active:cursor-grabbing ml-5 p-2 border border-[#444] mt-2 cursor-grab"
                 >
                   {m.kind === 'composite' ? '📦-📦' : '📦'} {m.name}{' '}
                   <span className="opacity-60">v{m.version}</span>

@@ -32,6 +32,21 @@ type Props = {
 };
 
 /* ---------------------------------- */
+/* Shared Tailwind class strings      */
+/* ---------------------------------- */
+
+const inputClasses =
+  'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
+
+const selectClasses = inputClasses;
+
+const miniBtnClasses =
+  'w-[34px] rounded-lg border border-[#333] bg-[#0f0f0f] text-white cursor-pointer';
+
+const addBtnClasses =
+  'rounded-lg border border-dashed border-[#444] bg-[#0f0f0f] text-white px-2.5 py-2.5 cursor-pointer text-xs text-left';
+
+/* ---------------------------------- */
 /* Component                          */
 /* ---------------------------------- */
 
@@ -65,32 +80,15 @@ export default function ModuleConfigPanel({
   return (
     <div className="absolute right-0 top-0 w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col z-20">
       {/* ---------- HEADER ---------- */}
-      <header
-        style={{
-          padding: 16,
-          borderBottom: '1px solid #333',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>Module</div>
-          <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
+      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
+        <div className="flex flex-col gap-1">
+          <div className="text-xs opacity-70">Module</div>
+          <h3 className="m-0 text-base">{title}</h3>
         </div>
 
         <button
           onClick={onClose}
-          style={{
-            cursor: 'pointer',
-            border: '1px solid #333',
-            background: '#0f0f0f',
-            color: '#fff',
-            borderRadius: 8,
-            width: 34,
-            height: 34,
-          }}
+          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
           aria-label="Close"
           title="Close"
         >
@@ -99,7 +97,7 @@ export default function ModuleConfigPanel({
       </header>
 
       {/* ---------- BODY ---------- */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 96 }}>
+      <div className="flex-1 overflow-y-auto p-4 pb-24">
         {/* ---------- REQUIRED INPUTS ---------- */}
         {requiredInputs.length > 0 && (
           <>
@@ -119,33 +117,19 @@ export default function ModuleConfigPanel({
         {optionalInputs.length > 0 && (
           <>
             <div
-              style={{
-                marginTop: requiredInputs.length > 0 ? 18 : 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
+              className={`flex items-center justify-between ${requiredInputs.length > 0 ? 'mt-4.5' : ''}`}
             >
-              <SectionTitle label="Optional Inputs" style={{ marginBottom: 0 }} />
+              <SectionTitle label="Optional Inputs" className="mb-0" />
 
               <button
                 onClick={() => setShowOptional((v) => !v)}
-                style={{
-                  cursor: 'pointer',
-                  border: '1px solid #333',
-                  background: '#0f0f0f',
-                  color: '#fff',
-                  borderRadius: 999,
-                  padding: '6px 10px',
-                  fontSize: 12,
-                  opacity: 0.9,
-                }}
+                className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-full px-2.5 py-1.5 text-xs opacity-90"
               >
                 {showOptional ? 'Hide' : 'Show'} ({optionalCount})
               </button>
             </div>
 
-            <div style={{ height: 10 }} />
+            <div className="h-2.5" />
 
             {showOptional &&
               optionalInputs.map((input) =>
@@ -166,24 +150,14 @@ export default function ModuleConfigPanel({
             {outputs.map((o) => (
               <div
                 key={o.name}
-                style={{
-                  marginBottom: 10,
-                  fontSize: 12,
-                  opacity: 0.85,
-                  background: '#0f0f0f',
-                  border: '1px solid #333',
-                  borderRadius: 10,
-                  padding: '10px 10px',
-                }}
+                className="mb-2.5 text-xs opacity-85 bg-[#0f0f0f] border border-[#333] rounded-[10px] px-2.5 py-2.5"
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <strong style={{ fontSize: 12 }}>{o.name}</strong>
-                  <span style={{ fontFamily: 'monospace', opacity: 0.75, fontSize: 11 }}>
-                    {o.type ?? ''}
-                  </span>
+                <div className="flex justify-between gap-2.5">
+                  <strong className="text-xs">{o.name}</strong>
+                  <span className="font-mono opacity-75 text-[11px]">{o.type ?? ''}</span>
                 </div>
                 {o.description && (
-                  <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>{o.description}</div>
+                  <div className="mt-1.5 text-[11px] opacity-70">{o.description}</div>
                 )}
               </div>
             ))}
@@ -194,17 +168,7 @@ export default function ModuleConfigPanel({
       {/* ---------- FOOTER ---------- */}
       <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-30">
         <button
-          style={{
-            width: '100%',
-            padding: '12px 0',
-            background: '#1f6feb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 10,
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: 'pointer',
-          }}
+          className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer"
           onClick={() => onSave(values)}
         >
           Save configuration
@@ -218,19 +182,19 @@ export default function ModuleConfigPanel({
 /* Section Title                      */
 /* ---------------------------------- */
 
-function SectionTitle({ label, style = {} }: { label: string; style?: React.CSSProperties }) {
+function SectionTitle({
+  label,
+  style = {},
+  className = '',
+}: {
+  label: string;
+  style?: React.CSSProperties;
+  className?: string;
+}) {
   return (
     <h4
-      style={{
-        margin: 0,
-        marginBottom: 12,
-        fontSize: 13,
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-        opacity: 0.85,
-        ...style,
-      }}
+      className={`m-0 mb-3 text-[13px] font-bold uppercase tracking-wide opacity-85 ${className}`}
+      style={style}
     >
       {label}
     </h4>
@@ -258,34 +222,9 @@ function renderInput({
   if (wiredValue) {
     return field(
       input,
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input
-          value={wiredValue}
-          readOnly
-          style={{
-            width: '100%',
-            background: '#0f0f0f',
-            color: '#fff',
-            border: '1px solid #333',
-            borderRadius: 8,
-            padding: '10px 10px',
-            fontSize: 12,
-            fontFamily: 'monospace',
-            opacity: 0.95,
-          }}
-        />
-        <span
-          style={{
-            fontSize: 11,
-            padding: '6px 10px',
-            borderRadius: 999,
-            border: '1px solid #2b4a7a',
-            background: '#0b1f3a',
-            color: '#9ecbff',
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
-          }}
-        >
+      <div className="flex gap-2 items-center">
+        <input value={wiredValue} readOnly className={`${inputClasses} font-mono opacity-95`} />
+        <span className="text-[11px] px-2.5 py-1.5 rounded-full border border-[#2b4a7a] bg-[#0b1f3a] text-[#9ecbff] font-bold whitespace-nowrap">
           Wired
         </span>
       </div>,
@@ -295,7 +234,11 @@ function renderInput({
   if (type === 'string') {
     return field(
       input,
-      <input value={value ?? ''} onChange={(e) => onChange(e.target.value)} style={inputStyle} />,
+      <input
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClasses}
+      />,
     );
   }
 
@@ -306,7 +249,7 @@ function renderInput({
         type="number"
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-        style={inputStyle}
+        className={inputClasses}
       />,
     );
   }
@@ -317,7 +260,7 @@ function renderInput({
       <select
         value={String(value ?? false)}
         onChange={(e) => onChange(e.target.value === 'true')}
-        style={selectStyle}
+        className={selectClasses}
       >
         <option value="true">True</option>
         <option value="false">False</option>
@@ -329,9 +272,9 @@ function renderInput({
     const items = Array.isArray(value) ? value : [];
     return field(
       input,
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="flex flex-col gap-2">
         {items.map((v: any, idx: number) => (
-          <div key={idx} style={{ display: 'flex', gap: 8 }}>
+          <div key={idx} className="flex gap-2">
             <input
               value={v ?? ''}
               onChange={(e) => {
@@ -339,18 +282,18 @@ function renderInput({
                 copy[idx] = e.target.value;
                 onChange(copy);
               }}
-              style={{ ...inputStyle, flex: 1 }}
+              className={`${inputClasses} flex-1`}
             />
             <button
               onClick={() => onChange(items.filter((_: any, i: number) => i !== idx))}
-              style={miniBtnStyle}
+              className={miniBtnClasses}
               title="Remove"
             >
               −
             </button>
           </div>
         ))}
-        <button onClick={() => onChange([...items, ''])} style={addBtnStyle}>
+        <button onClick={() => onChange([...items, ''])} className={addBtnClasses}>
           + Add
         </button>
       </div>,
@@ -369,14 +312,14 @@ function renderInput({
     const mapVal = value ?? {};
     return field(
       input,
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="flex flex-col gap-2">
         {Object.entries(mapVal).map(([k, v]) => (
-          <div key={k} style={{ display: 'flex', gap: 8 }}>
-            <input value={k} disabled style={{ ...inputStyle, flex: 1, opacity: 0.7 }} />
+          <div key={k} className="flex gap-2">
+            <input value={k} disabled className={`${inputClasses} flex-1 opacity-70`} />
             <input
               value={v as string}
               onChange={(e) => onChange({ ...mapVal, [k]: e.target.value })}
-              style={{ ...inputStyle, flex: 2 }}
+              className={`${inputClasses} flex-2`}
             />
             <button
               onClick={() => {
@@ -384,7 +327,7 @@ function renderInput({
                 delete copy[k];
                 onChange(copy);
               }}
-              style={miniBtnStyle}
+              className={miniBtnClasses}
               title="Remove"
             >
               −
@@ -393,7 +336,7 @@ function renderInput({
         ))}
         <button
           onClick={() => onChange({ ...mapVal, [`key_${Date.now()}`]: '' })}
-          style={addBtnStyle}
+          className={addBtnClasses}
         >
           + Add
         </button>
@@ -446,8 +389,8 @@ function renderInput({
 
 function field(input: TerraformInput, body: React.ReactNode) {
   return (
-    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
+    <div className="mb-4 flex flex-col gap-1.5">
+      <label className="text-xs font-semibold opacity-90">
         {input.name}
         {input.required && <span className="text-[#e5484d] ml-1">*</span>}
       </label>
@@ -458,38 +401,3 @@ function field(input: TerraformInput, body: React.ReactNode) {
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: '#0f0f0f',
-  color: '#fff',
-  border: '1px solid #333',
-  borderRadius: 8,
-  padding: '10px 10px',
-  fontSize: 12,
-};
-
-const selectStyle: React.CSSProperties = {
-  ...inputStyle,
-  padding: '10px 10px',
-};
-
-const miniBtnStyle: React.CSSProperties = {
-  width: 34,
-  borderRadius: 8,
-  border: '1px solid #333',
-  background: '#0f0f0f',
-  color: '#fff',
-  cursor: 'pointer',
-};
-
-const addBtnStyle: React.CSSProperties = {
-  borderRadius: 8,
-  border: '1px dashed #444',
-  background: '#0f0f0f',
-  color: '#fff',
-  padding: '10px 10px',
-  cursor: 'pointer',
-  fontSize: 12,
-  textAlign: 'left',
-};

@@ -41,50 +41,32 @@ export default function EdgeConfigPanel({
   }, [toInputs]);
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        right: 0,
-        top: 0,
-        width: 460,
-        height: '100%',
-        background: '#1e1e1e',
-        borderLeft: '1px solid #333',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 40,
-      }}
-    >
+    <div className="absolute right-0 top-0 w-[460px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col z-40">
       {/* header */}
-      <header
-        style={{
-          padding: 16,
-          borderBottom: '1px solid #333',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-        }}
-      >
+      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
         <div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>{title}</div>
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>
+          <div className="text-xs opacity-70">{title}</div>
+          <div className="text-sm font-semibold mt-0.5">
             {fromLabel} → {toLabel}
           </div>
         </div>
-        <button onClick={onClose} style={{ cursor: 'pointer' }}>
+        <button onClick={onClose} className="cursor-pointer">
           ✕
         </button>
       </header>
 
       {/* body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 96 }}>
+      <div className="flex-1 overflow-y-auto p-4 pb-24">
         <SectionTitle label="Map output to input" />
 
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>From Output</label>
-            <select value={from} onChange={(e) => setFrom(e.target.value)} style={selectStyle}>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-xs font-medium opacity-90 mb-1.5">From Output</label>
+            <select
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs"
+            >
               {fromOutputs.map((o) => (
                 <option key={o.name} value={o.name}>
                   {o.name}
@@ -92,14 +74,16 @@ export default function EdgeConfigPanel({
                 </option>
               ))}
             </select>
-            <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>
-              {descFor(fromOutputs, from)}
-            </div>
+            <div className="text-[11px] opacity-60 mt-1.5">{descFor(fromOutputs, from)}</div>
           </div>
 
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>To Input</label>
-            <select value={to} onChange={(e) => setTo(e.target.value)} style={selectStyle}>
+          <div className="flex-1">
+            <label className="block text-xs font-medium opacity-90 mb-1.5">To Input</label>
+            <select
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs"
+            >
               {requiredFirst.map((i) => (
                 <option key={i.name} value={i.name}>
                   {i.required ? '★ ' : ''}
@@ -108,43 +92,22 @@ export default function EdgeConfigPanel({
                 </option>
               ))}
             </select>
-            <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>
-              {descFor(requiredFirst, to)}
-            </div>
+            <div className="text-[11px] opacity-60 mt-1.5">{descFor(requiredFirst, to)}</div>
           </div>
         </div>
 
-        <div style={{ marginTop: 18, fontSize: 12, opacity: 0.8 }}>
+        <div className="mt-4.5 text-xs opacity-80">
           This will generate:
-          <div style={{ marginTop: 6, fontFamily: 'monospace', fontSize: 11, opacity: 0.9 }}>
+          <div className="mt-1.5 font-mono text-[11px] opacity-90">
             wires: from {`outputs.${from}`} → to {`inputs.${to}`}
           </div>
         </div>
       </div>
 
       {/* footer */}
-      <footer
-        style={{
-          padding: 16,
-          borderTop: '1px solid #333',
-          background: '#1e1e1e',
-          position: 'sticky',
-          bottom: 0,
-          zIndex: 50,
-        }}
-      >
+      <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-50">
         <button
-          style={{
-            width: '100%',
-            padding: '12px 0',
-            background: '#1f6feb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 8,
-            fontWeight: 600,
-            fontSize: 14,
-            cursor: 'pointer',
-          }}
+          className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-lg font-semibold text-sm cursor-pointer"
           disabled={!from || !to}
           onClick={() => onSave({ from, to })}
         >
@@ -157,39 +120,11 @@ export default function EdgeConfigPanel({
 
 function SectionTitle({ label }: { label: string }) {
   return (
-    <h4
-      style={{
-        margin: 0,
-        marginBottom: 12,
-        fontSize: 13,
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-        opacity: 0.85,
-      }}
-    >
+    <h4 className="m-0 mb-3 text-[13px] font-semibold uppercase tracking-wide opacity-85">
       {label}
     </h4>
   );
 }
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 12,
-  fontWeight: 500,
-  opacity: 0.9,
-  marginBottom: 6,
-};
-
-const selectStyle: React.CSSProperties = {
-  width: '100%',
-  background: '#0f0f0f',
-  color: '#fff',
-  border: '1px solid #333',
-  borderRadius: 8,
-  padding: '10px 10px',
-  fontSize: 12,
-};
 
 function descFor(list: any[], name: string) {
   const found = (list || []).find((x) => x?.name === name);
