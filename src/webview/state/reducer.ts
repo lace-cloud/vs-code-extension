@@ -121,9 +121,13 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case 'LOAD_WORKSPACE':
       return action.workspace;
 
-    // ── Phase 2-4: stubs ──
+    // ── Phase 2 ──
     case 'SET_VARIABLES':
+      return handleSetVariables(state, action);
     case 'SET_EXPORTS':
+      return handleSetExports(state, action);
+
+    // ── Phase 3-4: stubs ──
     case 'GROUP_INTO_COMPOSITE':
     case 'SET_TERRAFORM':
     case 'SET_PROVIDERS':
@@ -465,4 +469,51 @@ function handleSyncLayout(
       [module_key]: { nodes },
     },
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_VARIABLES (Phase 2)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetVariables(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_VARIABLES' }>,
+): WorkspaceState {
+  const { module_key, variables } = action;
+  const def = state.modules[module_key];
+  if (!def) return state;
+  return {
+    ...state,
+    modules: {
+      ...state.modules,
+      [module_key]: {
+        ...def,
+        interface: { ...def.interface, inputs: variables },
+      },
+    },
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_EXPORTS (Phase 2)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetExports(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_EXPORTS' }>,
+): WorkspaceState {
+  const { module_key, outputs, output_defs } = action;
+  const def = state.modules[module_key];
+  if (!def) return state;
+  // Update interface.outputs with the output definitions
+  const withInterface = {
+    ...def,
+    interface: { ...def.interface, outputs: output_defs },
+  };
+  // Update impl.graph.exports.outputs with the wiring
+  return updateCompositeGraph(
+    { ...state, modules: { ...state.modules, [module_key]: withInterface } },
+    module_key,
+    (graph) => ({ ...graph, exports: { outputs } }),
+  );
 }

@@ -1,7 +1,19 @@
 // src/webview/components/panels/ModuleConfigPanel.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import type { InputDef, OutputDef, Binding } from '../../types/ir';
 import { isLit, isOut, isVar, isExpr } from '../../types/ir';
+
+// ── Binding mode type ──
+
+type BindingMode = 'literal' | 'variable' | 'expression' | 'wired';
+
+function detectMode(binding: Binding | undefined): BindingMode {
+  if (!binding) return 'literal';
+  if (isOut(binding)) return 'wired';
+  if (isVar(binding)) return 'variable';
+  if (isExpr(binding)) return 'expression';
+  return 'literal';
+}
 
 // ── Props ──
 
@@ -9,6 +21,8 @@ type Props = {
   instance_id: string;
   schema: { inputs: InputDef[]; outputs: OutputDef[] };
   inputs: Record<string, Binding>;
+  /** Composite's interface.inputs — for the Variable mode dropdown */
+  composite_variables: InputDef[];
   onSave: (inputs: Record<string, Binding>) => void;
   onClose: () => void;
 };
@@ -18,27 +32,73 @@ type Props = {
 const inputClasses =
   'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
 
+const modeButtonBase =
+  'text-[10px] px-2 py-1 rounded cursor-pointer border transition-colors duration-100';
+
+const modeButtonActive = 'bg-[#1f6feb] border-[#1f6feb] text-white font-bold';
+
+const modeButtonInactive =
+  'bg-transparent border-[#555] text-[#999] hover:text-white hover:border-[#888]';
+
 // ── Component ──
 
-export default function ModuleConfigPanel({ instance_id, schema, inputs, onSave, onClose }: Props) {
-  // Local state: track literal values being edited
-  const [litValues, setLitValues] = useState<Record<string, any>>(() => {
-    const initial: Record<string, any> = {};
-    for (const [name, binding] of Object.entries(inputs)) {
-      if (isLit(binding)) {
-        initial[name] = binding.lit;
-      }
+export default function ModuleConfigPanel({
+  instance_id,
+  schema,
+  inputs,
+  composite_variables,
+  onSave,
+  onClose,
+}: Props) {
+  // Local state: tracks the current binding per input name
+  const [localBindings, setLocalBindings] = useState<Record<string, Binding>>(() => ({
+    ...inputs,
+  }));
+
+  // Track modes explicitly so switching modes can create appropriate defaults
+  const [modes, setModes] = useState<Record<string, BindingMode>>(() => {
+    const m: Record<string, BindingMode> = {};
+    for (const def of schema.inputs ?? []) {
+      m[def.name] = detectMode(inputs[def.name]);
     }
-    return initial;
+    return m;
   });
 
   const [showOptional, setShowOptional] = useState(true);
 
-  const updateValue = (key: string, value: any) => {
-    setLitValues((prev) => ({ ...prev, [key]: value }));
-  };
+  const updateBinding = useCallback((name: string, binding: Binding) => {
+    setLocalBindings((prev) => ({ ...prev, [name]: binding }));
+  }, []);
 
-  // ── Split inputs into required / optional ──
+  const switchMode = useCallback(
+    (name: string, mode: BindingMode, def: InputDef) => {
+      setModes((prev) => ({ ...prev, [name]: mode }));
+      // Create appropriate default binding for the new mode
+      switch (mode) {
+        case 'literal':
+          setLocalBindings((prev) => ({ ...prev, [name]: { lit: def.default ?? null } }));
+          break;
+        case 'variable':
+          setLocalBindings((prev) => ({
+            ...prev,
+            [name]: { var: composite_variables[0]?.name ?? '' },
+          }));
+          break;
+        case 'expression':
+          setLocalBindings((prev) => ({
+            ...prev,
+            [name]: { expr: { lang: 'hcl', value: '' } },
+          }));
+          break;
+        case 'wired':
+          // Cannot switch to wired manually — it's set by CONNECT action
+          break;
+      }
+    },
+    [composite_variables],
+  );
+
+  // ── Split inputs ──
 
   const { requiredInputs, optionalInputs } = useMemo(
     () => ({
@@ -48,117 +108,48 @@ export default function ModuleConfigPanel({ instance_id, schema, inputs, onSave,
     [schema.inputs],
   );
 
-  // ── Save handler: produce Record<string, Binding> ──
+  // ── Save handler ──
 
   const handleSave = () => {
-    const result: Record<string, Binding> = { ...inputs };
-    for (const [name, value] of Object.entries(litValues)) {
-      result[name] = { lit: value };
-    }
-    onSave(result);
+    onSave(localBindings);
   };
 
-  // ── Describe non-literal binding (read-only) ──
+  // ── Mode selector ──
 
-  function describeBinding(binding: Binding): string | null {
-    if (isOut(binding)) {
-      return `Wired to ${binding.out.module}.${binding.out.name}`;
-    }
-    if (isVar(binding)) {
-      return `Variable: var.${binding.var}`;
-    }
-    if (isExpr(binding)) {
-      return `Expression: ${binding.expr.value}`;
-    }
-    return null;
+  function renderModeSelector(def: InputDef): React.ReactNode {
+    const currentMode = modes[def.name] ?? 'literal';
+    const isWired = currentMode === 'wired';
+
+    const buttons: { mode: BindingMode; label: string; disabled?: boolean }[] = [
+      { mode: 'literal', label: 'Lit', disabled: isWired },
+      { mode: 'variable', label: 'Var', disabled: isWired || composite_variables.length === 0 },
+      { mode: 'expression', label: 'Expr', disabled: isWired },
+      { mode: 'wired', label: 'Wired', disabled: true }, // Always disabled — set by CONNECT
+    ];
+
+    return (
+      <div className="flex gap-1 mb-2">
+        {buttons.map((btn) => (
+          <button
+            key={btn.mode}
+            className={`${modeButtonBase} ${currentMode === btn.mode ? modeButtonActive : modeButtonInactive} ${btn.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+            onClick={() => {
+              if (!btn.disabled) switchMode(def.name, btn.mode, def);
+            }}
+            disabled={btn.disabled}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
+    );
   }
 
-  // ── Render a single input field ──
+  // ── Render a single input field based on mode ──
 
   function renderInputField(def: InputDef): React.ReactNode {
-    const binding = inputs[def.name];
-    const nonLitDesc = binding ? describeBinding(binding) : null;
-
-    // If bound to out/var/expr, show read-only
-    if (binding && !isLit(binding) && nonLitDesc) {
-      return (
-        <div key={def.name} className="mb-4 flex flex-col gap-1.5">
-          <label className="text-xs font-semibold opacity-90">
-            {def.name}
-            {def.required && <span className="text-[#e5484d] ml-1">*</span>}
-          </label>
-          <div className="flex gap-2 items-center">
-            <input value={nonLitDesc} readOnly className={`${inputClasses} font-mono opacity-95`} />
-            <span className="text-[11px] px-2.5 py-1.5 rounded-full border border-[#2b4a7a] bg-[#0b1f3a] text-[#9ecbff] font-bold whitespace-nowrap">
-              Wired
-            </span>
-          </div>
-          {def.description && <div className="text-[11px] opacity-60">{def.description}</div>}
-        </div>
-      );
-    }
-
-    // Literal mode editor based on type
-    const value = litValues[def.name] ?? def.default ?? null;
-    const type = def.type || 'string';
-
-    let editor: React.ReactNode;
-
-    if (type === 'bool') {
-      editor = (
-        <select
-          value={String(value ?? false)}
-          onChange={(e) => updateValue(def.name, e.target.value === 'true')}
-          className={inputClasses}
-        >
-          <option value="true">True</option>
-          <option value="false">False</option>
-        </select>
-      );
-    } else if (type === 'number') {
-      editor = (
-        <input
-          type="number"
-          value={value ?? ''}
-          onChange={(e) =>
-            updateValue(def.name, e.target.value === '' ? '' : Number(e.target.value))
-          }
-          className={inputClasses}
-        />
-      );
-    } else if (
-      type.startsWith('list(') ||
-      type.startsWith('map(') ||
-      type.startsWith('set(') ||
-      type.startsWith('object(')
-    ) {
-      // Complex types: JSON textarea
-      const jsonStr = typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2);
-      editor = (
-        <textarea
-          value={jsonStr}
-          onChange={(e) => {
-            try {
-              updateValue(def.name, JSON.parse(e.target.value));
-            } catch {
-              // Keep raw string while user is typing
-              updateValue(def.name, e.target.value);
-            }
-          }}
-          rows={4}
-          className={`${inputClasses} font-mono resize-y`}
-        />
-      );
-    } else {
-      // Default: string input
-      editor = (
-        <input
-          value={value ?? ''}
-          onChange={(e) => updateValue(def.name, e.target.value)}
-          className={inputClasses}
-        />
-      );
-    }
+    const currentMode = modes[def.name] ?? 'literal';
+    const binding = localBindings[def.name];
 
     return (
       <div key={def.name} className="mb-4 flex flex-col gap-1.5">
@@ -166,9 +157,140 @@ export default function ModuleConfigPanel({ instance_id, schema, inputs, onSave,
           {def.name}
           {def.required && <span className="text-[#e5484d] ml-1">*</span>}
         </label>
-        {editor}
+
+        {/* Mode selector */}
+        {renderModeSelector(def)}
+
+        {/* Mode-specific editor */}
+        {currentMode === 'wired' && renderWiredEditor(binding)}
+        {currentMode === 'variable' && renderVariableEditor(def, binding)}
+        {currentMode === 'expression' && renderExpressionEditor(def, binding)}
+        {currentMode === 'literal' && renderLiteralEditor(def, binding)}
+
         {def.description && <div className="text-[11px] opacity-60">{def.description}</div>}
       </div>
+    );
+  }
+
+  // ── Wired mode (read-only) ──
+
+  function renderWiredEditor(binding: Binding | undefined): React.ReactNode {
+    const label =
+      binding && isOut(binding) ? `${binding.out.module}.${binding.out.name}` : 'Not wired';
+    return (
+      <div className="flex gap-2 items-center">
+        <input value={label} readOnly className={`${inputClasses} font-mono opacity-95`} />
+        <span className="text-[11px] px-2.5 py-1.5 rounded-full border border-[#2b4a7a] bg-[#0b1f3a] text-[#9ecbff] font-bold whitespace-nowrap">
+          Wired
+        </span>
+      </div>
+    );
+  }
+
+  // ── Variable mode ──
+
+  function renderVariableEditor(def: InputDef, binding: Binding | undefined): React.ReactNode {
+    const currentVar = binding && isVar(binding) ? binding.var : '';
+
+    return (
+      <select
+        value={currentVar}
+        onChange={(e) => updateBinding(def.name, { var: e.target.value })}
+        className={inputClasses}
+      >
+        <option value="" disabled>
+          Select variable…
+        </option>
+        {composite_variables.map((v) => (
+          <option key={v.name} value={v.name}>
+            var.{v.name} ({v.type})
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  // ── Expression mode ──
+
+  function renderExpressionEditor(def: InputDef, binding: Binding | undefined): React.ReactNode {
+    const currentExpr = binding && isExpr(binding) ? binding.expr.value : '';
+
+    return (
+      <textarea
+        value={currentExpr}
+        onChange={(e) => updateBinding(def.name, { expr: { lang: 'hcl', value: e.target.value } })}
+        rows={3}
+        placeholder={'e.g. join("-", [var.prefix, var.name])'}
+        className={`${inputClasses} font-mono resize-y`}
+      />
+    );
+  }
+
+  // ── Literal mode ──
+
+  function renderLiteralEditor(def: InputDef, binding: Binding | undefined): React.ReactNode {
+    const value = binding && isLit(binding) ? binding.lit : (def.default ?? null);
+    const type = def.type || 'string';
+
+    if (type === 'bool') {
+      return (
+        <select
+          value={String(value ?? false)}
+          onChange={(e) => updateBinding(def.name, { lit: e.target.value === 'true' })}
+          className={inputClasses}
+        >
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+      );
+    }
+
+    if (type === 'number') {
+      return (
+        <input
+          type="number"
+          value={value ?? ''}
+          onChange={(e) =>
+            updateBinding(def.name, {
+              lit: e.target.value === '' ? '' : Number(e.target.value),
+            })
+          }
+          className={inputClasses}
+        />
+      );
+    }
+
+    if (
+      type.startsWith('list(') ||
+      type.startsWith('map(') ||
+      type.startsWith('set(') ||
+      type === 'object' ||
+      type.startsWith('object(')
+    ) {
+      const jsonStr = typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2);
+      return (
+        <textarea
+          value={jsonStr}
+          onChange={(e) => {
+            try {
+              updateBinding(def.name, { lit: JSON.parse(e.target.value) });
+            } catch {
+              updateBinding(def.name, { lit: e.target.value });
+            }
+          }}
+          rows={4}
+          className={`${inputClasses} font-mono resize-y`}
+        />
+      );
+    }
+
+    // Default: string
+    return (
+      <input
+        value={value ?? ''}
+        onChange={(e) => updateBinding(def.name, { lit: e.target.value })}
+        className={inputClasses}
+      />
     );
   }
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ReactFlowProvider } from 'reactflow';
+import { ReactFlowProvider } from '@xyflow/react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Canvas from './Canvas';
 

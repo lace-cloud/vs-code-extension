@@ -1,18 +1,21 @@
 // src/webview/Canvas.tsx
 import React, { useEffect, useState, useReducer, useMemo, useCallback, useRef } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   Controls,
   type Connection,
   type Edge,
   type Node,
   type NodeChange,
-} from 'reactflow';
+} from '@xyflow/react';
 
 import ModuleNode from './components/nodes/ModuleNode';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
+import VariablesPanel from './components/panels/VariablesPanel';
+import OutputsPanel from './components/panels/OutputsPanel';
 import RegistrySidebar, {
   type RegistryModule,
   type RegistryTree,
@@ -99,6 +102,8 @@ export default function Canvas() {
     target: string;
   } | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [variablesPanelOpen, setVariablesPanelOpen] = useState(false);
+  const [outputsPanelOpen, setOutputsPanelOpen] = useState(false);
 
   // Pending drop requests: requestId → drop position
   const pendingDrops = useRef<Record<number, { x: number; y: number }>>({});
@@ -390,6 +395,20 @@ export default function Canvas() {
           setTimeout(() => setStatusMessage(null), 5000);
           break;
         }
+
+        case 'triggerVariables': {
+          setVariablesPanelOpen(true);
+          setOutputsPanelOpen(false);
+          setConfigTarget(null);
+          break;
+        }
+
+        case 'triggerOutputs': {
+          setOutputsPanelOpen(true);
+          setVariablesPanelOpen(false);
+          setConfigTarget(null);
+          break;
+        }
       }
     };
 
@@ -449,6 +468,7 @@ export default function Canvas() {
               instance_id={configTarget}
               schema={configSchema}
               inputs={configInstance.inputs}
+              composite_variables={rootDef.interface.inputs}
               onSave={(inputs) => {
                 semanticDispatch({
                   type: 'UPDATE_INPUTS',
@@ -481,6 +501,45 @@ export default function Canvas() {
                 setEdgeConfigState(null);
               }}
               onClose={() => setEdgeConfigState(null)}
+            />
+          )}
+
+          {/* Variables panel */}
+          {variablesPanelOpen && (
+            <VariablesPanel
+              variables={rootDef.interface.inputs}
+              all_instance_inputs={Object.fromEntries(
+                graph.instances.map((inst) => [inst.id, inst.inputs]),
+              )}
+              onSave={(variables) => {
+                semanticDispatch({
+                  type: 'SET_VARIABLES',
+                  module_key,
+                  variables,
+                });
+                setVariablesPanelOpen(false);
+              }}
+              onClose={() => setVariablesPanelOpen(false)}
+            />
+          )}
+
+          {/* Outputs panel */}
+          {outputsPanelOpen && (
+            <OutputsPanel
+              instances={graph.instances}
+              resolveInstanceSchema={(inst) => resolveSchema(workspace, inst)}
+              output_defs={rootDef.interface.outputs}
+              exports={graph.exports.outputs}
+              onSave={(output_defs, outputs) => {
+                semanticDispatch({
+                  type: 'SET_EXPORTS',
+                  module_key,
+                  outputs,
+                  output_defs,
+                });
+                setOutputsPanelOpen(false);
+              }}
+              onClose={() => setOutputsPanelOpen(false)}
             />
           )}
         </div>

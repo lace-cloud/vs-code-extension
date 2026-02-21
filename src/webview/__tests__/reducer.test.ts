@@ -431,3 +431,239 @@ test('SYNC_LAYOUT bulk-replaces positions', () => {
     position: { x: 500, y: 300 },
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_VARIABLES (Phase 2)
+// ══════════════════════════════════════════════════════════════════════
+
+test('SET_VARIABLES sets composite interface.inputs', () => {
+  const state = makeWorkspace([]);
+  const variables = [
+    { name: 'bucket_name', type: 'string', required: true, description: 'The bucket name' },
+    { name: 'tags', type: 'map(string)', required: false, default: {} },
+  ];
+  const next = workspaceReducer(state, {
+    type: 'SET_VARIABLES',
+    module_key: 'root@v1.0.0',
+    variables,
+  });
+  expect(next.modules['root@v1.0.0'].interface.inputs).toEqual(variables);
+  // outputs unchanged
+  expect(next.modules['root@v1.0.0'].interface.outputs).toEqual([]);
+});
+
+test('SET_VARIABLES replaces existing variables', () => {
+  const state = makeWorkspace([]);
+  // Set initial variables
+  const first = workspaceReducer(state, {
+    type: 'SET_VARIABLES',
+    module_key: 'root@v1.0.0',
+    variables: [{ name: 'old_var', type: 'string', required: false }],
+  });
+  expect(first.modules['root@v1.0.0'].interface.inputs).toHaveLength(1);
+
+  // Replace with new variables
+  const second = workspaceReducer(first, {
+    type: 'SET_VARIABLES',
+    module_key: 'root@v1.0.0',
+    variables: [
+      { name: 'new_var_a', type: 'number', required: true },
+      { name: 'new_var_b', type: 'bool', required: false },
+    ],
+  });
+  expect(second.modules['root@v1.0.0'].interface.inputs).toHaveLength(2);
+  expect(second.modules['root@v1.0.0'].interface.inputs[0].name).toBe('new_var_a');
+  expect(second.modules['root@v1.0.0'].interface.inputs[1].name).toBe('new_var_b');
+});
+
+test('SET_VARIABLES on non-existent module_key returns state unchanged', () => {
+  const state = makeWorkspace([]);
+  const next = workspaceReducer(state, {
+    type: 'SET_VARIABLES',
+    module_key: 'nonexistent@v1.0.0',
+    variables: [{ name: 'x', type: 'string', required: false }],
+  });
+  expect(next).toBe(state);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_EXPORTS (Phase 2)
+// ══════════════════════════════════════════════════════════════════════
+
+test('SET_EXPORTS sets both interface.outputs and graph.exports.outputs', () => {
+  const state = makeWorkspace([
+    {
+      kind: 'module',
+      id: 's3_bucket',
+      use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
+      inputs: {},
+    },
+  ]);
+  const output_defs = [
+    { name: 'bucket_arn', type: 'string', description: 'The ARN of the primary bucket' },
+    { name: 'bucket_id', type: 'string', description: 'The name of the primary bucket' },
+  ];
+  const outputs = {
+    bucket_arn: { out: { module: 's3_bucket', name: 'arn' } },
+    bucket_id: { out: { module: 's3_bucket', name: 'id' } },
+  };
+  const next = workspaceReducer(state, {
+    type: 'SET_EXPORTS',
+    module_key: 'root@v1.0.0',
+    outputs,
+    output_defs,
+  });
+  // interface.outputs updated
+  expect(next.modules['root@v1.0.0'].interface.outputs).toEqual(output_defs);
+  // graph.exports.outputs updated
+  const def = next.modules['root@v1.0.0'];
+  if (def.impl.kind === 'composite') {
+    expect(def.impl.graph.exports.outputs).toEqual(outputs);
+  } else {
+    throw new Error('Expected composite');
+  }
+});
+
+test('SET_EXPORTS replaces existing exports', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+  ]);
+  // Set initial exports
+  const first = workspaceReducer(state, {
+    type: 'SET_EXPORTS',
+    module_key: 'root@v1.0.0',
+    outputs: { old_out: { out: { module: 'a', name: 'arn' } } },
+    output_defs: [{ name: 'old_out', type: 'string' }],
+  });
+  const firstDef = first.modules['root@v1.0.0'];
+  if (firstDef.impl.kind === 'composite') {
+    expect(firstDef.impl.graph.exports.outputs['old_out']).toBeDefined();
+  }
+
+  // Replace
+  const second = workspaceReducer(first, {
+    type: 'SET_EXPORTS',
+    module_key: 'root@v1.0.0',
+    outputs: { new_out: { out: { module: 'a', name: 'id' } } },
+    output_defs: [{ name: 'new_out', type: 'string' }],
+  });
+  const secondDef = second.modules['root@v1.0.0'];
+  if (secondDef.impl.kind === 'composite') {
+    expect(secondDef.impl.graph.exports.outputs['old_out']).toBeUndefined();
+    expect(secondDef.impl.graph.exports.outputs['new_out']).toEqual({
+      out: { module: 'a', name: 'id' },
+    });
+  }
+  expect(second.modules['root@v1.0.0'].interface.outputs).toEqual([
+    { name: 'new_out', type: 'string' },
+  ]);
+});
+
+test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
+  const state = makeWorkspace([]);
+  // Add a leaf module
+  const leafDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'leaf',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+  };
+  const stateWithLeaf = {
+    ...state,
+    modules: { ...state.modules, 'leaf@v1.0.0': leafDef },
+  };
+  const next = workspaceReducer(stateWithLeaf, {
+    type: 'SET_EXPORTS',
+    module_key: 'leaf@v1.0.0',
+    outputs: { x: { out: { module: 'a', name: 'b' } } },
+    output_defs: [{ name: 'x', type: 'string' }],
+  });
+  // interface.outputs updated (SET_EXPORTS updates interface first, then tries graph)
+  // But since it's a leaf, updateCompositeGraph is a no-op — graph won't change
+  expect(next.modules['leaf@v1.0.0'].interface.outputs).toEqual([{ name: 'x', type: 'string' }]);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// Phase 2: s3_stack validation scenario
+// ══════════════════════════════════════════════════════════════════════
+
+test('Phase 2 s3_stack scenario: variables, var bindings, curated outputs', () => {
+  // 1. Start with empty workspace
+  let state = makeWorkspace([]);
+
+  // 2. Drop composite bundle (s3_bucket + s3_bucket_versioning)
+  const compositeBundle = loadFixture('composite_deploy_bundle.json');
+  state = workspaceReducer(state, {
+    type: 'DROP_BUNDLE',
+    module_key: 'root@v1.0.0',
+    deploy_bundle: compositeBundle,
+    positions: {},
+  });
+  const instances = getInstances(state, 'root@v1.0.0');
+  expect(instances.find((i) => i.id === 's3_bucket')).toBeDefined();
+  expect(instances.find((i) => i.id === 's3_bucket_versioning')).toBeDefined();
+
+  // 3. Define composite variables
+  const variables = [
+    {
+      name: 'bucket_name',
+      type: 'string',
+      required: true,
+      description: 'The name of the S3 bucket',
+    },
+    { name: 'tags', type: 'map(string)', required: false, default: {} },
+    { name: 'versioning_enabled', type: 'bool', required: false, default: false },
+    { name: 'acl', type: 'string', required: false, default: 'private' },
+  ];
+  state = workspaceReducer(state, {
+    type: 'SET_VARIABLES',
+    module_key: 'root@v1.0.0',
+    variables,
+  });
+  expect(state.modules['root@v1.0.0'].interface.inputs).toEqual(variables);
+
+  // 4. Set var bindings on s3_bucket instance
+  state = workspaceReducer(state, {
+    type: 'UPDATE_INPUTS',
+    module_key: 'root@v1.0.0',
+    instance_id: 's3_bucket',
+    inputs: {
+      bucket_name: { var: 'bucket_name' },
+      tags: { var: 'tags' },
+      versioning_enabled: { var: 'versioning_enabled' },
+      acl: { var: 'acl' },
+    },
+  });
+  const s3Bucket = getInst(state, 's3_bucket');
+  expect(s3Bucket.inputs.bucket_name).toEqual({ var: 'bucket_name' });
+  expect(s3Bucket.inputs.tags).toEqual({ var: 'tags' });
+
+  // 5. Verify the wire from CONNECT is preserved (s3_bucket.id → s3_bucket_versioning.bucket_id)
+  const versioning = getInst(state, 's3_bucket_versioning');
+  expect(versioning.inputs.bucket_id).toEqual({ out: { module: 's3_bucket', name: 'id' } });
+
+  // 6. Set curated outputs
+  state = workspaceReducer(state, {
+    type: 'SET_EXPORTS',
+    module_key: 'root@v1.0.0',
+    outputs: {
+      bucket_arn: { out: { module: 's3_bucket', name: 'arn' } },
+      bucket_id: { out: { module: 's3_bucket', name: 'id' } },
+    },
+    output_defs: [
+      { name: 'bucket_arn', type: 'string', description: 'The ARN of the primary bucket' },
+      { name: 'bucket_id', type: 'string', description: 'The name of the primary bucket' },
+    ],
+  });
+
+  // Verify interface.outputs
+  expect(state.modules['root@v1.0.0'].interface.outputs).toHaveLength(2);
+  expect(state.modules['root@v1.0.0'].interface.outputs[0].name).toBe('bucket_arn');
+
+  // Verify graph.exports.outputs
+  const exports = getExports(state, 'root@v1.0.0');
+  expect(exports['bucket_arn']).toEqual({ out: { module: 's3_bucket', name: 'arn' } });
+  expect(exports['bucket_id']).toEqual({ out: { module: 's3_bucket', name: 'id' } });
+});

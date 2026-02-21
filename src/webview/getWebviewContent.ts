@@ -52,21 +52,27 @@ export function getWebviewContent(
       color: white;
       padding: 6px 10px;
       font-size: 13px;
+      gap: 6px;
     }
 
     .menu-left {
       display: flex;
+      gap: 4px;
     }
 
-    .menu-item {
-      margin-right: 16px;
-      cursor: pointer;
-      padding: 2px 6px;
+    .toolbar-btn {
+      padding: 4px 10px;
       border-radius: 4px;
+      background: #444;
+      border: 1px solid #555;
+      color: #ccc;
+      font-size: 12px;
+      cursor: pointer;
     }
 
-    .menu-item:hover {
-      background: #444;
+    .toolbar-btn:hover {
+      background: #555;
+      color: white;
     }
 
     .menu-right {
@@ -80,11 +86,10 @@ export function getWebviewContent(
 
 <body>
   <div id="menu-bar">
-  <!-- LEFT: File / Edit / View -->
+  <!-- LEFT: Variables / Outputs -->
   <div class="menu-left">
-    <div class="menu-item">File</div>
-    <div class="menu-item">Edit</div>
-    <div class="menu-item">View</div>
+    <button id="variables-btn" class="toolbar-btn">Variables</button>
+    <button id="outputs-btn" class="toolbar-btn">Outputs</button>
   </div>
 
   <!-- RIGHT: Generate -->
@@ -110,10 +115,24 @@ export function getWebviewContent(
 
   <script nonce="${nonce}">
   window.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('generate-btn');
-    if (btn) {
-      btn.addEventListener('click', () => {
+    const genBtn = document.getElementById('generate-btn');
+    if (genBtn) {
+      genBtn.addEventListener('click', () => {
         window.postMessage({ command: 'triggerGenerate' }, '*');
+      });
+    }
+
+    const varsBtn = document.getElementById('variables-btn');
+    if (varsBtn) {
+      varsBtn.addEventListener('click', () => {
+        window.postMessage({ command: 'triggerVariables' }, '*');
+      });
+    }
+
+    const outsBtn = document.getElementById('outputs-btn');
+    if (outsBtn) {
+      outsBtn.addEventListener('click', () => {
+        window.postMessage({ command: 'triggerOutputs' }, '*');
       });
     }
   });

@@ -1,5 +1,5 @@
 import React, { useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { Handle, Position, type NodeProps } from 'reactflow';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { Instance, InputDef, OutputDef } from '../../types/ir';
 import { isOut } from '../../types/ir';
 import { isValidTerraformIdentifier } from '../../utils/identifiers';
@@ -12,6 +12,9 @@ export type ModuleNodeData = {
   schema: { inputs: InputDef[]; outputs: OutputDef[] };
 };
 
+// v12: NodeProps takes the full Node type, not just the data
+type ModuleNodeNode = Node<ModuleNodeData, 'moduleNode'>;
+
 // ── Handle style ──
 
 const handleStyle =
@@ -19,7 +22,7 @@ const handleStyle =
 
 // ── Component ──
 
-const ModuleNode: React.FC<NodeProps<ModuleNodeData>> = ({ id, data }) => {
+const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const ctx = useContext(CanvasContext);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(id);
