@@ -11,11 +11,13 @@ import {
 } from '@xyflow/react';
 
 import ModuleNode from './components/nodes/ModuleNode';
+import CompositeNode from './components/nodes/CompositeNode';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
 import VariablesPanel from './components/panels/VariablesPanel';
 import OutputsPanel from './components/panels/OutputsPanel';
+import Breadcrumb from './components/Breadcrumb';
 import RegistrySidebar, {
   type RegistryModule,
   type RegistryTree,
@@ -23,7 +25,7 @@ import RegistrySidebar, {
 
 import type { WorkspaceState } from './types/workspace';
 import type { ModuleBundle } from './types/ir';
-import { isOut } from './types/ir';
+import { isOut, isModuleInstance } from './types/ir';
 import type { WebviewToHost } from '../types/protocol';
 
 import { workspaceReducer, type WorkspaceAction } from './state/reducer';
@@ -37,7 +39,7 @@ import { toTerraformIdentifier } from './utils/identifiers';
 
 const nodeTypes = {
   moduleNode: ModuleNode,
-  compositeNode: ModuleNode,
+  compositeNode: CompositeNode,
 };
 
 // ── Helper: post typed message to host ──
@@ -113,8 +115,49 @@ export default function Canvas() {
     {},
   );
 
-  // ── Active module key ──
-  const module_key = `${workspace.entry.module_id}@${workspace.entry.version}`;
+  // ── Breadcrumb navigation ──
+  const entry_key = `${workspace.entry.module_id}@${workspace.entry.version}`;
+  const [breadcrumb, setBreadcrumb] = useState<string[]>([entry_key]);
+
+  // Reset breadcrumb when entry changes (e.g., LOAD_WORKSPACE)
+  useEffect(() => {
+    setBreadcrumb([entry_key]);
+  }, [entry_key]);
+
+  const active_key = breadcrumb[breadcrumb.length - 1];
+
+  const navigateIn = useCallback(
+    (instance_id: string) => {
+      // Resolve the instance to find the module_key it points to
+      const ws = workspaceRef.current;
+      const ak = active_key;
+      const def = ws.modules[ak];
+      if (!def || def.impl.kind !== 'composite') return;
+
+      const inst = def.impl.graph.instances.find((i) => i.id === instance_id);
+      if (!inst || !isModuleInstance(inst)) return;
+
+      const targetKey = `${inst.use.module_id}@${inst.use.version}`;
+      const targetDef = ws.modules[targetKey];
+      if (!targetDef || targetDef.impl.kind !== 'composite') return;
+
+      setBreadcrumb((prev) => [...prev, targetKey]);
+      setLocalPositions({});
+      setConfigTarget(null);
+      setEdgeConfigState(null);
+    },
+    [active_key],
+  );
+
+  const navigateTo = useCallback((index: number) => {
+    setBreadcrumb((prev) => prev.slice(0, index + 1));
+    setLocalPositions({});
+    setConfigTarget(null);
+    setEdgeConfigState(null);
+  }, []);
+
+  // ── Active module key (breadcrumb-driven) ──
+  const module_key = active_key;
   const rootDef = workspace.modules[module_key];
 
   // Stable ref for workspace (used in message handler to avoid stale closure)
@@ -145,12 +188,10 @@ export default function Canvas() {
   const callbacks: CanvasCallbacks = useMemo(
     () => ({
       openConfig: (id) => setConfigTarget(id),
-      navigateIn: () => {
-        /* Phase 3 — noop */
-      },
+      navigateIn,
       markDirty: () => postToHost({ command: 'markDirty' }),
     }),
-    [],
+    [navigateIn],
   );
 
   // ── Guard: root must be composite ──
@@ -298,6 +339,7 @@ export default function Canvas() {
         case 'loadState': {
           dispatch({ type: 'LOAD_WORKSPACE', workspace: msg.state });
           setLocalPositions({});
+          // Breadcrumb resets via the entry_key useEffect
           break;
         }
 
@@ -443,6 +485,9 @@ export default function Canvas() {
 
         {/* Canvas area */}
         <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
+          {/* Breadcrumb navigation */}
+          <Breadcrumb path={breadcrumb} onNavigate={navigateTo} />
+
           {statusMessage && (
             <div className="absolute top-11 left-4 z-20 bg-[#1f6feb] text-white px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
               {statusMessage}

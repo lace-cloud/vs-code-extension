@@ -11,7 +11,7 @@ import type {
   ModuleDef,
   Instance,
 } from '../types/ir';
-import { isOut, isOutExport } from '../types/ir';
+import { isOut, isVar, isOutExport } from '../types/ir';
 import type { WorkspaceState } from '../types/workspace';
 import { uniqueInstanceId } from '../utils/identifiers';
 
@@ -127,8 +127,11 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case 'SET_EXPORTS':
       return handleSetExports(state, action);
 
-    // ── Phase 3-4: stubs ──
+    // ── Phase 3 ──
     case 'GROUP_INTO_COMPOSITE':
+      return handleGroupIntoComposite(state, action);
+
+    // ── Phase 4: stubs ──
     case 'SET_TERRAFORM':
     case 'SET_PROVIDERS':
     case 'SET_LOCALS':
@@ -516,4 +519,310 @@ function handleSetExports(
     module_key,
     (graph) => ({ ...graph, exports: { outputs } }),
   );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// GROUP_INTO_COMPOSITE (Phase 3)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleGroupIntoComposite(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'GROUP_INTO_COMPOSITE' }>,
+): WorkspaceState {
+  const { module_key, instance_ids, composite_id } = action;
+  const parentDef = state.modules[module_key];
+  if (!parentDef || parentDef.impl.kind !== 'composite') return state;
+
+  const parentGraph = parentDef.impl.graph;
+  const selectedSet = new Set(instance_ids);
+
+  // ── 1. Partition instances ──
+  const selectedInstances = parentGraph.instances.filter((i) => selectedSet.has(i.id));
+  const remainingInstances = parentGraph.instances.filter((i) => !selectedSet.has(i.id));
+
+  if (selectedInstances.length === 0) return state;
+
+  // ── 2. Analyze boundary edges ──
+  // Boundary-in: bindings on selected instances that reference modules outside selection (out bindings)
+  // Boundary-out: bindings on remaining instances that reference modules inside selection (out bindings)
+  // Also track var bindings on selected instances — these propagate into the sub-composite
+
+  // Collect boundary-in variable names needed (var bindings used by selected instances)
+  const neededVarNames = new Set<string>();
+  for (const inst of selectedInstances) {
+    for (const [, binding] of Object.entries(inst.inputs)) {
+      if (isVar(binding)) {
+        neededVarNames.add(binding.var);
+      }
+    }
+  }
+
+  // Collect boundary-in out references: selected instances referencing external modules
+  // These become inputs on the sub-composite interface
+  type BoundaryIn = {
+    instance_id: string;
+    input_name: string;
+    source_module: string;
+    source_output: string;
+  };
+  const boundaryIns: BoundaryIn[] = [];
+  for (const inst of selectedInstances) {
+    for (const [inputName, binding] of Object.entries(inst.inputs)) {
+      if (isOut(binding) && !selectedSet.has(binding.out.module)) {
+        boundaryIns.push({
+          instance_id: inst.id,
+          input_name: inputName,
+          source_module: binding.out.module,
+          source_output: binding.out.name,
+        });
+      }
+    }
+  }
+
+  // Collect boundary-out: remaining instances referencing selected instances
+  type BoundaryOut = {
+    instance_id: string;
+    input_name: string;
+    source_module: string;
+    source_output: string;
+  };
+  const boundaryOuts: BoundaryOut[] = [];
+  for (const inst of remainingInstances) {
+    for (const [inputName, binding] of Object.entries(inst.inputs)) {
+      if (isOut(binding) && selectedSet.has(binding.out.module)) {
+        boundaryOuts.push({
+          instance_id: inst.id,
+          input_name: inputName,
+          source_module: binding.out.module,
+          source_output: binding.out.name,
+        });
+      }
+    }
+  }
+
+  // Collect parent exports referencing selected instances
+  type ExportRef = { export_name: string; source_module: string; source_output: string };
+  const parentExportRefs: ExportRef[] = [];
+  for (const [exportName, exp] of Object.entries(parentGraph.exports.outputs)) {
+    if (isOutExport(exp) && selectedSet.has(exp.out.module)) {
+      parentExportRefs.push({
+        export_name: exportName,
+        source_module: exp.out.module,
+        source_output: exp.out.name,
+      });
+    }
+  }
+
+  // ── 3. Build sub-composite interface ──
+
+  // Inputs: one per unique boundary-in edge (deduplicated by source_module.source_output)
+  // We create a synthetic input name for each boundary-in
+  const subInputDefs: InputDef[] = [];
+  const boundaryInMap = new Map<string, string>(); // "source_module:source_output" → input_name
+  for (const bi of boundaryIns) {
+    const key = `${bi.source_module}:${bi.source_output}`;
+    if (!boundaryInMap.has(key)) {
+      const inputName = `${bi.source_module}_${bi.source_output}`;
+      boundaryInMap.set(key, inputName);
+      subInputDefs.push({ name: inputName, type: 'string', required: true });
+    }
+  }
+
+  // Propagate parent variables that selected instances reference
+  const parentInputsByName = new Map(parentDef.interface.inputs.map((inp) => [inp.name, inp]));
+  for (const varName of neededVarNames) {
+    const parentInput = parentInputsByName.get(varName);
+    if (parentInput) {
+      subInputDefs.push({ ...parentInput });
+    } else {
+      subInputDefs.push({ name: varName, type: 'string', required: false });
+    }
+  }
+
+  // Outputs: one per unique boundary-out edge + parent export refs into selection
+  const subOutputDefs: OutputDef[] = [];
+  const subExports: Record<string, OutputExport> = {};
+  const outputNameSet = new Set<string>();
+
+  for (const bo of boundaryOuts) {
+    const outputName = `${bo.source_module}_${bo.source_output}`;
+    if (!outputNameSet.has(outputName)) {
+      outputNameSet.add(outputName);
+      subOutputDefs.push({ name: outputName, type: 'string' });
+      subExports[outputName] = { out: { module: bo.source_module, name: bo.source_output } };
+    }
+  }
+
+  for (const er of parentExportRefs) {
+    const outputName = `${er.source_module}_${er.source_output}`;
+    if (!outputNameSet.has(outputName)) {
+      outputNameSet.add(outputName);
+      subOutputDefs.push({ name: outputName, type: 'string' });
+      subExports[outputName] = { out: { module: er.source_module, name: er.source_output } };
+    }
+  }
+
+  // ── 4. Rewrite selected instances' bindings for the sub-composite context ──
+  const subInstances: Instance[] = selectedInstances.map((inst) => {
+    const newInputs: Record<string, Binding> = {};
+    for (const [inputName, binding] of Object.entries(inst.inputs)) {
+      if (isOut(binding) && !selectedSet.has(binding.out.module)) {
+        // Boundary-in: rewrite to var binding referencing the new sub-composite input
+        const key = `${binding.out.module}:${binding.out.name}`;
+        const subInputName = boundaryInMap.get(key)!;
+        newInputs[inputName] = { var: subInputName };
+      } else {
+        // Internal out binding or var/lit/expr — preserved as-is
+        newInputs[inputName] = binding;
+      }
+    }
+
+    // Rewrite depends_on: keep only internal references
+    const newDependsOn = inst.depends_on?.filter((dep) => selectedSet.has(dep));
+
+    return {
+      ...inst,
+      inputs: newInputs,
+      ...(newDependsOn && newDependsOn.length > 0 ? { depends_on: newDependsOn } : {}),
+    } as Instance;
+  });
+
+  // ── 5. Build the new sub-composite ModuleDef ──
+  const compositeKey = `${composite_id}@v1.0.0`;
+  const subCompositeDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: composite_id,
+    version: 'v1.0.0',
+    interface: { inputs: subInputDefs, outputs: subOutputDefs },
+    impl: {
+      kind: 'composite',
+      graph: {
+        instances: subInstances,
+        exports: { outputs: subExports },
+      },
+    },
+  };
+
+  // ── 6. Build the replacement instance in the parent ──
+  const compositeInstanceId = composite_id;
+  const compositeInstanceInputs: Record<string, Binding> = {};
+
+  // Wire boundary-in: external out bindings → composite instance inputs
+  for (const bi of boundaryIns) {
+    const key = `${bi.source_module}:${bi.source_output}`;
+    const subInputName = boundaryInMap.get(key)!;
+    if (!compositeInstanceInputs[subInputName]) {
+      compositeInstanceInputs[subInputName] = {
+        out: { module: bi.source_module, name: bi.source_output },
+      };
+    }
+  }
+
+  // Pass through var bindings
+  for (const varName of neededVarNames) {
+    compositeInstanceInputs[varName] = { var: varName };
+  }
+
+  const compositeInstance: Instance = {
+    kind: 'module',
+    id: compositeInstanceId,
+    use: { module_id: composite_id, version: 'v1.0.0' },
+    inputs: compositeInstanceInputs,
+  };
+
+  // ── 7. Rewire remaining instances ──
+  const rewiredRemaining: Instance[] = remainingInstances.map((inst) => {
+    const newInputs: Record<string, Binding> = {};
+    for (const [inputName, binding] of Object.entries(inst.inputs)) {
+      if (isOut(binding) && selectedSet.has(binding.out.module)) {
+        // Boundary-out: rewrite to reference composite instance's output
+        const outputName = `${binding.out.module}_${binding.out.name}`;
+        newInputs[inputName] = { out: { module: compositeInstanceId, name: outputName } };
+      } else {
+        newInputs[inputName] = binding;
+      }
+    }
+
+    // Rewrite depends_on: replace selected instance refs with composite instance ref
+    const newDependsOn = inst.depends_on?.map((dep) =>
+      selectedSet.has(dep) ? compositeInstanceId : dep,
+    );
+    // Deduplicate depends_on
+    const dedupedDependsOn = newDependsOn ? [...new Set(newDependsOn)] : undefined;
+
+    return {
+      ...inst,
+      inputs: newInputs,
+      ...(dedupedDependsOn && dedupedDependsOn.length > 0 ? { depends_on: dedupedDependsOn } : {}),
+    } as Instance;
+  });
+
+  // ── 8. Rewire parent exports ──
+  const newParentExports: Record<string, OutputExport> = {};
+  for (const [exportName, exp] of Object.entries(parentGraph.exports.outputs)) {
+    if (isOutExport(exp) && selectedSet.has(exp.out.module)) {
+      const outputName = `${exp.out.module}_${exp.out.name}`;
+      newParentExports[exportName] = { out: { module: compositeInstanceId, name: outputName } };
+    } else {
+      newParentExports[exportName] = exp;
+    }
+  }
+
+  // ── 9. Layout migration ──
+  const parentLayout = state.layouts[module_key] || { nodes: {} };
+
+  // Compute center position for the new composite instance
+  const selectedPositions = instance_ids
+    .map((id) => parentLayout.nodes[id]?.position)
+    .filter((p): p is { x: number; y: number } => !!p);
+
+  const centerPos =
+    selectedPositions.length > 0
+      ? {
+          x: selectedPositions.reduce((sum, p) => sum + p.x, 0) / selectedPositions.length,
+          y: selectedPositions.reduce((sum, p) => sum + p.y, 0) / selectedPositions.length,
+        }
+      : { x: 0, y: 0 };
+
+  // New parent layout: remove selected, add composite instance
+  const newParentNodes: Record<string, { position: { x: number; y: number } }> = {};
+  for (const [id, entry] of Object.entries(parentLayout.nodes)) {
+    if (!selectedSet.has(id)) {
+      newParentNodes[id] = entry;
+    }
+  }
+  newParentNodes[compositeInstanceId] = { position: centerPos };
+
+  // Sub-composite layout: migrated positions from parent
+  const subLayoutNodes: Record<string, { position: { x: number; y: number } }> = {};
+  for (const id of instance_ids) {
+    if (parentLayout.nodes[id]) {
+      subLayoutNodes[id] = parentLayout.nodes[id];
+    }
+  }
+
+  // ── 10. Assemble final state ──
+  const newParentGraph: CompositeGraph = {
+    ...parentGraph,
+    instances: [...rewiredRemaining, compositeInstance],
+    exports: { outputs: newParentExports },
+  };
+
+  return {
+    ...state,
+    modules: {
+      ...state.modules,
+      [module_key]: {
+        ...parentDef,
+        impl: { kind: 'composite', graph: newParentGraph },
+      },
+      [compositeKey]: subCompositeDef,
+    },
+    layouts: {
+      ...state.layouts,
+      [module_key]: { nodes: newParentNodes },
+      [compositeKey]: { nodes: subLayoutNodes },
+    },
+  };
 }
