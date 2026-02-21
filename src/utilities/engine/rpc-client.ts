@@ -152,7 +152,7 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<{ filesWritten?: string[]; diagnostics?: any[] }>('generate', params);
   }
 
-  // ✅ validate (Phase 4)
+  // ✅ validate
   validate(params: { bundle: any }) {
     return this.call<{
       valid?: boolean;

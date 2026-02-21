@@ -20,7 +20,7 @@ import { uniqueInstanceId } from '../utils/identifiers';
 // ══════════════════════════════════════════════════════════════════════
 
 export type WorkspaceAction =
-  // ── Instance operations (Phase 1) ──
+  // ── Core editing ──
   | {
       type: 'DROP_BUNDLE';
       module_key: string;
@@ -49,7 +49,7 @@ export type WorkspaceAction =
       positions: Record<string, { x: number; y: number }>;
     }
   | { type: 'LOAD_WORKSPACE'; workspace: WorkspaceState }
-  // ── Composite interface (Phase 2) ──
+  // ── Composite interface ──
   | { type: 'SET_VARIABLES'; module_key: string; variables: InputDef[] }
   | {
       type: 'SET_EXPORTS';
@@ -57,14 +57,14 @@ export type WorkspaceAction =
       outputs: Record<string, OutputExport>;
       output_defs: OutputDef[];
     }
-  // ── Nested composites (Phase 3) ──
+  // ── Nested composites ──
   | {
       type: 'GROUP_INTO_COMPOSITE';
       module_key: string;
       instance_ids: string[];
       composite_id: string;
     }
-  // ── Terraform config (Phase 4) ──
+  // ── Terraform config ──
   | { type: 'SET_TERRAFORM'; module_key: string; terraform: TerraformBlock }
   | { type: 'SET_PROVIDERS'; module_key: string; providers: ProviderConfig[] }
   | { type: 'SET_LOCALS'; module_key: string; locals: LocalDef[] }
@@ -509,7 +509,7 @@ function handleSyncLayout(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_VARIABLES (Phase 2)
+// SET_VARIABLES
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetVariables(
@@ -532,7 +532,7 @@ function handleSetVariables(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_EXPORTS (Phase 2)
+// SET_EXPORTS
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetExports(
@@ -556,7 +556,7 @@ function handleSetExports(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// GROUP_INTO_COMPOSITE (Phase 3)
+// GROUP_INTO_COMPOSITE
 // ══════════════════════════════════════════════════════════════════════
 
 function handleGroupIntoComposite(
@@ -865,7 +865,7 @@ function handleGroupIntoComposite(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_TERRAFORM (Phase 4)
+// SET_TERRAFORM
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetTerraform(
@@ -882,7 +882,7 @@ function handleSetTerraform(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_PROVIDERS (Phase 4)
+// SET_PROVIDERS
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetProviders(
@@ -899,7 +899,7 @@ function handleSetProviders(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_LOCALS (Phase 4)
+// SET_LOCALS
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetLocals(
@@ -914,7 +914,7 @@ function handleSetLocals(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_DEPENDS_ON (Phase 4)
+// SET_DEPENDS_ON
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetDependsOn(
@@ -933,7 +933,7 @@ function handleSetDependsOn(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_ENVIRONMENTS (Phase 4)
+// SET_ENVIRONMENTS
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetEnvironments(
@@ -944,7 +944,7 @@ function handleSetEnvironments(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_ENVIRONMENT_BACKENDS (Phase 4)
+// SET_ENVIRONMENT_BACKENDS
 // ══════════════════════════════════════════════════════════════════════
 
 function handleSetEnvironmentBackends(

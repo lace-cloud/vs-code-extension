@@ -476,7 +476,7 @@ test('SYNC_LAYOUT bulk-replaces positions', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_VARIABLES (Phase 2)
+// SET_VARIABLES
 // ══════════════════════════════════════════════════════════════════════
 
 test('SET_VARIABLES sets composite interface.inputs', () => {
@@ -530,7 +530,7 @@ test('SET_VARIABLES on non-existent module_key returns state unchanged', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// SET_EXPORTS (Phase 2)
+// SET_EXPORTS
 // ══════════════════════════════════════════════════════════════════════
 
 test('SET_EXPORTS sets both interface.outputs and graph.exports.outputs', () => {
@@ -629,10 +629,10 @@ test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// Phase 2: s3_stack validation scenario
+// s3_stack validation scenario
 // ══════════════════════════════════════════════════════════════════════
 
-test('Phase 2 s3_stack scenario: variables, var bindings, curated outputs', () => {
+test('s3_stack scenario: variables, var bindings, curated outputs', () => {
   // 1. Start with empty workspace
   let state = makeWorkspace([]);
 

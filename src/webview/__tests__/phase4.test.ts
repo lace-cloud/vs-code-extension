@@ -432,11 +432,11 @@ describe('Full bundle with terraform — round-trip', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// Integration: build iam-stack from scratch with Phase 4 actions
+// Integration: build iam-stack from scratch with Terraform config actions
 // ══════════════════════════════════════════════════════════════════════
 
-describe('Integration: Phase 4 actions on iam-stack workspace', () => {
-  test('full Phase 4 configuration flow', () => {
+describe('Integration: Terraform config actions on iam-stack workspace', () => {
+  test('full Terraform configuration flow', () => {
     // Leaf module defs that instances reference
     const leafModules: Record<string, ModuleDef> = {
       'aws-iam-role@v2.0.0': {
