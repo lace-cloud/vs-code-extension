@@ -98,12 +98,30 @@ function updateCompositeGraph(
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// depends_on helpers (entries may be "module.X" or bare "X")
+// ══════════════════════════════════════════════════════════════════════
+
+function depMatchesInstance(dep: string, instanceId: string): boolean {
+  return dep === instanceId || dep === `module.${instanceId}`;
+}
+
+function depRenameInstance(dep: string, oldId: string, newId: string): string {
+  if (dep === `module.${oldId}`) return `module.${newId}`;
+  if (dep === oldId) return newId;
+  return dep;
+}
+
+function depBareId(dep: string): string {
+  return dep.startsWith('module.') ? dep.slice(7) : dep;
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // workspaceReducer
 // ══════════════════════════════════════════════════════════════════════
 
 export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
   switch (action.type) {
-    // ── Phase 1 ──
+    // ── Core editing ──
     case 'DROP_BUNDLE':
       return handleDropBundle(state, action);
     case 'CONNECT':
@@ -121,17 +139,17 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case 'LOAD_WORKSPACE':
       return action.workspace;
 
-    // ── Phase 2 ──
+    // ── Composite interface ──
     case 'SET_VARIABLES':
       return handleSetVariables(state, action);
     case 'SET_EXPORTS':
       return handleSetExports(state, action);
 
-    // ── Phase 3 ──
+    // ── Nested composites ──
     case 'GROUP_INTO_COMPOSITE':
       return handleGroupIntoComposite(state, action);
 
-    // ── Phase 4 ──
+    // ── Terraform config ──
     case 'SET_TERRAFORM':
       return handleSetTerraform(state, action);
     case 'SET_PROVIDERS':
@@ -209,8 +227,15 @@ function handleDropBundle(
       }
     }
 
-    // Update depends_on references
-    const newDependsOn = inst.depends_on?.map((dep) => renameMap.get(dep) ?? dep);
+    // Update depends_on references (entries may be "module.X" format)
+    const newDependsOn = inst.depends_on?.map((dep) => {
+      const bare = depBareId(dep);
+      const renamed = renameMap.get(bare);
+      if (renamed) {
+        return dep.startsWith('module.') ? `module.${renamed}` : renamed;
+      }
+      return dep;
+    });
 
     return {
       ...inst,
@@ -350,8 +375,10 @@ function handleRenameInstance(
         }
       }
 
-      // Update depends_on
-      const updatedDependsOn = inst.depends_on?.map((dep) => (dep === old_id ? new_id : dep));
+      // Update depends_on (entries may be "module.X" format)
+      const updatedDependsOn = inst.depends_on?.map((dep) =>
+        depRenameInstance(dep, old_id, new_id),
+      );
 
       return {
         ...inst,
@@ -415,8 +442,10 @@ function handleDeleteInstance(
           }
         }
 
-        // Remove from depends_on
-        const cleanedDependsOn = inst.depends_on?.filter((dep) => dep !== instance_id);
+        // Remove from depends_on (entries may be "module.X" format)
+        const cleanedDependsOn = inst.depends_on?.filter(
+          (dep) => !depMatchesInstance(dep, instance_id),
+        );
 
         // Build result without depends_on, then add it back only if non-empty
         const { depends_on: _deps, ...instWithoutDeps } = inst;
@@ -682,8 +711,8 @@ function handleGroupIntoComposite(
       }
     }
 
-    // Rewrite depends_on: keep only internal references
-    const newDependsOn = inst.depends_on?.filter((dep) => selectedSet.has(dep));
+    // Rewrite depends_on: keep only internal references (entries may be "module.X" format)
+    const newDependsOn = inst.depends_on?.filter((dep) => selectedSet.has(depBareId(dep)));
 
     return {
       ...inst,
@@ -750,9 +779,12 @@ function handleGroupIntoComposite(
     }
 
     // Rewrite depends_on: replace selected instance refs with composite instance ref
-    const newDependsOn = inst.depends_on?.map((dep) =>
-      selectedSet.has(dep) ? compositeInstanceId : dep,
-    );
+    const newDependsOn = inst.depends_on?.map((dep) => {
+      if (selectedSet.has(depBareId(dep))) {
+        return dep.startsWith('module.') ? `module.${compositeInstanceId}` : compositeInstanceId;
+      }
+      return dep;
+    });
     // Deduplicate depends_on
     const dedupedDependsOn = newDependsOn ? [...new Set(newDependsOn)] : undefined;
 

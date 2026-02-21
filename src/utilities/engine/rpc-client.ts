@@ -155,6 +155,7 @@ export class JSONRPCClient extends EventEmitter {
   // ✅ validate (Phase 4)
   validate(params: { bundle: any }) {
     return this.call<{
+      valid?: boolean;
       diagnostics?: Array<{
         severity: string;
         message: string;

@@ -15,7 +15,7 @@ npm run build               # Rspack build (both host + webview)
 npx tsc --noEmit            # Type-check only (2 pre-existing warnings in non-webview files are expected)
 ```
 
-Always run `npm test` after any change. All 87 tests must pass. The two TypeScript warnings in `RegistrySelectorProvider.ts` and `server-manager.ts` are pre-existing and not in scope.
+Always run `npm test` after any change. All 90 tests must pass. The two TypeScript warnings in `RegistrySelectorProvider.ts` and `server-manager.ts` are pre-existing and not in scope.
 
 ## Critical Invariants — Do Not Break These
 
@@ -115,7 +115,7 @@ The full union is in `reducer.ts`. Every action carries `module_key` (except wor
 2. Create a `handleXxx` function following the existing pattern (extract fields, return new state with spreads).
 3. Add the case to the switch in `workspaceReducer`.
 4. Add tests in `__tests__/` — use the existing `makeWorkspace()` helper from `reducer.test.ts` or `phase4.test.ts`.
-5. Run `npm test` — all 87+ tests must pass.
+5. Run `npm test` — all 90+ tests must pass.
 
 ### The `updateCompositeGraph` helper
 
@@ -211,7 +211,7 @@ In `createWebviewPanel.ts`, the `generateBundle` handler runs three steps:
 
 2. **Instance `kind` normalization.** Go omits `kind` for module instances (`omitempty`). `fromBundle` normalizes empty/missing `kind` to `'module'`. The Go generator handles this: it checks `kind == "resource" || kind == "data"` and falls through to module handling otherwise.
 
-3. **Empty arrays vs undefined.** Some reducer actions clear fields to `undefined` when arrays are empty (e.g., `SET_LOCALS`, `SET_DEPENDS_ON`). Others keep the empty array (e.g., `SET_PROVIDERS`). Follow the pattern established in the spec for each action.
+3. **`depends_on` entries use `module.` prefix.** The wire format is `["module.iam_role", "module.iam_policy"]`. Three helper functions in `reducer.ts` handle prefix-aware comparisons: `depMatchesInstance(dep, id)` checks if a dep references an instance (handles both `"module.X"` and bare `"X"`), `depRenameInstance(dep, oldId, newId)` renames preserving the prefix, and `depBareId(dep)` strips the prefix for set lookups. Every cascade handler (rename, delete, grouping) must use these helpers instead of direct string comparison.
 
 4. **Layout consistency.** Every operation that adds/removes/renames instances must also update the corresponding `GraphLayout` in `state.layouts[module_key]`. Forgetting this causes nodes to appear at (0,0).
 
@@ -222,6 +222,8 @@ In `createWebviewPanel.ts`, the `generateBundle` handler runs three steps:
 7. **ReactFlow v12.** This project uses `@xyflow/react` v12. Node components receive `NodeProps<Node<TData, TType>>` — the generic is the full `Node` type, not just data. Check the existing `ModuleNode.tsx` and `CompositeNode.tsx` for the pattern.
 
 8. **Two Rspack entries.** The build produces `out/extension.js` (Node.js, CommonJS) and `out/webview.js` (browser). They share types but run in different environments. Don't import VS Code APIs in webview code or DOM APIs in extension code.
+
+9. **Empty arrays vs undefined.** Some reducer actions clear fields to `undefined` when arrays are empty (e.g., `SET_LOCALS`, `SET_DEPENDS_ON`). Others keep the empty array (e.g., `SET_PROVIDERS`). Follow the existing pattern for each action.
 
 ## Style Guide
 

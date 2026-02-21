@@ -223,7 +223,7 @@ generate-{component}/
 ## Testing
 
 ```bash
-npm test              # Run all 87 tests
+npm test              # Run all 90 tests
 npm run test:watch    # Watch mode
 ```
 
@@ -232,10 +232,10 @@ Test suites cover the entire logic layer without requiring React or VS Code:
 | Suite                 | Tests | Coverage                                                           |
 | --------------------- | ----- | ------------------------------------------------------------------ |
 | `bundle.test.ts`      | 7     | `toBundle`/`fromBundle` round-trip, boundary errors                |
-| `reducer.test.ts`     | 24    | Core editing, interface, and grouping actions                      |
+| `reducer.test.ts`     | 26    | Core editing, interface, and grouping actions                      |
 | `phase4.test.ts`      | 18    | Terraform config actions, full bundle round-trip, integration flow |
 | `validate.test.ts`    | 6     | Duplicate IDs, dangling refs, depends_on with `module.` prefix     |
-| `grouping.test.ts`    | 12    | `GROUP_INTO_COMPOSITE` with cross-boundary wires, exports          |
+| `grouping.test.ts`    | 13    | `GROUP_INTO_COMPOSITE` with cross-boundary wires, exports          |
 | `derive.test.ts`      | 4     | Edge/wire derivation from out bindings                             |
 | `normalize.test.ts`   | 7     | Binding normalization for all 4 variants                           |
 | `identifiers.test.ts` | 8     | Terraform identifier validation, collision handling                |

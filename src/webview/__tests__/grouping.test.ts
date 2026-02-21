@@ -401,6 +401,45 @@ test('GROUP_INTO_COMPOSITE: depends_on entries are rewritten correctly', () => {
   expect(cInst.depends_on).toEqual(['sub_ab']);
 });
 
+test('GROUP_INTO_COMPOSITE: depends_on with module. prefix are rewritten correctly', () => {
+  const state = makeWorkspace(
+    [
+      { kind: 'module', id: 'a', use: { module_id: 'mod_a', version: 'v1.0.0' }, inputs: {} },
+      {
+        kind: 'module',
+        id: 'b',
+        use: { module_id: 'mod_b', version: 'v1.0.0' },
+        inputs: {},
+        depends_on: ['module.a'],
+      },
+      {
+        kind: 'module',
+        id: 'c',
+        use: { module_id: 'mod_c', version: 'v1.0.0' },
+        inputs: {},
+        depends_on: ['module.b'],
+      },
+    ],
+    { 'mod_a@v1.0.0': leafA, 'mod_b@v1.0.0': leafB, 'mod_c@v1.0.0': leafC },
+  );
+
+  // Group [a, b] — b depends on a (internal), c depends on b (boundary)
+  const next = workspaceReducer(state, {
+    type: 'GROUP_INTO_COMPOSITE',
+    module_key: 'root@v1.0.0',
+    instance_ids: ['a', 'b'],
+    composite_id: 'sub_ab',
+  });
+
+  // Internal depends_on preserved with prefix in sub-composite
+  const bInst = getInst(next, 'sub_ab@v1.0.0', 'b');
+  expect(bInst.depends_on).toEqual(['module.a']);
+
+  // External depends_on rewritten to reference composite instance, prefix preserved
+  const cInst = getInst(next, 'root@v1.0.0', 'c');
+  expect(cInst.depends_on).toEqual(['module.sub_ab']);
+});
+
 // ══════════════════════════════════════════════════════════════════════
 // GROUP_INTO_COMPOSITE: empty selection returns state unchanged
 // ══════════════════════════════════════════════════════════════════════

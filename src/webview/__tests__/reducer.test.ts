@@ -188,6 +188,27 @@ test('RENAME_INSTANCE cascades to sibling depends_on', () => {
   expect(c.depends_on).toEqual(['vpc']);
 });
 
+test('RENAME_INSTANCE cascades to sibling depends_on with module. prefix', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    {
+      kind: 'module',
+      id: 'c',
+      use: { module_id: 'z', version: 'v1' },
+      inputs: {},
+      depends_on: ['module.a'],
+    },
+  ]);
+  const next = workspaceReducer(state, {
+    type: 'RENAME_INSTANCE',
+    module_key: 'root@v1.0.0',
+    old_id: 'a',
+    new_id: 'vpc',
+  });
+  const c = getInst(next, 'c');
+  expect(c.depends_on).toEqual(['module.vpc']);
+});
+
 test('RENAME_INSTANCE cascades to layout key', () => {
   const state = makeWorkspace(
     [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
@@ -281,6 +302,28 @@ test('DELETE_INSTANCE cleans up sibling depends_on referencing deleted instance'
   const c = getInst(next, 'c');
   // depends_on should be removed (empty array removed)
   expect(c.depends_on).toBeUndefined();
+});
+
+test('DELETE_INSTANCE cleans up sibling depends_on with module. prefix', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    {
+      kind: 'module',
+      id: 'c',
+      use: { module_id: 'z', version: 'v1' },
+      inputs: {},
+      depends_on: ['module.a', 'module.b'],
+    },
+    { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+  ]);
+  const next = workspaceReducer(state, {
+    type: 'DELETE_INSTANCE',
+    module_key: 'root@v1.0.0',
+    instance_id: 'a',
+  });
+  const c = getInst(next, 'c');
+  // module.a removed, module.b preserved
+  expect(c.depends_on).toEqual(['module.b']);
 });
 
 // ══════════════════════════════════════════════════════════════════════
