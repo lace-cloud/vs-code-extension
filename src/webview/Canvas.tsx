@@ -9,7 +9,7 @@ import ReactFlow, {
   Controls,
   Connection,
   Edge,
-} from 'react-flow-renderer';
+} from 'reactflow';
 
 import AwsNode from './components/nodes/AwsNode';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
@@ -263,7 +263,7 @@ function CanvasInner() {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
 
-    const raw = e.dataTransfer.getData('application/reactflow');
+    const raw = e.dataTransfer.getData('application/lace-module');
     if (!raw) return;
 
     const mod: RegistryModule = JSON.parse(raw);

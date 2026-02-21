@@ -4,14 +4,6 @@ import path from 'path';
 import fs from 'fs';
 
 import { getWebviewContent } from './getWebviewContent';
-import { getWebviewUri } from './getWebviewUri';
-
-import {
-  getComponentIdByName,
-  loadCanvasState,
-  saveCanvasState,
-  saveBundleState,
-} from '../database';
 
 import { ServerManager } from '../utilities/engine/server-manager';
 
@@ -50,23 +42,9 @@ export async function createWebviewPanel(
 
   panels.set(componentName, panel);
 
-  panel.webview.html = getWebviewContent(
-    context,
-    panel.webview,
-    getWebviewUri(context, 'EC2.png', panel.webview),
-    getWebviewUri(context, 's3.svg', panel.webview),
-    getWebviewUri(context, 'lambda.svg', panel.webview),
-    getWebviewUri(context, 'iam-role.svg', panel.webview),
-    getWebviewUri(context, 'iam-policy.svg', panel.webview),
-  );
+  panel.webview.html = getWebviewContent(context, panel.webview);
 
-  const componentId = await getComponentIdByName(componentName);
   let cachedState: any = null;
-
-  if (componentId) {
-    const raw = await loadCanvasState(componentId);
-    cachedState = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  }
 
   async function sendRegistryList(system: string) {
     const rpc = server.rpcClient;
@@ -86,10 +64,6 @@ export async function createWebviewPanel(
   }
 
   panel.webview.onDidReceiveMessage(async (msg) => {
-    if (!componentId) {
-      return;
-    }
-
     switch (msg.command) {
       case 'webviewReady':
         panel.webview.postMessage({
@@ -104,7 +78,7 @@ export async function createWebviewPanel(
         break;
 
       /* ------------------------------------------------ */
-      /* ✅ GENERATE INTO generate-$componentName FOLDER */
+      /* GENERATE INTO generate-$componentName FOLDER      */
       /* ------------------------------------------------ */
       case 'generateBundle': {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -115,16 +89,11 @@ export async function createWebviewPanel(
 
         const workspacePath = workspaceFolder.uri.fsPath;
 
-        // 🔥 Create folder: generate-$componentName
         const outputDir = path.join(workspacePath, `generate-${componentName}`);
 
-        // Ensure directory exists
         if (!fs.existsSync(outputDir)) {
           fs.mkdirSync(outputDir, { recursive: true });
         }
-
-        // Save bundle JSON to DB
-        await saveBundleState(componentId, msg.bundle);
 
         try {
           const result = await server.rpcClient?.generate({
@@ -185,7 +154,6 @@ export async function createWebviewPanel(
       }
 
       case 'saveState':
-        await saveCanvasState(componentId, msg.state);
         cachedState = msg.state;
         panel.title = componentName;
         break;

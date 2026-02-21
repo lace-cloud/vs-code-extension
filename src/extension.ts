@@ -5,11 +5,9 @@ import { ComponentsTreeDataProvider } from './containers-views/ComponentsTreeDat
 import { TemplatesTreeDataProvider } from './containers-views/TemplatesTreeDataProvider';
 import { RegistrySelectorProvider } from './containers-views/RegistrySelectorProvider';
 
-import { setAuthenticationStatus, authenticateWithLace } from './auth/AuthenticationLace';
-
 import { updateStatusBar } from './statusbar/UpdateStatusBar';
 
-import { addComponent, getComponents, removeComponent, initializeDatabase } from './database';
+import { Store } from './persistence';
 
 import {
   createWebviewPanel,
@@ -18,7 +16,6 @@ import {
 } from './webview/createWebviewPanel';
 
 import { ServerManager } from './utilities/engine/server-manager';
-// import { syncModulesFromCLI } from './utilities/cli';
 
 /* ---------------------------------- */
 /* Providers                          */
@@ -32,7 +29,7 @@ let registrySelectorProvider: RegistrySelectorProvider | undefined;
 /* State                              */
 /* ---------------------------------- */
 
-let isAuthenticated = false;
+let store: Store | undefined;
 let server: ServerManager | undefined;
 let engineStatusBar: vscode.StatusBarItem | undefined;
 
@@ -42,24 +39,6 @@ let activeRegistrySystem: 'aws' | 'azure' | 'gcp' = 'aws';
 /* ---------------------------------- */
 /* UI Helpers                         */
 /* ---------------------------------- */
-
-function refreshTreeViews(): void {
-  componentsProvider?.refresh();
-  templatesProvider?.refresh();
-}
-
-function refreshUI(): void {
-  isAuthenticated = false;
-
-  vscode.authentication
-    .getSession('github', ['read:user'], { createIfNone: false })
-    .then((session) => {
-      isAuthenticated = !!session;
-      setAuthenticationStatus(isAuthenticated);
-      updateStatusBar();
-      refreshTreeViews();
-    });
-}
 
 function updateEngineStatus(state: string) {
   if (!engineStatusBar) {
@@ -85,12 +64,11 @@ function updateEngineStatus(state: string) {
 export async function activate(context: vscode.ExtensionContext) {
   console.log('Lace Extension Activated');
 
-  // await syncModulesFromCLI();
-  await initializeDatabase();
+  store = new Store(context.globalStorageUri);
 
   /* ---------- Tree Views ---------- */
 
-  componentsProvider = new ComponentsTreeDataProvider();
+  componentsProvider = new ComponentsTreeDataProvider(store);
   templatesProvider = new TemplatesTreeDataProvider();
 
   context.subscriptions.push(
@@ -143,6 +121,10 @@ export async function activate(context: vscode.ExtensionContext) {
     });
   }
 
+  /* ---------- Status Bar ---------- */
+
+  updateStatusBar();
+
   /* ---------- Commands ---------- */
 
   context.subscriptions.push(
@@ -150,12 +132,6 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.startEngine', () => server?.start()),
     vscode.commands.registerCommand('lace.stopEngine', () => server?.stop()),
     vscode.commands.registerCommand('lace.restartEngine', () => server?.restart()),
-
-    // Auth
-    vscode.commands.registerCommand('lace.connect', async () => {
-      await authenticateWithLace();
-      refreshTreeViews();
-    }),
 
     // Registry selector command (USED BY TREE ITEMS)
     vscode.commands.registerCommand('registry.selectSystem', (system: 'aws' | 'azure' | 'gcp') => {
@@ -175,11 +151,6 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('components.addComponent', async () => {
-      if (!isAuthenticated) {
-        vscode.window.showErrorMessage('Please connect to Lace first.');
-        return;
-      }
-
       const name = await vscode.window.showInputBox({
         prompt: 'Enter component name',
       });
@@ -188,17 +159,12 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      await addComponent(name);
+      store?.addComponent(name);
       componentsProvider?.refresh();
     }),
 
     vscode.commands.registerCommand('components.removeComponent', async () => {
-      if (!isAuthenticated) {
-        vscode.window.showErrorMessage('Please connect to Lace first.');
-        return;
-      }
-
-      const components = await getComponents();
+      const components = store?.listComponents() ?? [];
       const pick = await vscode.window.showQuickPick(
         components.map((c) => c.name),
         { placeHolder: 'Select component to delete' },
@@ -208,28 +174,11 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const component = components.find((c) => c.name === pick);
-      if (!component) {
-        return;
-      }
-
-      closeComponentPanel(component.name);
-      await removeComponent(component.id);
+      closeComponentPanel(pick);
+      store?.removeComponent(pick);
       componentsProvider?.refresh();
     }),
   );
-
-  /* ---------- Auth Session ---------- */
-
-  context.subscriptions.push(
-    vscode.authentication.onDidChangeSessions((e) => {
-      if (e.provider.id === 'github') {
-        refreshUI();
-      }
-    }),
-  );
-
-  refreshUI();
 }
 
 /* ---------------------------------- */

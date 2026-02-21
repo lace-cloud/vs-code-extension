@@ -3,7 +3,6 @@ declare global {
     vscode: {
       postMessage: (message: any) => void;
     };
-    iconPaths: { [key: string]: string };
   }
 }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ReactFlowProvider } from 'react-flow-renderer';
+import { ReactFlowProvider } from 'reactflow';
 import './index.css';
 import 'reactflow/dist/style.css';
 import App from './App';

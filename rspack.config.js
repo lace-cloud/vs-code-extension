@@ -18,14 +18,18 @@ module.exports = [
       rules: [
         {
           test: /\.ts$/,
-          use: 'ts-loader',
+          use: {
+            loader: 'ts-loader',
+            options: {
+              compilerOptions: { noEmit: false },
+            },
+          },
           exclude: /node_modules/,
         },
       ],
     },
     externals: {
       vscode: 'commonjs vscode',
-      sqlite3: 'commonjs sqlite3', // Exclude SQLite3 from bundling
     },
     devtool: 'source-map',
   },
@@ -44,7 +48,12 @@ module.exports = [
       rules: [
         {
           test: /\.tsx?$/,
-          use: 'ts-loader',
+          use: {
+            loader: 'ts-loader',
+            options: {
+              compilerOptions: { noEmit: false },
+            },
+          },
           exclude: /node_modules/,
         },
         {

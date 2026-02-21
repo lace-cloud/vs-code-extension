@@ -1,6 +1,6 @@
 // src/webview/components/nodes/AwsNode.tsx
 import React from 'react';
-import { Handle, Position, NodeProps, useReactFlow } from 'react-flow-renderer';
+import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
 
 const handleGenericStyle =
   'w-2.5 h-2.5 bg-transparent border-2 border-white rounded-full transition-[box-shadow, border-color] duration-150 ease-in-out';

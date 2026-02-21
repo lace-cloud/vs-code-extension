@@ -9,11 +9,6 @@ function getNonce() {
 export function getWebviewContent(
   context: vscode.ExtensionContext,
   webview: vscode.Webview,
-  ec2Uri: vscode.Uri,
-  s3Uri: vscode.Uri,
-  lambdaUri: vscode.Uri,
-  iamroleUri: vscode.Uri,
-  iampolicyUri: vscode.Uri,
 ): string {
   const nonce = getNonce();
 
@@ -26,7 +21,6 @@ export function getWebviewContent(
 <head>
   <meta charset="UTF-8" />
 
-  <!-- ✅ FINAL, CORRECT CSP -->
   <meta
     http-equiv="Content-Security-Policy"
     content="
@@ -37,7 +31,6 @@ export function getWebviewContent(
       connect-src ${webview.cspSource};
     "
   />
-
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lace</title>
@@ -113,36 +106,17 @@ export function getWebviewContent(
     </div>
   </div>
 
-
-  
-
-  
-
   <div id="root"></div>
 
   <script nonce="${nonce}">
-    // window.vscode = acquireVsCodeApi();
-
-    window.iconPaths = {
-      ec2: "${ec2Uri}",
-      s3: "${s3Uri}",
-      lambda: "${lambdaUri}",
-      iam_role: "${iamroleUri}",
-      iam_policy: "${iampolicyUri}"
-    };
-
-    // 🔹 Generate button handler
   window.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('generate-btn');
     if (btn) {
       btn.addEventListener('click', () => {
         window.postMessage({ command: 'triggerGenerate' }, '*');
-
       });
     }
   });
-
-    // window.vscode.postMessage({ command: 'webviewReady' });
   </script>
 
   <script nonce="${nonce}" src="${reactAppUri}"></script>

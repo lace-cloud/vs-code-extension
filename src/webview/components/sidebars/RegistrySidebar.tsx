@@ -51,7 +51,7 @@ const RegistrySidebar: React.FC<RegistrySidebarProps> = ({ registryTree }) => {
                   key={m.id}
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow', JSON.stringify(m));
+                    e.dataTransfer.setData('application/lace-module', JSON.stringify(m));
                     (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
                   }}
                   onDragEnd={(e) => {
