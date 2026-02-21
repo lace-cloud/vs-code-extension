@@ -5,32 +5,37 @@ import fs from 'fs';
 
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
-import { Store } from '../persistence';
 import { fromBundle, type LayoutHints } from './utils/bundle';
 import { validateWorkspace } from './utils/validate';
 import { toTerraformIdentifier } from './utils/identifiers';
 import type { WorkspaceState } from './types/workspace';
 import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol';
 
-const panels = new Map<string, vscode.WebviewPanel>();
+/* ── Constants ── */
 
-let storeInstance: Store | undefined;
+const LACE_DIR = '.lace';
+const LACE_FILE = 'lace.json';
 
-/** The most recently focused canvas panel — used for host-initiated actions. */
-let activePanel: vscode.WebviewPanel | undefined;
+/* ── State ── */
 
-export function setStore(store: Store) {
-  storeInstance = store;
+let canvasPanel: vscode.WebviewPanel | undefined;
+
+/* ── Public API ── */
+
+/** Get the .lace directory path for the current workspace. */
+export function getLaceDir(): string | undefined {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) return undefined;
+  return path.join(workspaceFolder.uri.fsPath, LACE_DIR);
 }
 
-/** Drop a module into the currently active canvas. Called from sidebar/command palette. */
+/** Drop a module into the active canvas. Called from sidebar/command palette. */
 export function addModuleToActiveCanvas(deploy_bundle: any) {
-  const panel = activePanel ?? [...panels.values()].at(-1);
-  if (!panel) {
-    vscode.window.showWarningMessage('No canvas open. Create a component first.');
+  if (!canvasPanel) {
+    vscode.window.showWarningMessage('No canvas open. Run "Lace: Open Canvas" first.');
     return;
   }
-  postToWebview(panel, {
+  postToWebview(canvasPanel, {
     command: 'dropBundle',
     requestId: Date.now(),
     deploy_bundle,
@@ -39,24 +44,54 @@ export function addModuleToActiveCanvas(deploy_bundle: any) {
 
 /** Trigger generate on the active canvas. */
 export function triggerGenerateOnActiveCanvas() {
-  const panel = activePanel ?? [...panels.values()].at(-1);
-  if (!panel) {
+  if (!canvasPanel) {
     vscode.window.showWarningMessage('No canvas open.');
     return;
   }
-  postToWebview(panel, { command: 'triggerGenerate' });
+  postToWebview(canvasPanel, { command: 'triggerGenerate' });
 }
 
-// ── Typed message helpers ──
+/** Whether a canvas is currently open. */
+export function isCanvasOpen(): boolean {
+  return canvasPanel !== undefined;
+}
+
+/* ── Typed message helpers ── */
 
 function postToWebview(panel: vscode.WebviewPanel, msg: HostToWebview) {
   panel.webview.postMessage(msg);
 }
 
-// ── Empty workspace factory ──
+/* ── .lace/ file helpers ── */
 
-function emptyWorkspace(componentName: string): WorkspaceState {
-  const root_id = toTerraformIdentifier(componentName);
+function ensureLaceDir(laceDir: string): void {
+  if (!fs.existsSync(laceDir)) {
+    fs.mkdirSync(laceDir, { recursive: true });
+  }
+}
+
+function readLaceJson(laceDir: string): any | undefined {
+  const filePath = path.join(laceDir, LACE_FILE);
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('Failed to read lace.json:', err);
+  }
+  return undefined;
+}
+
+function writeLaceJson(laceDir: string, state: WorkspaceState): void {
+  ensureLaceDir(laceDir);
+  const filePath = path.join(laceDir, LACE_FILE);
+  fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
+}
+
+/* ── Empty workspace factory ── */
+
+function emptyWorkspace(folderName: string): WorkspaceState {
+  const root_id = toTerraformIdentifier(folderName);
   const root_key = `${root_id}@v1.0.0`;
   return {
     schema_version: '1.0',
@@ -80,52 +115,55 @@ function emptyWorkspace(componentName: string): WorkspaceState {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// createWebviewPanel
+// openCanvas — single entry point
 // ══════════════════════════════════════════════════════════════════════
 
-export async function createWebviewPanel(
-  componentName: string,
-  context: vscode.ExtensionContext,
-  server: ServerManager,
-) {
-  if (panels.has(componentName)) {
-    panels.get(componentName)!.reveal();
+export async function openCanvas(context: vscode.ExtensionContext, server: ServerManager) {
+  // Already open? Reveal it.
+  if (canvasPanel) {
+    canvasPanel.reveal();
     return;
   }
 
-  const store = storeInstance ?? new Store(context.globalStorageUri);
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    vscode.window.showErrorMessage('Open a folder first, then run "Lace: Open Canvas".');
+    return;
+  }
 
-  const panel = vscode.window.createWebviewPanel('lace', componentName, vscode.ViewColumn.One, {
-    enableScripts: true,
-    localResourceRoots: [
-      vscode.Uri.file(path.join(context.extensionPath, 'out')),
-      vscode.Uri.joinPath(context.extensionUri, 'images'),
-    ],
-  });
+  const workspacePath = workspaceFolder.uri.fsPath;
+  const folderName = path.basename(workspacePath);
+  const laceDir = path.join(workspacePath, LACE_DIR);
 
-  panels.set(componentName, panel);
+  // ── Create panel ──
+
+  const panel = vscode.window.createWebviewPanel(
+    'lace',
+    `Lace · ${folderName}`,
+    vscode.ViewColumn.One,
+    {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.file(path.join(context.extensionPath, 'out')),
+        vscode.Uri.joinPath(context.extensionUri, 'images'),
+      ],
+    },
+  );
+
+  canvasPanel = panel;
   panel.webview.html = getWebviewContent(context, panel.webview);
-
-  // Track which panel is active for host-initiated actions
-  panel.onDidChangeViewState((e) => {
-    if (e.webviewPanel.active) {
-      activePanel = panel;
-    }
-  });
-  activePanel = panel;
 
   // ── Message handler ──
 
   panel.webview.onDidReceiveMessage(
     async (msg: WebviewToHost | { command: string; [key: string]: any }) => {
       switch (msg.command) {
-        // ── webviewReady: load saved state or create empty workspace ──
+        // ── webviewReady: load .lace/lace.json or create empty workspace ──
         case 'webviewReady': {
-          const record = store.getComponent(componentName);
-          if (record?.workspace_state) {
-            // Parse through fromBundle for boundary validation + binding normalization.
-            // Extract saved layout positions as hints so they survive the re-parse.
-            const saved = record.workspace_state;
+          const saved = readLaceJson(laceDir);
+          if (saved) {
+            // Parse through fromBundle for validation + normalization.
+            // Preserve saved layout positions as hints.
             const hints: LayoutHints = {};
             if (saved.layouts) {
               for (const [key, layout] of Object.entries(saved.layouts as Record<string, any>)) {
@@ -141,21 +179,23 @@ export async function createWebviewPanel(
             }
             postToWebview(panel, { command: 'loadState', state: workspace });
           } else {
-            // New component — send empty workspace
-            postToWebview(panel, { command: 'loadState', state: emptyWorkspace(componentName) });
+            // No .lace/lace.json — create empty workspace
+            const workspace = emptyWorkspace(folderName);
+            writeLaceJson(laceDir, workspace);
+            postToWebview(panel, { command: 'loadState', state: workspace });
           }
           break;
         }
 
-        // ── saveState: persist workspace ──
+        // ── saveState: write to .lace/lace.json ──
         case 'saveState': {
           const state = (msg as any).state as WorkspaceState;
-          store.saveWorkspaceState(componentName, state);
-          panel.title = componentName;
+          writeLaceJson(laceDir, state);
+          panel.title = `Lace · ${folderName}`;
           break;
         }
 
-        // ── fetchModuleVersion: call RPC, extract deploy_bundle, send to webview ──
+        // ── fetchModuleVersion: RPC → deploy_bundle → webview ──
         case 'fetchModuleVersion': {
           const m = msg as Extract<WebviewToHost, { command: 'fetchModuleVersion' }>;
           try {
@@ -165,7 +205,6 @@ export async function createWebviewPanel(
               version: m.version,
             });
 
-            // Extract ONLY deploy_bundle from the raw API response
             const deploy_bundle = response?.deploy_bundle;
             if (!deploy_bundle) {
               throw new Error('No deploy_bundle in registry/version response');
@@ -186,27 +225,15 @@ export async function createWebviewPanel(
           break;
         }
 
-        // ── generateBundle: validate then send to CLI for Terraform generation ──
+        // ── generateBundle: validate → generate into .lace/ ──
         case 'generateBundle': {
           const m = msg as Extract<WebviewToHost, { command: 'generateBundle' }>;
-          const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-          if (!workspaceFolder) {
-            postToWebview(panel, {
-              command: 'generateError',
-              message: 'No workspace folder open.',
-            });
-            return;
-          }
 
-          // ── Step 1: Graph validation (local, instant) ──
-          // Reconstruct workspace from the bundle to run graph validation
+          // Step 1: Graph validation (local, instant)
           const { workspace: parsedWs } = fromBundle(m.bundle);
           const graphErrors = validateWorkspace(parsedWs);
           if (graphErrors.length > 0) {
-            postToWebview(panel, {
-              command: 'validationErrors',
-              errors: graphErrors,
-            });
+            postToWebview(panel, { command: 'validationErrors', errors: graphErrors });
             postToWebview(panel, {
               command: 'generateError',
               message: `Graph validation failed: ${graphErrors.length} error(s)`,
@@ -214,7 +241,7 @@ export async function createWebviewPanel(
             return;
           }
 
-          // ── Step 2: Terraform validation (RPC, may take seconds) ──
+          // Step 2: Terraform validation (RPC)
           try {
             const validateResult = await server.rpcClient?.validate({
               bundle: m.bundle,
@@ -232,25 +259,18 @@ export async function createWebviewPanel(
               return;
             }
           } catch (err: any) {
-            // If validate RPC is not available (older CLI), proceed with generate
-            console.warn('Terraform validate RPC failed, proceeding with generate:', err.message);
+            console.warn('Terraform validate RPC unavailable, proceeding:', err.message);
           }
 
-          // Clear any previous validation errors on success
           postToWebview(panel, { command: 'validationErrors', errors: [] });
 
-          // ── Step 3: Generate ──
-          const workspacePath = workspaceFolder.uri.fsPath;
-          const outputDir = path.join(workspacePath, `generate-${componentName}`);
-
-          if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-          }
+          // Step 3: Generate into .lace/
+          ensureLaceDir(laceDir);
 
           try {
             const result = await server.rpcClient?.generate({
               bundle: m.bundle,
-              outputDir,
+              outputDir: laceDir,
               options: {
                 dryRun: false,
                 format: true,
@@ -264,7 +284,7 @@ export async function createWebviewPanel(
               files: result?.filesWritten,
             });
 
-            vscode.window.showInformationMessage(`Generated in ${path.basename(outputDir)}`);
+            vscode.window.showInformationMessage(`Terraform generated in ${LACE_DIR}/`);
           } catch (err: any) {
             postToWebview(panel, {
               command: 'generateError',
@@ -275,9 +295,9 @@ export async function createWebviewPanel(
           break;
         }
 
-        // ── markDirty: update panel title, trigger save ──
+        // ── markDirty: update title, trigger save ──
         case 'markDirty': {
-          panel.title = `${componentName} ●`;
+          panel.title = `Lace · ${folderName} ●`;
           postToWebview(panel, { command: 'triggerSave' });
           break;
         }
@@ -286,14 +306,6 @@ export async function createWebviewPanel(
   );
 
   panel.onDidDispose(() => {
-    panels.delete(componentName);
-    if (activePanel === panel) {
-      activePanel = undefined;
-    }
+    canvasPanel = undefined;
   });
-}
-
-export function closeComponentPanel(componentName: string) {
-  panels.get(componentName)?.dispose();
-  panels.delete(componentName);
 }

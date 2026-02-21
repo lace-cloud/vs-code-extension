@@ -28,18 +28,13 @@
         {
           "id": "laceRegistry",
           "name": "Registry"
-        },
-        {
-          "id": "components",
-          "name": "Components"
         }
       ]
     },
     "commands": [
       {
-        "command": "lace.newComponent",
-        "title": "Lace: New Component",
-        "icon": "$(add)"
+        "command": "lace.openCanvas",
+        "title": "Lace: Open Canvas"
       },
       {
         "command": "lace.addModule",
@@ -50,13 +45,14 @@
         "title": "Lace: Generate Terraform"
       },
       {
-        "command": "lace.openComponent",
-        "title": "Lace: Open Component"
-      },
-      {
         "command": "lace.refreshRegistry",
         "title": "Refresh Registry",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "lace.searchRegistry",
+        "title": "Search Registry",
+        "icon": "$(search)"
       },
       {
         "command": "lace.addModuleToCanvas",
@@ -66,20 +62,6 @@
       {
         "command": "lace.showModuleDetail",
         "title": "Show Module Detail"
-      },
-      {
-        "command": "components.addComponent",
-        "title": "Create New Component",
-        "icon": "$(add)"
-      },
-      {
-        "command": "components.removeComponent",
-        "title": "Delete Component",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "components.openComponent",
-        "title": "Open Component"
       },
       {
         "command": "lace.startEngine",
@@ -92,6 +74,22 @@
       {
         "command": "lace.restartEngine",
         "title": "Lace: Restart Engine"
+      },
+      {
+        "command": "lace.terraformValidate",
+        "title": "Lace: Terraform Validate"
+      },
+      {
+        "command": "lace.terraformFmt",
+        "title": "Lace: Terraform Format"
+      },
+      {
+        "command": "lace.terraformScan",
+        "title": "Lace: Terraform Security Scan"
+      },
+      {
+        "command": "lace.terraformDocs",
+        "title": "Lace: Terraform Docs"
       }
     ],
     "configuration": {
@@ -120,13 +118,8 @@
           "group": "navigation"
         },
         {
-          "command": "components.addComponent",
-          "when": "view == components",
-          "group": "navigation"
-        },
-        {
-          "command": "components.removeComponent",
-          "when": "view == components",
+          "command": "lace.searchRegistry",
+          "when": "view == laceRegistry",
           "group": "navigation"
         }
       ],

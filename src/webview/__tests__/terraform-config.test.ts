@@ -1,4 +1,4 @@
-// src/webview/__tests__/phase4.test.ts
+// src/webview/__tests__/terraform-config.test.ts
 import { test, expect, describe } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
