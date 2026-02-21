@@ -2,8 +2,6 @@
 
 Lace is a VS Code extension that lets you visually compose Terraform infrastructure by browsing modules from a registry, wiring their inputs/outputs together on a canvas, and generating production-ready `.tf` files. It communicates with a Go CLI backend (`lace`) over JSON-RPC for registry access, validation, and code generation.
 
-![Lace canvas example](image.png)
-
 ## Quick Start
 
 ```bash
