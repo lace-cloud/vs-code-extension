@@ -1,8 +1,14 @@
 import React from 'react';
+import { ReactFlowProvider } from 'reactflow';
+import ErrorBoundary from './components/ErrorBoundary';
 import Canvas from './Canvas';
 
-const App: React.FC = () => {
-  return <Canvas />;
-};
-
-export default App;
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <ReactFlowProvider>
+        <Canvas />
+      </ReactFlowProvider>
+    </ErrorBoundary>
+  );
+}

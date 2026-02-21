@@ -1,91 +1,185 @@
 // src/webview/components/panels/ModuleConfigPanel.tsx
 import React, { useMemo, useState } from 'react';
+import type { InputDef, OutputDef, Binding } from '../../types/ir';
+import { isLit, isOut, isVar, isExpr } from '../../types/ir';
 
-/* ---------------------------------- */
-/* Types                              */
-/* ---------------------------------- */
-
-type TerraformInput = {
-  name: string;
-  type: string;
-  required?: boolean;
-  description?: string;
-  default?: any;
-  object?: Record<string, TerraformInput>;
-  tuple?: TerraformInput[];
-};
-
-type TerraformOutput = {
-  name: string;
-  description?: string;
-  type?: string;
-};
+// ── Props ──
 
 type Props = {
-  title: string;
-  inputs: TerraformInput[];
-  outputs?: TerraformOutput[];
-  initialValues: Record<string, any>;
-  wiredInputs?: Record<string, string>; // inputName -> "module.x.y"
-  onSave: (values: Record<string, any>) => void;
+  instance_id: string;
+  schema: { inputs: InputDef[]; outputs: OutputDef[] };
+  inputs: Record<string, Binding>;
+  onSave: (inputs: Record<string, Binding>) => void;
   onClose: () => void;
 };
 
-/* ---------------------------------- */
-/* Shared Tailwind class strings      */
-/* ---------------------------------- */
+// ── Shared styles ──
 
 const inputClasses =
   'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
 
-const selectClasses = inputClasses;
+// ── Component ──
 
-const miniBtnClasses =
-  'w-[34px] rounded-lg border border-[#333] bg-[#0f0f0f] text-white cursor-pointer';
+export default function ModuleConfigPanel({ instance_id, schema, inputs, onSave, onClose }: Props) {
+  // Local state: track literal values being edited
+  const [litValues, setLitValues] = useState<Record<string, any>>(() => {
+    const initial: Record<string, any> = {};
+    for (const [name, binding] of Object.entries(inputs)) {
+      if (isLit(binding)) {
+        initial[name] = binding.lit;
+      }
+    }
+    return initial;
+  });
 
-const addBtnClasses =
-  'rounded-lg border border-dashed border-[#444] bg-[#0f0f0f] text-white px-2.5 py-2.5 cursor-pointer text-xs text-left';
-
-/* ---------------------------------- */
-/* Component                          */
-/* ---------------------------------- */
-
-export default function ModuleConfigPanel({
-  title,
-  inputs,
-  outputs = [],
-  initialValues,
-  wiredInputs = {},
-  onSave,
-  onClose,
-}: Props) {
-  const [values, setValues] = useState<Record<string, any>>(initialValues ?? {});
-  const [showOptional, setShowOptional] = useState(true); // ✅ default show, so fields don't "disappear"
+  const [showOptional, setShowOptional] = useState(true);
 
   const updateValue = (key: string, value: any) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setLitValues((prev) => ({ ...prev, [key]: value }));
   };
 
-  /* ---------- Split Inputs ---------- */
+  // ── Split inputs into required / optional ──
 
-  const { requiredInputs, optionalInputs } = useMemo(() => {
-    return {
-      requiredInputs: (inputs ?? []).filter((i) => i.required),
-      optionalInputs: (inputs ?? []).filter((i) => !i.required),
-    };
-  }, [inputs]);
+  const { requiredInputs, optionalInputs } = useMemo(
+    () => ({
+      requiredInputs: (schema.inputs ?? []).filter((i) => i.required),
+      optionalInputs: (schema.inputs ?? []).filter((i) => !i.required),
+    }),
+    [schema.inputs],
+  );
 
-  const optionalCount = optionalInputs.length;
+  // ── Save handler: produce Record<string, Binding> ──
+
+  const handleSave = () => {
+    const result: Record<string, Binding> = { ...inputs };
+    for (const [name, value] of Object.entries(litValues)) {
+      result[name] = { lit: value };
+    }
+    onSave(result);
+  };
+
+  // ── Describe non-literal binding (read-only) ──
+
+  function describeBinding(binding: Binding): string | null {
+    if (isOut(binding)) {
+      return `Wired to ${binding.out.module}.${binding.out.name}`;
+    }
+    if (isVar(binding)) {
+      return `Variable: var.${binding.var}`;
+    }
+    if (isExpr(binding)) {
+      return `Expression: ${binding.expr.value}`;
+    }
+    return null;
+  }
+
+  // ── Render a single input field ──
+
+  function renderInputField(def: InputDef): React.ReactNode {
+    const binding = inputs[def.name];
+    const nonLitDesc = binding ? describeBinding(binding) : null;
+
+    // If bound to out/var/expr, show read-only
+    if (binding && !isLit(binding) && nonLitDesc) {
+      return (
+        <div key={def.name} className="mb-4 flex flex-col gap-1.5">
+          <label className="text-xs font-semibold opacity-90">
+            {def.name}
+            {def.required && <span className="text-[#e5484d] ml-1">*</span>}
+          </label>
+          <div className="flex gap-2 items-center">
+            <input value={nonLitDesc} readOnly className={`${inputClasses} font-mono opacity-95`} />
+            <span className="text-[11px] px-2.5 py-1.5 rounded-full border border-[#2b4a7a] bg-[#0b1f3a] text-[#9ecbff] font-bold whitespace-nowrap">
+              Wired
+            </span>
+          </div>
+          {def.description && <div className="text-[11px] opacity-60">{def.description}</div>}
+        </div>
+      );
+    }
+
+    // Literal mode editor based on type
+    const value = litValues[def.name] ?? def.default ?? null;
+    const type = def.type || 'string';
+
+    let editor: React.ReactNode;
+
+    if (type === 'bool') {
+      editor = (
+        <select
+          value={String(value ?? false)}
+          onChange={(e) => updateValue(def.name, e.target.value === 'true')}
+          className={inputClasses}
+        >
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+      );
+    } else if (type === 'number') {
+      editor = (
+        <input
+          type="number"
+          value={value ?? ''}
+          onChange={(e) =>
+            updateValue(def.name, e.target.value === '' ? '' : Number(e.target.value))
+          }
+          className={inputClasses}
+        />
+      );
+    } else if (
+      type.startsWith('list(') ||
+      type.startsWith('map(') ||
+      type.startsWith('set(') ||
+      type.startsWith('object(')
+    ) {
+      // Complex types: JSON textarea
+      const jsonStr = typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2);
+      editor = (
+        <textarea
+          value={jsonStr}
+          onChange={(e) => {
+            try {
+              updateValue(def.name, JSON.parse(e.target.value));
+            } catch {
+              // Keep raw string while user is typing
+              updateValue(def.name, e.target.value);
+            }
+          }}
+          rows={4}
+          className={`${inputClasses} font-mono resize-y`}
+        />
+      );
+    } else {
+      // Default: string input
+      editor = (
+        <input
+          value={value ?? ''}
+          onChange={(e) => updateValue(def.name, e.target.value)}
+          className={inputClasses}
+        />
+      );
+    }
+
+    return (
+      <div key={def.name} className="mb-4 flex flex-col gap-1.5">
+        <label className="text-xs font-semibold opacity-90">
+          {def.name}
+          {def.required && <span className="text-[#e5484d] ml-1">*</span>}
+        </label>
+        {editor}
+        {def.description && <div className="text-[11px] opacity-60">{def.description}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="absolute right-0 top-0 w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col z-20">
-      {/* ---------- HEADER ---------- */}
+      {/* Header */}
       <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
         <div className="flex flex-col gap-1">
           <div className="text-xs opacity-70">Module</div>
-          <h3 className="m-0 text-base">{title}</h3>
+          <h3 className="m-0 text-base">{instance_id}</h3>
         </div>
-
         <button
           onClick={onClose}
           className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
@@ -96,58 +190,40 @@ export default function ModuleConfigPanel({
         </button>
       </header>
 
-      {/* ---------- BODY ---------- */}
+      {/* Body */}
       <div className="flex-1 overflow-y-auto p-4 pb-24">
-        {/* ---------- REQUIRED INPUTS ---------- */}
+        {/* Required Inputs */}
         {requiredInputs.length > 0 && (
           <>
             <SectionTitle label="Required Inputs" />
-            {requiredInputs.map((input) =>
-              renderInput({
-                input,
-                value: values[input.name],
-                wiredValue: wiredInputs?.[input.name],
-                onChange: (v) => updateValue(input.name, v),
-              }),
-            )}
+            {requiredInputs.map(renderInputField)}
           </>
         )}
 
-        {/* ---------- OPTIONAL INPUTS ---------- */}
+        {/* Optional Inputs */}
         {optionalInputs.length > 0 && (
           <>
             <div
-              className={`flex items-center justify-between ${requiredInputs.length > 0 ? 'mt-4.5' : ''}`}
+              className={`flex items-center justify-between ${requiredInputs.length > 0 ? 'mt-4' : ''}`}
             >
               <SectionTitle label="Optional Inputs" className="mb-0" />
-
               <button
                 onClick={() => setShowOptional((v) => !v)}
                 className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-full px-2.5 py-1.5 text-xs opacity-90"
               >
-                {showOptional ? 'Hide' : 'Show'} ({optionalCount})
+                {showOptional ? 'Hide' : 'Show'} ({optionalInputs.length})
               </button>
             </div>
-
             <div className="h-2.5" />
-
-            {showOptional &&
-              optionalInputs.map((input) =>
-                renderInput({
-                  input,
-                  value: values[input.name],
-                  wiredValue: wiredInputs?.[input.name],
-                  onChange: (v) => updateValue(input.name, v),
-                }),
-              )}
+            {showOptional && optionalInputs.map(renderInputField)}
           </>
         )}
 
-        {/* ---------- OUTPUTS ---------- */}
-        {outputs.length > 0 && (
+        {/* Outputs */}
+        {schema.outputs.length > 0 && (
           <>
             <SectionTitle label="Outputs" style={{ marginTop: 26 }} />
-            {outputs.map((o) => (
+            {schema.outputs.map((o) => (
               <div
                 key={o.name}
                 className="mb-2.5 text-xs opacity-85 bg-[#0f0f0f] border border-[#333] rounded-[10px] px-2.5 py-2.5"
@@ -159,17 +235,20 @@ export default function ModuleConfigPanel({
                 {o.description && (
                   <div className="mt-1.5 text-[11px] opacity-70">{o.description}</div>
                 )}
+                {o.sensitive && (
+                  <div className="mt-1 text-[10px] text-yellow-400 opacity-80">⚠ sensitive</div>
+                )}
               </div>
             ))}
           </>
         )}
       </div>
 
-      {/* ---------- FOOTER ---------- */}
+      {/* Footer */}
       <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-30">
         <button
           className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer"
-          onClick={() => onSave(values)}
+          onClick={handleSave}
         >
           Save configuration
         </button>
@@ -178,9 +257,7 @@ export default function ModuleConfigPanel({
   );
 }
 
-/* ---------------------------------- */
-/* Section Title                      */
-/* ---------------------------------- */
+// ── Section Title ──
 
 function SectionTitle({
   label,
@@ -198,206 +275,5 @@ function SectionTitle({
     >
       {label}
     </h4>
-  );
-}
-
-/* ---------------------------------- */
-/* Input Renderer                     */
-/* ---------------------------------- */
-
-function renderInput({
-  input,
-  value,
-  onChange,
-  wiredValue,
-}: {
-  input: TerraformInput;
-  value: any;
-  onChange: (v: any) => void;
-  wiredValue?: string;
-}): JSX.Element | null {
-  const type = input.type || 'string';
-
-  // ✅ If wired, show read-only Terraform expression (module.x.y)
-  if (wiredValue) {
-    return field(
-      input,
-      <div className="flex gap-2 items-center">
-        <input value={wiredValue} readOnly className={`${inputClasses} font-mono opacity-95`} />
-        <span className="text-[11px] px-2.5 py-1.5 rounded-full border border-[#2b4a7a] bg-[#0b1f3a] text-[#9ecbff] font-bold whitespace-nowrap">
-          Wired
-        </span>
-      </div>,
-    );
-  }
-
-  if (type === 'string') {
-    return field(
-      input,
-      <input
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-        className={inputClasses}
-      />,
-    );
-  }
-
-  if (type === 'number') {
-    return field(
-      input,
-      <input
-        type="number"
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-        className={inputClasses}
-      />,
-    );
-  }
-
-  if (type === 'bool') {
-    return field(
-      input,
-      <select
-        value={String(value ?? false)}
-        onChange={(e) => onChange(e.target.value === 'true')}
-        className={selectClasses}
-      >
-        <option value="true">True</option>
-        <option value="false">False</option>
-      </select>,
-    );
-  }
-
-  if (type.startsWith('list(')) {
-    const items = Array.isArray(value) ? value : [];
-    return field(
-      input,
-      <div className="flex flex-col gap-2">
-        {items.map((v: any, idx: number) => (
-          <div key={idx} className="flex gap-2">
-            <input
-              value={v ?? ''}
-              onChange={(e) => {
-                const copy = [...items];
-                copy[idx] = e.target.value;
-                onChange(copy);
-              }}
-              className={`${inputClasses} flex-1`}
-            />
-            <button
-              onClick={() => onChange(items.filter((_: any, i: number) => i !== idx))}
-              className={miniBtnClasses}
-              title="Remove"
-            >
-              −
-            </button>
-          </div>
-        ))}
-        <button onClick={() => onChange([...items, ''])} className={addBtnClasses}>
-          + Add
-        </button>
-      </div>,
-    );
-  }
-
-  if (type.startsWith('set(')) {
-    return renderInput({
-      input: { ...input, type: 'list(string)' },
-      value: Array.from(new Set(value ?? [])),
-      onChange: (v) => onChange(Array.from(new Set(v))),
-    });
-  }
-
-  if (type.startsWith('map(')) {
-    const mapVal = value ?? {};
-    return field(
-      input,
-      <div className="flex flex-col gap-2">
-        {Object.entries(mapVal).map(([k, v]) => (
-          <div key={k} className="flex gap-2">
-            <input value={k} disabled className={`${inputClasses} flex-1 opacity-70`} />
-            <input
-              value={v as string}
-              onChange={(e) => onChange({ ...mapVal, [k]: e.target.value })}
-              className={`${inputClasses} flex-2`}
-            />
-            <button
-              onClick={() => {
-                const copy = { ...mapVal };
-                delete copy[k];
-                onChange(copy);
-              }}
-              className={miniBtnClasses}
-              title="Remove"
-            >
-              −
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={() => onChange({ ...mapVal, [`key_${Date.now()}`]: '' })}
-          className={addBtnClasses}
-        >
-          + Add
-        </button>
-      </div>,
-    );
-  }
-
-  if (type === 'object' && input.object) {
-    const objVal = value ?? {};
-    return field(
-      input,
-      <fieldset className="pl-3 border-l-2 border-[#333]">
-        {Object.entries(input.object).map(([key, def]) =>
-          renderInput({
-            input: { ...def, name: key },
-            value: objVal[key],
-            onChange: (v) => onChange({ ...objVal, [key]: v }),
-          }),
-        )}
-      </fieldset>,
-    );
-  }
-
-  if (type === 'tuple' && input.tuple) {
-    const tupleVal = value ?? [];
-    return field(
-      input,
-      <>
-        {input.tuple.map((t, idx: number) =>
-          renderInput({
-            input: { ...t, name: `${input.name}[${idx}]` },
-            value: tupleVal[idx],
-            onChange: (v) => {
-              const copy = [...tupleVal];
-              copy[idx] = v;
-              onChange(copy);
-            },
-          }),
-        )}
-      </>,
-    );
-  }
-
-  return null;
-}
-
-/* ---------------------------------- */
-/* Field Wrapper                      */
-/* ---------------------------------- */
-
-function field(input: TerraformInput, body: React.ReactNode) {
-  return (
-    <div className="mb-4 flex flex-col gap-1.5">
-      <label className="text-xs font-semibold opacity-90">
-        {input.name}
-        {input.required && <span className="text-[#e5484d] ml-1">*</span>}
-      </label>
-
-      {body}
-
-      {input.description && <div className="text-[11px] opacity-60">{input.description}</div>}
-    </div>
   );
 }

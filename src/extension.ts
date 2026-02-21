@@ -13,6 +13,7 @@ import {
   createWebviewPanel,
   closeComponentPanel,
   setRegistrySystem,
+  setStore,
 } from './webview/createWebviewPanel';
 
 import { ServerManager } from './utilities/engine/server-manager';
@@ -65,6 +66,7 @@ export async function activate(context: vscode.ExtensionContext) {
   console.log('Lace Extension Activated');
 
   store = new Store(context.globalStorageUri);
+  setStore(store);
 
   /* ---------- Tree Views ---------- */
 
