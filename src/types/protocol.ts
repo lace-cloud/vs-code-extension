@@ -15,8 +15,6 @@ export type GraphError = {
 
 export type HostToWebview =
   | { command: 'loadState'; state: WorkspaceState }
-  | { command: 'registryList'; system: string; modules: RegistryModule[] }
-  | { command: 'setRegistrySystem'; system: string }
   | { command: 'triggerSave' }
   | { command: 'triggerGenerate' }
   | { command: 'generateSuccess'; files?: string[] }
@@ -30,7 +28,6 @@ export type HostToWebview =
 
 export type WebviewToHost =
   | { command: 'webviewReady' }
-  | { command: 'requestRegistryModules'; system: string }
   | { command: 'saveState'; state: WorkspaceState }
   | { command: 'generateBundle'; bundle: ModuleBundle }
   | {

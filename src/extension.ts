@@ -2,29 +2,23 @@
 import * as vscode from 'vscode';
 
 import { ComponentsTreeDataProvider } from './containers-views/ComponentsTreeDataProvider';
-import { TemplatesTreeDataProvider } from './containers-views/TemplatesTreeDataProvider';
-import { RegistrySelectorProvider } from './containers-views/RegistrySelectorProvider';
+import {
+  RegistryBrowserProvider,
+  type RegistryModule,
+} from './containers-views/RegistryBrowserProvider';
 
 import { updateStatusBar } from './statusbar/UpdateStatusBar';
-
 import { Store } from './persistence';
 
 import {
   createWebviewPanel,
   closeComponentPanel,
-  setRegistrySystem,
+  addModuleToActiveCanvas,
+  triggerGenerateOnActiveCanvas,
   setStore,
 } from './webview/createWebviewPanel';
 
 import { ServerManager } from './utilities/engine/server-manager';
-
-/* ---------------------------------- */
-/* Providers                          */
-/* ---------------------------------- */
-
-let componentsProvider: ComponentsTreeDataProvider | undefined;
-let templatesProvider: TemplatesTreeDataProvider | undefined;
-let registrySelectorProvider: RegistrySelectorProvider | undefined;
 
 /* ---------------------------------- */
 /* State                              */
@@ -33,18 +27,15 @@ let registrySelectorProvider: RegistrySelectorProvider | undefined;
 let store: Store | undefined;
 let server: ServerManager | undefined;
 let engineStatusBar: vscode.StatusBarItem | undefined;
-
-// single source of truth for registry system
-let activeRegistrySystem: 'aws' | 'azure' | 'gcp' = 'aws';
+let registryProvider: RegistryBrowserProvider | undefined;
+let componentsProvider: ComponentsTreeDataProvider | undefined;
 
 /* ---------------------------------- */
 /* UI Helpers                         */
 /* ---------------------------------- */
 
 function updateEngineStatus(state: string) {
-  if (!engineStatusBar) {
-    return;
-  }
+  if (!engineStatusBar) return;
 
   const icon =
     {
@@ -68,33 +59,20 @@ export async function activate(context: vscode.ExtensionContext) {
   store = new Store(context.globalStorageUri);
   setStore(store);
 
-  /* ---------- Tree Views ---------- */
+  /* ---------- Registry Browser ---------- */
+
+  registryProvider = new RegistryBrowserProvider();
+
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('laceRegistry', registryProvider),
+  );
+
+  /* ---------- Components Tree ---------- */
 
   componentsProvider = new ComponentsTreeDataProvider(store);
-  templatesProvider = new TemplatesTreeDataProvider();
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('components', componentsProvider),
-    vscode.window.registerTreeDataProvider('templates', templatesProvider),
-  );
-
-  /* ---------- Registry Selector (INLINE RADIO STYLE) ---------- */
-
-  registrySelectorProvider = new RegistrySelectorProvider(
-    () => activeRegistrySystem,
-    (system) => {
-      activeRegistrySystem = system;
-
-      // notify all open webviews
-      setRegistrySystem(system);
-
-      // refresh selector icons
-      registrySelectorProvider?.refresh();
-    },
-  );
-
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('laceView', registrySelectorProvider),
   );
 
   /* ---------- Lace Engine ---------- */
@@ -107,9 +85,10 @@ export async function activate(context: vscode.ExtensionContext) {
   server.on('state', (state) => {
     updateEngineStatus(state);
 
-    // optional: refresh registry selector on engine restart
     if (state === 'running') {
-      setRegistrySystem(activeRegistrySystem);
+      // Wire RPC client into registry provider and refresh
+      registryProvider?.setRpcClient(server?.rpcClient ?? null);
+      registryProvider?.refresh();
     }
   });
 
@@ -130,25 +109,115 @@ export async function activate(context: vscode.ExtensionContext) {
   /* ---------- Commands ---------- */
 
   context.subscriptions.push(
-    // Engine
+    // ── Engine ──
     vscode.commands.registerCommand('lace.startEngine', () => server?.start()),
     vscode.commands.registerCommand('lace.stopEngine', () => server?.stop()),
     vscode.commands.registerCommand('lace.restartEngine', () => server?.restart()),
 
-    // Registry selector command (USED BY TREE ITEMS)
-    vscode.commands.registerCommand('registry.selectSystem', (system: 'aws' | 'azure' | 'gcp') => {
-      activeRegistrySystem = system;
-      setRegistrySystem(system);
-      registrySelectorProvider?.refresh();
+    // ── Registry ──
+    vscode.commands.registerCommand('lace.refreshRegistry', () => {
+      registryProvider?.setRpcClient(server?.rpcClient ?? null);
+      registryProvider?.refresh();
     }),
 
-    // Components
-    vscode.commands.registerCommand('components.openComponent', async (name: string) => {
+    vscode.commands.registerCommand('lace.showModuleDetail', (mod: RegistryModule) => {
+      // For now: show info message. Phase 2: open full detail WebviewPanel.
+      const detail = [
+        `${mod.name} v${mod.version}`,
+        `System: ${mod.system}`,
+        `Kind: ${mod.kind}`,
+        mod.categories?.length ? `Categories: ${mod.categories.join(', ')}` : '',
+        mod.description ?? '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      vscode.window.showInformationMessage(detail, 'Add to Canvas').then((action) => {
+        if (action === 'Add to Canvas') {
+          dropModuleToCanvas(mod);
+        }
+      });
+    }),
+
+    vscode.commands.registerCommand('lace.addModuleToCanvas', (node: any) => {
+      // Called from tree item inline button — node is the TreeNode
+      if (node?.module) {
+        dropModuleToCanvas(node.module);
+      }
+    }),
+
+    // ── Command Palette: New Component ──
+    vscode.commands.registerCommand('lace.newComponent', async () => {
+      const name = await vscode.window.showInputBox({
+        prompt: 'Component name',
+        placeHolder: 'my-api-infra',
+      });
+      if (!name) return;
+
+      store?.addComponent(name);
+      componentsProvider?.refresh();
+
       if (!server) {
-        vscode.window.showErrorMessage('Lace engine manager not initialized.');
+        vscode.window.showErrorMessage('Lace engine not initialized.');
+        return;
+      }
+      await createWebviewPanel(name, context, server);
+    }),
+
+    // ── Command Palette: Open Component ──
+    vscode.commands.registerCommand('lace.openComponent', async () => {
+      const components = store?.listComponents() ?? [];
+      if (components.length === 0) {
+        vscode.window.showInformationMessage('No components. Use "Lace: New Component" first.');
         return;
       }
 
+      const pick = await vscode.window.showQuickPick(
+        components.map((c) => c.name),
+        { placeHolder: 'Select component to open' },
+      );
+      if (!pick || !server) return;
+
+      await createWebviewPanel(pick, context, server);
+    }),
+
+    // ── Command Palette: Add Module ──
+    vscode.commands.registerCommand('lace.addModule', async () => {
+      const modules = registryProvider?.getModules() ?? [];
+      if (modules.length === 0) {
+        vscode.window.showWarningMessage('Registry is empty. Is the Lace engine running?');
+        return;
+      }
+
+      const items = modules.map((m) => ({
+        label: `$(symbol-module) ${m.name}`,
+        description: `v${m.version}`,
+        detail: `${m.system} · ${m.kind}${m.categories?.length ? ' · ' + m.categories.join(', ') : ''}`,
+        module: m,
+      }));
+
+      const pick = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Search modules...',
+        matchOnDescription: true,
+        matchOnDetail: true,
+      });
+
+      if (pick) {
+        dropModuleToCanvas(pick.module);
+      }
+    }),
+
+    // ── Command Palette: Generate ──
+    vscode.commands.registerCommand('lace.generate', () => {
+      triggerGenerateOnActiveCanvas();
+    }),
+
+    // ── Components (existing) ──
+    vscode.commands.registerCommand('components.openComponent', async (name: string) => {
+      if (!server) {
+        vscode.window.showErrorMessage('Lace engine not initialized.');
+        return;
+      }
       await createWebviewPanel(name, context, server);
     }),
 
@@ -156,10 +225,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const name = await vscode.window.showInputBox({
         prompt: 'Enter component name',
       });
-
-      if (!name) {
-        return;
-      }
+      if (!name) return;
 
       store?.addComponent(name);
       componentsProvider?.refresh();
@@ -171,16 +237,41 @@ export async function activate(context: vscode.ExtensionContext) {
         components.map((c) => c.name),
         { placeHolder: 'Select component to delete' },
       );
-
-      if (!pick) {
-        return;
-      }
+      if (!pick) return;
 
       closeComponentPanel(pick);
       store?.removeComponent(pick);
       componentsProvider?.refresh();
     }),
   );
+}
+
+/* ---------------------------------- */
+/* Helper: drop module to canvas      */
+/* ---------------------------------- */
+
+async function dropModuleToCanvas(mod: RegistryModule) {
+  if (!server) {
+    vscode.window.showErrorMessage('Lace engine not initialized.');
+    return;
+  }
+
+  try {
+    const response = await server.rpcClient?.getRegistryVersion({
+      name: mod.name,
+      system: mod.system,
+      version: mod.version,
+    });
+
+    const deploy_bundle = response?.deploy_bundle;
+    if (!deploy_bundle) {
+      throw new Error('No deploy_bundle in registry response');
+    }
+
+    addModuleToActiveCanvas(deploy_bundle);
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`Failed to fetch module: ${err.message}`);
+  }
 }
 
 /* ---------------------------------- */

@@ -14,18 +14,37 @@ import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol
 
 const panels = new Map<string, vscode.WebviewPanel>();
 
-let activeRegistrySystem: 'aws' | 'azure' | 'gcp' = 'aws';
 let storeInstance: Store | undefined;
 
-export function setRegistrySystem(system: 'aws' | 'azure' | 'gcp') {
-  activeRegistrySystem = system;
-  for (const panel of panels.values()) {
-    postToWebview(panel, { command: 'setRegistrySystem', system });
-  }
-}
+/** The most recently focused canvas panel — used for host-initiated actions. */
+let activePanel: vscode.WebviewPanel | undefined;
 
 export function setStore(store: Store) {
   storeInstance = store;
+}
+
+/** Drop a module into the currently active canvas. Called from sidebar/command palette. */
+export function addModuleToActiveCanvas(deploy_bundle: any) {
+  const panel = activePanel ?? [...panels.values()].at(-1);
+  if (!panel) {
+    vscode.window.showWarningMessage('No canvas open. Create a component first.');
+    return;
+  }
+  postToWebview(panel, {
+    command: 'dropBundle',
+    requestId: Date.now(),
+    deploy_bundle,
+  });
+}
+
+/** Trigger generate on the active canvas. */
+export function triggerGenerateOnActiveCanvas() {
+  const panel = activePanel ?? [...panels.values()].at(-1);
+  if (!panel) {
+    vscode.window.showWarningMessage('No canvas open.');
+    return;
+  }
+  postToWebview(panel, { command: 'triggerGenerate' });
 }
 
 // ── Typed message helpers ──
@@ -87,23 +106,13 @@ export async function createWebviewPanel(
   panels.set(componentName, panel);
   panel.webview.html = getWebviewContent(context, panel.webview);
 
-  // ── Send registry modules ──
-
-  async function sendRegistryList(system: string) {
-    const rpc = server.rpcClient;
-    if (!rpc) return;
-
-    try {
-      const list = await rpc.listRegistryModules({ system });
-      postToWebview(panel, {
-        command: 'registryList',
-        system,
-        modules: list.modules ?? [],
-      });
-    } catch (err: any) {
-      console.warn('Failed to fetch registry list:', err.message);
+  // Track which panel is active for host-initiated actions
+  panel.onDidChangeViewState((e) => {
+    if (e.webviewPanel.active) {
+      activePanel = panel;
     }
-  }
+  });
+  activePanel = panel;
 
   // ── Message handler ──
 
@@ -135,13 +144,6 @@ export async function createWebviewPanel(
             // New component — send empty workspace
             postToWebview(panel, { command: 'loadState', state: emptyWorkspace(componentName) });
           }
-          await sendRegistryList(activeRegistrySystem);
-          break;
-        }
-
-        // ── requestRegistryModules ──
-        case 'requestRegistryModules': {
-          await sendRegistryList((msg as any).system);
           break;
         }
 
@@ -283,7 +285,12 @@ export async function createWebviewPanel(
     },
   );
 
-  panel.onDidDispose(() => panels.delete(componentName));
+  panel.onDidDispose(() => {
+    panels.delete(componentName);
+    if (activePanel === panel) {
+      activePanel = undefined;
+    }
+  });
 }
 
 export function closeComponentPanel(componentName: string) {

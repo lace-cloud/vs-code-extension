@@ -26,31 +26,46 @@
     "views": {
       "laceContainer": [
         {
-          "id": "laceView",
+          "id": "laceRegistry",
           "name": "Registry"
         },
         {
           "id": "components",
           "name": "Components"
-        },
-        {
-          "id": "templates",
-          "name": "Templates"
         }
       ]
     },
     "commands": [
       {
-        "command": "extension.fetchData",
-        "title": "Fetch Data"
+        "command": "lace.newComponent",
+        "title": "Lace: New Component",
+        "icon": "$(add)"
       },
       {
-        "command": "terraformPlayground.openPanel",
-        "title": "Open Terraform Playground"
+        "command": "lace.addModule",
+        "title": "Lace: Add Module to Canvas"
       },
       {
-        "command": "terraformPlayground.startPlayground",
-        "title": "Start Playground"
+        "command": "lace.generate",
+        "title": "Lace: Generate Terraform"
+      },
+      {
+        "command": "lace.openComponent",
+        "title": "Lace: Open Component"
+      },
+      {
+        "command": "lace.refreshRegistry",
+        "title": "Refresh Registry",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lace.addModuleToCanvas",
+        "title": "Add to Canvas",
+        "icon": "$(add)"
+      },
+      {
+        "command": "lace.showModuleDetail",
+        "title": "Show Module Detail"
       },
       {
         "command": "components.addComponent",
@@ -100,6 +115,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "lace.refreshRegistry",
+          "when": "view == laceRegistry",
+          "group": "navigation"
+        },
+        {
           "command": "components.addComponent",
           "when": "view == components",
           "group": "navigation"
@@ -110,11 +130,11 @@
           "group": "navigation"
         }
       ],
-      "menuBar/file": [
+      "view/item/context": [
         {
-          "command": "workbench.action.files.saveAs",
-          "when": "false",
-          "group": "navigation"
+          "command": "lace.addModuleToCanvas",
+          "when": "view == laceRegistry && viewItem == registryModule",
+          "group": "inline"
         }
       ]
     }

@@ -35,6 +35,7 @@ module.exports = [
   },
   {
     // Frontend (Webview)
+    mode: 'development',
     entry: './src/webview/index.tsx',
     output: {
       path: path.resolve(__dirname, 'out'),

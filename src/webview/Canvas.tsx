@@ -22,13 +22,9 @@ import ProvidersPanel from './components/panels/ProvidersPanel';
 import LocalsPanel from './components/panels/LocalsPanel';
 import EnvironmentsPanel from './components/panels/EnvironmentsPanel';
 import Breadcrumb from './components/Breadcrumb';
-import RegistrySidebar, {
-  type RegistryModule,
-  type RegistryTree,
-} from './components/sidebars/RegistrySidebar';
 
-import type { WorkspaceState } from './types/workspace';
-import type { ModuleBundle } from './types/ir';
+import type { WorkspaceState, GraphLayout } from './types/workspace';
+import type { ModuleBundle, CompositeGraph } from './types/ir';
 import { isOut, isModuleInstance } from './types/ir';
 import type { WebviewToHost } from '../types/protocol';
 
@@ -50,23 +46,6 @@ const nodeTypes = {
 
 function postToHost(msg: WebviewToHost) {
   window.vscode.postMessage(msg);
-}
-
-// ── Helper: build registry tree from flat module list ──
-
-function buildRegistryTree(modules: RegistryModule[]): RegistryTree {
-  const tree: RegistryTree = {};
-  modules.forEach((m) => {
-    const system = m.system ?? 'unknown';
-    const categories =
-      Array.isArray(m.categories) && m.categories.length > 0 ? m.categories : ['misc'];
-    if (!tree[system]) tree[system] = {};
-    categories.forEach((cat) => {
-      if (!tree[system][cat]) tree[system][cat] = [];
-      if (!tree[system][cat].some((x) => x.id === m.id)) tree[system][cat].push(m);
-    });
-  });
-  return tree;
 }
 
 // ── Initial empty workspace ──
@@ -96,12 +75,104 @@ function emptyWorkspace(name: string): WorkspaceState {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// Canvas Component
+// CompositeEditor — renders the ReactFlow viewport for a valid graph.
+//
+// Separated from Canvas so that its hooks (useMemo for rfNodes/rfEdges)
+// only mount when a valid composite graph exists. This avoids React's
+// "rendered fewer hooks" error (#300) — Canvas can safely early-return
+// <ErrorState> without skipping any hooks, because the graph-dependent
+// hooks live here and are never mounted in the error path.
+// ══════════════════════════════════════════════════════════════════════
+
+type CompositeEditorProps = {
+  graph: CompositeGraph;
+  layout: GraphLayout | undefined;
+  workspace: WorkspaceState;
+  module_key: string;
+  validationErrors: Array<{ module_key?: string; instance_id?: string; message: string }>;
+  localPositions: Record<string, { x: number; y: number }>;
+  onNodesChange: (changes: NodeChange[]) => void;
+  onNodeDragStop: (event: React.MouseEvent, node: Node, nodes: Node[]) => void;
+  onConnect: (conn: Connection) => void;
+};
+
+function CompositeEditor({
+  graph,
+  layout,
+  workspace,
+  module_key,
+  validationErrors,
+  localPositions,
+  onNodesChange,
+  onNodeDragStop,
+  onConnect,
+}: CompositeEditorProps) {
+  // ── Derive ReactFlow nodes ──
+  const rfNodes: Node[] = useMemo(
+    () =>
+      graph.instances.map((inst) => {
+        const nodeErrors = validationErrors.filter(
+          (e) => e.instance_id === inst.id && e.module_key === module_key,
+        );
+        return {
+          id: inst.id,
+          type: resolveNodeType(workspace, inst),
+          position: localPositions[inst.id] ?? layout?.nodes[inst.id]?.position ?? { x: 0, y: 0 },
+          data: {
+            instance: inst,
+            schema: resolveSchema(workspace, inst),
+            hasErrors: nodeErrors.length > 0,
+            errorMessages: nodeErrors.map((e) => e.message),
+          },
+        };
+      }),
+    [graph.instances, layout, workspace, localPositions, validationErrors, module_key],
+  );
+
+  // ── Derive ReactFlow edges ──
+  const rfEdges: Edge[] = useMemo(
+    () =>
+      deriveEdges(graph.instances).map((e) => ({
+        id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
+        source: e.source_instance,
+        target: e.target_instance,
+        data: { mapping: e.mapping },
+        label: `${e.mapping.from} → ${e.mapping.to}`,
+        labelStyle: { fill: '#fff', fontSize: 10 },
+        labelBgPadding: [0, 0] as [number, number],
+        labelBgBorderRadius: 0,
+        labelBgStyle: { fill: 'transparent' },
+      })),
+    [graph.instances],
+  );
+
+  return (
+    <ReactFlow
+      nodes={rfNodes}
+      edges={rfEdges}
+      nodeTypes={nodeTypes}
+      onNodesChange={onNodesChange}
+      onNodeDragStop={onNodeDragStop}
+      onConnect={onConnect}
+      fitView
+    >
+      <Background />
+      <Controls />
+    </ReactFlow>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Canvas — top-level component owning all workspace state.
+//
+// All hooks run unconditionally before the composite guard. The guard
+// is a clean early return that renders <ErrorState> if the active
+// module is not a composite. When the guard passes, <CompositeEditor>
+// renders the ReactFlow viewport with its own memoized hooks.
 // ══════════════════════════════════════════════════════════════════════
 
 export default function Canvas() {
   const [workspace, dispatch] = useReducer(workspaceReducer, emptyWorkspace('untitled'));
-  const [registryTree, setRegistryTree] = useState<RegistryTree>({});
   const [configTarget, setConfigTarget] = useState<string | null>(null);
   const [edgeConfigState, setEdgeConfigState] = useState<{
     source: string;
@@ -139,7 +210,6 @@ export default function Canvas() {
 
   const navigateIn = useCallback(
     (instance_id: string) => {
-      // Resolve the instance to find the module_key it points to
       const ws = workspaceRef.current;
       const ak = active_key;
       const def = ws.modules[ak];
@@ -203,53 +273,6 @@ export default function Canvas() {
       markDirty: () => postToHost({ command: 'markDirty' }),
     }),
     [navigateIn],
-  );
-
-  // ── Guard: root must be composite ──
-  if (!rootDef || rootDef.impl.kind !== 'composite') {
-    return <ErrorState message={`Root module "${module_key}" is not a composite.`} />;
-  }
-
-  const graph = rootDef.impl.graph;
-  const layout = workspace.layouts[module_key];
-
-  // ── Derive ReactFlow nodes ──
-  const rfNodes: Node[] = useMemo(
-    () =>
-      graph.instances.map((inst) => {
-        const nodeErrors = validationErrors.filter(
-          (e) => e.instance_id === inst.id && e.module_key === module_key,
-        );
-        return {
-          id: inst.id,
-          type: resolveNodeType(workspace, inst),
-          position: localPositions[inst.id] ?? layout?.nodes[inst.id]?.position ?? { x: 0, y: 0 },
-          data: {
-            instance: inst,
-            schema: resolveSchema(workspace, inst),
-            hasErrors: nodeErrors.length > 0,
-            errorMessages: nodeErrors.map((e) => e.message),
-          },
-        };
-      }),
-    [graph.instances, layout, workspace, localPositions, validationErrors, module_key],
-  );
-
-  // ── Derive ReactFlow edges ──
-  const rfEdges: Edge[] = useMemo(
-    () =>
-      deriveEdges(graph.instances).map((e) => ({
-        id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
-        source: e.source_instance,
-        target: e.target_instance,
-        data: { mapping: e.mapping },
-        label: `${e.mapping.from} → ${e.mapping.to}`,
-        labelStyle: { fill: '#fff', fontSize: 10 },
-        labelBgPadding: [0, 0] as [number, number],
-        labelBgBorderRadius: 0,
-        labelBgStyle: { fill: 'transparent' },
-      })),
-    [graph.instances],
   );
 
   // ── Event: node position changes during drag ──
@@ -330,7 +353,7 @@ export default function Canvas() {
     const raw = e.dataTransfer.getData('application/lace-module');
     if (!raw) return;
 
-    const mod: RegistryModule = JSON.parse(raw);
+    const mod: { name: string; system: string; version: string } = JSON.parse(raw);
     const requestId = Date.now();
 
     pendingDrops.current[requestId] = {
@@ -361,19 +384,6 @@ export default function Canvas() {
           dispatch({ type: 'LOAD_WORKSPACE', workspace: msg.state });
           setLocalPositions({});
           // Breadcrumb resets via the entry_key useEffect
-          break;
-        }
-
-        case 'registryList': {
-          const modulesArray: RegistryModule[] = Array.isArray(msg.modules)
-            ? msg.modules
-            : Object.values(msg.modules ?? {}).flat();
-          setRegistryTree(buildRegistryTree(modulesArray));
-          break;
-        }
-
-        case 'setRegistrySystem': {
-          postToHost({ command: 'requestRegistryModules', system: msg.system });
           break;
         }
 
@@ -544,6 +554,17 @@ export default function Canvas() {
     };
   }, [semanticDispatch]);
 
+  // ── Guard: active module must be composite ──
+  // Clean early return — every hook above runs unconditionally.
+  // Graph-dependent hooks live in CompositeEditor, which only
+  // mounts when this guard passes.
+  if (!rootDef || rootDef.impl.kind !== 'composite') {
+    return <ErrorState message={`Root module "${module_key}" is not a composite.`} />;
+  }
+
+  const graph = rootDef.impl.graph;
+  const layout = workspace.layouts[module_key];
+
   // ── Config panel target data ──
   const configInstance = configTarget
     ? graph.instances.find((i) => i.id === configTarget)
@@ -561,193 +582,186 @@ export default function Canvas() {
   // ── Render ──
   return (
     <CanvasContext.Provider value={callbacks}>
-      <div className="flex h-screen">
-        {/* Registry sidebar */}
-        <RegistrySidebar registryTree={registryTree} />
+      <div className="h-screen relative" onDrop={onDrop} onDragOver={onDragOver}>
+        {/* Breadcrumb navigation */}
+        <Breadcrumb path={breadcrumb} onNavigate={navigateTo} />
 
-        {/* Canvas area */}
-        <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
-          {/* Breadcrumb navigation */}
-          <Breadcrumb path={breadcrumb} onNavigate={navigateTo} />
+        {statusMessage && (
+          <div className="absolute top-11 left-4 z-20 bg-[#1f6feb] text-white px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
+            {statusMessage}
+          </div>
+        )}
 
-          {statusMessage && (
-            <div className="absolute top-11 left-4 z-20 bg-[#1f6feb] text-white px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
-              {statusMessage}
-            </div>
-          )}
+        <CompositeEditor
+          graph={graph}
+          layout={layout}
+          workspace={workspace}
+          module_key={module_key}
+          validationErrors={validationErrors}
+          localPositions={localPositions}
+          onNodesChange={onNodesChange}
+          onNodeDragStop={onNodeDragStop}
+          onConnect={onConnect}
+        />
 
-          <ReactFlow
-            nodes={rfNodes}
-            edges={rfEdges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onNodeDragStop={onNodeDragStop}
-            onConnect={onConnect}
-            fitView
-          >
-            <Background />
-            <Controls />
-          </ReactFlow>
+        {/* Module config panel */}
+        {configTarget && configInstance && configSchema && (
+          <ModuleConfigPanel
+            instance_id={configTarget}
+            schema={configSchema}
+            inputs={configInstance.inputs}
+            composite_variables={rootDef.interface.inputs}
+            sibling_ids={graph.instances.map((i) => i.id).filter((id) => id !== configTarget)}
+            depends_on={configInstance.depends_on}
+            onSave={(inputs) => {
+              semanticDispatch({
+                type: 'UPDATE_INPUTS',
+                module_key,
+                instance_id: configTarget,
+                inputs,
+              });
+              setConfigTarget(null);
+            }}
+            onSaveDependsOn={(depends_on) => {
+              semanticDispatch({
+                type: 'SET_DEPENDS_ON',
+                module_key,
+                instance_id: configTarget,
+                depends_on,
+              });
+            }}
+            onClose={() => setConfigTarget(null)}
+          />
+        )}
 
-          {/* Module config panel */}
-          {configTarget && configInstance && configSchema && (
-            <ModuleConfigPanel
-              instance_id={configTarget}
-              schema={configSchema}
-              inputs={configInstance.inputs}
-              composite_variables={rootDef.interface.inputs}
-              sibling_ids={graph.instances.map((i) => i.id).filter((id) => id !== configTarget)}
-              depends_on={configInstance.depends_on}
-              onSave={(inputs) => {
-                semanticDispatch({
-                  type: 'UPDATE_INPUTS',
-                  module_key,
-                  instance_id: configTarget,
-                  inputs,
-                });
-                setConfigTarget(null);
-              }}
-              onSaveDependsOn={(depends_on) => {
-                semanticDispatch({
-                  type: 'SET_DEPENDS_ON',
-                  module_key,
-                  instance_id: configTarget,
-                  depends_on,
-                });
-              }}
-              onClose={() => setConfigTarget(null)}
-            />
-          )}
+        {/* Edge config panel */}
+        {edgeConfigState && edgeSourceInst && edgeTargetInst && (
+          <EdgeConfigPanel
+            source_instance={edgeConfigState.source}
+            target_instance={edgeConfigState.target}
+            source_schema={resolveSchema(workspace, edgeSourceInst)}
+            target_schema={resolveSchema(workspace, edgeTargetInst)}
+            target_inputs={edgeTargetInst.inputs}
+            onConnect={(mapping) => {
+              semanticDispatch({
+                type: 'CONNECT',
+                module_key,
+                source_instance: edgeConfigState.source,
+                target_instance: edgeConfigState.target,
+                mapping,
+              });
+              setEdgeConfigState(null);
+            }}
+            onClose={() => setEdgeConfigState(null)}
+          />
+        )}
 
-          {/* Edge config panel */}
-          {edgeConfigState && edgeSourceInst && edgeTargetInst && (
-            <EdgeConfigPanel
-              source_instance={edgeConfigState.source}
-              target_instance={edgeConfigState.target}
-              source_schema={resolveSchema(workspace, edgeSourceInst)}
-              target_schema={resolveSchema(workspace, edgeTargetInst)}
-              target_inputs={edgeTargetInst.inputs}
-              onConnect={(mapping) => {
-                semanticDispatch({
-                  type: 'CONNECT',
-                  module_key,
-                  source_instance: edgeConfigState.source,
-                  target_instance: edgeConfigState.target,
-                  mapping,
-                });
-                setEdgeConfigState(null);
-              }}
-              onClose={() => setEdgeConfigState(null)}
-            />
-          )}
+        {/* Variables panel */}
+        {variablesPanelOpen && (
+          <VariablesPanel
+            variables={rootDef.interface.inputs}
+            all_instance_inputs={Object.fromEntries(
+              graph.instances.map((inst) => [inst.id, inst.inputs]),
+            )}
+            onSave={(variables) => {
+              semanticDispatch({
+                type: 'SET_VARIABLES',
+                module_key,
+                variables,
+              });
+              setVariablesPanelOpen(false);
+            }}
+            onClose={() => setVariablesPanelOpen(false)}
+          />
+        )}
 
-          {/* Variables panel */}
-          {variablesPanelOpen && (
-            <VariablesPanel
-              variables={rootDef.interface.inputs}
-              all_instance_inputs={Object.fromEntries(
-                graph.instances.map((inst) => [inst.id, inst.inputs]),
-              )}
-              onSave={(variables) => {
-                semanticDispatch({
-                  type: 'SET_VARIABLES',
-                  module_key,
-                  variables,
-                });
-                setVariablesPanelOpen(false);
-              }}
-              onClose={() => setVariablesPanelOpen(false)}
-            />
-          )}
+        {/* Outputs panel */}
+        {outputsPanelOpen && (
+          <OutputsPanel
+            instances={graph.instances}
+            resolveInstanceSchema={(inst) => resolveSchema(workspace, inst)}
+            output_defs={rootDef.interface.outputs}
+            exports={graph.exports.outputs}
+            onSave={(output_defs, outputs) => {
+              semanticDispatch({
+                type: 'SET_EXPORTS',
+                module_key,
+                outputs,
+                output_defs,
+              });
+              setOutputsPanelOpen(false);
+            }}
+            onClose={() => setOutputsPanelOpen(false)}
+          />
+        )}
 
-          {/* Outputs panel */}
-          {outputsPanelOpen && (
-            <OutputsPanel
-              instances={graph.instances}
-              resolveInstanceSchema={(inst) => resolveSchema(workspace, inst)}
-              output_defs={rootDef.interface.outputs}
-              exports={graph.exports.outputs}
-              onSave={(output_defs, outputs) => {
-                semanticDispatch({
-                  type: 'SET_EXPORTS',
-                  module_key,
-                  outputs,
-                  output_defs,
-                });
-                setOutputsPanelOpen(false);
-              }}
-              onClose={() => setOutputsPanelOpen(false)}
-            />
-          )}
+        {/* Terraform config panel */}
+        {terraformPanelOpen && (
+          <TerraformConfigPanel
+            terraform={rootDef.terraform}
+            onSave={(terraform) => {
+              semanticDispatch({
+                type: 'SET_TERRAFORM',
+                module_key,
+                terraform,
+              });
+              setTerraformPanelOpen(false);
+            }}
+            onClose={() => setTerraformPanelOpen(false)}
+          />
+        )}
 
-          {/* Terraform config panel */}
-          {terraformPanelOpen && (
-            <TerraformConfigPanel
-              terraform={rootDef.terraform}
-              onSave={(terraform) => {
-                semanticDispatch({
-                  type: 'SET_TERRAFORM',
-                  module_key,
-                  terraform,
-                });
-                setTerraformPanelOpen(false);
-              }}
-              onClose={() => setTerraformPanelOpen(false)}
-            />
-          )}
+        {/* Providers panel */}
+        {providersPanelOpen && (
+          <ProvidersPanel
+            providers={rootDef.providers}
+            onSave={(providers) => {
+              semanticDispatch({
+                type: 'SET_PROVIDERS',
+                module_key,
+                providers,
+              });
+              setProvidersPanelOpen(false);
+            }}
+            onClose={() => setProvidersPanelOpen(false)}
+          />
+        )}
 
-          {/* Providers panel */}
-          {providersPanelOpen && (
-            <ProvidersPanel
-              providers={rootDef.providers}
-              onSave={(providers) => {
-                semanticDispatch({
-                  type: 'SET_PROVIDERS',
-                  module_key,
-                  providers,
-                });
-                setProvidersPanelOpen(false);
-              }}
-              onClose={() => setProvidersPanelOpen(false)}
-            />
-          )}
+        {/* Locals panel */}
+        {localsPanelOpen && (
+          <LocalsPanel
+            locals={graph.locals}
+            onSave={(locals) => {
+              semanticDispatch({
+                type: 'SET_LOCALS',
+                module_key,
+                locals,
+              });
+              setLocalsPanelOpen(false);
+            }}
+            onClose={() => setLocalsPanelOpen(false)}
+          />
+        )}
 
-          {/* Locals panel */}
-          {localsPanelOpen && (
-            <LocalsPanel
-              locals={graph.locals}
-              onSave={(locals) => {
-                semanticDispatch({
-                  type: 'SET_LOCALS',
-                  module_key,
-                  locals,
-                });
-                setLocalsPanelOpen(false);
-              }}
-              onClose={() => setLocalsPanelOpen(false)}
-            />
-          )}
-
-          {/* Environments panel */}
-          {environmentsPanelOpen && (
-            <EnvironmentsPanel
-              environments={workspace.environments}
-              environment_backends={workspace.environment_backends}
-              onSave={(environments, backends) => {
-                semanticDispatch({
-                  type: 'SET_ENVIRONMENTS',
-                  environments,
-                });
-                semanticDispatch({
-                  type: 'SET_ENVIRONMENT_BACKENDS',
-                  backends,
-                });
-                setEnvironmentsPanelOpen(false);
-              }}
-              onClose={() => setEnvironmentsPanelOpen(false)}
-            />
-          )}
-        </div>
+        {/* Environments panel */}
+        {environmentsPanelOpen && (
+          <EnvironmentsPanel
+            environments={workspace.environments}
+            environment_backends={workspace.environment_backends}
+            onSave={(environments, backends) => {
+              semanticDispatch({
+                type: 'SET_ENVIRONMENTS',
+                environments,
+              });
+              semanticDispatch({
+                type: 'SET_ENVIRONMENT_BACKENDS',
+                backends,
+              });
+              setEnvironmentsPanelOpen(false);
+            }}
+            onClose={() => setEnvironmentsPanelOpen(false)}
+          />
+        )}
       </div>
     </CanvasContext.Provider>
   );
