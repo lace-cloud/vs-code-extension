@@ -138,7 +138,6 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<{ name: string; system: string; versions: any[] }>('registry/get', params);
   }
 
-  // ✅ generate
   generate(params: {
     bundle: any;
     outputDir: string;
@@ -152,7 +151,6 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<{ filesWritten?: string[]; diagnostics?: any[] }>('generate', params);
   }
 
-  // ✅ validate
   validate(params: { bundle: any }) {
     return this.call<{
       valid?: boolean;

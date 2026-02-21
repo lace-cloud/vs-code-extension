@@ -32,8 +32,7 @@ import { workspaceReducer, type WorkspaceAction } from './state/reducer';
 import { CanvasContext, type CanvasCallbacks } from './state/context';
 import { deriveEdges } from './utils/derive';
 import { resolveSchema, resolveNodeType } from './utils/resolve';
-import { toBundle, fromBundle } from './utils/bundle';
-import { toTerraformIdentifier } from './utils/identifiers';
+import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
 
 // ── Node types registration ──
 
@@ -46,32 +45,6 @@ const nodeTypes = {
 
 function postToHost(msg: WebviewToHost) {
   window.vscode.postMessage(msg);
-}
-
-// ── Initial empty workspace ──
-
-function emptyWorkspace(name: string): WorkspaceState {
-  const root_id = toTerraformIdentifier(name);
-  const root_key = `${root_id}@v1.0.0`;
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: root_id, version: 'v1.0.0' },
-    modules: {
-      [root_key]: {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: root_id,
-        version: 'v1.0.0',
-        interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: { instances: [], exports: { outputs: {} } },
-        },
-      },
-    },
-    layouts: { [root_key]: { nodes: {} } },
-  };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -188,9 +161,6 @@ export default function Canvas() {
   const [validationErrors, setValidationErrors] = useState<
     Array<{ module_key?: string; instance_id?: string; message: string }>
   >([]);
-
-  // Pending drop requests: requestId → drop position
-  const pendingDrops = useRef<Record<number, { x: number; y: number }>>({});
 
   // Local position tracking (ReactFlow owns position during drag)
   const [localPositions, setLocalPositions] = useState<Record<string, { x: number; y: number }>>(
@@ -347,33 +317,6 @@ export default function Canvas() {
     [semanticDispatch],
   );
 
-  // ── Event: drop from registry sidebar ──
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const raw = e.dataTransfer.getData('application/lace-module');
-    if (!raw) return;
-
-    const mod: { name: string; system: string; version: string } = JSON.parse(raw);
-    const requestId = Date.now();
-
-    pendingDrops.current[requestId] = {
-      x: e.clientX - 320,
-      y: e.clientY - 120,
-    };
-
-    postToHost({
-      command: 'fetchModuleVersion',
-      requestId,
-      name: mod.name,
-      system: mod.system,
-      version: mod.version,
-    });
-  }, []);
-
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-  }, []);
-
   // ── Message handler: host → webview ──
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -411,9 +354,6 @@ export default function Canvas() {
         }
 
         case 'dropBundle': {
-          const dropPos = pendingDrops.current[msg.requestId];
-          delete pendingDrops.current[msg.requestId];
-
           const deployBundle: ModuleBundle = msg.deploy_bundle;
           if (!deployBundle) break;
 
@@ -430,7 +370,7 @@ export default function Canvas() {
 
           if (entryDef?.impl.kind === 'composite') {
             const instances = entryDef.impl.graph.instances;
-            const basePos = dropPos ?? { x: 100, y: 100 };
+            const basePos = { x: 100, y: 100 };
             const cols = Math.max(2, Math.ceil(Math.sqrt(instances.length)));
 
             for (let i = 0; i < instances.length; i++) {
@@ -457,15 +397,6 @@ export default function Canvas() {
             deploy_bundle: bundleForDrop,
             positions,
           });
-          break;
-        }
-
-        case 'rpcError': {
-          if (msg.requestId) {
-            delete pendingDrops.current[msg.requestId];
-          }
-          setStatusMessage(`Error: ${msg.message}`);
-          setTimeout(() => setStatusMessage(null), 5000);
           break;
         }
 
@@ -582,7 +513,7 @@ export default function Canvas() {
   // ── Render ──
   return (
     <CanvasContext.Provider value={callbacks}>
-      <div className="h-screen relative" onDrop={onDrop} onDragOver={onDragOver}>
+      <div className="h-screen relative">
         {/* Breadcrumb navigation */}
         <Breadcrumb path={breadcrumb} onNavigate={navigateTo} />
 

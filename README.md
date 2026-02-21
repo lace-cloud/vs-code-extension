@@ -1,6 +1,6 @@
 # Lace — Visual Terraform Module Composer
 
-Lace is a VS Code extension that lets you visually compose Terraform infrastructure by dragging modules from a registry onto a canvas, wiring their inputs/outputs together, and generating production-ready `.tf` files. It communicates with a Go CLI backend (`lace`) over JSON-RPC for registry access, validation, and code generation.
+Lace is a VS Code extension that lets you visually compose Terraform infrastructure by browsing modules from a registry, wiring their inputs/outputs together on a canvas, and generating production-ready `.tf` files. It communicates with a Go CLI backend (`lace`) over JSON-RPC for registry access, validation, and code generation.
 
 ![Lace canvas example](image.png)
 
@@ -20,7 +20,7 @@ npm test
 # Press F5 → opens Extension Development Host
 ```
 
-In the Extension Development Host, click the **Lace** icon in the activity bar. Create a component, drag modules from the registry sidebar onto the canvas, wire them together, configure inputs, and hit **Generate** to produce Terraform files.
+In the Extension Development Host, click the **Lace** icon in the activity bar to browse the registry sidebar. Use `Lace: Open Canvas` to start composing, add modules from the sidebar or command palette, wire them together, configure inputs, and hit **Generate** to produce Terraform files in `.lace/`.
 
 ### Prerequisites
 
@@ -39,11 +39,12 @@ The extension has two runtime halves joined by VS Code's webview messaging bridg
 │                              │       │                              │
 │  extension.ts                │ msg   │  Canvas.tsx (ReactFlow)      │
 │  createWebviewPanel.ts  ◄────┼──────►│  reducer.ts (pure state)     │
-│  persistence.ts (JSON)       │       │  bundle.ts (toBundle/from)   │
-│  ServerManager + RPC Client  │       │  panels/*.tsx (config UIs)   │
-│         │                    │       │  validate.ts (graph checks)  │
-│         │ stdin/stdout       │       │                              │
-│         ▼                    │       └──────────────────────────────┘
+│  RegistrySidebarProvider.ts  │       │  bundle.ts (toBundle/from)   │
+│  ModuleDetailPanel.ts        │       │  panels/*.tsx (config UIs)   │
+│  ServerManager + RPC Client  │       │  validate.ts (graph checks)  │
+│         │                    │       │                              │
+│         │ stdin/stdout       │       └──────────────────────────────┘
+│         ▼                    │
 │  ┌──────────────┐            │
 │  │  lace CLI    │            │
 │  │  (Go binary) │            │
@@ -54,7 +55,7 @@ The extension has two runtime halves joined by VS Code's webview messaging bridg
 ### Data Flow
 
 ```
-User action (drop, connect, rename, configure...)
+User action (add module, connect, rename, configure...)
        │
        ▼
 WorkspaceAction                   ← semantic action with module_key
@@ -65,28 +66,72 @@ workspaceReducer(state, action)   ← pure: (WorkspaceState, Action) → Workspa
        ▼
 WorkspaceState                    ← ModuleBundle & { layouts }
        │
-       ├── save ──→ JSON file in globalStorageUri
+       ├── save ──→ .lace/lace.json (version-controlled)
        ├── render ──→ deriveEdges(instances) ──→ ReactFlow nodes + edges
-       └── generate ──→ toBundle(workspace) ──→ validate ──→ generate ──→ .tf files
+       └── generate ──→ toBundle(workspace) ──→ validate ──→ generate ──→ .lace/*.tf
 ```
+
+### Persistence: The `.lace/` Directory
+
+Lace stores everything in a `.lace/` directory at the workspace root — like `.github/`, `.vscode/`, or `.husky/`:
+
+```
+my-app/
+  src/
+  .lace/
+    lace.json       ← the bundle (source of truth, version-controlled)
+    main.tf         ← generated
+    variables.tf    ← generated
+    providers.tf    ← generated
+    ...
+```
+
+`lace.json` is the bundle — the same `ModuleBundle` format used everywhere in the system. Registry modules are bundles. Your project is a bundle that composes other bundles. It's fractal — bundles all the way down.
+
+One workspace = one component. No global storage, no naming, no component lists.
+
+## UX: Two Access Patterns
+
+**Sidebar (discovery flow):** The registry sidebar is a `WebviewViewProvider` with an inline search box (like VS Code's Extensions panel). Type to filter, click a module to open its detail tab (versions, interface, inputs/outputs), then "Add to Canvas" from the detail panel.
+
+**Command palette (power user flow):** `Lace: Add Module to Canvas` opens a quick pick — select a module and it drops directly onto the canvas. No detail panel, no extra clicks.
+
+Both flows converge on the same `dropModuleToCanvas` function.
+
+## Commands
+
+| Command                           | Purpose                                               |
+| --------------------------------- | ----------------------------------------------------- |
+| `Lace: Open Canvas`               | Open (or create) the canvas for the current workspace |
+| `Lace: Add Module to Canvas`      | Quick pick → drop module onto canvas                  |
+| `Lace: Generate Terraform`        | Validate + generate `.tf` files into `.lace/`         |
+| `Lace: Terraform Validate`        | Run `lace terraform validate` on `.lace/`             |
+| `Lace: Terraform Format`          | Run `lace terraform fmt` on `.lace/`                  |
+| `Lace: Terraform Security Scan`   | Run `lace terraform scan` on `.lace/`                 |
+| `Lace: Terraform Docs`            | Run `lace terraform docs` on `.lace/`                 |
+| `Lace: Start/Stop/Restart Engine` | Manage the CLI process                                |
+
+Terraform commands open an integrated terminal and shell out to the CLI.
 
 ## Project Structure
 
 ```
 src/
-├── extension.ts                  # VS Code activation, commands, tree views
-├── persistence.ts                # JSON file store (zero native deps)
+├── extension.ts                  # VS Code activation, commands, engine lifecycle
 ├── types/
-│   └── protocol.ts               # Host↔webview typed message unions
+│   └── protocol.ts               # Host↔webview message unions, RegistryModule, Diagnostic
 ├── utilities/engine/
 │   ├── server-manager.ts         # Spawns lace CLI, manages lifecycle
 │   └── rpc-client.ts             # JSON-RPC 2.0 over stdin/stdout
-├── containers-views/             # Tree data providers (registry, components)
-├── statusbar/                    # Engine status bar item
+├── containers-views/
+│   └── RegistrySidebarProvider.ts  # WebviewViewProvider with inline search
 └── webview/
     ├── index.tsx                  # React entry point
     ├── App.tsx                    # ReactFlowProvider wrapper
     ├── Canvas.tsx                 # Main canvas: nodes, edges, panels, toolbar
+    ├── ModuleDetailPanel.ts       # Extensions-style module detail tab
+    ├── createWebviewPanel.ts      # Host-side: .lace/ persistence, validation, generate
+    ├── getWebviewContent.ts       # HTML shell + toolbar buttons
     ├── state/
     │   ├── reducer.ts             # Pure reducer: 16 action types
     │   └── context.ts             # CanvasContext for node↔canvas communication
@@ -94,7 +139,7 @@ src/
     │   ├── ir.ts                  # Core IR types matching Go wire format exactly
     │   └── workspace.ts           # WorkspaceState = ModuleBundle & { layouts }
     ├── utils/
-    │   ├── bundle.ts              # toBundle / fromBundle boundary functions
+    │   ├── bundle.ts              # toBundle / fromBundle / emptyWorkspace
     │   ├── derive.ts              # Derive edges + wires from out bindings
     │   ├── validate.ts            # Graph validation (duplicates, dangling refs)
     │   ├── resolve.ts             # Schema resolution for instances
@@ -104,32 +149,12 @@ src/
     │   ├── nodes/
     │   │   ├── ModuleNode.tsx     # Leaf module node (with error highlighting)
     │   │   └── CompositeNode.tsx  # Composite node (double-click to navigate in)
-    │   ├── panels/
-    │   │   ├── ModuleConfigPanel.tsx      # Instance inputs + depends_on
-    │   │   ├── EdgeConfigPanel.tsx        # Wire binding configuration
-    │   │   ├── VariablesPanel.tsx         # Composite input interface
-    │   │   ├── OutputsPanel.tsx           # Composite output exports
-    │   │   ├── TerraformConfigPanel.tsx   # required_version, providers, backend
-    │   │   ├── ProvidersPanel.tsx         # Provider blocks with aliases
-    │   │   ├── LocalsPanel.tsx            # Locals with literal/expression modes
-    │   │   └── EnvironmentsPanel.tsx      # Per-env variables + backends
-    │   ├── sidebars/
-    │   │   └── RegistrySidebar.tsx        # Module search + drag source
-    │   ├── Breadcrumb.tsx                 # Composite navigation breadcrumb
-    │   └── ErrorBoundary.tsx              # React error boundary
-    ├── getWebviewContent.ts       # HTML shell + toolbar buttons
-    ├── createWebviewPanel.ts      # Host-side message handler + validation flow
+    │   ├── panels/                # 8 config panels (inputs, edges, variables, etc.)
+    │   ├── Breadcrumb.tsx         # Composite navigation breadcrumb
+    │   └── ErrorBoundary.tsx      # React error boundary
     └── __tests__/
         ├── fixtures/              # Real CLI bundle snapshots
-        ├── bundle.test.ts         # toBundle/fromBundle round-trip
-        ├── reducer.test.ts        # Core editing, interface, and grouping actions
-        ├── phase4.test.ts         # Terraform config actions + integration
-        ├── validate.test.ts       # Graph validation scenarios
-        ├── grouping.test.ts       # GROUP_INTO_COMPOSITE edge cases
-        ├── derive.test.ts         # Edge/wire derivation
-        ├── normalize.test.ts      # Binding normalization
-        ├── identifiers.test.ts    # Identifier validation/collision
-        └── scaffold.test.ts       # Empty workspace scaffold
+        └── *.test.ts              # 9 test suites, 95 tests
 ```
 
 ## Core Concepts
@@ -144,102 +169,30 @@ The wire format exchanged between the extension and CLI. A `ModuleBundle` contai
 
 ### Binding System
 
-Every instance input is a discriminated union — exactly one variant is set:
-
-| Variant | Shape                              | Meaning                                |
-| ------- | ---------------------------------- | -------------------------------------- |
-| `lit`   | `{ lit: any }`                     | Literal value (string, number, object) |
-| `var`   | `{ var: "name" }`                  | Reference to a composite variable      |
-| `out`   | `{ out: { module, name } }`        | Output of a sibling instance           |
-| `expr`  | `{ expr: { lang: "hcl", value } }` | Raw HCL expression                     |
-
-### Instance Types
-
-Instances are discriminated by `kind`: `module` (references another `ModuleDef` via `use`), `resource` (Terraform resource), or `data` (Terraform data source).
+Every instance input is a discriminated union — exactly one variant is set: `lit` (literal value), `var` (composite variable reference), `out` (sibling output reference), or `expr` (raw HCL expression).
 
 ### Wires
 
 Wires are **never stored** in workspace state. They are derived from `out` bindings in `toBundle()` and stripped by `fromBundle()`. This is a core invariant.
 
-## Reducer Actions
-
-All state transitions go through a pure reducer: `(WorkspaceState, WorkspaceAction) → WorkspaceState`.
-
-| Action                     | Category  | Purpose                                              |
-| -------------------------- | --------- | ---------------------------------------------------- |
-| `DROP_BUNDLE`              | Core      | Merge registry module into active composite          |
-| `CONNECT`                  | Core      | Wire source output → target input                    |
-| `DISCONNECT`               | Core      | Remove an input binding                              |
-| `UPDATE_INPUTS`            | Core      | Bulk-update instance inputs                          |
-| `RENAME_INSTANCE`          | Core      | Rename with cascade to bindings, exports, depends_on |
-| `DELETE_INSTANCE`          | Core      | Remove instance + clean up all references            |
-| `SYNC_LAYOUT`              | Core      | Bulk-update node positions (drag-end)                |
-| `LOAD_WORKSPACE`           | Core      | Replace entire state (initial load)                  |
-| `SET_VARIABLES`            | Interface | Edit composite input interface                       |
-| `SET_EXPORTS`              | Interface | Edit composite output exports                        |
-| `GROUP_INTO_COMPOSITE`     | Grouping  | Extract instances into a new nested composite        |
-| `SET_TERRAFORM`            | Terraform | Set terraform block (version, providers, backend)    |
-| `SET_PROVIDERS`            | Terraform | Set provider configurations                          |
-| `SET_LOCALS`               | Terraform | Set local value definitions                          |
-| `SET_DEPENDS_ON`           | Terraform | Set explicit dependencies on an instance             |
-| `SET_ENVIRONMENTS`         | Terraform | Set per-environment variable overrides               |
-| `SET_ENVIRONMENT_BACKENDS` | Terraform | Set per-environment backend configs                  |
-
-## Validation
-
-Two validation layers run before code generation:
-
-1. **Graph validation** (instant, local) — `validateWorkspace()` checks for duplicate IDs, dangling `out` bindings, dangling `depends_on`, unknown `use` references, and dangling export references. Errors highlight affected nodes with red borders and tooltips.
-
-2. **Terraform validation** (RPC) — The CLI's `validate` endpoint checks bundle structure and returns structured diagnostics. Only `severity: "error"` diagnostics abort generation.
-
-## Generated Output
-
-The CLI produces a complete Terraform project:
-
-```
-generate-{component}/
-├── main.tf              # Module blocks for each instance
-├── variables.tf         # Input variable declarations
-├── outputs.tf           # Output value declarations
-├── versions.tf          # required_version + required_providers
-├── backend.tf           # Backend configuration
-├── providers.tf         # Provider blocks (with aliases)
-├── locals.tf            # Local value definitions
-├── module.meta.json     # Instance → module mappings
-└── envs/
-    ├── dev/
-    │   ├── main.tf          # module "root" { source = "../../" }
-    │   ├── dev.tfvars       # Environment-specific values
-    │   ├── variables.tf     # Variables (no defaults)
-    │   └── backend.tf       # Environment-specific backend
-    └── prod/
-        ├── main.tf
-        ├── prod.tfvars
-        ├── variables.tf
-        └── backend.tf
-```
-
 ## Testing
 
 ```bash
-npm test              # Run all 90 tests
+npm test              # Run all 95 tests
 npm run test:watch    # Watch mode
 ```
 
-Test suites cover the entire logic layer without requiring React or VS Code:
-
-| Suite                 | Tests | Coverage                                                           |
-| --------------------- | ----- | ------------------------------------------------------------------ |
-| `bundle.test.ts`      | 7     | `toBundle`/`fromBundle` round-trip, boundary errors                |
-| `reducer.test.ts`     | 26    | Core editing, interface, and grouping actions                      |
-| `phase4.test.ts`      | 18    | Terraform config actions, full bundle round-trip, integration flow |
-| `validate.test.ts`    | 6     | Duplicate IDs, dangling refs, depends_on with `module.` prefix     |
-| `grouping.test.ts`    | 13    | `GROUP_INTO_COMPOSITE` with cross-boundary wires, exports          |
-| `derive.test.ts`      | 4     | Edge/wire derivation from out bindings                             |
-| `normalize.test.ts`   | 7     | Binding normalization for all 4 variants                           |
-| `identifiers.test.ts` | 8     | Terraform identifier validation, collision handling                |
-| `scaffold.test.ts`    | 1     | Empty workspace construction                                       |
+| Suite                      | Tests | Coverage                                            |
+| -------------------------- | ----- | --------------------------------------------------- |
+| `reducer.test.ts`          | 26    | Core editing, interface, and grouping actions       |
+| `terraform-config.test.ts` | 18    | Terraform config actions, full bundle round-trip    |
+| `grouping.test.ts`         | 13    | `GROUP_INTO_COMPOSITE` with cross-boundary wires    |
+| `identifiers.test.ts`      | 8     | Terraform identifier validation/collision           |
+| `bundle.test.ts`           | 7     | `toBundle`/`fromBundle` round-trip, boundary errors |
+| `normalize.test.ts`        | 7     | Binding normalization for all 4 variants            |
+| `validate.test.ts`         | 6     | Duplicate IDs, dangling refs, depends_on            |
+| `scaffold.test.ts`         | 6     | `emptyWorkspace` factory + round-trip fidelity      |
+| `derive.test.ts`           | 4     | Edge/wire derivation from out bindings              |
 
 ## Configuration
 
@@ -253,6 +206,6 @@ Test suites cover the entire logic layer without requiring React or VS Code:
 
 - **Bundler**: [Rspack](https://rspack.dev/) with two entries — `extension.ts` (Node.js target) and `webview/index.tsx` (browser target)
 - **Styling**: Tailwind CSS v4 via PostCSS
-- **TypeScript**: Strict mode, `noUnusedLocals`, `noUnusedParameters`
+- **TypeScript**: Strict mode
 - **Test runner**: Vitest
 - **Formatting**: Prettier (enforced via lint-staged + Husky)

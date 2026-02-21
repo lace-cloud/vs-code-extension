@@ -5,9 +5,8 @@ import fs from 'fs';
 
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
-import { fromBundle, type LayoutHints } from './utils/bundle';
+import { fromBundle, emptyWorkspace, type LayoutHints } from './utils/bundle';
 import { validateWorkspace } from './utils/validate';
-import { toTerraformIdentifier } from './utils/identifiers';
 import type { WorkspaceState } from './types/workspace';
 import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol';
 
@@ -37,7 +36,6 @@ export function addModuleToActiveCanvas(deploy_bundle: any) {
   }
   postToWebview(canvasPanel, {
     command: 'dropBundle',
-    requestId: Date.now(),
     deploy_bundle,
   });
 }
@@ -86,32 +84,6 @@ function writeLaceJson(laceDir: string, state: WorkspaceState): void {
   ensureLaceDir(laceDir);
   const filePath = path.join(laceDir, LACE_FILE);
   fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
-}
-
-/* ── Empty workspace factory ── */
-
-function emptyWorkspace(folderName: string): WorkspaceState {
-  const root_id = toTerraformIdentifier(folderName);
-  const root_key = `${root_id}@v1.0.0`;
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: root_id, version: 'v1.0.0' },
-    modules: {
-      [root_key]: {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: root_id,
-        version: 'v1.0.0',
-        interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: { instances: [], exports: { outputs: {} } },
-        },
-      },
-    },
-    layouts: { [root_key]: { nodes: {} } },
-  };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -192,36 +164,6 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           const state = (msg as any).state as WorkspaceState;
           writeLaceJson(laceDir, state);
           panel.title = `Lace · ${folderName}`;
-          break;
-        }
-
-        // ── fetchModuleVersion: RPC → deploy_bundle → webview ──
-        case 'fetchModuleVersion': {
-          const m = msg as Extract<WebviewToHost, { command: 'fetchModuleVersion' }>;
-          try {
-            const response = await server.rpcClient?.getRegistryVersion({
-              name: m.name,
-              system: m.system,
-              version: m.version,
-            });
-
-            const deploy_bundle = response?.deploy_bundle;
-            if (!deploy_bundle) {
-              throw new Error('No deploy_bundle in registry/version response');
-            }
-
-            postToWebview(panel, {
-              command: 'dropBundle',
-              requestId: m.requestId,
-              deploy_bundle,
-            });
-          } catch (err: any) {
-            postToWebview(panel, {
-              command: 'rpcError',
-              requestId: m.requestId,
-              message: err.message,
-            });
-          }
           break;
         }
 

@@ -1,7 +1,7 @@
 // src/webview/ModuleDetailPanel.ts
 import * as vscode from 'vscode';
 import type { JSONRPCClient } from '../utilities/engine/rpc-client';
-import type { RegistryModule } from '../containers-views/RegistryBrowserProvider';
+import type { RegistryModule } from '../types/protocol';
 
 const activePanels = new Map<string, vscode.WebviewPanel>();
 

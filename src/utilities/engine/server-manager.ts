@@ -13,16 +13,12 @@ export class ServerManager extends EventEmitter {
   private restartCount = 0;
   private readonly maxRestarts = 3;
 
-  constructor(private readonly context: vscode.ExtensionContext) {
-    super(); // ✅ NO arguments here
+  constructor() {
+    super();
   }
 
   get rpcClient(): JSONRPCClient | null {
     return this.client;
-  }
-
-  get currentState(): ServerState {
-    return this.state;
   }
 
   async start(): Promise<void> {
@@ -37,14 +33,11 @@ export class ServerManager extends EventEmitter {
       .get<string>('binaryPath', '/usr/local/bin/lace');
 
     try {
-      console.log(`--------Binary Path-----${binaryPath}`);
       this.process = spawn(binaryPath, ['module', 'serve'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-      //   console.log(`-------this process-----${this.process}`);
-
-      this.process.stderr?.on('data', (d) => console.log('[lace]', d.toString()));
+      this.process.stderr?.on('data', (d) => console.warn('[lace]', d.toString()));
 
       this.process.on('exit', (code) => {
         this.setState('stopped');
@@ -83,7 +76,7 @@ export class ServerManager extends EventEmitter {
   }
 
   dispose(): void {
-    this.stop(); // ✅ REQUIRED to fix "dispose does not exist"
+    this.stop();
   }
 
   private setState(state: ServerState): void {

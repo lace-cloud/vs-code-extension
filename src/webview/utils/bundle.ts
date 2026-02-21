@@ -12,6 +12,7 @@ import type {
 import type { WorkspaceState, GraphLayout } from '../types/workspace';
 import { mapRecord } from './record';
 import { deriveWires } from './derive';
+import { toTerraformIdentifier } from './identifiers';
 
 // ── Layout Hints ──
 
@@ -245,4 +246,30 @@ export function computeLayout(
   }
 
   return { nodes };
+}
+
+// ── Empty workspace factory ──
+
+export function emptyWorkspace(name: string): WorkspaceState {
+  const root_id = toTerraformIdentifier(name);
+  const root_key = `${root_id}@v1.0.0`;
+  return {
+    schema_version: '1.0',
+    kind: 'module_bundle',
+    entry: { module_id: root_id, version: 'v1.0.0' },
+    modules: {
+      [root_key]: {
+        schema_version: '1.0',
+        kind: 'module_def',
+        id: root_id,
+        version: 'v1.0.0',
+        interface: { inputs: [], outputs: [] },
+        impl: {
+          kind: 'composite',
+          graph: { instances: [], exports: { outputs: {} } },
+        },
+      },
+    },
+    layouts: { [root_key]: { nodes: {} } },
+  };
 }

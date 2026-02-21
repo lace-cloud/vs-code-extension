@@ -27,7 +27,8 @@
       "laceContainer": [
         {
           "id": "laceRegistry",
-          "name": "Registry"
+          "name": "Registry",
+          "type": "webview"
         }
       ]
     },
@@ -48,20 +49,6 @@
         "command": "lace.refreshRegistry",
         "title": "Refresh Registry",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "lace.searchRegistry",
-        "title": "Search Registry",
-        "icon": "$(search)"
-      },
-      {
-        "command": "lace.addModuleToCanvas",
-        "title": "Add to Canvas",
-        "icon": "$(add)"
-      },
-      {
-        "command": "lace.showModuleDetail",
-        "title": "Show Module Detail"
       },
       {
         "command": "lace.startEngine",
@@ -116,18 +103,6 @@
           "command": "lace.refreshRegistry",
           "when": "view == laceRegistry",
           "group": "navigation"
-        },
-        {
-          "command": "lace.searchRegistry",
-          "when": "view == laceRegistry",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "lace.addModuleToCanvas",
-          "when": "view == laceRegistry && viewItem == registryModule",
-          "group": "inline"
         }
       ]
     }

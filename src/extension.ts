@@ -1,12 +1,9 @@
 // src/extension.ts
 import * as vscode from 'vscode';
 
-import {
-  RegistryBrowserProvider,
-  type RegistryModule,
-} from './containers-views/RegistryBrowserProvider';
+import { RegistrySidebarProvider } from './containers-views/RegistrySidebarProvider';
+import type { RegistryModule } from './types/protocol';
 
-import { updateStatusBar } from './statusbar/UpdateStatusBar';
 import { showModuleDetail } from './webview/ModuleDetailPanel';
 
 import {
@@ -25,7 +22,7 @@ import { ServerManager } from './utilities/engine/server-manager';
 
 let server: ServerManager | undefined;
 let engineStatusBar: vscode.StatusBarItem | undefined;
-let registryProvider: RegistryBrowserProvider | undefined;
+let registryProvider: RegistrySidebarProvider | undefined;
 
 /* ---------------------------------- */
 /* UI Helpers                         */
@@ -74,15 +71,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
   /* ---------- Registry Browser (sidebar) ---------- */
 
-  registryProvider = new RegistryBrowserProvider();
+  registryProvider = new RegistrySidebarProvider();
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('laceRegistry', registryProvider),
+    vscode.window.registerWebviewViewProvider(RegistrySidebarProvider.viewType, registryProvider),
   );
 
   /* ---------- Lace Engine ---------- */
 
-  server = new ServerManager(context);
+  server = new ServerManager();
 
   engineStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(engineStatusBar);
@@ -105,10 +102,6 @@ export async function activate(context: vscode.ExtensionContext) {
       vscode.window.showErrorMessage(`Failed to start Lace engine: ${err.message}`);
     });
   }
-
-  /* ---------- Status Bar ---------- */
-
-  updateStatusBar();
 
   /* ---------- Commands ---------- */
 
@@ -133,33 +126,7 @@ export async function activate(context: vscode.ExtensionContext) {
       registryProvider?.refresh();
     }),
 
-    // ── Registry: search ──
-    vscode.commands.registerCommand('lace.searchRegistry', async () => {
-      const modules = registryProvider?.getModules() ?? [];
-      if (modules.length === 0) {
-        vscode.window.showWarningMessage('Registry is empty. Is the Lace engine running?');
-        return;
-      }
-
-      const items = modules.map((m) => ({
-        label: `$(symbol-module) ${m.name}`,
-        description: `v${m.version} · ${m.system}`,
-        detail: m.categories?.length ? m.categories.join(', ') : undefined,
-        module: m,
-      }));
-
-      const pick = await vscode.window.showQuickPick(items, {
-        placeHolder: 'Search registry modules...',
-        matchOnDescription: true,
-        matchOnDetail: true,
-      });
-
-      if (pick) {
-        showModuleDetail(pick.module, server?.rpcClient ?? null, addModuleToActiveCanvas);
-      }
-    }),
-
-    // ── Registry: click module in tree → detail panel ──
+    // ── Registry: click module in sidebar → detail panel ──
     vscode.commands.registerCommand('lace.showModuleDetail', (mod: RegistryModule) => {
       showModuleDetail(mod, server?.rpcClient ?? null, addModuleToActiveCanvas);
     }),
