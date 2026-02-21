@@ -17,6 +17,10 @@ import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
 import VariablesPanel from './components/panels/VariablesPanel';
 import OutputsPanel from './components/panels/OutputsPanel';
+import TerraformConfigPanel from './components/panels/TerraformConfigPanel';
+import ProvidersPanel from './components/panels/ProvidersPanel';
+import LocalsPanel from './components/panels/LocalsPanel';
+import EnvironmentsPanel from './components/panels/EnvironmentsPanel';
 import Breadcrumb from './components/Breadcrumb';
 import RegistrySidebar, {
   type RegistryModule,
@@ -106,6 +110,13 @@ export default function Canvas() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [variablesPanelOpen, setVariablesPanelOpen] = useState(false);
   const [outputsPanelOpen, setOutputsPanelOpen] = useState(false);
+  const [terraformPanelOpen, setTerraformPanelOpen] = useState(false);
+  const [providersPanelOpen, setProvidersPanelOpen] = useState(false);
+  const [localsPanelOpen, setLocalsPanelOpen] = useState(false);
+  const [environmentsPanelOpen, setEnvironmentsPanelOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<
+    Array<{ module_key?: string; instance_id?: string; message: string }>
+  >([]);
 
   // Pending drop requests: requestId → drop position
   const pendingDrops = useRef<Record<number, { x: number; y: number }>>({});
@@ -205,13 +216,23 @@ export default function Canvas() {
   // ── Derive ReactFlow nodes ──
   const rfNodes: Node[] = useMemo(
     () =>
-      graph.instances.map((inst) => ({
-        id: inst.id,
-        type: resolveNodeType(workspace, inst),
-        position: localPositions[inst.id] ?? layout?.nodes[inst.id]?.position ?? { x: 0, y: 0 },
-        data: { instance: inst, schema: resolveSchema(workspace, inst) },
-      })),
-    [graph.instances, layout, workspace, localPositions],
+      graph.instances.map((inst) => {
+        const nodeErrors = validationErrors.filter(
+          (e) => e.instance_id === inst.id && e.module_key === module_key,
+        );
+        return {
+          id: inst.id,
+          type: resolveNodeType(workspace, inst),
+          position: localPositions[inst.id] ?? layout?.nodes[inst.id]?.position ?? { x: 0, y: 0 },
+          data: {
+            instance: inst,
+            schema: resolveSchema(workspace, inst),
+            hasErrors: nodeErrors.length > 0,
+            errorMessages: nodeErrors.map((e) => e.message),
+          },
+        };
+      }),
+    [graph.instances, layout, workspace, localPositions, validationErrors, module_key],
   );
 
   // ── Derive ReactFlow edges ──
@@ -441,6 +462,10 @@ export default function Canvas() {
         case 'triggerVariables': {
           setVariablesPanelOpen(true);
           setOutputsPanelOpen(false);
+          setTerraformPanelOpen(false);
+          setProvidersPanelOpen(false);
+          setLocalsPanelOpen(false);
+          setEnvironmentsPanelOpen(false);
           setConfigTarget(null);
           break;
         }
@@ -448,7 +473,64 @@ export default function Canvas() {
         case 'triggerOutputs': {
           setOutputsPanelOpen(true);
           setVariablesPanelOpen(false);
+          setTerraformPanelOpen(false);
+          setProvidersPanelOpen(false);
+          setLocalsPanelOpen(false);
+          setEnvironmentsPanelOpen(false);
           setConfigTarget(null);
+          break;
+        }
+
+        case 'triggerTerraformConfig': {
+          setTerraformPanelOpen(true);
+          setVariablesPanelOpen(false);
+          setOutputsPanelOpen(false);
+          setProvidersPanelOpen(false);
+          setLocalsPanelOpen(false);
+          setEnvironmentsPanelOpen(false);
+          setConfigTarget(null);
+          break;
+        }
+
+        case 'triggerProviders': {
+          setProvidersPanelOpen(true);
+          setVariablesPanelOpen(false);
+          setOutputsPanelOpen(false);
+          setTerraformPanelOpen(false);
+          setLocalsPanelOpen(false);
+          setEnvironmentsPanelOpen(false);
+          setConfigTarget(null);
+          break;
+        }
+
+        case 'triggerLocals': {
+          setLocalsPanelOpen(true);
+          setVariablesPanelOpen(false);
+          setOutputsPanelOpen(false);
+          setTerraformPanelOpen(false);
+          setProvidersPanelOpen(false);
+          setEnvironmentsPanelOpen(false);
+          setConfigTarget(null);
+          break;
+        }
+
+        case 'triggerEnvironments': {
+          setEnvironmentsPanelOpen(true);
+          setVariablesPanelOpen(false);
+          setOutputsPanelOpen(false);
+          setTerraformPanelOpen(false);
+          setProvidersPanelOpen(false);
+          setLocalsPanelOpen(false);
+          setConfigTarget(null);
+          break;
+        }
+
+        case 'validationErrors': {
+          setValidationErrors(msg.errors ?? []);
+          if (msg.errors?.length > 0) {
+            setStatusMessage(`Validation: ${msg.errors.length} error(s) found`);
+            setTimeout(() => setStatusMessage(null), 5000);
+          }
           break;
         }
       }
@@ -514,6 +596,8 @@ export default function Canvas() {
               schema={configSchema}
               inputs={configInstance.inputs}
               composite_variables={rootDef.interface.inputs}
+              sibling_ids={graph.instances.map((i) => i.id).filter((id) => id !== configTarget)}
+              depends_on={configInstance.depends_on}
               onSave={(inputs) => {
                 semanticDispatch({
                   type: 'UPDATE_INPUTS',
@@ -522,6 +606,14 @@ export default function Canvas() {
                   inputs,
                 });
                 setConfigTarget(null);
+              }}
+              onSaveDependsOn={(depends_on) => {
+                semanticDispatch({
+                  type: 'SET_DEPENDS_ON',
+                  module_key,
+                  instance_id: configTarget,
+                  depends_on,
+                });
               }}
               onClose={() => setConfigTarget(null)}
             />
@@ -585,6 +677,74 @@ export default function Canvas() {
                 setOutputsPanelOpen(false);
               }}
               onClose={() => setOutputsPanelOpen(false)}
+            />
+          )}
+
+          {/* Terraform config panel */}
+          {terraformPanelOpen && (
+            <TerraformConfigPanel
+              terraform={rootDef.terraform}
+              onSave={(terraform) => {
+                semanticDispatch({
+                  type: 'SET_TERRAFORM',
+                  module_key,
+                  terraform,
+                });
+                setTerraformPanelOpen(false);
+              }}
+              onClose={() => setTerraformPanelOpen(false)}
+            />
+          )}
+
+          {/* Providers panel */}
+          {providersPanelOpen && (
+            <ProvidersPanel
+              providers={rootDef.providers}
+              onSave={(providers) => {
+                semanticDispatch({
+                  type: 'SET_PROVIDERS',
+                  module_key,
+                  providers,
+                });
+                setProvidersPanelOpen(false);
+              }}
+              onClose={() => setProvidersPanelOpen(false)}
+            />
+          )}
+
+          {/* Locals panel */}
+          {localsPanelOpen && (
+            <LocalsPanel
+              locals={graph.locals}
+              onSave={(locals) => {
+                semanticDispatch({
+                  type: 'SET_LOCALS',
+                  module_key,
+                  locals,
+                });
+                setLocalsPanelOpen(false);
+              }}
+              onClose={() => setLocalsPanelOpen(false)}
+            />
+          )}
+
+          {/* Environments panel */}
+          {environmentsPanelOpen && (
+            <EnvironmentsPanel
+              environments={workspace.environments}
+              environment_backends={workspace.environment_backends}
+              onSave={(environments, backends) => {
+                semanticDispatch({
+                  type: 'SET_ENVIRONMENTS',
+                  environments,
+                });
+                semanticDispatch({
+                  type: 'SET_ENVIRONMENT_BACKENDS',
+                  backends,
+                });
+                setEnvironmentsPanelOpen(false);
+              }}
+              onClose={() => setEnvironmentsPanelOpen(false)}
             />
           )}
         </div>

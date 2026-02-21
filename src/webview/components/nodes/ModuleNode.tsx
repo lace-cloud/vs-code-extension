@@ -10,6 +10,8 @@ import { CanvasContext } from '../../state/context';
 export type ModuleNodeData = {
   instance: Instance;
   schema: { inputs: InputDef[]; outputs: OutputDef[] };
+  hasErrors?: boolean;
+  errorMessages?: string[];
 };
 
 // v12: NodeProps takes the full Node type, not just the data
@@ -118,7 +120,8 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   return (
     <div
       onClick={onClick}
-      className="bg-[#1e1e1e] border border-slate-400 shadow-gray-400 shadow-sm rounded-lg p-2.5 max-w-64 text-white text-center cursor-pointer relative"
+      className={`bg-[#1e1e1e] border ${data.hasErrors ? 'border-2 border-[#e5484d] shadow-[0_0_6px_rgba(229,72,77,0.4)]' : 'border border-slate-400 shadow-gray-400 shadow-sm'} rounded-lg p-2.5 max-w-64 text-white text-center cursor-pointer relative`}
+      title={data.hasErrors ? data.errorMessages?.join('\n') : undefined}
     >
       {/* Delete button */}
       <button
@@ -159,6 +162,13 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
           {badge.source} → {badge.inputName}
         </div>
       ))}
+
+      {/* Validation error indicator */}
+      {data.hasErrors && (
+        <div className="mt-1 text-[10px] text-[#e5484d] truncate">
+          ⚠ {data.errorMessages?.[0] ?? 'Validation error'}
+        </div>
+      )}
 
       <Handle id="out-right" type="source" position={Position.Right} className={handleStyle} />
       <Handle id="out-bottom" type="source" position={Position.Bottom} className={handleStyle} />

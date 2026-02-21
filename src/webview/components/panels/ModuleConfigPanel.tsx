@@ -23,7 +23,12 @@ type Props = {
   inputs: Record<string, Binding>;
   /** Composite's interface.inputs — for the Variable mode dropdown */
   composite_variables: InputDef[];
+  /** IDs of sibling instances in the same composite (for depends_on) */
+  sibling_ids: string[];
+  /** Current depends_on value */
+  depends_on: string[] | undefined;
   onSave: (inputs: Record<string, Binding>) => void;
+  onSaveDependsOn: (depends_on: string[]) => void;
   onClose: () => void;
 };
 
@@ -47,13 +52,21 @@ export default function ModuleConfigPanel({
   schema,
   inputs,
   composite_variables,
+  sibling_ids,
+  depends_on,
   onSave,
+  onSaveDependsOn,
   onClose,
 }: Props) {
   // Local state: tracks the current binding per input name
   const [localBindings, setLocalBindings] = useState<Record<string, Binding>>(() => ({
     ...inputs,
   }));
+
+  // depends_on local state
+  const [localDependsOn, setLocalDependsOn] = useState<Set<string>>(
+    () => new Set(depends_on ?? []),
+  );
 
   // Track modes explicitly so switching modes can create appropriate defaults
   const [modes, setModes] = useState<Record<string, BindingMode>>(() => {
@@ -112,6 +125,7 @@ export default function ModuleConfigPanel({
 
   const handleSave = () => {
     onSave(localBindings);
+    onSaveDependsOn([...localDependsOn]);
   };
 
   // ── Mode selector ──
@@ -338,6 +352,40 @@ export default function ModuleConfigPanel({
             </div>
             <div className="h-2.5" />
             {showOptional && optionalInputs.map(renderInputField)}
+          </>
+        )}
+
+        {/* depends_on */}
+        {sibling_ids.length > 0 && (
+          <>
+            <SectionTitle label="Depends On" style={{ marginTop: 26 }} />
+            <div className="text-[11px] opacity-60 mb-2">
+              Select sibling instances this module depends on.
+            </div>
+            {sibling_ids.map((sibId) => {
+              const depKey = `module.${sibId}`;
+              return (
+                <label
+                  key={sibId}
+                  className="flex items-center gap-2 mb-1.5 text-xs cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={localDependsOn.has(depKey)}
+                    onChange={(e) => {
+                      setLocalDependsOn((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(depKey);
+                        else next.delete(depKey);
+                        return next;
+                      });
+                    }}
+                    className="accent-[#1f6feb]"
+                  />
+                  <span className="font-mono opacity-90">{depKey}</span>
+                </label>
+              );
+            })}
           </>
         )}
 

@@ -86,10 +86,14 @@ export function getWebviewContent(
 
 <body>
   <div id="menu-bar">
-  <!-- LEFT: Variables / Outputs -->
+  <!-- LEFT: Variables / Outputs / Settings -->
   <div class="menu-left">
     <button id="variables-btn" class="toolbar-btn">Variables</button>
     <button id="outputs-btn" class="toolbar-btn">Outputs</button>
+    <button id="terraform-btn" class="toolbar-btn">Terraform</button>
+    <button id="providers-btn" class="toolbar-btn">Providers</button>
+    <button id="locals-btn" class="toolbar-btn">Locals</button>
+    <button id="environments-btn" class="toolbar-btn">Environments</button>
   </div>
 
   <!-- RIGHT: Generate -->
@@ -133,6 +137,34 @@ export function getWebviewContent(
     if (outsBtn) {
       outsBtn.addEventListener('click', () => {
         window.postMessage({ command: 'triggerOutputs' }, '*');
+      });
+    }
+
+    const tfBtn = document.getElementById('terraform-btn');
+    if (tfBtn) {
+      tfBtn.addEventListener('click', () => {
+        window.postMessage({ command: 'triggerTerraformConfig' }, '*');
+      });
+    }
+
+    const provBtn = document.getElementById('providers-btn');
+    if (provBtn) {
+      provBtn.addEventListener('click', () => {
+        window.postMessage({ command: 'triggerProviders' }, '*');
+      });
+    }
+
+    const localsBtn = document.getElementById('locals-btn');
+    if (localsBtn) {
+      localsBtn.addEventListener('click', () => {
+        window.postMessage({ command: 'triggerLocals' }, '*');
+      });
+    }
+
+    const envsBtn = document.getElementById('environments-btn');
+    if (envsBtn) {
+      envsBtn.addEventListener('click', () => {
+        window.postMessage({ command: 'triggerEnvironments' }, '*');
       });
     }
   });

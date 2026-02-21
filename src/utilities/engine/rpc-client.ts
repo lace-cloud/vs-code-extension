@@ -152,6 +152,19 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<{ filesWritten?: string[]; diagnostics?: any[] }>('generate', params);
   }
 
+  // ✅ validate (Phase 4)
+  validate(params: { bundle: any }) {
+    return this.call<{
+      diagnostics?: Array<{
+        severity: string;
+        message: string;
+        file?: string;
+        line?: number;
+        column?: number;
+      }>;
+    }>('validate', params);
+  }
+
   dispose(): void {
     this.rl?.close();
     for (const [, pending] of this.pending) {

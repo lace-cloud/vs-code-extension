@@ -7,9 +7,10 @@ import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
 import { Store } from '../persistence';
 import { fromBundle, type LayoutHints } from './utils/bundle';
+import { validateWorkspace } from './utils/validate';
 import { toTerraformIdentifier } from './utils/identifiers';
 import type { WorkspaceState } from './types/workspace';
-import type { HostToWebview, WebviewToHost } from '../types/protocol';
+import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol';
 
 const panels = new Map<string, vscode.WebviewPanel>();
 
@@ -183,7 +184,7 @@ export async function createWebviewPanel(
           break;
         }
 
-        // ── generateBundle: send to CLI for Terraform generation ──
+        // ── generateBundle: validate then send to CLI for Terraform generation ──
         case 'generateBundle': {
           const m = msg as Extract<WebviewToHost, { command: 'generateBundle' }>;
           const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -195,6 +196,48 @@ export async function createWebviewPanel(
             return;
           }
 
+          // ── Step 1: Graph validation (local, instant) ──
+          // Reconstruct workspace from the bundle to run graph validation
+          const { workspace: parsedWs } = fromBundle(m.bundle);
+          const graphErrors = validateWorkspace(parsedWs);
+          if (graphErrors.length > 0) {
+            postToWebview(panel, {
+              command: 'validationErrors',
+              errors: graphErrors,
+            });
+            postToWebview(panel, {
+              command: 'generateError',
+              message: `Graph validation failed: ${graphErrors.length} error(s)`,
+            });
+            return;
+          }
+
+          // ── Step 2: Terraform validation (RPC, may take seconds) ──
+          try {
+            const validateResult = await server.rpcClient?.validate({
+              bundle: m.bundle,
+            });
+
+            const diagnosticErrors = (validateResult?.diagnostics ?? []).filter(
+              (d: any) => d.severity === 'error',
+            );
+            if (diagnosticErrors.length > 0) {
+              postToWebview(panel, {
+                command: 'generateError',
+                message: `Terraform validation failed: ${diagnosticErrors.length} error(s)`,
+                diagnostics: diagnosticErrors as Diagnostic[],
+              });
+              return;
+            }
+          } catch (err: any) {
+            // If validate RPC is not available (older CLI), proceed with generate
+            console.warn('Terraform validate RPC failed, proceeding with generate:', err.message);
+          }
+
+          // Clear any previous validation errors on success
+          postToWebview(panel, { command: 'validationErrors', errors: [] });
+
+          // ── Step 3: Generate ──
           const workspacePath = workspaceFolder.uri.fsPath;
           const outputDir = path.join(workspacePath, `generate-${componentName}`);
 

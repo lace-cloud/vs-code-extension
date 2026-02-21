@@ -131,14 +131,19 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case 'GROUP_INTO_COMPOSITE':
       return handleGroupIntoComposite(state, action);
 
-    // ── Phase 4: stubs ──
+    // ── Phase 4 ──
     case 'SET_TERRAFORM':
+      return handleSetTerraform(state, action);
     case 'SET_PROVIDERS':
+      return handleSetProviders(state, action);
     case 'SET_LOCALS':
+      return handleSetLocals(state, action);
     case 'SET_DEPENDS_ON':
+      return handleSetDependsOn(state, action);
     case 'SET_ENVIRONMENTS':
+      return handleSetEnvironments(state, action);
     case 'SET_ENVIRONMENT_BACKENDS':
-      return state;
+      return handleSetEnvironmentBackends(state, action);
   }
 }
 
@@ -825,4 +830,94 @@ function handleGroupIntoComposite(
       [compositeKey]: { nodes: subLayoutNodes },
     },
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_TERRAFORM (Phase 4)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetTerraform(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_TERRAFORM' }>,
+): WorkspaceState {
+  const { module_key, terraform } = action;
+  const def = state.modules[module_key];
+  if (!def) return state;
+  return {
+    ...state,
+    modules: { ...state.modules, [module_key]: { ...def, terraform } },
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_PROVIDERS (Phase 4)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetProviders(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_PROVIDERS' }>,
+): WorkspaceState {
+  const { module_key, providers } = action;
+  const def = state.modules[module_key];
+  if (!def) return state;
+  return {
+    ...state,
+    modules: { ...state.modules, [module_key]: { ...def, providers } },
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_LOCALS (Phase 4)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetLocals(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_LOCALS' }>,
+): WorkspaceState {
+  const { module_key, locals } = action;
+  return updateCompositeGraph(state, module_key, (graph) => ({
+    ...graph,
+    locals: locals.length > 0 ? locals : undefined,
+  }));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_DEPENDS_ON (Phase 4)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetDependsOn(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_DEPENDS_ON' }>,
+): WorkspaceState {
+  const { module_key, instance_id, depends_on } = action;
+  return updateCompositeGraph(state, module_key, (graph) => ({
+    ...graph,
+    instances: graph.instances.map((inst) =>
+      inst.id === instance_id
+        ? { ...inst, depends_on: depends_on.length > 0 ? depends_on : undefined }
+        : inst,
+    ),
+  }));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_ENVIRONMENTS (Phase 4)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetEnvironments(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_ENVIRONMENTS' }>,
+): WorkspaceState {
+  return { ...state, environments: action.environments };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_ENVIRONMENT_BACKENDS (Phase 4)
+// ══════════════════════════════════════════════════════════════════════
+
+function handleSetEnvironmentBackends(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'SET_ENVIRONMENT_BACKENDS' }>,
+): WorkspaceState {
+  return { ...state, environment_backends: action.backends };
 }

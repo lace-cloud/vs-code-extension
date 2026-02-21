@@ -47,7 +47,9 @@ export function validateWorkspace(workspace: WorkspaceState): GraphError[] {
       // Check: depends_on entries referencing unknown instances
       if (inst.depends_on) {
         for (const dep of inst.depends_on) {
-          if (!instanceIds.has(dep)) {
+          // depends_on may use "module.NAME" format — strip prefix for lookup
+          const bareId = dep.startsWith('module.') ? dep.slice(7) : dep;
+          if (!instanceIds.has(bareId) && !instanceIds.has(dep)) {
             errors.push({
               module_key: key,
               instance_id: inst.id,

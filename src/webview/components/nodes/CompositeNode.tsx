@@ -10,6 +10,8 @@ import { CanvasContext } from '../../state/context';
 export type CompositeNodeData = {
   instance: Instance;
   schema: { inputs: InputDef[]; outputs: OutputDef[] };
+  hasErrors?: boolean;
+  errorMessages?: string[];
 };
 
 // v12: NodeProps takes the full Node type, not just the data
@@ -129,7 +131,8 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
     <div
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      className="bg-[#1e1e1e] border-2 border-[#58a6ff] shadow-[0_0_0_1px_#58a6ff] rounded-lg p-2.5 max-w-64 text-white text-center cursor-pointer relative"
+      className={`bg-[#1e1e1e] border-2 ${data.hasErrors ? 'border-[#e5484d] shadow-[0_0_6px_rgba(229,72,77,0.4)]' : 'border-[#58a6ff] shadow-[0_0_0_1px_#58a6ff]'} rounded-lg p-2.5 max-w-64 text-white text-center cursor-pointer relative`}
+      title={data.hasErrors ? data.errorMessages?.join('\n') : undefined}
     >
       {/* Delete button */}
       <button
@@ -176,6 +179,13 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
           {badge.source} → {badge.inputName}
         </div>
       ))}
+
+      {/* Validation error indicator */}
+      {data.hasErrors && (
+        <div className="mt-1 text-[10px] text-[#e5484d] truncate">
+          ⚠ {data.errorMessages?.[0] ?? 'Validation error'}
+        </div>
+      )}
 
       <Handle id="out-right" type="source" position={Position.Right} className={handleStyle} />
       <Handle id="out-bottom" type="source" position={Position.Bottom} className={handleStyle} />
