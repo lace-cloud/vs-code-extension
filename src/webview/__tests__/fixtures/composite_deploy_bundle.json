@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "kind": "module_bundle",
+  "entry": {
+    "module_id": "s3-stack",
+    "version": "v1.0.0"
+  },
+  "modules": {
+    "s3-stack@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "s3-stack",
+      "version": "v1.0.0",
+      "description": "S3 bucket with versioning and lifecycle rules",
+      "interface": {
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "bucket_arn",
+            "type": "string",
+            "description": "The ARN of the primary bucket"
+          },
+          { "name": "bucket_id", "type": "string", "description": "The name of the primary bucket" }
+        ]
+      },
+      "impl": {
+        "kind": "composite",
+        "graph": {
+          "instances": [
+            {
+              "id": "s3_bucket",
+              "use": { "module_id": "aws-s3-bucket", "version": "v1.2.0" },
+              "inputs": {
+                "bucket_name": { "lit": {} },
+                "tags": { "lit": {} },
+                "versioning_enabled": { "lit": {} },
+                "acl": { "lit": {} }
+              }
+            },
+            {
+              "id": "s3_bucket_versioning",
+              "use": { "module_id": "aws-s3-bucket-versioning", "version": "v1.0.0" },
+              "inputs": {
+                "bucket_id": { "out": { "module": "s3_bucket", "name": "id" } },
+                "enabled": { "lit": {} }
+              }
+            }
+          ],
+          "wires": [
+            {
+              "from": { "module": "s3_bucket", "port": "outputs.id" },
+              "to": { "module": "s3_bucket_versioning", "port": "inputs.bucket_id" }
+            }
+          ],
+          "exports": {
+            "outputs": {
+              "bucket_arn": { "out": { "module": "s3_bucket", "name": "arn" } },
+              "bucket_id": { "out": { "module": "s3_bucket", "name": "id" } }
+            }
+          }
+        }
+      }
+    },
+    "aws-s3-bucket@v1.2.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "aws-s3-bucket",
+      "version": "v1.2.0",
+      "description": "Creates an S3 bucket with configurable settings",
+      "interface": {
+        "inputs": [
+          {
+            "name": "bucket_name",
+            "type": "string",
+            "required": true,
+            "description": "The name of the S3 bucket"
+          },
+          { "name": "tags", "type": "map(string)", "description": "Tags to apply to the bucket" },
+          { "name": "versioning_enabled", "type": "bool", "description": "Enable versioning" },
+          { "name": "acl", "type": "string", "description": "Canned ACL to apply" }
+        ],
+        "outputs": [
+          { "name": "arn", "type": "string", "description": "The ARN of the S3 bucket" },
+          { "name": "id", "type": "string", "description": "The name of the bucket" },
+          {
+            "name": "bucket_domain_name",
+            "type": "string",
+            "description": "The bucket domain name"
+          }
+        ]
+      },
+      "impl": {
+        "kind": "leaf",
+        "source": {
+          "kind": "git",
+          "repo": "https://github.com/example/terraform-aws-s3-bucket.git",
+          "ref": "v1.2.0"
+        }
+      }
+    },
+    "aws-s3-bucket-versioning@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "aws-s3-bucket-versioning",
+      "version": "v1.0.0",
+      "description": "Configures versioning on an S3 bucket",
+      "interface": {
+        "inputs": [
+          {
+            "name": "bucket_id",
+            "type": "string",
+            "required": true,
+            "description": "The ID of the S3 bucket"
+          },
+          { "name": "enabled", "type": "bool", "description": "Whether versioning is enabled" }
+        ],
+        "outputs": [
+          {
+            "name": "versioning_id",
+            "type": "string",
+            "description": "The versioning configuration ID"
+          }
+        ]
+      },
+      "impl": {
+        "kind": "leaf",
+        "source": {
+          "kind": "git",
+          "repo": "https://github.com/example/terraform-aws-s3-versioning.git",
+          "ref": "v1.0.0"
+        }
+      }
+    }
+  }
+}
