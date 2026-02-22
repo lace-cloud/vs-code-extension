@@ -3,7 +3,7 @@
   "displayName": "lace",
   "description": "",
   "version": "0.0.1",
-  "publisher": "lace",
+  "publisher": "LaceCloudInc",
   "icon": "Lace_Logo.png",
   "engines": {
     "vscode": "^1.96.0"
