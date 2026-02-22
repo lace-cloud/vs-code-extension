@@ -9,13 +9,17 @@ A VS Code extension for visually composing Terraform modules. Users browse modul
 ## Build & Test Commands
 
 ```bash
-npm test                    # Run all 95 tests (Vitest)
-npm run test:watch          # Watch mode
+npm test                    # Run all tests: unit + E2E (Vitest)
+npm run test:unit           # Unit tests only (95 tests, no binary needed)
+npm run test:e2e            # E2E tests only (6 tests, requires lace + terraform)
+npm run test:watch          # Watch mode (unit tests)
 npm run build               # Rspack build (both host + webview)
 npx tsc --noEmit            # Type-check only (must be zero errors)
 ```
 
-Always run `npm test` after any change. All 95 tests must pass. TypeScript must compile with zero errors.
+Always run `npm run test:unit` after any change. All 95 unit tests must pass. TypeScript must compile with zero errors.
+
+E2E tests require the `lace` binary and `terraform` to be installed. They spawn a real `lace module serve` process and talk JSON-RPC. If the binary is missing, the tests fail with install instructions. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
 
 ## Critical Invariants — Do Not Break These
 
@@ -150,19 +154,21 @@ It handles the nested spread `state → modules → module → impl → graph` a
 
 ## File Organization Conventions
 
-| Layer             | Directory                                     | What goes here                                            |
-| ----------------- | --------------------------------------------- | --------------------------------------------------------- |
-| IR types          | `webview/types/ir.ts`                         | Wire format types only. Must match Go.                    |
-| Workspace types   | `webview/types/workspace.ts`                  | `WorkspaceState`, `GraphLayout`                           |
-| Protocol types    | `types/protocol.ts`                           | Message unions, shared types (RegistryModule, Diagnostic) |
-| Pure logic        | `webview/utils/`                              | bundle, derive, validate, resolve, identifiers, record    |
-| State management  | `webview/state/`                              | reducer (pure), context (React context)                   |
-| UI components     | `webview/components/`                         | nodes, panels, breadcrumb                                 |
-| Tests             | `webview/__tests__/`                          | Test files + fixtures                                     |
-| Host-side         | `webview/createWebviewPanel.ts`               | .lace/ persistence, validation flow, generate             |
-| Host-side         | `webview/ModuleDetailPanel.ts`                | Extensions-style detail tab for registry modules          |
-| Registry          | `containers-views/RegistrySidebarProvider.ts` | WebviewViewProvider with inline search                    |
-| CLI communication | `utilities/engine/`                           | ServerManager, JSONRPCClient                              |
+| Layer             | Directory                                       | What goes here                                            |
+| ----------------- | ----------------------------------------------- | --------------------------------------------------------- |
+| IR types          | `webview/types/ir.ts`                           | Wire format types only. Must match Go.                    |
+| Workspace types   | `webview/types/workspace.ts`                    | `WorkspaceState`, `GraphLayout`                           |
+| Protocol types    | `types/protocol.ts`                             | Message unions, shared types (RegistryModule, Diagnostic) |
+| Pure logic        | `webview/utils/`                                | bundle, derive, validate, resolve, identifiers, record    |
+| State management  | `webview/state/`                                | reducer (pure), context (React context)                   |
+| UI components     | `webview/components/`                           | nodes, panels, breadcrumb                                 |
+| Tests             | `webview/__tests__/`                            | Unit test files + fixtures                                |
+| E2E tests         | `webview/__tests__/e2e-rpc-integration.test.ts` | Spawns real CLI, full RPC pipeline                        |
+| CI/CD             | `.github/workflows/ci.yml`                      | GitHub Actions: unit + E2E with lace + terraform          |
+| Host-side         | `webview/createWebviewPanel.ts`                 | .lace/ persistence, validation flow, generate             |
+| Host-side         | `webview/ModuleDetailPanel.ts`                  | Extensions-style detail tab for registry modules          |
+| Registry          | `containers-views/RegistrySidebarProvider.ts`   | WebviewViewProvider with inline search                    |
+| CLI communication | `utilities/engine/`                             | ServerManager, JSONRPCClient                              |
 
 ## Host ↔ Webview Protocol
 
@@ -186,17 +192,40 @@ In `createWebviewPanel.ts`, the `generateBundle` handler runs three steps:
 
 Tests use Vitest. Fixtures are in `__tests__/fixtures/` — these are real CLI bundle snapshots.
 
+### Unit vs E2E
+
+Unit tests (`__tests__/*.test.ts` excluding `e2e-*`) are pure logic — no external processes, no filesystem, no network. They test the reducer, bundle transformations, validation, and utility functions.
+
+E2E tests (`__tests__/e2e-rpc-integration.test.ts`) spawn the real `lace module serve` binary, exercise the full JSON-RPC transport, generate files to a temp directory, and run `terraform fmt -check` to validate HCL syntax. They require the `lace` binary and `terraform` to be installed.
+
 ### Test file naming
 
-| File                       | Content                                                 |
-| -------------------------- | ------------------------------------------------------- |
-| `reducer.test.ts`          | Core editing, composite interface, and grouping actions |
-| `terraform-config.test.ts` | Terraform config actions + full integration flow        |
-| `bundle.test.ts`           | `toBundle`/`fromBundle` boundary                        |
-| `validate.test.ts`         | `validateWorkspace` checks                              |
-| `grouping.test.ts`         | `GROUP_INTO_COMPOSITE` edge cases                       |
-| `scaffold.test.ts`         | `emptyWorkspace` factory + round-trip fidelity          |
-| Other files                | Individual utility tests                                |
+| File                          | Content                                                 |
+| ----------------------------- | ------------------------------------------------------- |
+| `e2e-rpc-integration.test.ts` | E2E: spawn CLI, full RPC pipeline, generate to disk     |
+| `reducer.test.ts`             | Core editing, composite interface, and grouping actions |
+| `terraform-config.test.ts`    | Terraform config actions + full integration flow        |
+| `bundle.test.ts`              | `toBundle`/`fromBundle` boundary                        |
+| `validate.test.ts`            | `validateWorkspace` checks                              |
+| `grouping.test.ts`            | `GROUP_INTO_COMPOSITE` edge cases                       |
+| `scaffold.test.ts`            | `emptyWorkspace` factory + round-trip fidelity          |
+| Other files                   | Individual utility tests                                |
+
+### Adding E2E tests
+
+E2E tests follow this pattern:
+
+1. `spawnServer(binary)` — get a `ChildProcess` + `JSONRPCClient`
+2. `client.initialize('0.1.0')` — handshake
+3. Build workspace using `emptyWorkspace` + reducer actions
+4. `toBundle(ws)` → `client.validate({ bundle })` → `client.call('generate', ...)`
+5. Assert on RPC results and/or files written to disk
+6. `client.shutdown()` — clean exit
+7. `afterEach` kills the process and disposes the client
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to `main`/`develop`. It installs Node.js, npm dependencies, the Lace CLI binary (from `releases.lace.cloud`), and Terraform (via `hashicorp/setup-terraform@v3`), then runs unit and E2E tests in sequence.
 
 ## Common Gotchas
 

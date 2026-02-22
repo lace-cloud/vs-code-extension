@@ -25,6 +25,7 @@ In the Extension Development Host, click the **Lace** icon in the activity bar t
 - **Node.js** ≥ 18, **npm** ≥ 9
 - **VS Code** ≥ 1.96.0
 - **Lace CLI** binary (default path: `/usr/local/bin/lace`; configurable via `lace.binaryPath` setting)
+- **Terraform** (for E2E tests — `terraform fmt -check` validates generated HCL)
 - CLI authenticated via `lace login` (the extension never manages tokens)
 
 ## Architecture Overview
@@ -114,6 +115,9 @@ Terraform commands open an integrated terminal and shell out to the CLI.
 ## Project Structure
 
 ```
+.github/
+└── workflows/
+    └── ci.yml                    # CI: unit + E2E tests with lace CLI + Terraform
 src/
 ├── extension.ts                  # VS Code activation, commands, engine lifecycle
 ├── types/
@@ -152,7 +156,8 @@ src/
     │   └── ErrorBoundary.tsx      # React error boundary
     └── __tests__/
         ├── fixtures/              # Real CLI bundle snapshots
-        └── *.test.ts              # 9 test suites, 95 tests
+        ├── e2e-rpc-integration.test.ts  # E2E: spawns lace CLI, full RPC pipeline
+        └── *.test.ts              # 9 unit test suites, 95 tests
 ```
 
 ## Core Concepts
@@ -176,9 +181,15 @@ Wires are **never stored** in workspace state. They are derived from `out` bindi
 ## Testing
 
 ```bash
-npm test              # Run all 95 tests
-npm run test:watch    # Watch mode
+npm test              # Run all tests (unit + E2E)
+npm run test:unit     # Unit tests only (no binary needed)
+npm run test:e2e      # E2E tests only (requires lace binary + terraform)
+npm run test:watch    # Watch mode (unit tests)
 ```
+
+### Unit Tests (95 tests)
+
+Pure logic tests — no external dependencies. Exercises the reducer, bundle round-trips, validation, identifiers, and wire derivation.
 
 | Suite                      | Tests | Coverage                                            |
 | -------------------------- | ----- | --------------------------------------------------- |
@@ -191,6 +202,37 @@ npm run test:watch    # Watch mode
 | `validate.test.ts`         | 6     | Duplicate IDs, dangling refs, depends_on            |
 | `scaffold.test.ts`         | 6     | `emptyWorkspace` factory + round-trip fidelity      |
 | `derive.test.ts`           | 4     | Edge/wire derivation from out bindings              |
+
+### E2E Tests (6 tests)
+
+Spawn the real `lace module serve` binary, talk JSON-RPC through the actual `JSONRPCClient`, and exercise the full extension→CLI contract. The main test builds a workspace, validates over RPC, generates `.tf` files to disk, and runs `terraform fmt -check` to verify valid HCL.
+
+| Test                 | What it covers                                                       |
+| -------------------- | -------------------------------------------------------------------- |
+| Full pipeline        | workspace → validate → generate to disk → terraform fmt              |
+| Invalid bundle       | Wrong schema version + missing entry → server rejects                |
+| Dangling reference   | Instance references non-existent module → caught                     |
+| Method not found     | Unknown RPC method → transport error                                 |
+| Round-trip stability | Complex fixture → fromBundle → toBundle → validate → re-import       |
+| Duplicate drop       | Same bundle dropped twice → dedup → validate → generate all 4 blocks |
+
+**Prerequisites for E2E:**
+
+```bash
+# Install Lace CLI
+wget https://releases.lace.cloud/lace-cli-linux-amd64 -O lace
+chmod +x lace && sudo mv lace /usr/local/bin/
+
+# Terraform (for fmt -check)
+# https://developer.hashicorp.com/terraform/install
+
+# Or override binary path
+LACE_BINARY=/path/to/lace npm run test:e2e
+```
+
+## CI/CD
+
+GitHub Actions runs on push/PR to `main` and `develop` branches. The workflow installs Node.js, npm dependencies, the Lace CLI binary, and Terraform, then runs unit and E2E tests in sequence. See `.github/workflows/ci.yml`.
 
 ## Configuration
 

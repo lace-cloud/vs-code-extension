@@ -25,7 +25,8 @@
 import { describe, test, expect, beforeAll, afterEach } from 'vitest';
 import { spawn, execSync, type ChildProcess } from 'child_process';
 import { join } from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, mkdtempSync, rmSync, readdirSync } from 'fs';
+import { tmpdir } from 'os';
 
 import { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import { emptyWorkspace, fromBundle, toBundle } from '../utils/bundle';
@@ -111,7 +112,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     client = undefined;
   });
 
-  test('full pipeline: workspace → validate → generate dry-run → verify HCL', async () => {
+  test('full pipeline: workspace → validate → generate to disk → terraform fmt', async () => {
     const srv = spawnServer(binary);
     proc = srv.process;
     client = srv.client;
@@ -176,39 +177,54 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     expect(validateResult.valid).toBe(true);
     expect(validateResult.diagnostics).toHaveLength(0);
 
-    // ── 5. Generate Terraform (dry-run) over RPC ──
-    const genResult = await client.call<{
-      files?: Record<string, string>;
-      diagnostics?: any[];
-    }>('generate', {
-      bundle,
-      outputDir: '',
-      options: { dryRun: true, format: false, validate: false, overwrite: false },
-    });
+    // ── 5. Generate Terraform to disk over RPC ──
+    const outDir = mkdtempSync(join(tmpdir(), 'lace-e2e-'));
 
-    expect(genResult.diagnostics).toHaveLength(0);
-    expect(genResult.files).toBeDefined();
+    try {
+      const genResult = await client.call<{
+        filesWritten?: string[];
+        diagnostics?: any[];
+      }>('generate', {
+        bundle,
+        outputDir: outDir,
+        options: { dryRun: false, format: true, validate: false, overwrite: true },
+      });
 
-    const mainTf = genResult.files!['main.tf'];
-    expect(mainTf).toBeDefined();
+      const errors = (genResult.diagnostics ?? []).filter((d: any) => d.severity === 'error');
+      expect(errors).toHaveLength(0);
+      expect(genResult.filesWritten).toBeDefined();
+      expect(genResult.filesWritten!.length).toBeGreaterThan(0);
 
-    // Verify module blocks present
-    expect(mainTf).toContain('module "s3_bucket"');
-    expect(mainTf).toContain('module "s3_bucket_versioning"');
+      // Verify files on disk
+      const files = readdirSync(outDir);
+      expect(files).toContain('main.tf');
+      expect(files).toContain('module.meta.json');
 
-    // Verify git source from leaf def
-    expect(mainTf).toContain('git::https://github.com/example/terraform-aws-s3-bucket.git');
+      const mainTf = readFileSync(join(outDir, 'main.tf'), 'utf-8');
 
-    // Verify literal binding was serialized
-    expect(mainTf).toContain('my-production-bucket');
+      // Verify module blocks
+      expect(mainTf).toContain('module "s3_bucket"');
+      expect(mainTf).toContain('module "s3_bucket_versioning"');
 
-    // Verify out-binding became a module reference
-    expect(mainTf).toContain('module.s3_bucket.id');
+      // Verify git source from leaf def
+      expect(mainTf).toContain('git::https://github.com/example/terraform-aws-s3-bucket.git');
 
-    // module.meta.json always present in dry-run output
-    expect(genResult.files!['module.meta.json']).toBeDefined();
+      // Verify literal binding was serialized
+      expect(mainTf).toContain('my-production-bucket');
 
-    // ── 6. Shutdown ──
+      // Verify out-binding became a module reference
+      expect(mainTf).toContain('module.s3_bucket.id');
+
+      // ── 6. terraform fmt -check: verify CLI-formatted HCL is clean ──
+      // The CLI already ran `terraform fmt` via format: true above.
+      // fmt -check verifies the output is idempotent — valid, well-formatted HCL.
+      // No terraform init required.
+      execSync('terraform fmt -check', { cwd: outDir, encoding: 'utf-8' });
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+
+    // ── 7. Shutdown ──
     const shutdown = await client.shutdown();
     expect(shutdown.status).toBe('ok');
   });
