@@ -4,6 +4,10 @@
   "description": "",
   "version": "0.0.4",
   "publisher": "LaceCloudInc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lace-cloud/vs-code-extension"
+  },
   "icon": "Lace_Logo.png",
   "engines": {
     "vscode": "^1.96.0"
@@ -108,8 +112,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "vscode:prepublish": "npm run build",
+    "compile": "rspack --config rspack.config.js",
     "pretest": "npm run compile",
     "format": "prettier --write .",
     "test": "vitest run",
