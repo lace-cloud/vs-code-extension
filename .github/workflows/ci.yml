@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
     tags: ['v*']
   pull_request:
     branches: [main, develop]
@@ -54,7 +54,7 @@ jobs:
 
       - name: Verify tag is on main
         run: |
-          git branch --contains ${{ github.sha }} | grep -q '^\s*main$' || \
+          git branch -r --contains ${{ github.sha }} | grep -q 'origin/main' || \
             (echo "Tag must point to a commit on main" && exit 1)
 
       - uses: actions/setup-node@v4
