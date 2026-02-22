@@ -1,186 +1,237 @@
-
+// src/extension.ts
 import * as vscode from 'vscode';
-import { ComponentsTreeDataProvider } from './containers-views/ComponentsTreeDataProvider';
-import { TemplatesTreeDataProvider} from './containers-views/TemplatesTreeDataProvider';
-import {setAuthenticationStatus,authenticateWithLace} from './auth/AuthenticationLace';
-import {updateStatusBar} from './statusbar/UpdateStatusBar';
-import { addComponent, getComponents, removeComponent, initializeDatabase, saveCanvasState, getComponentIdByName, loadCanvasState } from './database';
-import { createWebviewPanel } from './webview/createWebviewPanel';
 
+import { RegistrySidebarProvider } from './containers-views/RegistrySidebarProvider';
+import type { RegistryModule } from './types/protocol';
 
-let componentsProvider: ComponentsTreeDataProvider | undefined;
-let templatesProvider: TemplatesTreeDataProvider | undefined;
-const panels: Map<string, vscode.WebviewPanel> = new Map();
+import { showModuleDetail } from './webview/ModuleDetailPanel';
 
-// Global state for authentication
-let isAuthenticated = false;
-let statusBarItem: vscode.StatusBarItem | undefined;
+import {
+  openCanvas,
+  addModuleToActiveCanvas,
+  triggerGenerateOnActiveCanvas,
+  getLaceDir,
+  isCanvasOpen,
+} from './webview/createWebviewPanel';
 
-// Refresh tree views for both components and templates
-function refreshTreeViews(): void {
-  if (componentsProvider) {
-    componentsProvider.refresh();
-  }
-  if (templatesProvider) {
-    templatesProvider.refresh();
-  }
+import { ServerManager } from './utilities/engine/server-manager';
+
+/* ---------------------------------- */
+/* State                              */
+/* ---------------------------------- */
+
+let server: ServerManager | undefined;
+let engineStatusBar: vscode.StatusBarItem | undefined;
+let registryProvider: RegistrySidebarProvider | undefined;
+
+/* ---------------------------------- */
+/* UI Helpers                         */
+/* ---------------------------------- */
+
+function updateEngineStatus(state: string) {
+  if (!engineStatusBar) return;
+
+  const icon =
+    {
+      stopped: '$(circle-outline)',
+      starting: '$(loading~spin)',
+      running: '$(check)',
+      error: '$(error)',
+    }[state] ?? '$(question)';
+
+  engineStatusBar.text = `${icon} Lace Engine: ${state}`;
+  engineStatusBar.show();
 }
 
-// Function to refresh UI based on authentication status
-function refreshUI(): void {
-  isAuthenticated = false; // Assume the user is signed out by default
-  vscode.authentication.getSession('github', ['read:user'], { createIfNone: false }).then(session => {
-    if (session) {
-      isAuthenticated = true;
-    }
-    setAuthenticationStatus(isAuthenticated);
-    // Update UI based on the current authentication state
-    updateStatusBar();
-    refreshTreeViews();
+/** Run a lace CLI terraform command in the integrated terminal. */
+function runTerraformCommand(subcommand: string, extraArgs: string[] = []) {
+  const laceDir = getLaceDir();
+  if (!laceDir) {
+    vscode.window.showErrorMessage('Open a folder first.');
+    return;
+  }
+
+  const binaryPath = vscode.workspace.getConfiguration('lace').get<string>('binaryPath', 'lace');
+
+  const args = ['terraform', subcommand, '--path', laceDir, ...extraArgs];
+  const terminal = vscode.window.createTerminal({
+    name: `Lace: terraform ${subcommand}`,
+    cwd: laceDir,
   });
+  terminal.show();
+  terminal.sendText(`${binaryPath} ${args.join(' ')}`);
 }
 
-// Activate Extension
+/* ---------------------------------- */
+/* Activate                           */
+/* ---------------------------------- */
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log('Lace Extension Activated');
 
-  console.log('Ensure the database schema is ready');
-  await initializeDatabase(); // Ensure the database schema is ready
+  /* ---------- Registry Browser (sidebar) ---------- */
 
-  // Assign to global variables to ensure they can be accessed in refreshTreeViews
-  componentsProvider = new ComponentsTreeDataProvider();
-  templatesProvider = new TemplatesTreeDataProvider();
+  registryProvider = new RegistrySidebarProvider();
 
-  vscode.window.registerTreeDataProvider('components', componentsProvider);
-  vscode.window.registerTreeDataProvider('templates', templatesProvider);
-
-  // Register "Connect to Lace" Command
   context.subscriptions.push(
-    vscode.commands.registerCommand('lace.connect', async () => {
-      await authenticateWithLace();
-      refreshTreeViews(); // Properly refresh tree views after authentication
-    })
+    vscode.window.registerWebviewViewProvider(RegistrySidebarProvider.viewType, registryProvider),
   );
 
-  // Command to add a component
-  context.subscriptions.push(
-    vscode.commands.registerCommand('components.addComponent', async () => {
-      if (!isAuthenticated) {
-        vscode.window.showErrorMessage('Please connect to Lace to use this feature.');
-        return;
-      }
+  /* ---------- Lace Engine ---------- */
 
-      const componentName = await vscode.window.showInputBox({
-        prompt: 'Enter the name of the new component',
-      });
+  server = new ServerManager();
 
-      if (!componentName) {
-        vscode.window.showErrorMessage('Component name cannot be empty.');
-        return;
-      }
+  engineStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  context.subscriptions.push(engineStatusBar);
 
-      try {
-        await addComponent(componentName);
-        vscode.window.showInformationMessage(`Component "${componentName}" added successfully.`);
-        componentsProvider?.refresh(); // Refresh Components view
-      } catch (error) {
-        vscode.window.showErrorMessage(`Failed to add component: ${error}`);
-      }
-    })
+  server.on('state', (state) => {
+    updateEngineStatus(state);
+
+    if (state === 'running') {
+      registryProvider?.setRpcClient(server?.rpcClient ?? null);
+      registryProvider?.refresh();
+    }
+  });
+
+  server.on('error', (err: Error) =>
+    vscode.window.showErrorMessage(`Lace Engine Error: ${err.message}`),
   );
 
-  // Command to remove a component
+  if (vscode.workspace.getConfiguration('lace').get<boolean>('autoStart', true)) {
+    server.start().catch((err) => {
+      vscode.window.showErrorMessage(`Failed to start Lace engine: ${err.message}`);
+    });
+  }
+
+  /* ---------- Commands ---------- */
+
   context.subscriptions.push(
-    vscode.commands.registerCommand('components.removeComponent', async () => {
-      if (!isAuthenticated) {
-        vscode.window.showErrorMessage('Please connect to Lace to use this feature.');
+    // ── Engine ──
+    vscode.commands.registerCommand('lace.startEngine', () => server?.start()),
+    vscode.commands.registerCommand('lace.stopEngine', () => server?.stop()),
+    vscode.commands.registerCommand('lace.restartEngine', () => server?.restart()),
+
+    // ── Canvas (single entry point) ──
+    vscode.commands.registerCommand('lace.openCanvas', async () => {
+      if (!server) {
+        vscode.window.showErrorMessage('Lace engine not initialized.');
+        return;
+      }
+      await openCanvas(context, server);
+    }),
+
+    // ── Registry: refresh ──
+    vscode.commands.registerCommand('lace.refreshRegistry', () => {
+      registryProvider?.setRpcClient(server?.rpcClient ?? null);
+      registryProvider?.refresh();
+    }),
+
+    // ── Registry: click module in sidebar → detail panel ──
+    vscode.commands.registerCommand('lace.showModuleDetail', (mod: RegistryModule) => {
+      showModuleDetail(mod, server?.rpcClient ?? null, addModuleToActiveCanvas);
+    }),
+
+    // ── Registry: inline "+" button → add to canvas ──
+    vscode.commands.registerCommand('lace.addModuleToCanvas', async (node: any) => {
+      if (!node?.module) return;
+
+      // Open canvas first if not already open
+      if (!isCanvasOpen() && server) {
+        await openCanvas(context, server);
+        // Small delay for webview to initialize
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      dropModuleToCanvas(node.module);
+    }),
+
+    // ── Command Palette: Add Module ──
+    vscode.commands.registerCommand('lace.addModule', async () => {
+      const modules = registryProvider?.getModules() ?? [];
+      if (modules.length === 0) {
+        vscode.window.showWarningMessage('Registry is empty. Is the Lace engine running?');
         return;
       }
 
-      const components = await getComponents();
-      const componentNames = components.map((comp) => comp.name);
+      const items = modules.map((m) => ({
+        label: `$(symbol-module) ${m.name}`,
+        description: `v${m.version}`,
+        detail: `${m.system} · ${m.kind}${m.categories?.length ? ' · ' + m.categories.join(', ') : ''}`,
+        module: m,
+      }));
 
-      const componentName = await vscode.window.showQuickPick(componentNames, {
-        placeHolder: 'Select a component to remove',
+      const pick = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Search modules to add...',
+        matchOnDescription: true,
+        matchOnDetail: true,
       });
 
-      if (!componentName) {
-        vscode.window.showErrorMessage('No component selected.');
-        return;
-      }
-
-      try {
-        const component = components.find((comp) => comp.name === componentName);
-        if (component) {
-          await removeComponent(component.id);
-          vscode.window.showInformationMessage(`Component "${componentName}" removed successfully.`);
-          componentsProvider?.refresh(); // Refresh Components view
-        } else {
-          vscode.window.showErrorMessage('Component not found.');
+      if (pick) {
+        // Open canvas first if not already open
+        if (!isCanvasOpen() && server) {
+          await openCanvas(context, server);
+          await new Promise((r) => setTimeout(r, 500));
         }
-      } catch (error) {
-        vscode.window.showErrorMessage(`Failed to remove component: ${error}`);
+        dropModuleToCanvas(pick.module);
       }
-    })
+    }),
+
+    // ── Command Palette: Generate Terraform ──
+    vscode.commands.registerCommand('lace.generate', () => {
+      triggerGenerateOnActiveCanvas();
+    }),
+
+    // ── Terraform commands (shell out to CLI) ──
+    vscode.commands.registerCommand('lace.terraformValidate', () => {
+      runTerraformCommand('validate');
+    }),
+
+    vscode.commands.registerCommand('lace.terraformFmt', () => {
+      runTerraformCommand('fmt');
+    }),
+
+    vscode.commands.registerCommand('lace.terraformScan', () => {
+      runTerraformCommand('scan');
+    }),
+
+    vscode.commands.registerCommand('lace.terraformDocs', () => {
+      runTerraformCommand('docs');
+    }),
   );
-
-    // Command to save the state via File > Save
-  context.subscriptions.push(
-    vscode.commands.registerCommand('workbench.action.files.save', () => {
-      const activePanel = [...panels.values()].find((panel) => panel.active);
-      if (!activePanel) {
-        vscode.window.showErrorMessage('No active component to save.');
-        return;
-      }
-
-      activePanel.webview.postMessage({ command: 'triggerSave' });
-    })
-  );
-
-  const saveAsCommand = vscode.commands.registerCommand(
-    'workbench.action.files.saveAs',
-    () => {
-      vscode.window.showErrorMessage('Save As is disabled in this workspace.');
-    }
-  );
-
-  context.subscriptions.push(saveAsCommand);
- 
-  
-
-  // Command to open a component in the playground
-  context.subscriptions.push(
-    vscode.commands.registerCommand('components.openComponent', (componentName: string) => {
-      console.log('opened the component');
-      createWebviewPanel(componentName, context);
-    })
-  );
-
-  // Listen to authentication session changes
-  vscode.authentication.onDidChangeSessions(event => {
-    if (event.provider.id === 'github') {
-      refreshUI(); // Refresh the UI based on authentication state
-    }
-  });
-
-  // Create and update the status bar item
-  updateStatusBar();
-
-  // Dispose of the status bar item when the extension is deactivated
-  context.subscriptions.push({
-    dispose: () => {
-      statusBarItem?.dispose();
-    },
-  });
-
-  // Initial UI refresh to handle authentication state at startup
-  refreshUI();
 }
 
+/* ---------------------------------- */
+/* Helper: drop module to canvas      */
+/* ---------------------------------- */
 
-// Deactivate Extension
+async function dropModuleToCanvas(mod: RegistryModule) {
+  if (!server) {
+    vscode.window.showErrorMessage('Lace engine not initialized.');
+    return;
+  }
+
+  try {
+    const response = await server.rpcClient?.getRegistryVersion({
+      name: mod.name,
+      system: mod.system,
+      version: mod.version,
+    });
+
+    const deploy_bundle = response?.deploy_bundle;
+    if (!deploy_bundle) {
+      throw new Error('No deploy_bundle in registry response');
+    }
+
+    addModuleToActiveCanvas(deploy_bundle);
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`Failed to fetch module: ${err.message}`);
+  }
+}
+
+/* ---------------------------------- */
+/* Deactivate                         */
+/* ---------------------------------- */
+
 export function deactivate() {
-  console.log('Lace Extension Deactivated.');
-  statusBarItem?.dispose();
+  server?.dispose();
 }
-

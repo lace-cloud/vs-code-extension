@@ -1,64 +1,68 @@
 :root {
-    color-scheme: light dark;
-  }
-  
-  /* Main App Container */
-  .app {
-    display: flex;
-    height: 100vh;
-    background-color: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
-  }
-  
-  /* Sidebar Styling */
-  .sidebar {
-    width: 250px;
-    padding: 10px;
-    background-color: var(--vscode-editor-widget-background);
-    color: var(--vscode-editor-foreground);
-    border-right: 1px solid var(--vscode-editorWidget-border);
-  }
-  
-  /* Icon Styling */
-  .icon {
-    display: flex;
-    align-items: center;
-    margin-bottom: 10px;
-    padding: 5px;
-    cursor: grab;
-    border-radius: 5px;
-  }
-  
-  .icon:hover {
-    background-color: var(--vscode-list-hoverBackground);
-  }
-  
-  /* Icon Image */
-  .icon-image {
-    width: 32px;
-    height: 32px;
-    margin-right: 10px;
-  }
-  
-  /* Canvas Styling */
-  .canvas {
-    flex: 1;
-    background-color: var(--vscode-editor-background);
-  }
-  
-  /* Node Label Styling */
-  .node-label {
-    display: flex;
-    align-items: center;
-    font-weight: bold;
-    color: var(--vscode-editor-foreground);
-  }
-  
-  /* Image inside Node */
-  .node-image {
-    width: 30px;
-    height: 30px;
-    margin-right: 5px;
-    border-radius: 3px;
-  }
-  
+  color-scheme: light dark;
+}
+
+/* Main App Container */
+.app {
+  display: flex;
+  height: 100vh;
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+/* Sidebar Styling */
+.sidebar {
+  width: 250px;
+  padding: 10px;
+  background-color: var(--vscode-editor-widget-background);
+  color: var(--vscode-editor-foreground);
+  border-right: 1px solid var(--vscode-editorWidget-border);
+}
+
+/* Icon Styling */
+.icon {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 5px;
+  cursor: grab;
+  border-radius: 5px;
+}
+
+.icon:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Icon Image */
+.icon-image {
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+}
+
+/* Canvas Styling */
+.canvas {
+  flex: 1;
+  background-color: var(--vscode-editor-background);
+}
+
+/* Node Label Styling */
+.node-label {
+  display: flex;
+  align-items: center;
+  font-weight: bold;
+  color: var(--vscode-editor-foreground);
+}
+
+/* Image inside Node */
+.node-image {
+  width: 30px;
+  height: 30px;
+  margin-right: 5px;
+  border-radius: 3px;
+}
+
+.react-flow__handle:hover {
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  border-color: #ffffff;
+}

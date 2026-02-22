@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "kind": "module_bundle",
+  "entry": {
+    "module_id": "deploy-aws-s3-bucket",
+    "version": "v1.2.0"
+  },
+  "modules": {
+    "deploy-aws-s3-bucket@v1.2.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "deploy-aws-s3-bucket",
+      "version": "v1.2.0",
+      "interface": {
+        "inputs": [],
+        "outputs": [
+          { "name": "arn", "type": "any", "description": "The ARN of the S3 bucket" },
+          { "name": "id", "type": "any", "description": "The name of the bucket" },
+          { "name": "bucket_domain_name", "type": "any", "description": "The bucket domain name" }
+        ]
+      },
+      "impl": {
+        "kind": "composite",
+        "graph": {
+          "instances": [
+            {
+              "id": "aws-s3-bucket",
+              "use": { "module_id": "aws-s3-bucket", "version": "v1.2.0" },
+              "inputs": {
+                "bucket_name": { "lit": {} },
+                "tags": { "lit": {} },
+                "versioning_enabled": { "lit": {} },
+                "acl": { "lit": {} }
+              }
+            }
+          ],
+          "wires": [],
+          "exports": {
+            "outputs": {
+              "arn": { "out": { "module": "aws-s3-bucket", "name": "arn" } },
+              "id": { "out": { "module": "aws-s3-bucket", "name": "id" } },
+              "bucket_domain_name": {
+                "out": { "module": "aws-s3-bucket", "name": "bucket_domain_name" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "aws-s3-bucket@v1.2.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "aws-s3-bucket",
+      "version": "v1.2.0",
+      "description": "Creates an S3 bucket with configurable settings",
+      "interface": {
+        "inputs": [
+          {
+            "name": "bucket_name",
+            "type": "string",
+            "required": true,
+            "description": "The name of the S3 bucket"
+          },
+          {
+            "name": "tags",
+            "type": "map(string)",
+            "description": "Tags to apply to the bucket",
+            "default": "{}"
+          },
+          {
+            "name": "versioning_enabled",
+            "type": "bool",
+            "description": "Enable versioning",
+            "default": "false"
+          },
+          {
+            "name": "acl",
+            "type": "string",
+            "description": "Canned ACL to apply",
+            "default": "private"
+          }
+        ],
+        "outputs": [
+          { "name": "arn", "type": "any", "description": "The ARN of the S3 bucket" },
+          { "name": "id", "type": "any", "description": "The name of the bucket" },
+          { "name": "bucket_domain_name", "type": "any", "description": "The bucket domain name" }
+        ]
+      },
+      "impl": {
+        "kind": "leaf",
+        "source": {
+          "kind": "registry",
+          "ref": "aws-s3-bucket/aws/v1.2.0"
+        }
+      }
+    }
+  }
+}

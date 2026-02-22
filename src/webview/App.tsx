@@ -1,16 +1,14 @@
 import React from 'react';
-import Sidebar from './Sidebar';
-import {Canvas} from './Canvas';
-import './App.css';
+import { ReactFlowProvider } from '@xyflow/react';
+import ErrorBoundary from './components/ErrorBoundary';
+import Canvas from './Canvas';
 
-const App: React.FC = () => {
+export default function App() {
   return (
-    <div className="app">
-      <Sidebar />
-      <Canvas />
-    </div>
+    <ErrorBoundary>
+      <ReactFlowProvider>
+        <Canvas />
+      </ReactFlowProvider>
+    </ErrorBoundary>
   );
-};
-
-export default App;
-
+}

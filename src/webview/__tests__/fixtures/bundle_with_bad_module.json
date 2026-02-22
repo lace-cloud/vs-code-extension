@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "kind": "module_bundle",
+  "entry": {
+    "module_id": "test-stack",
+    "version": "v1.0.0"
+  },
+  "modules": {
+    "test-stack@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "test-stack",
+      "version": "v1.0.0",
+      "description": "Valid composite",
+      "interface": {
+        "inputs": [],
+        "outputs": []
+      },
+      "impl": {
+        "kind": "composite",
+        "graph": {
+          "instances": [],
+          "wires": [],
+          "exports": { "outputs": {} }
+        }
+      }
+    },
+    "bad-module@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "bad-module",
+      "version": "v1.0.0",
+      "description": "Module with missing impl.kind",
+      "interface": {
+        "inputs": [],
+        "outputs": []
+      },
+      "impl": {}
+    }
+  }
+}

@@ -2,8 +2,8 @@
   "name": "lace",
   "displayName": "lace",
   "description": "",
-  "version": "0.0.1",
-  "publisher": "lace",
+  "version": "0.0.2",
+  "publisher": "LaceCloudInc",
   "icon": "Lace_Logo.png",
   "engines": {
     "vscode": "^1.96.0"
@@ -26,68 +26,82 @@
     "views": {
       "laceContainer": [
         {
-          "id": "laceView",
-          "name": "Lace"
-        },
-        {
-          "id": "components",
-          "name": "Components"
-        },
-        {
-          "id": "templates",
-          "name": "Templates"
+          "id": "laceRegistry",
+          "name": "Registry",
+          "type": "webview"
         }
       ]
     },
     "commands": [
       {
-        "command": "extension.fetchData",
-        "title": "Fetch Data"
+        "command": "lace.openCanvas",
+        "title": "Lace: Open Canvas"
       },
       {
-        "command": "terraformPlayground.openPanel",
-        "title": "Open Terraform Playground"
+        "command": "lace.addModule",
+        "title": "Lace: Add Module to Canvas"
       },
       {
-        "command": "terraformPlayground.startPlayground",
-        "title": "Start Playground"
+        "command": "lace.generate",
+        "title": "Lace: Generate Terraform"
       },
       {
-        "command": "components.addComponent",
-        "title": "Create New Component",
-        "icon": "$(add)"
+        "command": "lace.refreshRegistry",
+        "title": "Refresh Registry",
+        "icon": "$(refresh)"
       },
       {
-        "command": "components.removeComponent",
-        "title": "Delete Component",
-        "icon": "$(trash)"
+        "command": "lace.startEngine",
+        "title": "Lace: Start Engine"
       },
       {
-        "command": "components.openComponent",
-        "title": "Open Component"
+        "command": "lace.stopEngine",
+        "title": "Lace: Stop Engine"
       },
       {
-        "command": "lace.connect",
-        "title": "Connect to Lace"
+        "command": "lace.restartEngine",
+        "title": "Lace: Restart Engine"
+      },
+      {
+        "command": "lace.terraformValidate",
+        "title": "Lace: Terraform Validate"
+      },
+      {
+        "command": "lace.terraformFmt",
+        "title": "Lace: Terraform Format"
+      },
+      {
+        "command": "lace.terraformScan",
+        "title": "Lace: Terraform Security Scan"
+      },
+      {
+        "command": "lace.terraformDocs",
+        "title": "Lace: Terraform Docs"
       }
     ],
+    "configuration": {
+      "title": "Lace",
+      "properties": {
+        "lace.binaryPath": {
+          "type": "string",
+          "default": "/usr/local/bin/lace",
+          "description": "Path to the lace CLI binary"
+        },
+        "lace.autoStart": {
+          "type": "boolean",
+          "default": true
+        },
+        "lace.autoRestart": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
     "menus": {
       "view/title": [
         {
-          "command": "components.addComponent",
-          "when": "view == components",
-          "group": "navigation"
-        },
-        {
-          "command": "components.removeComponent",
-          "when": "view == components",
-          "group": "navigation"
-        }
-      ],
-      "menuBar/file": [
-        {
-          "command": "workbench.action.files.saveAs",
-          "when": "false",
+          "command": "lace.refreshRegistry",
+          "when": "view == laceRegistry",
           "group": "navigation"
         }
       ]
@@ -96,38 +110,49 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test",
+    "pretest": "npm run compile",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude 'src/webview/__tests__/e2e-*'",
+    "test:e2e": "vitest run src/webview/__tests__/e2e-*",
+    "test:watch": "vitest",
     "build": "rspack --config rspack.config.js",
     "watch": "rspack --watch --config rspack.config.js",
-    "package": "vsce package"
+    "package": "vsce package",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@rspack/cli": "^1.1.8",
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/mocha": "^10.0.10",
-    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "20.x",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/sqlite3": "^3.1.11",
     "@types/vscode": "^1.95.0",
-    "@typescript-eslint/eslint-plugin": "^8.10.0",
-    "@typescript-eslint/parser": "^8.7.0",
+    "@vitest/ui": "^3.0.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "css-loader": "^7.1.2",
-    "eslint": "^9.13.0",
     "file-loader": "^6.2.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.2.1",
+    "prettier": "^3.8.1",
     "style-loader": "^4.0.0",
+    "tailwindcss": "^4.1.18",
     "ts-loader": "^9.5.1",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^3.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,json,md}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
-    "axios": "^1.7.9",
+    "@xyflow/react": "^12.10.1",
     "react": "^18.3.1",
-    "react-flow-renderer": "^10.3.17",
-    "reactflow": "^11.11.4",
-    "sqlite3": "^5.1.7"
+    "react-dom": "^18.3.1"
   }
 }
