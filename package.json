@@ -113,6 +113,8 @@
     "pretest": "npm run compile",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:unit": "vitest run --exclude 'src/webview/__tests__/e2e-*'",
+    "test:e2e": "vitest run src/webview/__tests__/e2e-*",
     "test:watch": "vitest",
     "build": "rspack --config rspack.config.js",
     "watch": "rspack --watch --config rspack.config.js",
