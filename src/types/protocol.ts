@@ -10,7 +10,7 @@ export type HostToWebview =
   | { command: 'triggerGenerate' }
   | { command: 'generateSuccess'; files?: string[] }
   | { command: 'generateError'; message: string; diagnostics?: Diagnostic[] }
-  | { command: 'dropBundle'; deploy_bundle: ModuleBundle }
+  | { command: 'dropBundle'; deploy_bundle: ModuleBundle; icon_url?: string }
   | { command: 'validationErrors'; errors: GraphError[] };
 
 // ── Webview → Host ──
@@ -41,4 +41,5 @@ export type RegistryModule = {
   kind: 'leaf' | 'composite';
   categories?: string[];
   description?: string;
+  icon_url?: string;
 };

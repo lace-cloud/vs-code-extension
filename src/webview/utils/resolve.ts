@@ -34,3 +34,17 @@ export function resolveNodeType(workspace: WorkspaceState, inst: Instance): stri
   }
   return 'moduleNode';
 }
+
+/**
+ * Resolve the icon URL for an instance from an icon map.
+ * The icon map is keyed by module_key ("id@version").
+ * Returns undefined for non-module instances or missing entries.
+ */
+export function resolveIconUrl(
+  inst: Instance,
+  iconMap: Record<string, string>,
+): string | undefined {
+  if (!isModuleInstance(inst)) return undefined;
+  const key = `${inst.use.module_id}@${inst.use.version}`;
+  return iconMap[key];
+}

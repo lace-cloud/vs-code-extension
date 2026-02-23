@@ -29,7 +29,7 @@ export function getLaceDir(): string | undefined {
 }
 
 /** Drop a module into the active canvas. Called from sidebar/command palette. */
-export function addModuleToActiveCanvas(deploy_bundle: any) {
+export function addModuleToActiveCanvas(deploy_bundle: any, icon_url?: string) {
   if (!canvasPanel) {
     vscode.window.showWarningMessage('No canvas open. Run "Lace: Open Canvas" first.');
     return;
@@ -37,6 +37,7 @@ export function addModuleToActiveCanvas(deploy_bundle: any) {
   postToWebview(canvasPanel, {
     command: 'dropBundle',
     deploy_bundle,
+    icon_url,
   });
 }
 

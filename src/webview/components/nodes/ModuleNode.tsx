@@ -10,6 +10,7 @@ import { CanvasContext } from '../../state/context';
 export type ModuleNodeData = {
   instance: Instance;
   schema: { inputs: InputDef[]; outputs: OutputDef[] };
+  icon_url?: string;
   hasErrors?: boolean;
   errorMessages?: string[];
 };
@@ -20,7 +21,7 @@ type ModuleNodeNode = Node<ModuleNodeData, 'moduleNode'>;
 // ── Handle style ──
 
 const handleStyle =
-  'w-2.5 h-2.5 bg-transparent border-2 border-white rounded-full transition-[box-shadow,border-color] duration-150 ease-in-out';
+  'w-2.5 h-2.5 bg-transparent border-2 border-[#CEFE65] rounded-full transition-[box-shadow,border-color] duration-150 ease-in-out';
 
 // ── Component ──
 
@@ -117,10 +118,30 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [id],
   );
 
+  // ── Broken icon fallback (inline SVG) ──
+
+  const BrokenIcon = () => (
+    <svg
+      width="32"
+      height="32"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="rgba(206, 254, 101, 0.4)"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+      <line x1="2" y1="2" x2="22" y2="22" stroke="rgba(206, 254, 101, 0.3)" strokeWidth="1.5" />
+    </svg>
+  );
+
   return (
     <div
       onClick={onClick}
-      className={`bg-[#1e1e1e] border ${data.hasErrors ? 'border-2 border-[#e5484d] shadow-[0_0_6px_rgba(229,72,77,0.4)]' : 'border border-slate-400 shadow-gray-400 shadow-sm'} rounded-lg p-2.5 max-w-64 text-white text-center cursor-pointer relative`}
+      className={`bg-[#153238] border ${data.hasErrors ? 'border-2 border-[#e5484d] shadow-[0_0_6px_rgba(229,72,77,0.4)]' : 'border border-[rgba(206,254,101,0.25)]'} rounded-lg p-2.5 min-w-16 text-white text-center cursor-pointer relative`}
       title={data.hasErrors ? data.errorMessages?.join('\n') : undefined}
     >
       {/* Delete button */}
@@ -136,28 +157,48 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       <Handle id="in-top" type="target" position={Position.Top} className={handleStyle} />
       <Handle id="in-left" type="target" position={Position.Left} className={handleStyle} />
 
-      {/* Label / inline rename */}
-      {editing ? (
-        <input
-          ref={inputRef}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={onKeyDown}
-          className="bg-[#0f0f0f] text-white border border-[#555] rounded px-1 py-0.5 text-xs text-center w-full"
-          onClick={(e) => e.stopPropagation()}
-        />
-      ) : (
-        <div className="text-xs" onDoubleClick={onDoubleClick}>
-          {instance.id}
-        </div>
-      )}
+      {/* Icon + Label */}
+      <div className="flex flex-col items-center gap-1.5">
+        {data.icon_url ? (
+          <img
+            src={data.icon_url}
+            alt={instance.id}
+            className="w-8 h-8 rounded object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+        ) : null}
+        {!data.icon_url && <BrokenIcon />}
+
+        {/* Label / inline rename */}
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={onKeyDown}
+            className="bg-[#161616] text-white border border-[rgba(206,254,101,0.2)] rounded px-1 py-0.5 text-xs text-center w-full"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <div
+            className="text-[10px] text-[#CEFE65] opacity-70 max-w-24 truncate"
+            onDoubleClick={onDoubleClick}
+            title={instance.id}
+          >
+            {instance.id}
+          </div>
+        )}
+      </div>
 
       {/* Wired input badges */}
       {wiredBadges.map((badge) => (
         <div
           key={badge.inputName}
-          className="mt-1 text-[10px] bg-[#0f5132] px-1 py-0.5 rounded text-white"
+          className="mt-1 text-[10px] bg-[#161616] border border-[rgba(206,254,101,0.2)] px-1 py-0.5 rounded text-[#CEFE65]"
         >
           {badge.source} → {badge.inputName}
         </div>

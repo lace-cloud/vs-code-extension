@@ -8,7 +8,7 @@ const activePanels = new Map<string, vscode.WebviewPanel>();
 export async function showModuleDetail(
   mod: RegistryModule,
   rpcClient: JSONRPCClient | null,
-  onAddToCanvas: (deploy_bundle: any) => void,
+  onAddToCanvas: (deploy_bundle: any, icon_url?: string) => void,
 ) {
   const panelKey = `${mod.system}/${mod.name}`;
 
@@ -86,7 +86,7 @@ export async function showModuleDetail(
   // Handle messages from the webview
   panel.webview.onDidReceiveMessage((msg) => {
     if (msg.command === 'addToCanvas' && deployBundle) {
-      onAddToCanvas(deployBundle);
+      onAddToCanvas(deployBundle, mod.icon_url);
     }
   });
 }

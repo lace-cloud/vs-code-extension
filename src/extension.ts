@@ -222,7 +222,7 @@ async function dropModuleToCanvas(mod: RegistryModule) {
       throw new Error('No deploy_bundle in registry response');
     }
 
-    addModuleToActiveCanvas(deploy_bundle);
+    addModuleToActiveCanvas(deploy_bundle, mod.icon_url);
   } catch (err: any) {
     vscode.window.showErrorMessage(`Failed to fetch module: ${err.message}`);
   }

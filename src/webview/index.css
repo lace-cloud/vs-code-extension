@@ -1,1 +1,65 @@
+/* ── Lace brand tokens ──
+ * Green Yellow:   #CEFE65  (primary accent)
+ * Gunmetal:       #153238  (dark teal)
+ * Night:          #161616  (background)
+ * Non Photo Blue: #95E7FF  (secondary)
+ * Bright Grey:    #ECEFED  (secondary)
+ * Font:           Instrument Sans
+ */
+
+/* ── Layer ordering ──
+ * Tailwind v4 declares: @layer theme, base, components, utilities
+ * Preflight resets live in @layer base.
+ * ReactFlow styles go in @layer components → beats Preflight.
+ * Our overrides below are unlayered → highest cascade priority.
+ */
+
 @import 'tailwindcss';
+@import '@xyflow/react/dist/style.css' layer(components);
+
+/* ── ReactFlow overrides (unlayered — wins cascade) ── */
+
+.react-flow__handle:hover {
+  box-shadow: 0 0 6px rgba(206, 254, 101, 0.6);
+  border-color: #CEFE65;
+}
+
+.react-flow__controls {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(206, 254, 101, 0.15);
+}
+
+.react-flow__controls-button {
+  background: #153238;
+  border: none;
+  border-bottom: 1px solid rgba(206, 254, 101, 0.1);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.react-flow__controls-button:hover {
+  background: #1a3f47;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__controls-button svg {
+  fill: #CEFE65;
+  width: 14px;
+  height: 14px;
+  max-width: 14px;
+  max-height: 14px;
+}
+
+.react-flow__controls-button:hover svg {
+  fill: #e0ff8a;
+}
