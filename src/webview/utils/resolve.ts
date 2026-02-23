@@ -24,14 +24,7 @@ export function resolveSchema(workspace: WorkspaceState, inst: Instance): Resolv
   return { inputs: def.interface.inputs, outputs: def.interface.outputs };
 }
 
-export function resolveNodeType(workspace: WorkspaceState, inst: Instance): string {
-  if (!isModuleInstance(inst)) {
-    return 'moduleNode';
-  }
-  const def = resolveModuleDef(workspace, inst);
-  if (def?.impl.kind === 'composite') {
-    return 'compositeNode';
-  }
+export function resolveNodeType(_workspace: WorkspaceState, _inst: Instance): string {
   return 'moduleNode';
 }
 

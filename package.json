@@ -98,6 +98,11 @@
         "lace.autoRestart": {
           "type": "boolean",
           "default": true
+        },
+        "lace.autoSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically save canvas changes. When disabled, use Cmd+S to save manually."
         }
       }
     },

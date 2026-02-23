@@ -29,6 +29,7 @@ type Props = {
   depends_on: string[] | undefined;
   onSave: (inputs: Record<string, Binding>) => void;
   onSaveDependsOn: (depends_on: string[]) => void;
+  onDisconnect: (input_name: string) => void;
   onClose: () => void;
 };
 
@@ -56,6 +57,7 @@ export default function ModuleConfigPanel({
   depends_on,
   onSave,
   onSaveDependsOn,
+  onDisconnect,
   onClose,
 }: Props) {
   // Local state: tracks the current binding per input name
@@ -176,7 +178,7 @@ export default function ModuleConfigPanel({
         {renderModeSelector(def)}
 
         {/* Mode-specific editor */}
-        {currentMode === 'wired' && renderWiredEditor(binding)}
+        {currentMode === 'wired' && renderWiredEditor(def.name, binding)}
         {currentMode === 'variable' && renderVariableEditor(def, binding)}
         {currentMode === 'expression' && renderExpressionEditor(def, binding)}
         {currentMode === 'literal' && renderLiteralEditor(def, binding)}
@@ -186,9 +188,9 @@ export default function ModuleConfigPanel({
     );
   }
 
-  // ── Wired mode (read-only) ──
+  // ── Wired mode (read-only with disconnect button) ──
 
-  function renderWiredEditor(binding: Binding | undefined): React.ReactNode {
+  function renderWiredEditor(inputName: string, binding: Binding | undefined): React.ReactNode {
     const label =
       binding && isOut(binding) ? `${binding.out.module}.${binding.out.name}` : 'Not wired';
     return (
@@ -197,6 +199,13 @@ export default function ModuleConfigPanel({
         <span className="text-[11px] px-2.5 py-1.5 rounded-full border border-[#2b4a7a] bg-[#0b1f3a] text-[#9ecbff] font-bold whitespace-nowrap">
           Wired
         </span>
+        <button
+          onClick={() => onDisconnect(inputName)}
+          className="text-[11px] px-2 py-1.5 rounded-full border border-[#e5484d] bg-transparent text-[#e5484d] cursor-pointer hover:bg-[#e5484d] hover:text-white transition-colors duration-100 font-bold whitespace-nowrap"
+          title="Disconnect this input"
+        >
+          ✕
+        </button>
       </div>
     );
   }

@@ -15,6 +15,7 @@ import {
 } from './webview/createWebviewPanel';
 
 import { ServerManager } from './utilities/engine/server-manager';
+import { requireClient, handleRpcError } from './utilities/engine/rpc-errors';
 
 /* ---------------------------------- */
 /* State                              */
@@ -205,13 +206,9 @@ export async function activate(context: vscode.ExtensionContext) {
 /* ---------------------------------- */
 
 async function dropModuleToCanvas(mod: RegistryModule) {
-  if (!server) {
-    vscode.window.showErrorMessage('Lace engine not initialized.');
-    return;
-  }
-
   try {
-    const response = await server.rpcClient?.getRegistryVersion({
+    const client = requireClient(server?.rpcClient, 'fetch module');
+    const response = await client.getRegistryVersion({
       name: mod.name,
       system: mod.system,
       version: mod.version,
@@ -224,7 +221,7 @@ async function dropModuleToCanvas(mod: RegistryModule) {
 
     addModuleToActiveCanvas(deploy_bundle, mod.icon_url);
   } catch (err: any) {
-    vscode.window.showErrorMessage(`Failed to fetch module: ${err.message}`);
+    handleRpcError(err, 'registry/version', 'fetch module');
   }
 }
 

@@ -6,14 +6,15 @@ import {
   ControlButton,
   useReactFlow,
   applyNodeChanges,
+  applyEdgeChanges,
   type Connection,
   type Edge,
+  type EdgeChange,
   type Node,
   type NodeChange,
 } from '@xyflow/react';
 
 import ModuleNode from './components/nodes/ModuleNode';
-import CompositeNode from './components/nodes/CompositeNode';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
@@ -23,11 +24,10 @@ import TerraformConfigPanel from './components/panels/TerraformConfigPanel';
 import ProvidersPanel from './components/panels/ProvidersPanel';
 import LocalsPanel from './components/panels/LocalsPanel';
 import EnvironmentsPanel from './components/panels/EnvironmentsPanel';
-import Breadcrumb from './components/Breadcrumb';
 
 import type { WorkspaceState, GraphLayout } from './types/workspace';
 import type { ModuleBundle, CompositeGraph } from './types/ir';
-import { isOut, isModuleInstance } from './types/ir';
+import { isOut } from './types/ir';
 import type { WebviewToHost } from '../types/protocol';
 
 import { workspaceReducer, type WorkspaceAction } from './state/reducer';
@@ -40,7 +40,6 @@ import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
 
 const nodeTypes = {
   moduleNode: ModuleNode,
-  compositeNode: CompositeNode,
 };
 
 // ── Helper: post typed message to host ──
@@ -69,6 +68,7 @@ type CompositeEditorProps = {
   iconMap: Record<string, string>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
+  onEdgesDelete: (edges: Edge[]) => void;
   onSave: () => void;
 };
 
@@ -82,6 +82,7 @@ function CompositeEditor({
   iconMap,
   onDragStop,
   onConnect,
+  onEdgesDelete,
   onSave,
 }: CompositeEditorProps) {
   const { fitView } = useReactFlow();
@@ -93,7 +94,7 @@ function CompositeEditor({
   }, [fitViewTrigger, fitView]);
 
   // ── Derive ReactFlow edges ──
-  const rfEdges: Edge[] = useMemo(
+  const rfEdgesFromWorkspace: Edge[] = useMemo(
     () =>
       deriveEdges(graph.instances).map((e) => ({
         id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
@@ -111,10 +112,20 @@ function CompositeEditor({
     [graph.instances],
   );
 
+  // ── Local edge state (for selection support) ──
+  const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromWorkspace);
+  useEffect(() => {
+    setRfEdges(rfEdgesFromWorkspace);
+  }, [rfEdgesFromWorkspace]);
+
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setRfEdges((eds) => applyEdgeChanges(changes, eds));
+  }, []);
+
   // ── Derive connected handles per node (for handle visibility) ──
   const connectedHandlesMap: Record<string, string[]> = useMemo(() => {
     const map: Record<string, Set<string>> = {};
-    for (const edge of rfEdges) {
+    for (const edge of rfEdgesFromWorkspace) {
       if (!map[edge.source]) map[edge.source] = new Set();
       if (!map[edge.target]) map[edge.target] = new Set();
       map[edge.source].add(edge.sourceHandle ?? 'out-right');
@@ -125,7 +136,7 @@ function CompositeEditor({
       result[id] = [...set];
     }
     return result;
-  }, [rfEdges]);
+  }, [rfEdgesFromWorkspace]);
 
   // ── Derive ReactFlow nodes from workspace state ──
   // Position resolution: saved layout → auto-grid fallback → origin.
@@ -236,6 +247,8 @@ function CompositeEditor({
       edges={rfEdges}
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onEdgesDelete={onEdgesDelete}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       style={gridStyle}
@@ -295,48 +308,8 @@ export default function Canvas() {
   // Icon URL mappings: module_key → icon_url (populated from registry metadata on drop)
   const [iconMap, setIconMap] = useState<Record<string, string>>({});
 
-  // ── Breadcrumb navigation ──
-  const entry_key = `${workspace.entry.module_id}@${workspace.entry.version}`;
-  const [breadcrumb, setBreadcrumb] = useState<string[]>([entry_key]);
-
-  // Reset breadcrumb when entry changes (e.g., LOAD_WORKSPACE)
-  useEffect(() => {
-    setBreadcrumb([entry_key]);
-  }, [entry_key]);
-
-  const active_key = breadcrumb[breadcrumb.length - 1];
-
-  const navigateIn = useCallback(
-    (instance_id: string) => {
-      const ws = workspaceRef.current;
-      const ak = active_key;
-      const def = ws.modules[ak];
-      if (!def || def.impl.kind !== 'composite') return;
-
-      const inst = def.impl.graph.instances.find((i) => i.id === instance_id);
-      if (!inst || !isModuleInstance(inst)) return;
-
-      const targetKey = `${inst.use.module_id}@${inst.use.version}`;
-      const targetDef = ws.modules[targetKey];
-      if (!targetDef || targetDef.impl.kind !== 'composite') return;
-
-      setBreadcrumb((prev) => [...prev, targetKey]);
-      setConfigTarget(null);
-      setEdgeConfigState(null);
-      setFitViewTrigger((n) => n + 1);
-    },
-    [active_key],
-  );
-
-  const navigateTo = useCallback((index: number) => {
-    setBreadcrumb((prev) => prev.slice(0, index + 1));
-    setConfigTarget(null);
-    setEdgeConfigState(null);
-    setFitViewTrigger((n) => n + 1);
-  }, []);
-
-  // ── Active module key (breadcrumb-driven) ──
-  const module_key = active_key;
+  // ── Active module key (entry composite) ──
+  const module_key = `${workspace.entry.module_id}@${workspace.entry.version}`;
   const rootDef = workspace.modules[module_key];
 
   // Stable ref for workspace (used in message handler to avoid stale closure)
@@ -373,13 +346,12 @@ export default function Canvas() {
   const callbacks: CanvasCallbacks = useMemo(
     () => ({
       openConfig: (id) => setConfigTarget(id),
-      navigateIn,
       markDirty: () => {
         setIsDirty(true);
         postToHost({ command: 'markDirty' });
       },
     }),
-    [navigateIn],
+    [],
   );
 
   // ── Event: drag stop → sync layout to workspace (marks dirty) ──
@@ -440,6 +412,25 @@ export default function Canvas() {
     [semanticDispatch],
   );
 
+  // ── Event: edge delete (select edge + Delete/Backspace) ──
+  const onEdgesDelete = useCallback(
+    (edges: Edge[]) => {
+      const mk = moduleKeyRef.current;
+      for (const edge of edges) {
+        const mapping = edge.data?.mapping as { from: string; to: string } | undefined;
+        if (mapping) {
+          semanticDispatch({
+            type: 'DISCONNECT',
+            module_key: mk,
+            target_instance: edge.target,
+            input_name: mapping.to,
+          });
+        }
+      }
+    },
+    [semanticDispatch],
+  );
+
   // ── Message handler: host → webview ──
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -451,7 +442,6 @@ export default function Canvas() {
           setIsDirty(false);
           setLoadGeneration((n) => n + 1);
           setFitViewTrigger((n) => n + 1);
-          // Breadcrumb resets via the entry_key useEffect
           break;
         }
 
@@ -664,9 +654,6 @@ export default function Canvas() {
   return (
     <CanvasContext.Provider value={callbacks}>
       <div className="h-screen flex flex-col relative">
-        {/* Breadcrumb navigation */}
-        <Breadcrumb path={breadcrumb} onNavigate={navigateTo} />
-
         {statusMessage && (
           <div className="absolute top-11 left-4 z-20 bg-[#153238] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
             {statusMessage}
@@ -685,6 +672,7 @@ export default function Canvas() {
             iconMap={iconMap}
             onDragStop={onDragStop}
             onConnect={onConnect}
+            onEdgesDelete={onEdgesDelete}
             onSave={onSave}
           />
 
@@ -713,6 +701,15 @@ export default function Canvas() {
                   instance_id: configTarget,
                   depends_on,
                 });
+              }}
+              onDisconnect={(input_name) => {
+                semanticDispatch({
+                  type: 'DISCONNECT',
+                  module_key,
+                  target_instance: configTarget,
+                  input_name,
+                });
+                setConfigTarget(null);
               }}
               onClose={() => setConfigTarget(null)}
             />

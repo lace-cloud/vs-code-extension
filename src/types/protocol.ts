@@ -7,11 +7,18 @@ import type { GraphError } from '../webview/utils/validate';
 export type HostToWebview =
   | { command: 'loadState'; state: WorkspaceState }
   | { command: 'saveConfirmed' }
+  | { command: 'triggerSave' }
   | { command: 'triggerGenerate' }
   | { command: 'generateSuccess'; files?: string[] }
   | { command: 'generateError'; message: string; diagnostics?: Diagnostic[] }
   | { command: 'dropBundle'; deploy_bundle: ModuleBundle; icon_url?: string }
-  | { command: 'validationErrors'; errors: GraphError[] };
+  | { command: 'validationErrors'; errors: GraphError[] }
+  | { command: 'triggerVariables' }
+  | { command: 'triggerOutputs' }
+  | { command: 'triggerTerraformConfig' }
+  | { command: 'triggerProviders' }
+  | { command: 'triggerLocals' }
+  | { command: 'triggerEnvironments' };
 
 // ── Webview → Host ──
 

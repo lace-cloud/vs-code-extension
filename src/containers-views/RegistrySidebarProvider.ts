@@ -12,6 +12,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   private modules: RegistryModule[] = [];
   private rpcClient: JSONRPCClient | null = null;
   private loading = false;
+  private errorMessage: string | null = null;
 
   setRpcClient(client: JSONRPCClient | null) {
     this.rpcClient = client;
@@ -22,32 +23,55 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     return this.modules;
   }
 
+  /** Fetch all modules for a system, paginating until exhausted. */
+  private async fetchAllModules(system: string): Promise<RegistryModule[]> {
+    if (!this.rpcClient) return [];
+    const allModules: RegistryModule[] = [];
+    let page = 1;
+    const limit = 100;
+    while (true) {
+      const result = await this.rpcClient.listRegistryModules({ system, page, limit });
+      const modules = (result?.modules ?? []) as RegistryModule[];
+      allModules.push(...modules);
+      if (modules.length < limit) break;
+      page++;
+    }
+    return allModules;
+  }
+
   async refresh() {
     if (!this.rpcClient) {
       this.modules = [];
+      this.errorMessage = null;
       this.updateWebview();
       return;
     }
 
     this.loading = true;
+    this.errorMessage = null;
     this.updateWebview();
 
-    try {
-      const [aws, azure, gcp] = await Promise.allSettled([
-        this.rpcClient.listRegistryModules({ system: 'aws' }),
-        this.rpcClient.listRegistryModules({ system: 'azure' }),
-        this.rpcClient.listRegistryModules({ system: 'gcp' }),
-      ]);
+    const [aws, azure, gcp] = await Promise.allSettled([
+      this.fetchAllModules('aws'),
+      this.fetchAllModules('azure'),
+      this.fetchAllModules('gcp'),
+    ]);
 
-      this.modules = [];
-      for (const result of [aws, azure, gcp]) {
-        if (result.status === 'fulfilled' && result.value?.modules) {
-          this.modules.push(...(result.value.modules as RegistryModule[]));
-        }
+    const results = [aws, azure, gcp];
+    const failCount = results.filter((r) => r.status === 'rejected').length;
+
+    this.modules = [];
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        this.modules.push(...result.value);
       }
-    } catch (err: any) {
-      console.warn('Failed to fetch registry:', err.message);
-      this.modules = [];
+    }
+
+    if (failCount === results.length) {
+      this.errorMessage = 'Lace engine is not available. Start it with "Lace: Start Engine".';
+      console.warn('All registry fetches failed');
+    } else if (failCount > 0) {
+      console.warn(`${failCount} registry system(s) failed to load`);
     }
 
     this.loading = false;
@@ -90,6 +114,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
   private buildHtml(): string {
     const modulesJson = JSON.stringify(this.modules);
+    const errorJson = JSON.stringify(this.errorMessage);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -265,6 +290,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const vscode = acquireVsCodeApi();
     const allModules = ${modulesJson};
     const loading = ${this.loading};
+    const errorMessage = ${errorJson};
 
     const searchInput = document.getElementById('search');
     const content = document.getElementById('content');
@@ -272,6 +298,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     function render(filter) {
       if (loading) {
         content.innerHTML = '<div class="loading">Loading registry...</div>';
+        return;
+      }
+
+      if (errorMessage) {
+        content.innerHTML = '<div class="empty-state">' + escHtml(errorMessage) + '</div>';
         return;
       }
 

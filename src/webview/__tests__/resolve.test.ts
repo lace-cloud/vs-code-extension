@@ -135,10 +135,10 @@ describe('resolveSchema', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe('resolveNodeType', () => {
-  test('returns compositeNode for composite module', () => {
+  test('returns moduleNode for composite module (composites are flattened)', () => {
     const def = makeCompositeDef('iam-stack', 'v1.0.0');
     const ws = makeWorkspace({ 'iam-stack@v1.0.0': def });
-    expect(resolveNodeType(ws, compositeInst)).toBe('compositeNode');
+    expect(resolveNodeType(ws, compositeInst)).toBe('moduleNode');
   });
 
   test('returns moduleNode for leaf module', () => {

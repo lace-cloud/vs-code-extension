@@ -2,7 +2,6 @@ import React from 'react';
 
 export type CanvasCallbacks = {
   openConfig: (instance_id: string) => void;
-  navigateIn: (instance_id: string) => void;
   markDirty: () => void;
 };
 

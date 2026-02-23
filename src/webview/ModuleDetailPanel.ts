@@ -36,17 +36,29 @@ export async function showModuleDetail(
   let moduleInterface: { inputs: any[]; outputs: any[] } | null = null;
   let deployBundle: any = null;
   let description = mod.description ?? '';
+  let fetchError: string | null = null;
 
   if (rpcClient) {
+    // Fetch versions (independent)
     try {
-      // Get all versions
       const getResult = await rpcClient.getRegistryModule({
         name: mod.name,
         system: mod.system,
       });
       versions = getResult?.versions ?? [];
 
-      // Get deploy bundle for the specific version (contains interface)
+      const versionMeta = versions.find(
+        (v: any) => v.version === mod.version || v.version === `v${mod.version}`,
+      );
+      if (versionMeta?.description) {
+        description = versionMeta.description;
+      }
+    } catch (err: any) {
+      console.warn('Failed to fetch module versions:', err.message);
+    }
+
+    // Fetch deploy bundle (independent)
+    try {
       const versionResult = await rpcClient.getRegistryVersion({
         name: mod.name,
         system: mod.system,
@@ -55,10 +67,8 @@ export async function showModuleDetail(
 
       deployBundle = versionResult?.deploy_bundle;
 
-      // Extract interface from deploy bundle
       if (deployBundle?.modules) {
         const moduleDefs = Object.values(deployBundle.modules) as any[];
-        // Find the leaf module (not the wrapper composite)
         const leafDef = moduleDefs.find((d: any) => d.impl?.kind === 'leaf') ?? moduleDefs[0];
         if (leafDef?.interface) {
           moduleInterface = leafDef.interface;
@@ -67,21 +77,14 @@ export async function showModuleDetail(
           description = leafDef.description;
         }
       }
-
-      // Try to get description from version metadata
-      const versionMeta = versions.find(
-        (v: any) => v.version === mod.version || v.version === `v${mod.version}`,
-      );
-      if (versionMeta?.description) {
-        description = versionMeta.description;
-      }
     } catch (err: any) {
-      console.warn('Failed to fetch module details:', err.message);
+      console.warn('Failed to fetch deploy bundle:', err.message);
+      fetchError = 'Could not load deploy bundle. Some details may be unavailable.';
     }
   }
 
   // Render full detail
-  panel.webview.html = buildHtml(mod, moduleInterface, versions, false, description);
+  panel.webview.html = buildHtml(mod, moduleInterface, versions, false, description, fetchError);
 
   // Handle messages from the webview
   panel.webview.onDidReceiveMessage((msg) => {
@@ -99,6 +102,7 @@ function buildHtml(
   versions: any[] | null,
   loading: boolean,
   description?: string,
+  fetchError?: string | null,
 ): string {
   const kindBadge = mod.kind === 'composite' ? 'Composite' : 'Leaf';
   const kindColor = mod.kind === 'composite' ? '#1f6feb' : '#2ea043';
@@ -400,6 +404,8 @@ function buildHtml(
       <button class="btn-primary" id="add-to-canvas" ${loading ? 'disabled' : ''}>Add to Canvas</button>
     </div>
   </div>
+
+  ${fetchError ? `<div style="padding:8px 32px;background:#3b2507;color:#f0a030;font-size:13px;border-bottom:1px solid var(--border);">${esc(fetchError)}</div>` : ''}
 
   <!-- Tabs -->
   <div class="tabs">
