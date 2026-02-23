@@ -10,7 +10,7 @@ A VS Code extension for visually composing Terraform modules. Users browse modul
 
 ```bash
 npm test                    # Run all tests: unit + E2E (Vitest)
-npm run test:unit           # Unit tests only (95 tests, no binary needed)
+npm run test:unit           # Unit tests only (99 tests, no binary needed)
 npm run test:e2e            # E2E tests only (6 tests, requires lace + terraform)
 npm run test:watch          # Watch mode (unit tests)
 npm run build               # Rspack build (both host + webview)
@@ -58,7 +58,7 @@ The webview never fetches registry data. The extension host owns all registry da
 
 ### 8. Node data is serializable
 
-`ModuleNodeData` and `CompositeNodeData` contain no callbacks. Communication from nodes to canvas goes through `CanvasContext` (React context with `openConfig`, `navigateIn`, `markDirty`). For dispatch and module key, nodes read from `(window as any).__canvasDispatch` and `(window as any).__activeModuleKey` — this is intentional (ReactFlow node rendering doesn't support prop drilling).
+`ModuleNodeData` contains no callbacks. Communication from nodes to canvas goes through `CanvasContext` (React context with `openConfig`, `markDirty`). For dispatch and module key, nodes read from `(window as any).__canvasDispatch` and `(window as any).__activeModuleKey` — this is intentional (ReactFlow node rendering doesn't support prop drilling).
 
 ## Type System
 
@@ -124,9 +124,6 @@ The full union is in `reducer.ts`. Every action carries `module_key` (except wor
 **Composite interface:**
 `SET_VARIABLES`, `SET_EXPORTS`
 
-**Nested composites:**
-`GROUP_INTO_COMPOSITE`
-
 **Terraform config:**
 `SET_TERRAFORM`, `SET_PROVIDERS`, `SET_LOCALS`, `SET_DEPENDS_ON`, `SET_ENVIRONMENTS`, `SET_ENVIRONMENT_BACKENDS`
 
@@ -161,7 +158,7 @@ It handles the nested spread `state → modules → module → impl → graph` a
 | Protocol types    | `types/protocol.ts`                             | Message unions, shared types (RegistryModule, Diagnostic) |
 | Pure logic        | `webview/utils/`                                | bundle, derive, validate, resolve, identifiers, record    |
 | State management  | `webview/state/`                                | reducer (pure), context (React context)                   |
-| UI components     | `webview/components/`                           | nodes, panels, breadcrumb                                 |
+| UI components     | `webview/components/`                           | nodes, panels                                             |
 | Tests             | `webview/__tests__/`                            | Unit test files + fixtures                                |
 | E2E tests         | `webview/__tests__/e2e-rpc-integration.test.ts` | Spawns real CLI, full RPC pipeline                        |
 | CI/CD             | `.github/workflows/ci.yml`                      | GitHub Actions: unit + E2E with lace + terraform          |
@@ -200,16 +197,15 @@ E2E tests (`__tests__/e2e-rpc-integration.test.ts`) spawn the real `lace module 
 
 ### Test file naming
 
-| File                          | Content                                                 |
-| ----------------------------- | ------------------------------------------------------- |
-| `e2e-rpc-integration.test.ts` | E2E: spawn CLI, full RPC pipeline, generate to disk     |
-| `reducer.test.ts`             | Core editing, composite interface, and grouping actions |
-| `terraform-config.test.ts`    | Terraform config actions + full integration flow        |
-| `bundle.test.ts`              | `toBundle`/`fromBundle` boundary                        |
-| `validate.test.ts`            | `validateWorkspace` checks                              |
-| `grouping.test.ts`            | `GROUP_INTO_COMPOSITE` edge cases                       |
-| `scaffold.test.ts`            | `emptyWorkspace` factory + round-trip fidelity          |
-| Other files                   | Individual utility tests                                |
+| File                          | Content                                             |
+| ----------------------------- | --------------------------------------------------- |
+| `e2e-rpc-integration.test.ts` | E2E: spawn CLI, full RPC pipeline, generate to disk |
+| `reducer.test.ts`             | Core editing and composite interface actions        |
+| `terraform-config.test.ts`    | Terraform config actions + full integration flow    |
+| `bundle.test.ts`              | `toBundle`/`fromBundle` boundary                    |
+| `validate.test.ts`            | `validateWorkspace` checks                          |
+| `scaffold.test.ts`            | `emptyWorkspace` factory + round-trip fidelity      |
+| Other files                   | Individual utility tests                            |
 
 ### Adding E2E tests
 
@@ -239,13 +235,11 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to `main`/`develop`.
 
 5. **Cascading references on rename/delete.** `RENAME_INSTANCE` and `DELETE_INSTANCE` must cascade to: sibling `out` bindings, export outputs, `depends_on` arrays, and layout node keys.
 
-6. **`GROUP_INTO_COMPOSITE`** is the most complex action. It creates a new module def, migrates instances, rewires cross-boundary bindings to use variables/exports, creates a layout, and adds a single composite instance in the parent. Always test with `grouping.test.ts`.
+6. **ReactFlow v12.** This project uses `@xyflow/react` v12. Node components receive `NodeProps<Node<TData, TType>>`. Check existing `ModuleNode.tsx` for the pattern.
 
-7. **ReactFlow v12.** This project uses `@xyflow/react` v12. Node components receive `NodeProps<Node<TData, TType>>`. Check existing `ModuleNode.tsx` and `CompositeNode.tsx` for the pattern.
+7. **Two Rspack entries.** The build produces `out/extension.js` (Node.js, CommonJS) and `out/webview.js` (browser). They share types but run in different environments. Don't import VS Code APIs in webview code or DOM APIs in extension code.
 
-8. **Two Rspack entries.** The build produces `out/extension.js` (Node.js, CommonJS) and `out/webview.js` (browser). They share types but run in different environments. Don't import VS Code APIs in webview code or DOM APIs in extension code.
-
-9. **No dead code.** Every source file is imported by at least one other file. Every export is consumed. Every type in `protocol.ts` is used. Run `npx tsc --noEmit` — zero errors, zero warnings.
+8. **No dead code.** Every source file is imported by at least one other file. Every export is consumed. Every type in `protocol.ts` is used. Run `npx tsc --noEmit` — zero errors, zero warnings.
 
 ## Style Guide
 

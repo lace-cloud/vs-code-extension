@@ -149,15 +149,13 @@ src/
     │   └── record.ts              # mapRecord / filterRecord utilities
     ├── components/
     │   ├── nodes/
-    │   │   ├── ModuleNode.tsx     # Leaf module node (with error highlighting)
-    │   │   └── CompositeNode.tsx  # Composite node (double-click to navigate in)
+    │   │   └── ModuleNode.tsx     # Module node (with error highlighting)
     │   ├── panels/                # 8 config panels (inputs, edges, variables, etc.)
-    │   ├── Breadcrumb.tsx         # Composite navigation breadcrumb
     │   └── ErrorBoundary.tsx      # React error boundary
     └── __tests__/
         ├── fixtures/              # Real CLI bundle snapshots
         ├── e2e-rpc-integration.test.ts  # E2E: spawns lace CLI, full RPC pipeline
-        └── *.test.ts              # 9 unit test suites, 95 tests
+        └── *.test.ts              # 9 unit test suites, 99 tests
 ```
 
 ## Core Concepts
@@ -187,20 +185,20 @@ npm run test:e2e      # E2E tests only (requires lace binary + terraform)
 npm run test:watch    # Watch mode (unit tests)
 ```
 
-### Unit Tests (95 tests)
+### Unit Tests (99 tests)
 
 Pure logic tests — no external dependencies. Exercises the reducer, bundle round-trips, validation, identifiers, and wire derivation.
 
 | Suite                      | Tests | Coverage                                            |
 | -------------------------- | ----- | --------------------------------------------------- |
-| `reducer.test.ts`          | 26    | Core editing, interface, and grouping actions       |
+| `reducer.test.ts`          | 29    | Core editing and composite interface actions        |
 | `terraform-config.test.ts` | 18    | Terraform config actions, full bundle round-trip    |
-| `grouping.test.ts`         | 13    | `GROUP_INTO_COMPOSITE` with cross-boundary wires    |
 | `identifiers.test.ts`      | 8     | Terraform identifier validation/collision           |
 | `bundle.test.ts`           | 7     | `toBundle`/`fromBundle` round-trip, boundary errors |
 | `normalize.test.ts`        | 7     | Binding normalization for all 4 variants            |
 | `validate.test.ts`         | 6     | Duplicate IDs, dangling refs, depends_on            |
 | `scaffold.test.ts`         | 6     | `emptyWorkspace` factory + round-trip fidelity      |
+| `resolve.test.ts`          | 14    | Schema/module/icon resolution for instances         |
 | `derive.test.ts`           | 4     | Edge/wire derivation from out bindings              |
 
 ### E2E Tests (6 tests)

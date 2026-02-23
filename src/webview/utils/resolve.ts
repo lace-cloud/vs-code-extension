@@ -24,10 +24,6 @@ export function resolveSchema(workspace: WorkspaceState, inst: Instance): Resolv
   return { inputs: def.interface.inputs, outputs: def.interface.outputs };
 }
 
-export function resolveNodeType(_workspace: WorkspaceState, _inst: Instance): string {
-  return 'moduleNode';
-}
-
 /**
  * Resolve the icon URL for an instance from an icon map.
  * The icon map is keyed by module_key ("id@version").

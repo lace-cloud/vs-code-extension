@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { resolveSchema, resolveNodeType, resolveModuleDef, resolveIconUrl } from '../utils/resolve';
+import { resolveSchema, resolveModuleDef, resolveIconUrl } from '../utils/resolve';
 import type { WorkspaceState } from '../types/workspace';
 import type { Instance, ModuleDef, ModuleInstance, ResourceInstance } from '../types/ir';
 
@@ -18,23 +18,6 @@ function makeLeafDef(id: string, version: string): ModuleDef {
       outputs: [{ name: 'arn', type: 'string' }],
     },
     impl: { kind: 'leaf', source: { kind: 'registry' } },
-  };
-}
-
-function makeCompositeDef(id: string, version: string): ModuleDef {
-  return {
-    schema_version: '1.0',
-    kind: 'module_def',
-    id,
-    version,
-    interface: {
-      inputs: [{ name: 'region', type: 'string', required: true }],
-      outputs: [{ name: 'cluster_id', type: 'string' }],
-    },
-    impl: {
-      kind: 'composite',
-      graph: { instances: [], exports: { outputs: {} } },
-    },
   };
 }
 
@@ -127,34 +110,6 @@ describe('resolveSchema', () => {
     const schema = resolveSchema(ws, resourceInst);
     expect(schema.inputs).toEqual([]);
     expect(schema.outputs).toEqual([]);
-  });
-});
-
-// ══════════════════════════════════════════════════════════════════════
-// resolveNodeType
-// ══════════════════════════════════════════════════════════════════════
-
-describe('resolveNodeType', () => {
-  test('returns moduleNode for composite module (composites are flattened)', () => {
-    const def = makeCompositeDef('iam-stack', 'v1.0.0');
-    const ws = makeWorkspace({ 'iam-stack@v1.0.0': def });
-    expect(resolveNodeType(ws, compositeInst)).toBe('moduleNode');
-  });
-
-  test('returns moduleNode for leaf module', () => {
-    const def = makeLeafDef('aws-s3-bucket', 'v1.2.0');
-    const ws = makeWorkspace({ 'aws-s3-bucket@v1.2.0': def });
-    expect(resolveNodeType(ws, leafInst)).toBe('moduleNode');
-  });
-
-  test('returns moduleNode for resource instance', () => {
-    const ws = makeWorkspace({});
-    expect(resolveNodeType(ws, resourceInst)).toBe('moduleNode');
-  });
-
-  test('returns moduleNode when module def is missing', () => {
-    const ws = makeWorkspace({});
-    expect(resolveNodeType(ws, leafInst)).toBe('moduleNode');
   });
 });
 

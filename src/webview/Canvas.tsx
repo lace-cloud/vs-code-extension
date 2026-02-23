@@ -33,7 +33,7 @@ import type { WebviewToHost } from '../types/protocol';
 import { workspaceReducer, type WorkspaceAction } from './state/reducer';
 import { CanvasContext, type CanvasCallbacks } from './state/context';
 import { deriveEdges } from './utils/derive';
-import { resolveSchema, resolveNodeType, resolveIconUrl } from './utils/resolve';
+import { resolveSchema, resolveIconUrl } from './utils/resolve';
 import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
 
 // ── Node types registration ──
@@ -160,7 +160,7 @@ function CompositeEditor({
       );
       return {
         id: inst.id,
-        type: resolveNodeType(workspace, inst),
+        type: 'moduleNode',
         position: saved ?? auto,
         data: {
           instance: inst,

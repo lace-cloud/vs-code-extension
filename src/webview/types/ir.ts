@@ -57,11 +57,6 @@ export type OutputExport =
 export const isOutExport = isOut as (
   e: OutputExport,
 ) => e is { out: { module: string; name: string } };
-export const isVarExport = isVar as (e: OutputExport) => e is { var: string };
-export const isLitExport = isLit as (e: OutputExport) => e is { lit: any };
-export const isExprExport = isExpr as (
-  e: OutputExport,
-) => e is { expr: { lang: 'hcl'; value: string } };
 
 // ── Module Identity ──
 
