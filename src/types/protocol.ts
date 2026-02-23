@@ -6,7 +6,7 @@ import type { GraphError } from '../webview/utils/validate';
 
 export type HostToWebview =
   | { command: 'loadState'; state: WorkspaceState }
-  | { command: 'triggerSave' }
+  | { command: 'saveConfirmed' }
   | { command: 'triggerGenerate' }
   | { command: 'generateSuccess'; files?: string[] }
   | { command: 'generateError'; message: string; diagnostics?: Diagnostic[] }

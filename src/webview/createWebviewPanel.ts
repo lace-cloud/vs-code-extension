@@ -165,6 +165,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           const state = (msg as any).state as WorkspaceState;
           writeLaceJson(laceDir, state);
           panel.title = `Lace · ${folderName}`;
+          postToWebview(panel, { command: 'saveConfirmed' });
           break;
         }
 
@@ -238,10 +239,9 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           break;
         }
 
-        // ── markDirty: update title, trigger save ──
+        // ── markDirty: update title only (no auto-save) ──
         case 'markDirty': {
           panel.title = `Lace · ${folderName} ●`;
-          postToWebview(panel, { command: 'triggerSave' });
           break;
         }
       }

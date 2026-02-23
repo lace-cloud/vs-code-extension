@@ -29,6 +29,8 @@
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid rgba(206, 254, 101, 0.15);
+  margin-right: 12px !important;
+  margin-bottom: 12px !important;
 }
 
 .react-flow__controls-button {

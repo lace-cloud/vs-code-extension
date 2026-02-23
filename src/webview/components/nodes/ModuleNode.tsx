@@ -15,13 +15,16 @@ export type ModuleNodeData = {
   errorMessages?: string[];
 };
 
-// v12: NodeProps takes the full Node type, not just the data
 type ModuleNodeNode = Node<ModuleNodeData, 'moduleNode'>;
+
+// ── Sizes (single source of truth) ──
+
+const CARD_SIZE = 28; // px — the visual card is a fixed square
+const ICON_SIZE = 20; // px
 
 // ── Handle style ──
 
-const handleStyle =
-  'w-2.5 h-2.5 bg-transparent border-2 border-[#CEFE65] rounded-full transition-[box-shadow,border-color] duration-150 ease-in-out';
+const handleStyle = 'w-1.5 h-1.5 bg-[#CEFE65] border border-[#153238] rounded-full';
 
 // ── Component ──
 
@@ -29,6 +32,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const ctx = useContext(CanvasContext);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(id);
+  const [hovered, setHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,7 +44,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
   const instance = data.instance;
 
-  // Wired input badges: show all `out` bindings
+  // Wired input badges
   const wiredBadges: { inputName: string; source: string }[] = [];
   for (const [inputName, binding] of Object.entries(instance.inputs)) {
     if (isOut(binding)) {
@@ -51,7 +55,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     }
   }
 
-  // ── Inline rename ──
+  // ── Callbacks ──
 
   const onDoubleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -81,16 +85,11 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        commitRename();
-      } else if (e.key === 'Escape') {
-        setEditing(false);
-      }
+      if (e.key === 'Enter') commitRename();
+      else if (e.key === 'Escape') setEditing(false);
     },
     [commitRename],
   );
-
-  // ── Click → open config ──
 
   const onClick = useCallback(
     (e: React.MouseEvent) => {
@@ -100,30 +99,24 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [ctx, instance.id],
   );
 
-  // ── Delete ──
-
   const onDelete = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       const dispatch = (window as any).__canvasDispatch;
       const moduleKey = (window as any).__activeModuleKey;
       if (dispatch && moduleKey) {
-        dispatch({
-          type: 'DELETE_INSTANCE',
-          module_key: moduleKey,
-          instance_id: id,
-        });
+        dispatch({ type: 'DELETE_INSTANCE', module_key: moduleKey, instance_id: id });
       }
     },
     [id],
   );
 
-  // ── Broken icon fallback (inline SVG) ──
+  // ── Broken icon fallback ──
 
   const BrokenIcon = () => (
     <svg
-      width="32"
-      height="32"
+      width={ICON_SIZE}
+      height={ICON_SIZE}
       viewBox="0 0 24 24"
       fill="none"
       stroke="rgba(206, 254, 101, 0.4)"
@@ -138,41 +131,60 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     </svg>
   );
 
+  // ── Border style ──
+
+  const borderClass = data.hasErrors
+    ? 'border-2 border-[#e5484d] shadow-[0_0_6px_rgba(229,72,77,0.4)]'
+    : 'border border-transparent';
+
   return (
     <div
+      className="relative cursor-pointer"
+      style={{ width: CARD_SIZE, height: CARD_SIZE }}
       onClick={onClick}
-      className={`bg-[#153238] border ${data.hasErrors ? 'border-2 border-[#e5484d] shadow-[0_0_6px_rgba(229,72,77,0.4)]' : 'border border-[rgba(206,254,101,0.25)]'} rounded-lg p-2.5 min-w-16 text-white text-center cursor-pointer relative`}
-      title={data.hasErrors ? data.errorMessages?.join('\n') : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={data.hasErrors ? data.errorMessages?.join('\n') : instance.id}
     >
-      {/* Delete button */}
-      <button
-        onClick={onDelete}
-        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[#e5484d] border-none text-white text-xs cursor-pointer flex items-center justify-center"
-        title="Delete"
+      {/* ── Card: fixed-size icon box ── */}
+      <div
+        className={`w-full h-full bg-transparent ${borderClass} rounded-md flex items-center justify-center`}
       >
-        ✕
-      </button>
-
-      {/* Handles */}
-      <Handle id="in-top" type="target" position={Position.Top} className={handleStyle} />
-      <Handle id="in-left" type="target" position={Position.Left} className={handleStyle} />
-
-      {/* Icon + Label */}
-      <div className="flex flex-col items-center gap-1.5">
         {data.icon_url ? (
           <img
             src={data.icon_url}
             alt={instance.id}
-            className="w-8 h-8 rounded object-contain"
+            className="rounded object-contain"
+            style={{ width: ICON_SIZE, height: ICON_SIZE }}
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
               (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
             }}
           />
-        ) : null}
-        {!data.icon_url && <BrokenIcon />}
+        ) : (
+          <BrokenIcon />
+        )}
+      </div>
 
-        {/* Label / inline rename */}
+      {/* ── Delete button (visible on hover) ── */}
+      {hovered && (
+        <button
+          onClick={onDelete}
+          className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#e5484d] border-none text-white text-[7px] leading-none cursor-pointer flex items-center justify-center z-10"
+          title="Delete"
+        >
+          ✕
+        </button>
+      )}
+
+      {/* ── Handles ── */}
+      <Handle id="in-top" type="target" position={Position.Top} className={handleStyle} />
+      <Handle id="in-left" type="target" position={Position.Left} className={handleStyle} />
+      <Handle id="out-right" type="source" position={Position.Right} className={handleStyle} />
+      <Handle id="out-bottom" type="source" position={Position.Bottom} className={handleStyle} />
+
+      {/* ── Label (outside card, doesn't affect bounding box) ── */}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 flex flex-col items-center pointer-events-auto">
         {editing ? (
           <input
             ref={inputRef}
@@ -180,39 +192,35 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitRename}
             onKeyDown={onKeyDown}
-            className="bg-[#161616] text-white border border-[rgba(206,254,101,0.2)] rounded px-1 py-0.5 text-xs text-center w-full"
+            className="bg-[#161616] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] rounded px-1 py-px text-[8px] text-center w-24"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <div
-            className="text-[10px] text-[#CEFE65] opacity-70 max-w-24 truncate"
+          <span
+            className="text-[8px] text-[#CEFE65] opacity-80 whitespace-nowrap max-w-[80px] truncate"
             onDoubleClick={onDoubleClick}
-            title={instance.id}
           >
             {instance.id}
-          </div>
+          </span>
+        )}
+
+        {/* Wired input badges */}
+        {wiredBadges.map((badge) => (
+          <span
+            key={badge.inputName}
+            className="mt-px text-[8px] bg-[#161616] border border-[rgba(206,254,101,0.15)] px-1 rounded text-[#CEFE65] opacity-70 whitespace-nowrap"
+          >
+            {badge.source} → {badge.inputName}
+          </span>
+        ))}
+
+        {/* Validation error */}
+        {data.hasErrors && (
+          <span className="mt-px text-[8px] text-[#e5484d] whitespace-nowrap">
+            ⚠ {data.errorMessages?.[0] ?? 'Error'}
+          </span>
         )}
       </div>
-
-      {/* Wired input badges */}
-      {wiredBadges.map((badge) => (
-        <div
-          key={badge.inputName}
-          className="mt-1 text-[10px] bg-[#161616] border border-[rgba(206,254,101,0.2)] px-1 py-0.5 rounded text-[#CEFE65]"
-        >
-          {badge.source} → {badge.inputName}
-        </div>
-      ))}
-
-      {/* Validation error indicator */}
-      {data.hasErrors && (
-        <div className="mt-1 text-[10px] text-[#e5484d] truncate">
-          ⚠ {data.errorMessages?.[0] ?? 'Validation error'}
-        </div>
-      )}
-
-      <Handle id="out-right" type="source" position={Position.Right} className={handleStyle} />
-      <Handle id="out-bottom" type="source" position={Position.Bottom} className={handleStyle} />
     </div>
   );
 };

@@ -495,15 +495,16 @@ function handleSyncLayout(
   action: Extract<WorkspaceAction, { type: 'SYNC_LAYOUT' }>,
 ): WorkspaceState {
   const { module_key, positions } = action;
-  const nodes: Record<string, { position: { x: number; y: number } }> = {};
+  const existing = state.layouts[module_key]?.nodes ?? {};
+  const updates: Record<string, { position: { x: number; y: number } }> = {};
   for (const [id, pos] of Object.entries(positions)) {
-    nodes[id] = { position: pos };
+    updates[id] = { position: pos };
   }
   return {
     ...state,
     layouts: {
       ...state.layouts,
-      [module_key]: { nodes },
+      [module_key]: { nodes: { ...existing, ...updates } },
     },
   };
 }

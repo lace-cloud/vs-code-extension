@@ -417,6 +417,35 @@ test('DROP_BUNDLE handles collision with _1 suffix', () => {
   expect(instances.find((i) => i.id === 'aws-s3-bucket_1')).toBeDefined();
 });
 
+test('DROP_BUNDLE preserves existing node layout positions', () => {
+  const state = makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'existing-node',
+        use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
+        inputs: {},
+      },
+    ],
+    {},
+    { 'root@v1.0.0': { nodes: { 'existing-node': { position: { x: 42, y: 84 } } } } },
+  );
+  const deploy_bundle = loadFixture('leaf_deploy_bundle.json');
+  const next = workspaceReducer(state, {
+    type: 'DROP_BUNDLE',
+    module_key: 'root@v1.0.0',
+    deploy_bundle,
+    positions: { 'aws-s3-bucket': { x: 200, y: 300 } },
+  });
+  // Existing node position preserved
+  expect(next.layouts['root@v1.0.0'].nodes['existing-node']).toEqual({
+    position: { x: 42, y: 84 },
+  });
+  // New node has its drop position
+  const newId = getInstances(next, 'root@v1.0.0').find((i) => i.id !== 'existing-node')!.id;
+  expect(next.layouts['root@v1.0.0'].nodes[newId]).toBeDefined();
+});
+
 // ══════════════════════════════════════════════════════════════════════
 // LOAD_WORKSPACE
 // ══════════════════════════════════════════════════════════════════════
@@ -459,7 +488,7 @@ test('UPDATE_INPUTS replaces entire inputs on target instance', () => {
 // SYNC_LAYOUT
 // ══════════════════════════════════════════════════════════════════════
 
-test('SYNC_LAYOUT bulk-replaces positions', () => {
+test('SYNC_LAYOUT updates position for existing node', () => {
   const state = makeWorkspace(
     [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
     {},
@@ -473,6 +502,51 @@ test('SYNC_LAYOUT bulk-replaces positions', () => {
   expect(next.layouts['root@v1.0.0'].nodes['a']).toEqual({
     position: { x: 500, y: 300 },
   });
+});
+
+test('SYNC_LAYOUT merges with existing positions (does not clobber siblings)', () => {
+  const state = makeWorkspace(
+    [
+      { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+      { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+      { kind: 'module', id: 'c', use: { module_id: 'z', version: 'v1' }, inputs: {} },
+    ],
+    {},
+    {
+      'root@v1.0.0': {
+        nodes: {
+          a: { position: { x: 10, y: 20 } },
+          b: { position: { x: 30, y: 40 } },
+          c: { position: { x: 50, y: 60 } },
+        },
+      },
+    },
+  );
+  // Only drag node 'b' — a and c must survive
+  const next = workspaceReducer(state, {
+    type: 'SYNC_LAYOUT',
+    module_key: 'root@v1.0.0',
+    positions: { b: { x: 999, y: 888 } },
+  });
+  expect(next.layouts['root@v1.0.0'].nodes['a']).toEqual({ position: { x: 10, y: 20 } });
+  expect(next.layouts['root@v1.0.0'].nodes['b']).toEqual({ position: { x: 999, y: 888 } });
+  expect(next.layouts['root@v1.0.0'].nodes['c']).toEqual({ position: { x: 50, y: 60 } });
+});
+
+test('SYNC_LAYOUT adds positions for nodes not yet in layout', () => {
+  const state = makeWorkspace(
+    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
+    {},
+    {}, // empty layout (makeWorkspace creates { nodes: {} } for root)
+  );
+  // Verify node 'a' has no position yet
+  expect(state.layouts['root@v1.0.0'].nodes['a']).toBeUndefined();
+  const next = workspaceReducer(state, {
+    type: 'SYNC_LAYOUT',
+    module_key: 'root@v1.0.0',
+    positions: { a: { x: 100, y: 200 } },
+  });
+  expect(next.layouts['root@v1.0.0'].nodes['a']).toEqual({ position: { x: 100, y: 200 } });
 });
 
 // ══════════════════════════════════════════════════════════════════════

@@ -2,10 +2,9 @@
 import React, { useEffect, useState, useReducer, useMemo, useCallback, useRef } from 'react';
 import {
   ReactFlow,
-  Background,
-  BackgroundVariant,
   Controls,
   useReactFlow,
+  applyNodeChanges,
   type Connection,
   type Edge,
   type Node,
@@ -65,11 +64,9 @@ type CompositeEditorProps = {
   workspace: WorkspaceState;
   module_key: string;
   validationErrors: Array<{ module_key?: string; instance_id?: string; message: string }>;
-  localPositions: Record<string, { x: number; y: number }>;
   fitViewTrigger: number;
   iconMap: Record<string, string>;
-  onNodesChange: (changes: NodeChange[]) => void;
-  onNodeDragStop: (event: React.MouseEvent, node: Node, nodes: Node[]) => void;
+  onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
 };
 
@@ -79,43 +76,99 @@ function CompositeEditor({
   workspace,
   module_key,
   validationErrors,
-  localPositions,
   fitViewTrigger,
   iconMap,
-  onNodesChange,
-  onNodeDragStop,
+  onDragStop,
   onConnect,
 }: CompositeEditorProps) {
   const { fitView } = useReactFlow();
 
   // ── Imperative fitView on load, drop, and navigation ──
   useEffect(() => {
-    // Small delay to let ReactFlow finish measuring after render
     const timer = setTimeout(() => fitView({ padding: 0.2 }), 50);
     return () => clearTimeout(timer);
   }, [fitViewTrigger, fitView]);
 
-  // ── Derive ReactFlow nodes ──
-  const rfNodes: Node[] = useMemo(
-    () =>
-      graph.instances.map((inst) => {
-        const nodeErrors = validationErrors.filter(
-          (e) => e.instance_id === inst.id && e.module_key === module_key,
-        );
-        return {
-          id: inst.id,
-          type: resolveNodeType(workspace, inst),
-          position: localPositions[inst.id] ?? layout?.nodes[inst.id]?.position ?? { x: 0, y: 0 },
-          data: {
-            instance: inst,
-            schema: resolveSchema(workspace, inst),
-            icon_url: resolveIconUrl(inst, iconMap),
-            hasErrors: nodeErrors.length > 0,
-            errorMessages: nodeErrors.map((e) => e.message),
-          },
-        };
-      }),
-    [graph.instances, layout, workspace, localPositions, validationErrors, module_key, iconMap],
+  // ── Derive ReactFlow nodes from workspace state ──
+  // Position resolution: saved layout → auto-grid fallback → origin.
+  // Auto-grid is a pure computation — never persisted. Positions are only
+  // written to workspace when the user drags (onDragStop → SYNC_LAYOUT).
+  const rfNodesFromWorkspace: Node[] = useMemo(() => {
+    // Auto-layout for nodes without saved positions
+    const cols = Math.max(2, Math.ceil(Math.sqrt(graph.instances.length)));
+    const SPACING_X = 120;
+    const SPACING_Y = 100;
+    const BASE = { x: 80, y: 80 };
+
+    return graph.instances.map((inst, i) => {
+      const saved = layout?.nodes[inst.id]?.position;
+      const auto = {
+        x: BASE.x + (i % cols) * SPACING_X,
+        y: BASE.y + Math.floor(i / cols) * SPACING_Y,
+      };
+      const nodeErrors = validationErrors.filter(
+        (e) => e.instance_id === inst.id && e.module_key === module_key,
+      );
+      return {
+        id: inst.id,
+        type: resolveNodeType(workspace, inst),
+        position: saved ?? auto,
+        data: {
+          instance: inst,
+          schema: resolveSchema(workspace, inst),
+          icon_url: resolveIconUrl(inst, iconMap),
+          hasErrors: nodeErrors.length > 0,
+          errorMessages: nodeErrors.map((e) => e.message),
+        },
+      };
+    });
+  }, [graph.instances, layout, workspace, validationErrors, module_key, iconMap]);
+
+  // ── Local ReactFlow node state ──
+  // ReactFlow in controlled mode needs ALL changes (position, dimensions,
+  // selection) applied via applyNodeChanges. This state is the single owner
+  // of node data that ReactFlow renders.
+  const [rfNodes, setRfNodes] = useState<Node[]>(rfNodesFromWorkspace);
+
+  // Re-sync when workspace changes (new drops, renames, deletes).
+  // Preserves ReactFlow-managed fields (measured, width, height, selected)
+  // and drag positions on existing nodes while updating type/data and
+  // adding/removing nodes to match the workspace.
+  useEffect(() => {
+    setRfNodes((prev) => {
+      const prevById = new Map(prev.map((n) => [n.id, n]));
+      return rfNodesFromWorkspace.map((wn) => {
+        const existing = prevById.get(wn.id);
+        if (existing) {
+          return {
+            ...existing,
+            type: wn.type,
+            data: wn.data,
+            // Existing nodes keep their ReactFlow-managed position (drag state).
+            // New position from workspace (e.g. a layout sync) would require
+            // remount, which we handle via key={module_key} on the parent.
+          };
+        }
+        return wn; // New node — use workspace position
+      });
+    });
+  }, [rfNodesFromWorkspace]);
+
+  // ── Handle ALL ReactFlow node changes (position, dimensions, select) ──
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setRfNodes((nds) => applyNodeChanges(changes, nds));
+  }, []);
+
+  // ── Sync positions back to workspace on drag stop ──
+  const onNodeDragStop = useCallback(
+    (_event: React.MouseEvent, _node: Node, nodes: Node[]) => {
+      const positions: Record<string, { x: number; y: number }> = {};
+      for (const n of nodes) {
+        positions[n.id] = n.position;
+      }
+      onDragStop(positions);
+    },
+    [onDragStop],
   );
 
   // ── Derive ReactFlow edges ──
@@ -135,6 +188,18 @@ function CompositeEditor({
     [graph.instances],
   );
 
+  // Fixed grid background (CSS — does not zoom/pan with the graph)
+  const gridStyle = {
+    background: '#161616',
+    backgroundImage: [
+      'linear-gradient(rgba(206,254,101,0.035) 1px, transparent 1px)',
+      'linear-gradient(90deg, rgba(206,254,101,0.035) 1px, transparent 1px)',
+      'linear-gradient(rgba(206,254,101,0.07) 1px, transparent 1px)',
+      'linear-gradient(90deg, rgba(206,254,101,0.07) 1px, transparent 1px)',
+    ].join(', '),
+    backgroundSize: '12px 12px, 12px 12px, 60px 60px, 60px 60px',
+  };
+
   return (
     <ReactFlow
       nodes={rfNodes}
@@ -143,21 +208,8 @@ function CompositeEditor({
       onNodesChange={onNodesChange}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
-      style={{ background: '#161616' }}
+      style={gridStyle}
     >
-      <Background
-        variant={BackgroundVariant.Lines}
-        gap={12}
-        size={1}
-        color="rgba(206, 254, 101, 0.035)"
-      />
-      <Background
-        id="grid-major"
-        variant={BackgroundVariant.Lines}
-        gap={60}
-        size={1}
-        color="rgba(206, 254, 101, 0.07)"
-      />
       <Controls position="bottom-right" />
     </ReactFlow>
   );
@@ -189,11 +241,11 @@ export default function Canvas() {
   const [validationErrors, setValidationErrors] = useState<
     Array<{ module_key?: string; instance_id?: string; message: string }>
   >([]);
+  const [isDirty, setIsDirty] = useState(false);
 
-  // Local position tracking (ReactFlow owns position during drag)
-  const [localPositions, setLocalPositions] = useState<Record<string, { x: number; y: number }>>(
-    {},
-  );
+  // Generation counter: incremented on LOAD_WORKSPACE to force CompositeEditor
+  // remount (via key) even when the module_key doesn't change.
+  const [loadGeneration, setLoadGeneration] = useState(0);
 
   // Trigger counter for imperative fitView calls (incremented on load/drop/navigate)
   const [fitViewTrigger, setFitViewTrigger] = useState(0);
@@ -227,7 +279,6 @@ export default function Canvas() {
       if (!targetDef || targetDef.impl.kind !== 'composite') return;
 
       setBreadcrumb((prev) => [...prev, targetKey]);
-      setLocalPositions({});
       setConfigTarget(null);
       setEdgeConfigState(null);
       setFitViewTrigger((n) => n + 1);
@@ -237,7 +288,6 @@ export default function Canvas() {
 
   const navigateTo = useCallback((index: number) => {
     setBreadcrumb((prev) => prev.slice(0, index + 1));
-    setLocalPositions({});
     setConfigTarget(null);
     setEdgeConfigState(null);
     setFitViewTrigger((n) => n + 1);
@@ -256,10 +306,16 @@ export default function Canvas() {
   // ── Semantic dispatch wrapper ──
   const semanticDispatch = useCallback((action: WorkspaceAction) => {
     dispatch(action);
-    if (action.type !== 'LOAD_WORKSPACE' && action.type !== 'SYNC_LAYOUT') {
+    if (action.type !== 'LOAD_WORKSPACE') {
+      setIsDirty(true);
       postToHost({ command: 'markDirty' });
     }
   }, []);
+
+  // ── Sync dirty state to menu bar HTML ──
+  useEffect(() => {
+    window.postMessage({ command: 'setDirty', dirty: isDirty }, '*');
+  }, [isDirty]);
 
   // ── Expose dispatch globally for ModuleNode rename/delete ──
   useEffect(() => {
@@ -276,36 +332,25 @@ export default function Canvas() {
     () => ({
       openConfig: (id) => setConfigTarget(id),
       navigateIn,
-      markDirty: () => postToHost({ command: 'markDirty' }),
+      markDirty: () => {
+        setIsDirty(true);
+        postToHost({ command: 'markDirty' });
+      },
     }),
     [navigateIn],
   );
 
-  // ── Event: node position changes during drag ──
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    const posUpdates: Record<string, { x: number; y: number }> = {};
-    for (const change of changes) {
-      if (change.type === 'position' && change.position && change.id) {
-        posUpdates[change.id] = change.position;
-      }
-    }
-    if (Object.keys(posUpdates).length > 0) {
-      setLocalPositions((prev) => ({ ...prev, ...posUpdates }));
-    }
-  }, []);
-
-  // ── Event: node drag stop → sync layout to workspace ──
-  const onNodeDragStop = useCallback((_event: React.MouseEvent, _node: Node, nodes: Node[]) => {
-    const positions: Record<string, { x: number; y: number }> = {};
-    for (const n of nodes) {
-      positions[n.id] = n.position;
-    }
-    dispatch({
-      type: 'SYNC_LAYOUT',
-      module_key: moduleKeyRef.current,
-      positions,
-    });
-  }, []);
+  // ── Event: drag stop → sync layout to workspace (marks dirty) ──
+  const onDragStop = useCallback(
+    (positions: Record<string, { x: number; y: number }>) => {
+      semanticDispatch({
+        type: 'SYNC_LAYOUT',
+        module_key: moduleKeyRef.current,
+        positions,
+      });
+    },
+    [semanticDispatch],
+  );
 
   // ── Event: new connection ──
   const onConnect = useCallback(
@@ -361,14 +406,23 @@ export default function Canvas() {
       switch (msg.command) {
         case 'loadState': {
           dispatch({ type: 'LOAD_WORKSPACE', workspace: msg.state });
-          setLocalPositions({});
+          setIsDirty(false);
+          setLoadGeneration((n) => n + 1);
           setFitViewTrigger((n) => n + 1);
           // Breadcrumb resets via the entry_key useEffect
           break;
         }
 
         case 'triggerSave': {
+          // User-initiated save (Cmd+S or save button)
           postToHost({ command: 'saveState', state: workspaceRef.current });
+          break;
+        }
+
+        case 'saveConfirmed': {
+          setIsDirty(false);
+          setStatusMessage('Saved');
+          setTimeout(() => setStatusMessage(null), 1500);
           break;
         }
 
@@ -412,10 +466,19 @@ export default function Canvas() {
           const entryDef = parsed.modules[entryKey];
           const positions: Record<string, { x: number; y: number }> = {};
 
+          // Count existing instances to offset new drops
+          const currentDef = workspaceRef.current.modules[moduleKeyRef.current];
+          const existingCount =
+            currentDef?.impl.kind === 'composite' ? currentDef.impl.graph.instances.length : 0;
+
           if (entryDef?.impl.kind === 'composite') {
             const instances = entryDef.impl.graph.instances;
-            const basePos = { x: 100, y: 100 };
             const cols = Math.max(2, Math.ceil(Math.sqrt(instances.length)));
+
+            // Offset each successive drop: arrange in a grid with spacing
+            const offsetCol = existingCount % 4;
+            const offsetRow = Math.floor(existingCount / 4);
+            const basePos = { x: 100 + offsetCol * 120, y: 100 + offsetRow * 100 };
 
             for (let i = 0; i < instances.length; i++) {
               const col = i % cols;
@@ -570,16 +633,15 @@ export default function Canvas() {
 
         <div className="flex-1 relative min-h-0">
           <CompositeEditor
+            key={`${module_key}:${loadGeneration}`}
             graph={graph}
             layout={layout}
             workspace={workspace}
             module_key={module_key}
             validationErrors={validationErrors}
-            localPositions={localPositions}
             fitViewTrigger={fitViewTrigger}
             iconMap={iconMap}
-            onNodesChange={onNodesChange}
-            onNodeDragStop={onNodeDragStop}
+            onDragStop={onDragStop}
             onConnect={onConnect}
           />
 
