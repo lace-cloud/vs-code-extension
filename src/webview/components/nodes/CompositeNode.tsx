@@ -13,18 +13,35 @@ export type CompositeNodeData = {
   icon_url?: string;
   hasErrors?: boolean;
   errorMessages?: string[];
+  connectedHandles?: string[];
 };
 
 type CompositeNodeNode = Node<CompositeNodeData, 'compositeNode'>;
 
-// ── Sizes (single source of truth) ──
+// ── Sizes ──
 
-const CARD_SIZE = 28;
-const ICON_SIZE = 20;
+const CARD_SIZE = 42;
+const ICON_SIZE = 36;
 
-// ── Handle style ──
+// ── Broken icon fallback (folder motif for composites) ──
 
-const handleStyle = 'w-1.5 h-1.5 bg-[#CEFE65] border border-[#153238] rounded-full';
+function BrokenIcon() {
+  return (
+    <svg
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#95E7FF"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+      <line x1="2" y1="2" x2="22" y2="22" stroke="rgba(149, 231, 255, 0.5)" strokeWidth="1.5" />
+    </svg>
+  );
+}
 
 // ── Component ──
 
@@ -33,6 +50,7 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(id);
   const [hovered, setHovered] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,6 +61,7 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
   }, [editing]);
 
   const instance = data.instance;
+  const connected = data.connectedHandles ?? [];
 
   // Wired input badges
   const wiredBadges: { inputName: string; source: string }[] = [];
@@ -119,29 +138,18 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
     [id],
   );
 
-  // ── Broken icon fallback (folder motif for composites) ──
+  // ── Helpers ──
 
-  const BrokenIcon = () => (
-    <svg
-      width={ICON_SIZE}
-      height={ICON_SIZE}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#95E7FF"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-      <line x1="2" y1="2" x2="22" y2="22" stroke="rgba(149, 231, 255, 0.5)" strokeWidth="1.5" />
-    </svg>
-  );
+  const showIcon = data.icon_url && !imgFailed;
 
-  // ── Border style ──
+  function handleClass(handleId: string): string {
+    const base = 'lace-handle lace-handle--composite';
+    return connected.includes(handleId) ? `${base} lace-handle--connected` : base;
+  }
 
-  const borderClass = data.hasErrors
-    ? 'border-2 border-[#e5484d] shadow-[0_0_6px_rgba(229,72,77,0.4)]'
-    : 'border border-transparent';
+  const errorBorder = data.hasErrors ? '1.5px solid #e5484d' : '1px solid transparent';
+
+  const errorShadow = data.hasErrors ? '0 0 8px rgba(229, 72, 77, 0.3)' : 'none';
 
   return (
     <div
@@ -155,20 +163,18 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
         data.hasErrors ? data.errorMessages?.join('\n') : `${instance.id} (double-click to open)`
       }
     >
-      {/* ── Card: fixed-size icon box ── */}
+      {/* ── Card (invisible unless error) ── */}
       <div
-        className={`w-full h-full bg-transparent ${borderClass} rounded-md flex items-center justify-center`}
+        className="w-full h-full rounded-sm flex items-center justify-center"
+        style={{ border: errorBorder, boxShadow: errorShadow }}
       >
-        {data.icon_url ? (
+        {showIcon ? (
           <img
             src={data.icon_url}
             alt={instance.id}
             className="rounded object-contain"
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-            }}
+            onError={() => setImgFailed(true)}
           />
         ) : (
           <BrokenIcon />
@@ -179,21 +185,37 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
       {hovered && (
         <button
           onClick={onDelete}
-          className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#e5484d] border-none text-white text-[7px] leading-none cursor-pointer flex items-center justify-center z-10"
+          className="absolute rounded-full bg-[#e5484d] border-none text-white leading-none cursor-pointer flex items-center justify-center z-10"
+          style={{ top: -4, right: -4, width: 8, height: 8, fontSize: 5 }}
           title="Delete"
         >
           ✕
         </button>
       )}
 
-      {/* ── Handles ── */}
-      <Handle id="in-top" type="target" position={Position.Top} className={handleStyle} />
-      <Handle id="in-left" type="target" position={Position.Left} className={handleStyle} />
-      <Handle id="out-right" type="source" position={Position.Right} className={handleStyle} />
-      <Handle id="out-bottom" type="source" position={Position.Bottom} className={handleStyle} />
+      {/* ── Handles (CSS controls visibility) ── */}
+      <Handle id="in-top" type="target" position={Position.Top} className={handleClass('in-top')} />
+      <Handle
+        id="in-left"
+        type="target"
+        position={Position.Left}
+        className={handleClass('in-left')}
+      />
+      <Handle
+        id="out-right"
+        type="source"
+        position={Position.Right}
+        className={handleClass('out-right')}
+      />
+      <Handle
+        id="out-bottom"
+        type="source"
+        position={Position.Bottom}
+        className={handleClass('out-bottom')}
+      />
 
-      {/* ── Label (outside card, doesn't affect bounding box) ── */}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 flex flex-col items-center pointer-events-auto">
+      {/* ── Label ── */}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 flex flex-col items-center pointer-events-auto">
         {editing ? (
           <input
             ref={inputRef}
@@ -201,12 +223,14 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitRename}
             onKeyDown={onKeyDown}
-            className="bg-[#161616] text-[#95E7FF] border border-[rgba(149,231,255,0.3)] rounded px-1 py-px text-[8px] text-center w-24"
+            className="bg-[#161616] text-[#95E7FF] border border-[rgba(149,231,255,0.3)] rounded px-1 py-px text-center w-24"
+            style={{ fontSize: 12 }}
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
           <span
-            className="text-[8px] text-[#95E7FF] opacity-80 whitespace-nowrap max-w-[80px] truncate"
+            className="whitespace-nowrap max-w-[100px] truncate"
+            style={{ fontSize: 12, color: 'rgba(149, 231, 255, 0.65)' }}
             onDoubleClick={onLabelDoubleClick}
           >
             {instance.id}
@@ -217,7 +241,8 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
         {wiredBadges.map((badge) => (
           <span
             key={badge.inputName}
-            className="mt-px text-[8px] bg-[#161616] border border-[rgba(206,254,101,0.15)] px-1 rounded text-[#CEFE65] opacity-70 whitespace-nowrap"
+            className="mt-px bg-[#161616] border border-[rgba(206,254,101,0.1)] px-1 rounded text-[#CEFE65] opacity-60 whitespace-nowrap"
+            style={{ fontSize: 7 }}
           >
             {badge.source} → {badge.inputName}
           </span>
@@ -225,7 +250,7 @@ const CompositeNode: React.FC<NodeProps<CompositeNodeNode>> = ({ id, data }) => 
 
         {/* Validation error */}
         {data.hasErrors && (
-          <span className="mt-px text-[8px] text-[#e5484d] whitespace-nowrap">
+          <span className="mt-px text-[#e5484d] whitespace-nowrap" style={{ fontSize: 7 }}>
             ⚠ {data.errorMessages?.[0] ?? 'Error'}
           </span>
         )}

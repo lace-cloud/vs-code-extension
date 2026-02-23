@@ -3,6 +3,7 @@ import React, { useEffect, useState, useReducer, useMemo, useCallback, useRef } 
 import {
   ReactFlow,
   Controls,
+  ControlButton,
   useReactFlow,
   applyNodeChanges,
   type Connection,
@@ -68,6 +69,7 @@ type CompositeEditorProps = {
   iconMap: Record<string, string>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
+  onSave: () => void;
 };
 
 function CompositeEditor({
@@ -80,6 +82,7 @@ function CompositeEditor({
   iconMap,
   onDragStop,
   onConnect,
+  onSave,
 }: CompositeEditorProps) {
   const { fitView } = useReactFlow();
 
@@ -88,6 +91,41 @@ function CompositeEditor({
     const timer = setTimeout(() => fitView({ padding: 0.2 }), 50);
     return () => clearTimeout(timer);
   }, [fitViewTrigger, fitView]);
+
+  // ── Derive ReactFlow edges ──
+  const rfEdges: Edge[] = useMemo(
+    () =>
+      deriveEdges(graph.instances).map((e) => ({
+        id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
+        source: e.source_instance,
+        sourceHandle: 'out-right',
+        target: e.target_instance,
+        targetHandle: 'in-left',
+        data: { mapping: e.mapping },
+        label: `${e.mapping.from} → ${e.mapping.to}`,
+        labelStyle: { fill: '#CEFE65', fontSize: 10 },
+        labelBgPadding: [0, 0] as [number, number],
+        labelBgBorderRadius: 0,
+        labelBgStyle: { fill: 'transparent' },
+      })),
+    [graph.instances],
+  );
+
+  // ── Derive connected handles per node (for handle visibility) ──
+  const connectedHandlesMap: Record<string, string[]> = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const edge of rfEdges) {
+      if (!map[edge.source]) map[edge.source] = new Set();
+      if (!map[edge.target]) map[edge.target] = new Set();
+      map[edge.source].add(edge.sourceHandle ?? 'out-right');
+      map[edge.target].add(edge.targetHandle ?? 'in-left');
+    }
+    const result: Record<string, string[]> = {};
+    for (const [id, set] of Object.entries(map)) {
+      result[id] = [...set];
+    }
+    return result;
+  }, [rfEdges]);
 
   // ── Derive ReactFlow nodes from workspace state ──
   // Position resolution: saved layout → auto-grid fallback → origin.
@@ -119,10 +157,19 @@ function CompositeEditor({
           icon_url: resolveIconUrl(inst, iconMap),
           hasErrors: nodeErrors.length > 0,
           errorMessages: nodeErrors.map((e) => e.message),
+          connectedHandles: connectedHandlesMap[inst.id] ?? [],
         },
       };
     });
-  }, [graph.instances, layout, workspace, validationErrors, module_key, iconMap]);
+  }, [
+    graph.instances,
+    layout,
+    workspace,
+    validationErrors,
+    module_key,
+    iconMap,
+    connectedHandlesMap,
+  ]);
 
   // ── Local ReactFlow node state ──
   // ReactFlow in controlled mode needs ALL changes (position, dimensions,
@@ -171,23 +218,6 @@ function CompositeEditor({
     [onDragStop],
   );
 
-  // ── Derive ReactFlow edges ──
-  const rfEdges: Edge[] = useMemo(
-    () =>
-      deriveEdges(graph.instances).map((e) => ({
-        id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
-        source: e.source_instance,
-        target: e.target_instance,
-        data: { mapping: e.mapping },
-        label: `${e.mapping.from} → ${e.mapping.to}`,
-        labelStyle: { fill: '#CEFE65', fontSize: 10 },
-        labelBgPadding: [0, 0] as [number, number],
-        labelBgBorderRadius: 0,
-        labelBgStyle: { fill: 'transparent' },
-      })),
-    [graph.instances],
-  );
-
   // Fixed grid background (CSS — does not zoom/pan with the graph)
   const gridStyle = {
     background: '#161616',
@@ -197,7 +227,7 @@ function CompositeEditor({
       'linear-gradient(rgba(206,254,101,0.07) 1px, transparent 1px)',
       'linear-gradient(90deg, rgba(206,254,101,0.07) 1px, transparent 1px)',
     ].join(', '),
-    backgroundSize: '12px 12px, 12px 12px, 60px 60px, 60px 60px',
+    backgroundSize: '16px 16px, 16px 16px, 80px 80px, 80px 80px',
   };
 
   return (
@@ -209,8 +239,20 @@ function CompositeEditor({
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       style={gridStyle}
+      proOptions={{ hideAttribution: true }}
     >
-      <Controls position="bottom-right" />
+      <Controls position="bottom-right" showInteractive={false}>
+        <ControlButton
+          onClick={onSave}
+          title="Save (Cmd+S)"
+          aria-label="Save"
+          className="react-flow__controls-button"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z" />
+          </svg>
+        </ControlButton>
+      </Controls>
     </ReactFlow>
   );
 }
@@ -241,7 +283,7 @@ export default function Canvas() {
   const [validationErrors, setValidationErrors] = useState<
     Array<{ module_key?: string; instance_id?: string; message: string }>
   >([]);
-  const [isDirty, setIsDirty] = useState(false);
+  const [_isDirty, setIsDirty] = useState(false);
 
   // Generation counter: incremented on LOAD_WORKSPACE to force CompositeEditor
   // remount (via key) even when the module_key doesn't change.
@@ -312,10 +354,10 @@ export default function Canvas() {
     }
   }, []);
 
-  // ── Sync dirty state to menu bar HTML ──
-  useEffect(() => {
-    window.postMessage({ command: 'setDirty', dirty: isDirty }, '*');
-  }, [isDirty]);
+  // ── Save action (used by Controls save button + Cmd+S) ──
+  const onSave = useCallback(() => {
+    postToHost({ command: 'saveState', state: workspaceRef.current });
+  }, []);
 
   // ── Expose dispatch globally for ModuleNode rename/delete ──
   useEffect(() => {
@@ -643,6 +685,7 @@ export default function Canvas() {
             iconMap={iconMap}
             onDragStop={onDragStop}
             onConnect={onConnect}
+            onSave={onSave}
           />
 
           {/* Module config panel */}

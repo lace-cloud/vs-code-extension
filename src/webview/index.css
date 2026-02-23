@@ -12,38 +12,71 @@
  * Preflight resets live in @layer base.
  * ReactFlow styles go in @layer components → beats Preflight.
  * Our overrides below are unlayered → highest cascade priority.
+ * No !important needed — unlayered rules beat all @layer rules.
  */
 
 @import 'tailwindcss';
 @import '@xyflow/react/dist/style.css' layer(components);
 
-/* ── ReactFlow overrides (unlayered — wins cascade) ── */
+/* ── Handles ──
+ * Hidden at rest. Visible on node hover (connection cues) or when
+ * connected (persistent indicator). Composite nodes use blue accent.
+ */
 
-.react-flow__handle:hover {
-  box-shadow: 0 0 6px rgba(206, 254, 101, 0.6);
-  border-color: #CEFE65;
+.lace-handle {
+  width: 3px;
+  height: 3px;
+  background: rgba(206, 254, 101, 0.7);
+  border: none;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
+
+.react-flow__node:hover .lace-handle {
+  opacity: 1;
+}
+
+.lace-handle--connected {
+  opacity: 0.7;
+}
+
+.react-flow__node:hover .lace-handle--connected {
+  opacity: 1;
+}
+
+.lace-handle--composite {
+  background: rgba(149, 231, 255, 0.7);
+}
+
+/* ── Controls ──
+ * ReactFlow Panel sets .bottom { bottom: 0 } and .right { right: 0 }
+ * in @layer components. We override to inset from edges.
+ */
 
 .react-flow__controls {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid rgba(206, 254, 101, 0.15);
-  margin-right: 12px !important;
-  margin-bottom: 12px !important;
+}
+
+.react-flow__panel.bottom.right {
+  bottom: 40px;
+  right: 20px;
 }
 
 .react-flow__controls-button {
   background: #153238;
   border: none;
   border-bottom: 1px solid rgba(206, 254, 101, 0.1);
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  padding: 6px;
+  padding: 5px;
 }
 
 .react-flow__controls-button:hover {
@@ -56,12 +89,18 @@
 
 .react-flow__controls-button svg {
   fill: #CEFE65;
-  width: 14px;
-  height: 14px;
-  max-width: 14px;
-  max-height: 14px;
+  width: 13px;
+  height: 13px;
+  max-width: 13px;
+  max-height: 13px;
 }
 
 .react-flow__controls-button:hover svg {
   fill: #e0ff8a;
+}
+
+/* ── Edge labels ── */
+
+.react-flow__edge-textbg {
+  fill: transparent;
 }

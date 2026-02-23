@@ -97,26 +97,8 @@ export function getWebviewContent(
     <button id="environments-btn" class="toolbar-btn">Environments</button>
   </div>
 
-  <!-- RIGHT: Save + Generate -->
+  <!-- RIGHT: Generate -->
   <div class="menu-right">
-    <button
-      id="save-btn"
-      style="
-        padding: 4px 12px;
-        border-radius: 4px;
-        background: transparent;
-        border: 1px solid rgba(206, 254, 101, 0.3);
-        color: #CEFE65;
-        font-size: 12px;
-        cursor: pointer;
-        opacity: 0.4;
-        pointer-events: none;
-        transition: opacity 0.15s;
-      "
-      disabled
-    >
-    Save
-    </button>
     <button
       id="generate-btn"
       style="
@@ -187,13 +169,9 @@ export function getWebviewContent(
       });
     }
 
-    // ── Save button ──
-    const saveBtn = document.getElementById('save-btn');
+    // ── Save (Cmd+S triggers save via React app) ──
     function triggerSave() {
       window.postMessage({ command: 'triggerSave' }, '*');
-    }
-    if (saveBtn) {
-      saveBtn.addEventListener('click', triggerSave);
     }
 
     // ── Cmd+S / Ctrl+S keyboard shortcut ──
@@ -201,23 +179,6 @@ export function getWebviewContent(
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         triggerSave();
-      }
-    });
-
-    // ── Listen for dirty/clean state from React app ──
-    window.addEventListener('message', (e) => {
-      if (e.data?.command === 'setDirty' && saveBtn) {
-        const dirty = e.data.dirty;
-        saveBtn.style.opacity = dirty ? '1' : '0.4';
-        saveBtn.style.pointerEvents = dirty ? 'auto' : 'none';
-        saveBtn.disabled = !dirty;
-        if (dirty) {
-          saveBtn.style.background = 'rgba(206, 254, 101, 0.1)';
-          saveBtn.style.borderColor = '#CEFE65';
-        } else {
-          saveBtn.style.background = 'transparent';
-          saveBtn.style.borderColor = 'rgba(206, 254, 101, 0.3)';
-        }
       }
     });
   });
