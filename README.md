@@ -1,249 +1,71 @@
 # Lace — Visual Terraform Module Composer
 
-Lace is a VS Code extension that lets you visually compose Terraform infrastructure by browsing modules from a registry, wiring their inputs/outputs together on a canvas, and generating production-ready `.tf` files. It communicates with a Go CLI backend (`lace`) over JSON-RPC for registry access, validation, and code generation.
+Build Terraform infrastructure visually. Browse a module registry, wire inputs and outputs on a canvas, and generate production-ready `.tf` files — all inside VS Code.
 
-## Quick Start
+<!-- TODO: Replace with a screenshot or GIF of the Lace canvas in action -->
 
-```bash
-# Install dependencies
-npm install
+![Lace Canvas](https://placeholder.com/lace-canvas-screenshot.png)
 
-# Build (extension backend + webview frontend)
-npm run build
+## Features
 
-# Run tests
-npm test
+- **Visual canvas** — Drag-and-drop module composition with a node-based editor
+- **Module registry sidebar** — Browse, search, and inspect modules without leaving VS Code
+- **Wire inputs and outputs** — Connect module outputs to other module inputs visually
+- **Configure everything** — Variables, outputs, providers, locals, and environments through dedicated config panels
+- **Generate Terraform** — Produce production-ready `.tf` files with one click
+- **Terraform tooling** — Validate, format, security scan, and generate docs via integrated terminal commands
+- **Auto-save** — Optionally auto-save canvas changes as you work
 
-# Launch in VS Code
-# Press F5 → opens Extension Development Host
-```
-
-In the Extension Development Host, click the **Lace** icon in the activity bar to browse the registry sidebar. Use `Lace: Open Canvas` to start composing, add modules from the sidebar or command palette, wire them together, configure inputs, and hit **Generate** to produce Terraform files in `.lace/`.
+## Getting Started
 
 ### Prerequisites
 
-- **Node.js** ≥ 18, **npm** ≥ 9
-- **VS Code** ≥ 1.96.0
-- **Lace CLI** binary (default path: `/usr/local/bin/lace`; configurable via `lace.binaryPath` setting)
-- **Terraform** (for E2E tests — `terraform fmt -check` validates generated HCL)
-- CLI authenticated via `lace login` (the extension never manages tokens)
+- [VS Code](https://code.visualstudio.com/) 1.96.0 or later
+- [Lace CLI](https://lace.cloud) installed and available on your PATH
+- Authenticated via `lace login`
 
-## Architecture Overview
+### Workflow
 
-The extension has two runtime halves joined by VS Code's webview messaging bridge:
-
-```
-┌──────────────────────────────┐       ┌──────────────────────────────┐
-│         Host (Node.js)       │       │      Webview (Browser)       │
-│                              │       │                              │
-│  extension.ts                │ msg   │  Canvas.tsx (ReactFlow)      │
-│  createWebviewPanel.ts  ◄────┼──────►│  reducer.ts (pure state)     │
-│  RegistrySidebarProvider.ts  │       │  bundle.ts (toBundle/from)   │
-│  ModuleDetailPanel.ts        │       │  panels/*.tsx (config UIs)   │
-│  ServerManager + RPC Client  │       │  validate.ts (graph checks)  │
-│         │                    │       │                              │
-│         │ stdin/stdout       │       └──────────────────────────────┘
-│         ▼                    │
-│  ┌──────────────┐            │
-│  │  lace CLI    │            │
-│  │  (Go binary) │            │
-│  └──────────────┘            │
-└──────────────────────────────┘
-```
-
-### Data Flow
-
-```
-User action (add module, connect, rename, configure...)
-       │
-       ▼
-WorkspaceAction                   ← semantic action with module_key
-       │
-       ▼
-workspaceReducer(state, action)   ← pure: (WorkspaceState, Action) → WorkspaceState
-       │
-       ▼
-WorkspaceState                    ← ModuleBundle & { layouts }
-       │
-       ├── save ──→ .lace/lace.json (version-controlled)
-       ├── render ──→ deriveEdges(instances) ──→ ReactFlow nodes + edges
-       └── generate ──→ toBundle(workspace) ──→ validate ──→ generate ──→ .lace/*.tf
-```
-
-### Persistence: The `.lace/` Directory
-
-Lace stores everything in a `.lace/` directory at the workspace root — like `.github/`, `.vscode/`, or `.husky/`:
-
-```
-my-app/
-  src/
-  .lace/
-    lace.json       ← the bundle (source of truth, version-controlled)
-    main.tf         ← generated
-    variables.tf    ← generated
-    providers.tf    ← generated
-    ...
-```
-
-`lace.json` is the bundle — the same `ModuleBundle` format used everywhere in the system. Registry modules are bundles. Your project is a bundle that composes other bundles. It's fractal — bundles all the way down.
-
-One workspace = one component. No global storage, no naming, no component lists.
-
-## UX: Two Access Patterns
-
-**Sidebar (discovery flow):** The registry sidebar is a `WebviewViewProvider` with an inline search box (like VS Code's Extensions panel). Type to filter, click a module to open its detail tab (versions, interface, inputs/outputs), then "Add to Canvas" from the detail panel.
-
-**Command palette (power user flow):** `Lace: Add Module to Canvas` opens a quick pick — select a module and it drops directly onto the canvas. No detail panel, no extra clicks.
-
-Both flows converge on the same `dropModuleToCanvas` function.
+1. Open a workspace folder in VS Code
+2. Run **Lace: Open Canvas** from the command palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+3. Browse the **Registry** sidebar (Lace icon in the activity bar) to find modules
+4. Click a module to view its details, then **Add to Canvas**
+5. Wire module outputs to other module inputs by dragging connections on the canvas
+6. Configure variables, providers, and other settings through the config panels
+7. Run **Lace: Generate Terraform** to produce `.tf` files
 
 ## Commands
 
-| Command                           | Purpose                                               |
-| --------------------------------- | ----------------------------------------------------- |
-| `Lace: Open Canvas`               | Open (or create) the canvas for the current workspace |
-| `Lace: Add Module to Canvas`      | Quick pick → drop module onto canvas                  |
-| `Lace: Generate Terraform`        | Validate + generate `.tf` files into `.lace/`         |
-| `Lace: Terraform Validate`        | Run `lace terraform validate` on `.lace/`             |
-| `Lace: Terraform Format`          | Run `lace terraform fmt` on `.lace/`                  |
-| `Lace: Terraform Security Scan`   | Run `lace terraform scan` on `.lace/`                 |
-| `Lace: Terraform Docs`            | Run `lace terraform docs` on `.lace/`                 |
-| `Lace: Start/Stop/Restart Engine` | Manage the CLI process                                |
+| Command                         | Description                                           |
+| ------------------------------- | ----------------------------------------------------- |
+| `Lace: Open Canvas`             | Open the visual canvas for the current workspace      |
+| `Lace: Add Module to Canvas`    | Quick-pick a module and add it directly to the canvas |
+| `Lace: Generate Terraform`      | Validate the canvas and generate `.tf` files          |
+| `Lace: Terraform Validate`      | Run `terraform validate` on generated files           |
+| `Lace: Terraform Format`        | Run `terraform fmt` on generated files                |
+| `Lace: Terraform Security Scan` | Run a security scan on generated files                |
+| `Lace: Terraform Docs`          | Generate documentation for your Terraform config      |
+| `Lace: Start Engine`            | Start the Lace CLI backend process                    |
+| `Lace: Stop Engine`             | Stop the Lace CLI backend process                     |
+| `Lace: Restart Engine`          | Restart the Lace CLI backend process                  |
 
-Terraform commands open an integrated terminal and shell out to the CLI.
+## Settings
 
-## Project Structure
+| Setting            | Default               | Description                                                            |
+| ------------------ | --------------------- | ---------------------------------------------------------------------- |
+| `lace.binaryPath`  | `/usr/local/bin/lace` | Path to the Lace CLI binary                                            |
+| `lace.autoStart`   | `true`                | Start the CLI engine automatically when the extension activates        |
+| `lace.autoRestart` | `true`                | Automatically restart the engine on crash (up to 3 retries)            |
+| `lace.autoSave`    | `false`               | Automatically save canvas changes. When disabled, use `Cmd+S` to save. |
 
-```
-.github/
-└── workflows/
-    └── ci.yml                    # CI: unit + E2E tests with lace CLI + Terraform
-src/
-├── extension.ts                  # VS Code activation, commands, engine lifecycle
-├── types/
-│   └── protocol.ts               # Host↔webview message unions, RegistryModule, Diagnostic
-├── utilities/engine/
-│   ├── server-manager.ts         # Spawns lace CLI, manages lifecycle
-│   └── rpc-client.ts             # JSON-RPC 2.0 over stdin/stdout
-├── containers-views/
-│   └── RegistrySidebarProvider.ts  # WebviewViewProvider with inline search
-└── webview/
-    ├── index.tsx                  # React entry point
-    ├── App.tsx                    # ReactFlowProvider wrapper
-    ├── Canvas.tsx                 # Main canvas: nodes, edges, panels, toolbar
-    ├── ModuleDetailPanel.ts       # Extensions-style module detail tab
-    ├── createWebviewPanel.ts      # Host-side: .lace/ persistence, validation, generate
-    ├── getWebviewContent.ts       # HTML shell + toolbar buttons
-    ├── state/
-    │   ├── reducer.ts             # Pure reducer: 16 action types
-    │   └── context.ts             # CanvasContext for node↔canvas communication
-    ├── types/
-    │   ├── ir.ts                  # Core IR types matching Go wire format exactly
-    │   └── workspace.ts           # WorkspaceState = ModuleBundle & { layouts }
-    ├── utils/
-    │   ├── bundle.ts              # toBundle / fromBundle / emptyWorkspace
-    │   ├── derive.ts              # Derive edges + wires from out bindings
-    │   ├── validate.ts            # Graph validation (duplicates, dangling refs)
-    │   ├── resolve.ts             # Schema resolution for instances
-    │   ├── identifiers.ts         # Terraform identifier validation/generation
-    │   └── record.ts              # mapRecord / filterRecord utilities
-    ├── components/
-    │   ├── nodes/
-    │   │   └── ModuleNode.tsx     # Module node (with error highlighting)
-    │   ├── panels/                # 8 config panels (inputs, edges, variables, etc.)
-    │   └── ErrorBoundary.tsx      # React error boundary
-    └── __tests__/
-        ├── fixtures/              # Real CLI bundle snapshots
-        ├── e2e-rpc-integration.test.ts  # E2E: spawns lace CLI, full RPC pipeline
-        └── *.test.ts              # 9 unit test suites, 99 tests
-```
+## How It Works
 
-## Core Concepts
+Lace connects to a module registry through its CLI backend. When you add modules to the canvas and wire them together, Lace maintains a project file (`lace.json`) that captures your composition. When you generate, Lace produces standard Terraform files (`.tf`) from your visual design.
 
-### Module Bundle
+All project files live in a `.lace/` directory at your workspace root. This directory is meant to be version-controlled alongside the rest of your code.
 
-The wire format exchanged between the extension and CLI. A `ModuleBundle` contains a flat map of `ModuleDef` entries (keyed as `id@version`) and an `entry` reference pointing to the root composite.
+## Links
 
-### Workspace State
-
-`WorkspaceState = ModuleBundle & { layouts }`. The `layouts` record stores per-composite node positions for the canvas. `toBundle()` strips layouts; `fromBundle()` adds them.
-
-### Binding System
-
-Every instance input is a discriminated union — exactly one variant is set: `lit` (literal value), `var` (composite variable reference), `out` (sibling output reference), or `expr` (raw HCL expression).
-
-### Wires
-
-Wires are **never stored** in workspace state. They are derived from `out` bindings in `toBundle()` and stripped by `fromBundle()`. This is a core invariant.
-
-## Testing
-
-```bash
-npm test              # Run all tests (unit + E2E)
-npm run test:unit     # Unit tests only (no binary needed)
-npm run test:e2e      # E2E tests only (requires lace binary + terraform)
-npm run test:watch    # Watch mode (unit tests)
-```
-
-### Unit Tests (99 tests)
-
-Pure logic tests — no external dependencies. Exercises the reducer, bundle round-trips, validation, identifiers, and wire derivation.
-
-| Suite                      | Tests | Coverage                                            |
-| -------------------------- | ----- | --------------------------------------------------- |
-| `reducer.test.ts`          | 29    | Core editing and composite interface actions        |
-| `terraform-config.test.ts` | 18    | Terraform config actions, full bundle round-trip    |
-| `identifiers.test.ts`      | 8     | Terraform identifier validation/collision           |
-| `bundle.test.ts`           | 7     | `toBundle`/`fromBundle` round-trip, boundary errors |
-| `normalize.test.ts`        | 7     | Binding normalization for all 4 variants            |
-| `validate.test.ts`         | 6     | Duplicate IDs, dangling refs, depends_on            |
-| `scaffold.test.ts`         | 6     | `emptyWorkspace` factory + round-trip fidelity      |
-| `resolve.test.ts`          | 14    | Schema/module/icon resolution for instances         |
-| `derive.test.ts`           | 4     | Edge/wire derivation from out bindings              |
-
-### E2E Tests (6 tests)
-
-Spawn the real `lace module serve` binary, talk JSON-RPC through the actual `JSONRPCClient`, and exercise the full extension→CLI contract. The main test builds a workspace, validates over RPC, generates `.tf` files to disk, and runs `terraform fmt -check` to verify valid HCL.
-
-| Test                 | What it covers                                                       |
-| -------------------- | -------------------------------------------------------------------- |
-| Full pipeline        | workspace → validate → generate to disk → terraform fmt              |
-| Invalid bundle       | Wrong schema version + missing entry → server rejects                |
-| Dangling reference   | Instance references non-existent module → caught                     |
-| Method not found     | Unknown RPC method → transport error                                 |
-| Round-trip stability | Complex fixture → fromBundle → toBundle → validate → re-import       |
-| Duplicate drop       | Same bundle dropped twice → dedup → validate → generate all 4 blocks |
-
-**Prerequisites for E2E:**
-
-```bash
-# Install Lace CLI
-wget https://releases.lace.cloud/lace-cli-linux-amd64 -O lace
-chmod +x lace && sudo mv lace /usr/local/bin/
-
-# Terraform (for fmt -check)
-# https://developer.hashicorp.com/terraform/install
-
-# Or override binary path
-LACE_BINARY=/path/to/lace npm run test:e2e
-```
-
-## CI/CD
-
-GitHub Actions runs on push/PR to `main` and `develop` branches. The workflow installs Node.js, npm dependencies, the Lace CLI binary, and Terraform, then runs unit and E2E tests in sequence. See `.github/workflows/ci.yml`.
-
-## Configuration
-
-| Setting            | Default               | Description                                  |
-| ------------------ | --------------------- | -------------------------------------------- |
-| `lace.binaryPath`  | `/usr/local/bin/lace` | Path to the Lace CLI binary                  |
-| `lace.autoStart`   | `true`                | Start CLI engine on extension activation     |
-| `lace.autoRestart` | `true`                | Auto-restart engine on crash (up to 3 times) |
-
-## Build System
-
-- **Bundler**: [Rspack](https://rspack.dev/) with two entries — `extension.ts` (Node.js target) and `webview/index.tsx` (browser target)
-- **Styling**: Tailwind CSS v4 via PostCSS
-- **TypeScript**: Strict mode
-- **Test runner**: Vitest
-- **Formatting**: Prettier (enforced via lint-staged + Husky)
+- [Documentation](https://lace.cloud)
+- [Report an Issue](https://github.com/lace-cloud/vs-code-extension/issues)
+- [GitHub Repository](https://github.com/lace-cloud/vs-code-extension)
