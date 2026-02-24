@@ -15,6 +15,23 @@ function detectMode(binding: Binding | undefined): BindingMode {
   return 'literal';
 }
 
+/**
+ * Returns true when a literal value is an untouched placeholder default.
+ * These should be omitted for optional inputs so Terraform uses the
+ * module's own defaults instead of emitting `= {}` or `= null`.
+ */
+function isEmptyLit(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value as Record<string, unknown>).length === 0
+  ) {
+    return true;
+  }
+  return false;
+}
+
 // ── Props ──
 
 type Props = {
@@ -126,7 +143,18 @@ export default function ModuleConfigPanel({
   // ── Save handler ──
 
   const handleSave = () => {
-    onSave(localBindings);
+    // Filter out optional inputs whose literal value is an untouched placeholder
+    // (null or empty object). Omitting them lets Terraform use the module's own
+    // defaults instead of emitting invalid `= {}` in HCL.
+    const optionalNames = new Set(optionalInputs.map((i) => i.name));
+    const filtered: Record<string, Binding> = {};
+    for (const [name, binding] of Object.entries(localBindings)) {
+      if (optionalNames.has(name) && isLit(binding) && isEmptyLit(binding.lit)) {
+        continue;
+      }
+      filtered[name] = binding;
+    }
+    onSave(filtered);
     onSaveDependsOn([...localDependsOn]);
   };
 
@@ -311,7 +339,19 @@ export default function ModuleConfigPanel({
     return (
       <input
         value={value ?? ''}
-        onChange={(e) => updateBinding(def.name, { lit: e.target.value })}
+        onChange={(e) => {
+          let v = e.target.value;
+          // Strip wrapping quotes — the CLI handles HCL quoting automatically.
+          // Without this, typing "" stores the two-character string "" which the
+          // CLI then quotes again, producing the invalid HCL literal "\"\"".
+          if (
+            v.length >= 2 &&
+            ((v[0] === '"' && v[v.length - 1] === '"') || (v[0] === "'" && v[v.length - 1] === "'"))
+          ) {
+            v = v.slice(1, -1);
+          }
+          updateBinding(def.name, { lit: v });
+        }}
         className={inputClasses}
       />
     );
