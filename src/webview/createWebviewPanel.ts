@@ -51,6 +51,18 @@ export function triggerGenerateOnActiveCanvas() {
   postToWebview(canvasPanel, { command: 'triggerGenerate' });
 }
 
+/** Send refreshed module defs to the active canvas. */
+export function refreshModulesOnActiveCanvas(
+  updated_modules: Record<string, import('./types/ir').ModuleDef>,
+  icon_updates?: Record<string, string>,
+) {
+  if (!canvasPanel) {
+    vscode.window.showWarningMessage('No canvas open.');
+    return;
+  }
+  postToWebview(canvasPanel, { command: 'refreshModuleDefs', updated_modules, icon_updates });
+}
+
 /** Whether a canvas is currently open. */
 export function isCanvasOpen(): boolean {
   return canvasPanel !== undefined;
@@ -258,6 +270,12 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
               message: classified.message,
             });
           }
+          break;
+        }
+
+        // ── refreshModules: relay to command ──
+        case 'refreshModules': {
+          vscode.commands.executeCommand('lace.refreshCanvasModules');
           break;
         }
 

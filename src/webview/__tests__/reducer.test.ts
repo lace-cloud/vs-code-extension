@@ -706,6 +706,208 @@ test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
 // s3_stack validation scenario
 // ══════════════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════════════
+// REFRESH_MODULE_DEFS
+// ══════════════════════════════════════════════════════════════════════
+
+test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and root composite', () => {
+  const leafDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'aws-s3-bucket',
+    version: 'v1.2.0',
+    interface: {
+      inputs: [{ name: 'bucket_name', type: 'string', required: true }],
+      outputs: [{ name: 'arn', type: 'string' }],
+    },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old-repo', ref: 'v1.2.0' } },
+  };
+  const state = makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 's3',
+        use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
+        inputs: { bucket_name: { lit: 'my-bucket' } },
+      },
+    ],
+    { 'aws-s3-bucket@v1.2.0': leafDef },
+  );
+
+  // Updated def: fixed git URL
+  const updatedDef: ModuleDef = {
+    ...leafDef,
+    interface: {
+      inputs: [
+        { name: 'bucket_name', type: 'string', required: true },
+        { name: 'tags', type: 'map(string)', required: false },
+      ],
+      outputs: [{ name: 'arn', type: 'string' }],
+    },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'fixed-repo', ref: 'v1.2.0' } },
+  };
+
+  const next = workspaceReducer(state, {
+    type: 'REFRESH_MODULE_DEFS',
+    updated_modules: { 'aws-s3-bucket@v1.2.0': updatedDef },
+  });
+
+  // Module def is updated
+  const def = next.modules['aws-s3-bucket@v1.2.0'];
+  expect((def.impl as any).source.repo).toBe('fixed-repo');
+  expect(def.interface.inputs).toHaveLength(2);
+
+  // Root composite preserved
+  expect(next.modules['root@v1.0.0']).toBeDefined();
+  expect(next.modules['root@v1.0.0'].impl.kind).toBe('composite');
+
+  // Instance inputs preserved
+  const s3 = getInst(next, 's3');
+  expect(s3.inputs.bucket_name).toEqual({ lit: 'my-bucket' });
+});
+
+test('REFRESH_MODULE_DEFS with empty map returns same state reference', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+  ]);
+  const next = workspaceReducer(state, {
+    type: 'REFRESH_MODULE_DEFS',
+    updated_modules: {},
+  });
+  expect(next).toBe(state); // reference equality — no re-render
+});
+
+test('REFRESH_MODULE_DEFS preserves layouts', () => {
+  const leafDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'vpc',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old', ref: 'v1' } },
+  };
+  const state = makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'my-vpc',
+        use: { module_id: 'vpc', version: 'v1.0.0' },
+        inputs: {},
+      },
+    ],
+    { 'vpc@v1.0.0': leafDef },
+    { 'root@v1.0.0': { nodes: { 'my-vpc': { position: { x: 42, y: 84 } } } } },
+  );
+
+  const updatedDef: ModuleDef = {
+    ...leafDef,
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'new', ref: 'v1' } },
+  };
+
+  const next = workspaceReducer(state, {
+    type: 'REFRESH_MODULE_DEFS',
+    updated_modules: { 'vpc@v1.0.0': updatedDef },
+  });
+
+  expect(next.layouts['root@v1.0.0'].nodes['my-vpc']).toEqual({
+    position: { x: 42, y: 84 },
+  });
+});
+
+test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', () => {
+  const bucketDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'aws-s3-bucket',
+    version: 'v1.0.0',
+    interface: {
+      inputs: [{ name: 'name', type: 'string', required: true }],
+      outputs: [{ name: 'id', type: 'string' }],
+    },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old', ref: 'v1' } },
+  };
+  const versioningDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'aws-s3-versioning',
+    version: 'v1.0.0',
+    interface: {
+      inputs: [{ name: 'bucket_id', type: 'string', required: true }],
+      outputs: [],
+    },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old', ref: 'v1' } },
+  };
+
+  const state = makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'bucket',
+        use: { module_id: 'aws-s3-bucket', version: 'v1.0.0' },
+        inputs: { name: { lit: 'my-bucket' } },
+      },
+      {
+        kind: 'module',
+        id: 'versioning',
+        use: { module_id: 'aws-s3-versioning', version: 'v1.0.0' },
+        inputs: { bucket_id: { out: { module: 'bucket', name: 'id' } } },
+      },
+    ],
+    {
+      'aws-s3-bucket@v1.0.0': bucketDef,
+      'aws-s3-versioning@v1.0.0': versioningDef,
+    },
+  );
+
+  // Refresh both defs with updated source
+  const next = workspaceReducer(state, {
+    type: 'REFRESH_MODULE_DEFS',
+    updated_modules: {
+      'aws-s3-bucket@v1.0.0': {
+        ...bucketDef,
+        impl: { kind: 'leaf', source: { kind: 'git', repo: 'new', ref: 'v1' } },
+      },
+      'aws-s3-versioning@v1.0.0': {
+        ...versioningDef,
+        impl: { kind: 'leaf', source: { kind: 'git', repo: 'new', ref: 'v1' } },
+      },
+    },
+  });
+
+  // Wiring preserved
+  const v = getInst(next, 'versioning');
+  expect(v.inputs.bucket_id).toEqual({ out: { module: 'bucket', name: 'id' } });
+
+  // Defs updated
+  expect((next.modules['aws-s3-bucket@v1.0.0'].impl as any).source.repo).toBe('new');
+  expect((next.modules['aws-s3-versioning@v1.0.0'].impl as any).source.repo).toBe('new');
+});
+
+test('REFRESH_MODULE_DEFS does not guard against entry overwrite (host responsibility)', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+  ]);
+  // Deliberately overwrite the entry module — reducer does not block this
+  const bogusRoot: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'root',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'bad', ref: 'v1' } },
+  };
+  const next = workspaceReducer(state, {
+    type: 'REFRESH_MODULE_DEFS',
+    updated_modules: { 'root@v1.0.0': bogusRoot },
+  });
+  // Reducer allows it — host must filter entry key before dispatching
+  expect(next.modules['root@v1.0.0'].impl.kind).toBe('leaf');
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// s3_stack validation scenario
+// ══════════════════════════════════════════════════════════════════════
+
 test('s3_stack scenario: variables, var bindings, curated outputs', () => {
   // 1. Start with empty workspace
   let state = makeWorkspace([]);

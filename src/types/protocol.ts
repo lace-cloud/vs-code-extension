@@ -18,7 +18,12 @@ export type HostToWebview =
   | { command: 'triggerTerraformConfig' }
   | { command: 'triggerProviders' }
   | { command: 'triggerLocals' }
-  | { command: 'triggerEnvironments' };
+  | { command: 'triggerEnvironments' }
+  | {
+      command: 'refreshModuleDefs';
+      updated_modules: Record<string, import('../webview/types/ir').ModuleDef>;
+      icon_updates?: Record<string, string>;
+    };
 
 // ── Webview → Host ──
 
@@ -26,7 +31,8 @@ export type WebviewToHost =
   | { command: 'webviewReady' }
   | { command: 'saveState'; state: WorkspaceState }
   | { command: 'generateBundle'; bundle: ModuleBundle }
-  | { command: 'markDirty' };
+  | { command: 'markDirty' }
+  | { command: 'refreshModules' };
 
 // ── RPC diagnostic (matches Go's server.Diagnostic) ──
 

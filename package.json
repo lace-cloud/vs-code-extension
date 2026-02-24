@@ -67,6 +67,11 @@
         "title": "Lace: Restart Engine"
       },
       {
+        "command": "lace.refreshCanvasModules",
+        "title": "Lace: Refresh Canvas Modules",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "lace.terraformValidate",
         "title": "Lace: Terraform Validate"
       },

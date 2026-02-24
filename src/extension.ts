@@ -10,9 +10,13 @@ import {
   openCanvas,
   addModuleToActiveCanvas,
   triggerGenerateOnActiveCanvas,
+  refreshModulesOnActiveCanvas,
   getLaceDir,
   isCanvasOpen,
 } from './webview/createWebviewPanel';
+
+import { fromBundle } from './webview/utils/bundle';
+import type { ModuleDef } from './webview/types/ir';
 
 import { ServerManager } from './utilities/engine/server-manager';
 import { requireClient, handleRpcError } from './utilities/engine/rpc-errors';
@@ -197,6 +201,109 @@ export async function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('lace.terraformDocs', () => {
       runTerraformCommand('docs');
+    }),
+
+    // ── Refresh canvas modules from registry ──
+    vscode.commands.registerCommand('lace.refreshCanvasModules', async () => {
+      const laceDir = getLaceDir();
+      if (!laceDir) {
+        vscode.window.showErrorMessage('Open a folder first.');
+        return;
+      }
+
+      const fs = await import('fs');
+      const path = await import('path');
+      const filePath = path.join(laceDir, 'lace.json');
+      if (!fs.existsSync(filePath)) {
+        vscode.window.showWarningMessage('No lace.json found. Save the canvas first.');
+        return;
+      }
+
+      let saved: any;
+      try {
+        saved = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      } catch {
+        vscode.window.showErrorMessage('Failed to read lace.json.');
+        return;
+      }
+
+      const entryKey = `${saved.entry?.module_id}@${saved.entry?.version}`;
+      const moduleKeys = Object.keys(saved.modules ?? {}).filter((k) => k !== entryKey);
+
+      if (moduleKeys.length === 0) {
+        vscode.window.showInformationMessage('No modules to refresh.');
+        return;
+      }
+
+      const registryModules = registryProvider?.getModules() ?? [];
+
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Refreshing modules from registry...',
+          cancellable: false,
+        },
+        async (progress) => {
+          const updatedModules: Record<string, ModuleDef> = {};
+          const iconUpdates: Record<string, string> = {};
+          let errorCount = 0;
+
+          for (let idx = 0; idx < moduleKeys.length; idx++) {
+            const key = moduleKeys[idx];
+            const existingDef = saved.modules[key];
+            if (!existingDef) continue;
+
+            progress.report({
+              message: `${idx + 1}/${moduleKeys.length}: ${existingDef.id ?? key}`,
+              increment: 100 / moduleKeys.length,
+            });
+
+            // Find matching registry module
+            const regMod = registryModules.find(
+              (m) => m.id === existingDef.id && m.version === existingDef.version,
+            );
+            if (!regMod) continue; // Not in registry — skip silently
+
+            try {
+              const client = requireClient(server?.rpcClient, 'refresh module');
+              const response = await client.getRegistryVersion({
+                name: regMod.name,
+                system: regMod.system,
+                version: regMod.version,
+              });
+
+              const deployBundle = response?.deploy_bundle;
+              if (!deployBundle) continue;
+
+              const { workspace: parsed } = fromBundle(deployBundle);
+              const parsedEntryKey = `${deployBundle.entry.module_id}@${deployBundle.entry.version}`;
+
+              // Collect non-entry module defs
+              for (const [defKey, def] of Object.entries(parsed.modules)) {
+                if (defKey !== parsedEntryKey) {
+                  updatedModules[defKey] = def;
+                }
+              }
+
+              // Collect icon URL
+              if (regMod.icon_url) {
+                iconUpdates[key] = regMod.icon_url;
+              }
+            } catch (err: any) {
+              console.error(`Failed to refresh ${key}:`, err);
+              errorCount++;
+            }
+          }
+
+          refreshModulesOnActiveCanvas(updatedModules, iconUpdates);
+
+          if (errorCount > 0) {
+            vscode.window.showWarningMessage(
+              `Refreshed modules with ${errorCount} error(s). Check Output for details.`,
+            );
+          }
+        },
+      );
     }),
   );
 }

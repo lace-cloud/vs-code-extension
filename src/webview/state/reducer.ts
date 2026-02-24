@@ -63,7 +63,9 @@ export type WorkspaceAction =
   | { type: 'SET_LOCALS'; module_key: string; locals: LocalDef[] }
   | { type: 'SET_DEPENDS_ON'; module_key: string; instance_id: string; depends_on: string[] }
   | { type: 'SET_ENVIRONMENTS'; environments: WorkspaceState['environments'] }
-  | { type: 'SET_ENVIRONMENT_BACKENDS'; backends: WorkspaceState['environment_backends'] };
+  | { type: 'SET_ENVIRONMENT_BACKENDS'; backends: WorkspaceState['environment_backends'] }
+  // ── Refresh ──
+  | { type: 'REFRESH_MODULE_DEFS'; updated_modules: Record<string, ModuleDef> };
 
 // ══════════════════════════════════════════════════════════════════════
 // updateCompositeGraph helper
@@ -151,6 +153,10 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
       return handleSetEnvironments(state, action);
     case 'SET_ENVIRONMENT_BACKENDS':
       return handleSetEnvironmentBackends(state, action);
+
+    // ── Refresh ──
+    case 'REFRESH_MODULE_DEFS':
+      return handleRefreshModuleDefs(state, action);
   }
 }
 
@@ -707,4 +713,22 @@ function handleSetEnvironmentBackends(
   action: Extract<WorkspaceAction, { type: 'SET_ENVIRONMENT_BACKENDS' }>,
 ): WorkspaceState {
   return { ...state, environment_backends: action.backends };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// REFRESH_MODULE_DEFS
+// ══════════════════════════════════════════════════════════════════════
+
+function handleRefreshModuleDefs(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'REFRESH_MODULE_DEFS' }>,
+): WorkspaceState {
+  const { updated_modules } = action;
+  if (Object.keys(updated_modules).length === 0) {
+    return state;
+  }
+  return {
+    ...state,
+    modules: { ...state.modules, ...updated_modules },
+  };
 }

@@ -70,6 +70,7 @@ type CompositeEditorProps = {
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
   onSave: () => void;
+  onRefresh: () => void;
 };
 
 function CompositeEditor({
@@ -84,6 +85,7 @@ function CompositeEditor({
   onConnect,
   onEdgesDelete,
   onSave,
+  onRefresh,
 }: CompositeEditorProps) {
   const { fitView } = useReactFlow();
 
@@ -265,6 +267,16 @@ function CompositeEditor({
             <path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z" />
           </svg>
         </ControlButton>
+        <ControlButton
+          onClick={onRefresh}
+          title="Refresh modules from registry"
+          aria-label="Refresh modules"
+          className="react-flow__controls-button"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+          </svg>
+        </ControlButton>
       </Controls>
     </ReactFlow>
   );
@@ -330,6 +342,13 @@ export default function Canvas() {
   // ── Save action (used by Controls save button + Cmd+S) ──
   const onSave = useCallback(() => {
     postToHost({ command: 'saveState', state: workspaceRef.current });
+  }, []);
+
+  // ── Refresh action (re-fetch module defs from registry) ──
+  const onRefresh = useCallback(() => {
+    postToHost({ command: 'refreshModules' });
+    setStatusMessage('Refreshing...');
+    setTimeout(() => setStatusMessage(null), 5000);
   }, []);
 
   // ── Expose dispatch globally for ModuleNode rename/delete ──
@@ -606,6 +625,27 @@ export default function Canvas() {
           break;
         }
 
+        case 'refreshModuleDefs': {
+          const updatedModules = msg.updated_modules;
+          if (updatedModules && Object.keys(updatedModules).length > 0) {
+            semanticDispatch({
+              type: 'REFRESH_MODULE_DEFS',
+              updated_modules: updatedModules,
+            });
+            // Update icon map if provided
+            const iconUpdates: Record<string, string> | undefined = msg.icon_updates;
+            if (iconUpdates) {
+              setIconMap((prev) => ({ ...prev, ...iconUpdates }));
+            }
+            const count = Object.keys(updatedModules).length;
+            setStatusMessage(`Refreshed ${count} module(s)`);
+          } else {
+            setStatusMessage('All modules up to date');
+          }
+          setTimeout(() => setStatusMessage(null), 3000);
+          break;
+        }
+
         case 'validationErrors': {
           setValidationErrors(msg.errors ?? []);
           if (msg.errors?.length > 0) {
@@ -674,6 +714,7 @@ export default function Canvas() {
             onConnect={onConnect}
             onEdgesDelete={onEdgesDelete}
             onSave={onSave}
+            onRefresh={onRefresh}
           />
 
           {/* Module config panel */}
