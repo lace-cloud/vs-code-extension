@@ -529,7 +529,42 @@ test('LOAD_WORKSPACE replaces entire state', () => {
     { kind: 'module', id: 'x', use: { module_id: 'a', version: 'v1' }, inputs: {} },
   ]);
   const next = workspaceReducer(state, { type: 'LOAD_WORKSPACE', workspace: newState });
-  expect(next).toBe(newState); // reference equality — full replacement
+  // No orphans → GC returns same reference
+  expect(next).toBe(newState);
+});
+
+test('LOAD_WORKSPACE removes orphaned module defs not referenced by any instance', () => {
+  const referencedDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'vpc',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+  };
+  const orphanDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'rds-instance',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+  };
+  // Simulate loading a lace.json that has orphaned defs from earlier bugs
+  const dirtyState = makeWorkspace(
+    [{ kind: 'module', id: 'my-vpc', use: { module_id: 'vpc', version: 'v1.0.0' }, inputs: {} }],
+    { 'vpc@v1.0.0': referencedDef, 'rds-instance@v1.0.0': orphanDef },
+  );
+
+  const next = workspaceReducer(makeWorkspace([]), {
+    type: 'LOAD_WORKSPACE',
+    workspace: dirtyState,
+  });
+  // Orphan removed by GC on load
+  expect(next.modules['rds-instance@v1.0.0']).toBeUndefined();
+  // Referenced def and root preserved
+  expect(next.modules['vpc@v1.0.0']).toBeDefined();
+  expect(next.modules['root@v1.0.0']).toBeDefined();
 });
 
 // ══════════════════════════════════════════════════════════════════════

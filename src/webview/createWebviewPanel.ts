@@ -63,6 +63,12 @@ export function refreshModulesOnActiveCanvas(
   postToWebview(canvasPanel, { command: 'refreshModuleDefs', updated_modules, icon_updates });
 }
 
+/** Trigger save on the active canvas (webview sends back its current state). */
+export function triggerSaveOnActiveCanvas() {
+  if (!canvasPanel) return;
+  postToWebview(canvasPanel, { command: 'triggerSave' });
+}
+
 /** Whether a canvas is currently open. */
 export function isCanvasOpen(): boolean {
   return canvasPanel !== undefined;

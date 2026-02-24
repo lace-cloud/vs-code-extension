@@ -132,7 +132,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case 'SYNC_LAYOUT':
       return handleSyncLayout(state, action);
     case 'LOAD_WORKSPACE':
-      return action.workspace;
+      return gcOrphanedModules(action.workspace);
 
     // ── Composite interface ──
     case 'SET_VARIABLES':

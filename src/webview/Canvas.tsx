@@ -662,6 +662,7 @@ export default function Canvas() {
           } else {
             setStatusMessage('All modules up to date');
           }
+          // Host sends triggerSave after this to persist the reconciled state.
           setTimeout(() => setStatusMessage(null), 3000);
           break;
         }

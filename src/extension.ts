@@ -11,6 +11,7 @@ import {
   addModuleToActiveCanvas,
   triggerGenerateOnActiveCanvas,
   refreshModulesOnActiveCanvas,
+  triggerSaveOnActiveCanvas,
   getLaceDir,
   isCanvasOpen,
 } from './webview/createWebviewPanel';
@@ -289,6 +290,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
             refreshModulesOnActiveCanvas(updatedModules, iconUpdates);
 
+            // Auto-save: the webview processes refreshModuleDefs, then
+            // triggerSave asks it to post back its current state for disk write.
+            triggerSaveOnActiveCanvas();
+
             // Summary notification
             const parts: string[] = [];
             if (fetchCount > 0) parts.push(`${fetchCount} refreshed`);
@@ -299,7 +304,7 @@ export async function activate(context: vscode.ExtensionContext) {
             if (errorCount > 0) {
               vscode.window.showWarningMessage(`Refresh: ${summary}. Check Output for details.`);
             } else if (fetchCount > 0) {
-              vscode.window.showInformationMessage(`Refresh: ${summary}. Save to persist.`);
+              vscode.window.showInformationMessage(`Refresh: ${summary}.`);
             } else {
               vscode.window.showWarningMessage(`Refresh: ${summary}. No modules could be updated.`);
             }
