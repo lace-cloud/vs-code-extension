@@ -346,20 +346,40 @@ export default function Canvas() {
 
   // ── Refresh action (re-fetch module defs from registry) ──
   const onRefresh = useCallback(() => {
-    postToHost({ command: 'refreshModules' });
+    const ws = workspaceRef.current;
+    const entryKey = `${ws.entry.module_id}@${ws.entry.version}`;
+    const module_keys: Record<string, { id: string; version: string }> = {};
+    for (const [key, def] of Object.entries(ws.modules)) {
+      if (key !== entryKey) {
+        module_keys[key] = { id: def.id, version: def.version };
+      }
+    }
+    postToHost({ command: 'refreshModules', module_keys });
     setStatusMessage('Refreshing...');
     setTimeout(() => setStatusMessage(null), 5000);
   }, []);
 
-  // ── Expose dispatch globally for ModuleNode rename/delete ──
+  // ── Single-module refresh (called from ModuleNode hover button) ──
+  const refreshSingleModule = useCallback((moduleKey: string, id: string, version: string) => {
+    postToHost({
+      command: 'refreshModules',
+      module_keys: { [moduleKey]: { id, version } },
+    });
+    setStatusMessage('Refreshing...');
+    setTimeout(() => setStatusMessage(null), 5000);
+  }, []);
+
+  // ── Expose dispatch globally for ModuleNode rename/delete/refresh ──
   useEffect(() => {
     (window as any).__canvasDispatch = semanticDispatch;
     (window as any).__activeModuleKey = module_key;
+    (window as any).__canvasRefreshModule = refreshSingleModule;
     return () => {
       delete (window as any).__canvasDispatch;
       delete (window as any).__activeModuleKey;
+      delete (window as any).__canvasRefreshModule;
     };
-  }, [semanticDispatch, module_key]);
+  }, [semanticDispatch, module_key, refreshSingleModule]);
 
   // ── Context callbacks for nodes ──
   const callbacks: CanvasCallbacks = useMemo(

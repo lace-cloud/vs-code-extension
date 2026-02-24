@@ -204,107 +204,109 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
 
     // ── Refresh canvas modules from registry ──
-    vscode.commands.registerCommand('lace.refreshCanvasModules', async () => {
-      const laceDir = getLaceDir();
-      if (!laceDir) {
-        vscode.window.showErrorMessage('Open a folder first.');
-        return;
-      }
+    // module_keys comes from the webview's current workspace state (not disk).
+    vscode.commands.registerCommand(
+      'lace.refreshCanvasModules',
+      async (moduleKeys?: Record<string, { id: string; version: string }>) => {
+        if (!moduleKeys || Object.keys(moduleKeys).length === 0) {
+          vscode.window.showInformationMessage('No modules to refresh.');
+          return;
+        }
 
-      const fs = await import('fs');
-      const path = await import('path');
-      const filePath = path.join(laceDir, 'lace.json');
-      if (!fs.existsSync(filePath)) {
-        vscode.window.showWarningMessage('No lace.json found. Save the canvas first.');
-        return;
-      }
+        const registryModules = registryProvider?.getModules() ?? [];
+        const keys = Object.keys(moduleKeys);
 
-      let saved: any;
-      try {
-        saved = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      } catch {
-        vscode.window.showErrorMessage('Failed to read lace.json.');
-        return;
-      }
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: 'Refreshing modules from registry...',
+            cancellable: false,
+          },
+          async (progress) => {
+            const updatedModules: Record<string, ModuleDef> = {};
+            const iconUpdates: Record<string, string> = {};
+            let errorCount = 0;
+            let skipCount = 0;
+            let fetchCount = 0;
 
-      const entryKey = `${saved.entry?.module_id}@${saved.entry?.version}`;
-      const moduleKeys = Object.keys(saved.modules ?? {}).filter((k) => k !== entryKey);
+            for (let idx = 0; idx < keys.length; idx++) {
+              const key = keys[idx];
+              const { id, version } = moduleKeys[key];
 
-      if (moduleKeys.length === 0) {
-        vscode.window.showInformationMessage('No modules to refresh.');
-        return;
-      }
-
-      const registryModules = registryProvider?.getModules() ?? [];
-
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: 'Refreshing modules from registry...',
-          cancellable: false,
-        },
-        async (progress) => {
-          const updatedModules: Record<string, ModuleDef> = {};
-          const iconUpdates: Record<string, string> = {};
-          let errorCount = 0;
-
-          for (let idx = 0; idx < moduleKeys.length; idx++) {
-            const key = moduleKeys[idx];
-            const existingDef = saved.modules[key];
-            if (!existingDef) continue;
-
-            progress.report({
-              message: `${idx + 1}/${moduleKeys.length}: ${existingDef.id ?? key}`,
-              increment: 100 / moduleKeys.length,
-            });
-
-            // Find matching registry module
-            const regMod = registryModules.find(
-              (m) => m.id === existingDef.id && m.version === existingDef.version,
-            );
-            if (!regMod) continue; // Not in registry — skip silently
-
-            try {
-              const client = requireClient(server?.rpcClient, 'refresh module');
-              const response = await client.getRegistryVersion({
-                name: regMod.name,
-                system: regMod.system,
-                version: regMod.version,
+              progress.report({
+                message: `${idx + 1}/${keys.length}: ${id}`,
+                increment: 100 / keys.length,
               });
 
-              const deployBundle = response?.deploy_bundle;
-              if (!deployBundle) continue;
+              // Find matching registry module
+              const regMod = registryModules.find(
+                (m) => (m.id === id || m.name === id) && m.version === version,
+              );
+              if (!regMod) {
+                console.warn(
+                  `[Refresh] ${key}: not found in registry (id=${id}, version=${version})`,
+                );
+                skipCount++;
+                continue;
+              }
 
-              const { workspace: parsed } = fromBundle(deployBundle);
-              const parsedEntryKey = `${deployBundle.entry.module_id}@${deployBundle.entry.version}`;
+              try {
+                const client = requireClient(server?.rpcClient, 'refresh module');
+                const response = await client.getRegistryVersion({
+                  name: regMod.name,
+                  system: regMod.system,
+                  version: regMod.version,
+                });
 
-              // Collect non-entry module defs
-              for (const [defKey, def] of Object.entries(parsed.modules)) {
-                if (defKey !== parsedEntryKey) {
-                  updatedModules[defKey] = def;
+                const deployBundle = response?.deploy_bundle;
+                if (!deployBundle) {
+                  console.warn(`[Refresh] ${key}: no deploy_bundle in response`);
+                  skipCount++;
+                  continue;
                 }
-              }
 
-              // Collect icon URL
-              if (regMod.icon_url) {
-                iconUpdates[key] = regMod.icon_url;
+                const { workspace: parsed } = fromBundle(deployBundle);
+                const parsedEntryKey = `${deployBundle.entry.module_id}@${deployBundle.entry.version}`;
+
+                // Collect non-entry module defs
+                for (const [defKey, def] of Object.entries(parsed.modules)) {
+                  if (defKey !== parsedEntryKey) {
+                    updatedModules[defKey] = def;
+                  }
+                }
+
+                // Collect icon URL
+                if (regMod.icon_url) {
+                  iconUpdates[key] = regMod.icon_url;
+                }
+
+                fetchCount++;
+              } catch (err: any) {
+                console.error(`[Refresh] Failed to refresh ${key}:`, err);
+                errorCount++;
               }
-            } catch (err: any) {
-              console.error(`Failed to refresh ${key}:`, err);
-              errorCount++;
             }
-          }
 
-          refreshModulesOnActiveCanvas(updatedModules, iconUpdates);
+            refreshModulesOnActiveCanvas(updatedModules, iconUpdates);
 
-          if (errorCount > 0) {
-            vscode.window.showWarningMessage(
-              `Refreshed modules with ${errorCount} error(s). Check Output for details.`,
-            );
-          }
-        },
-      );
-    }),
+            // Summary notification
+            const parts: string[] = [];
+            if (fetchCount > 0) parts.push(`${fetchCount} refreshed`);
+            if (skipCount > 0) parts.push(`${skipCount} skipped`);
+            if (errorCount > 0) parts.push(`${errorCount} failed`);
+            const summary = parts.join(', ');
+
+            if (errorCount > 0) {
+              vscode.window.showWarningMessage(`Refresh: ${summary}. Check Output for details.`);
+            } else if (fetchCount > 0) {
+              vscode.window.showInformationMessage(`Refresh: ${summary}. Save to persist.`);
+            } else {
+              vscode.window.showWarningMessage(`Refresh: ${summary}. No modules could be updated.`);
+            }
+          },
+        );
+      },
+    ),
   );
 }
 

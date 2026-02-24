@@ -32,7 +32,10 @@ export type WebviewToHost =
   | { command: 'saveState'; state: WorkspaceState }
   | { command: 'generateBundle'; bundle: ModuleBundle }
   | { command: 'markDirty' }
-  | { command: 'refreshModules' };
+  | {
+      command: 'refreshModules';
+      module_keys: Record<string, { id: string; version: string }>;
+    };
 
 // ── RPC diagnostic (matches Go's server.Diagnostic) ──
 

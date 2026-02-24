@@ -11,7 +11,7 @@ import type {
   ModuleDef,
   Instance,
 } from '../types/ir';
-import { isOut, isVar, isOutExport } from '../types/ir';
+import { isOut, isVar, isOutExport, isModuleInstance } from '../types/ir';
 import type { WorkspaceState } from '../types/workspace';
 import { uniqueInstanceId } from '../utils/identifiers';
 
@@ -486,6 +486,57 @@ function handleRenameInstance(
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// collectReachableModuleKeys — traverse from entry to find all referenced defs
+// ══════════════════════════════════════════════════════════════════════
+
+function collectReachableModuleKeys(
+  modules: Record<string, ModuleDef>,
+  entryKey: string,
+): Set<string> {
+  const reachable = new Set<string>();
+  const queue = [entryKey];
+
+  while (queue.length > 0) {
+    const key = queue.pop()!;
+    if (reachable.has(key)) continue;
+    reachable.add(key);
+
+    const def = modules[key];
+    if (!def || def.impl.kind !== 'composite') continue;
+
+    for (const inst of def.impl.graph.instances) {
+      if (isModuleInstance(inst)) {
+        const refKey = `${inst.use.module_id}@${inst.use.version}`;
+        if (!reachable.has(refKey)) {
+          queue.push(refKey);
+        }
+      }
+    }
+  }
+
+  return reachable;
+}
+
+/** Remove module defs not reachable from the entry module. */
+function gcOrphanedModules(state: WorkspaceState): WorkspaceState {
+  const entryKey = `${state.entry.module_id}@${state.entry.version}`;
+  const reachable = collectReachableModuleKeys(state.modules, entryKey);
+
+  const moduleKeys = Object.keys(state.modules);
+  if (moduleKeys.every((k) => reachable.has(k))) {
+    return state; // nothing to collect
+  }
+
+  const cleanedModules: Record<string, ModuleDef> = {};
+  for (const [key, def] of Object.entries(state.modules)) {
+    if (reachable.has(key)) {
+      cleanedModules[key] = def;
+    }
+  }
+  return { ...state, modules: cleanedModules };
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // DELETE_INSTANCE
 // ══════════════════════════════════════════════════════════════════════
 
@@ -543,16 +594,16 @@ function handleDeleteInstance(
   const layout = newState.layouts[module_key];
   if (layout && layout.nodes[instance_id]) {
     const { [instance_id]: _removed, ...restNodes } = layout.nodes;
-    return {
+    return gcOrphanedModules({
       ...newState,
       layouts: {
         ...newState.layouts,
         [module_key]: { nodes: restNodes },
       },
-    };
+    });
   }
 
-  return newState;
+  return gcOrphanedModules(newState);
 }
 
 // ══════════════════════════════════════════════════════════════════════

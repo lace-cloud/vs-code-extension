@@ -273,9 +273,10 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           break;
         }
 
-        // ── refreshModules: relay to command ──
+        // ── refreshModules: relay to command with module keys from webview state ──
         case 'refreshModules': {
-          vscode.commands.executeCommand('lace.refreshCanvasModules');
+          const rm = msg as Extract<WebviewToHost, { command: 'refreshModules' }>;
+          vscode.commands.executeCommand('lace.refreshCanvasModules', rm.module_keys);
           break;
         }
 

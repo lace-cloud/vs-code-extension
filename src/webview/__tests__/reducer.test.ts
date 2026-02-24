@@ -326,6 +326,79 @@ test('DELETE_INSTANCE cleans up sibling depends_on with module. prefix', () => {
   expect(c.depends_on).toEqual(['module.b']);
 });
 
+test('DELETE_INSTANCE removes orphaned module defs from state.modules', () => {
+  const leafDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'rds-instance',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+  };
+  const state = makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'my-rds',
+        use: { module_id: 'rds-instance', version: 'v1.0.0' },
+        inputs: {},
+      },
+    ],
+    { 'rds-instance@v1.0.0': leafDef },
+  );
+  // Module def exists before delete
+  expect(state.modules['rds-instance@v1.0.0']).toBeDefined();
+
+  const next = workspaceReducer(state, {
+    type: 'DELETE_INSTANCE',
+    module_key: 'root@v1.0.0',
+    instance_id: 'my-rds',
+  });
+  // Instance removed
+  expect(getInstances(next, 'root@v1.0.0')).toHaveLength(0);
+  // Orphaned module def cleaned up
+  expect(next.modules['rds-instance@v1.0.0']).toBeUndefined();
+  // Root composite preserved
+  expect(next.modules['root@v1.0.0']).toBeDefined();
+});
+
+test('DELETE_INSTANCE preserves module defs still referenced by other instances', () => {
+  const leafDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'vpc',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+  };
+  const state = makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'vpc-1',
+        use: { module_id: 'vpc', version: 'v1.0.0' },
+        inputs: {},
+      },
+      {
+        kind: 'module',
+        id: 'vpc-2',
+        use: { module_id: 'vpc', version: 'v1.0.0' },
+        inputs: {},
+      },
+    ],
+    { 'vpc@v1.0.0': leafDef },
+  );
+
+  const next = workspaceReducer(state, {
+    type: 'DELETE_INSTANCE',
+    module_key: 'root@v1.0.0',
+    instance_id: 'vpc-1',
+  });
+  // vpc-2 still references the module def — must be preserved
+  expect(next.modules['vpc@v1.0.0']).toBeDefined();
+  expect(getInstances(next, 'root@v1.0.0')).toHaveLength(1);
+});
+
 // ══════════════════════════════════════════════════════════════════════
 // DROP_BUNDLE
 // ══════════════════════════════════════════════════════════════════════
