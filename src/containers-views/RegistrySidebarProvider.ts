@@ -170,8 +170,15 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       z-index: 10;
     }
 
+    .search-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
     .search-input {
-      width: 100%;
+      flex: 1;
+      min-width: 0;
       padding: 5px 8px;
       border: 1px solid var(--vscode-input-border, #3c3c3c);
       background: var(--vscode-input-background, #3c3c3c);
@@ -189,9 +196,34 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-input-placeholderForeground, #888);
     }
 
+    .filter-toggle {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      padding: 0;
+    }
+
+    .filter-toggle:hover {
+      background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
+    }
+
+    .filter-toggle.active {
+      background: var(--vscode-badge-background, #4d4d4d);
+      color: var(--vscode-badge-foreground, #fff);
+    }
+
     /* ── Category chips ── */
     #chips {
-      display: flex;
+      display: none;
       flex-wrap: wrap;
       gap: 4px;
       padding: 6px 8px 2px;
@@ -423,13 +455,16 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <div class="search-container">
-    <input
-      class="search-input"
-      type="text"
-      id="search"
-      placeholder="Search Lace Registry"
-      autofocus
-    />
+    <div class="search-row">
+      <input
+        class="search-input"
+        type="text"
+        id="search"
+        placeholder="Search Lace Registry"
+        autofocus
+      />
+      <button class="filter-toggle" id="filterToggle" title="Toggle filters">&#x25BD;</button>
+    </div>
   </div>
   <div id="chips"></div>
   <div id="content"></div>
@@ -445,9 +480,16 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const searchInput = document.getElementById('search');
     const chipsEl = document.getElementById('chips');
     const content = document.getElementById('content');
+    const filterToggle = document.getElementById('filterToggle');
 
     let activeCategories = [];
+    let filtersVisible = false;
     let debounceTimer = null;
+
+    filterToggle.addEventListener('click', () => {
+      filtersVisible = !filtersVisible;
+      render(searchInput.value);
+    });
 
     // ── Helpers ──
 
@@ -479,8 +521,18 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     // ── Category chips ──
 
+    function updateToggleButton() {
+      if (activeCategories.length > 0) {
+        filterToggle.classList.add('active');
+      } else {
+        filterToggle.classList.toggle('active', filtersVisible);
+      }
+    }
+
     function renderChips(query) {
-      if (query || allModules.length === 0) {
+      updateToggleButton();
+
+      if (query || allModules.length === 0 || !filtersVisible) {
         chipsEl.innerHTML = '';
         chipsEl.style.display = 'none';
         return;
