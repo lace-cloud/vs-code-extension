@@ -38,6 +38,35 @@ function findInstance(state: WorkspaceState, instanceId: string) {
   return entry.graph.instances.find((i) => i.id === instanceId);
 }
 
+/**
+ * Poll the canvas state to find a newly added instance by module ID.
+ * Retries up to 4 times with increasing delays (200, 400, 600, 800ms = ~2s total).
+ * Returns the instance ID if found, undefined otherwise.
+ */
+async function pollForAddedInstance(
+  deps: Pick<GraphWriteDeps, 'requestGraphState'>,
+  moduleId: string,
+  moduleName: string,
+): Promise<string | undefined> {
+  const delays = [200, 400, 600, 800];
+  for (const delay of delays) {
+    await new Promise((r) => setTimeout(r, delay));
+    try {
+      const state = await deps.requestGraphState();
+      const entry = getEntryGraph(state);
+      if (!entry) continue;
+      const added = [...entry.graph.instances].reverse().find((inst) => {
+        if (!isModuleInstance(inst)) return false;
+        return inst.use.module_id === moduleId || inst.use.module_id === moduleName;
+      });
+      if (added) return added.id;
+    } catch {
+      // State read failed, retry
+    }
+  }
+  return undefined;
+}
+
 // ── Tool Registration ──
 
 export function registerGraphWriteTools(deps: GraphWriteDeps): void {
@@ -105,27 +134,17 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
 
       deps.addModuleToActiveCanvas(deploy_bundle, match.icon_url);
 
-      try {
-        await new Promise((r) => setTimeout(r, 300));
-        const state = await deps.requestGraphState();
-        const entry = getEntryGraph(state);
-        if (entry) {
-          const added = [...entry.graph.instances].reverse().find((inst) => {
-            if (!isModuleInstance(inst)) return false;
-            return inst.use.module_id === match!.id || inst.use.module_id === match!.name;
-          });
-          if (added) {
-            return {
-              content: `Added **${match.name}** (${match.system}, v${match.version}) to the canvas as instance "${added.id}".`,
-            };
-          }
-        }
-      } catch {
-        // State read failed, but the module was still dropped
+      // Poll for the newly added instance (canvas processes the drop async)
+      const instanceId = await pollForAddedInstance(deps, match.id, match.name);
+
+      if (instanceId) {
+        return {
+          content: `Added **${match.name}** (${match.system}, v${match.version}) to the canvas as instance "${instanceId}".`,
+        };
       }
 
       return {
-        content: `Added **${match.name}** (${match.system}, v${match.version}) to the canvas.`,
+        content: `Added **${match.name}** (${match.system}, v${match.version}) to the canvas. Use lace_describe_graph to find the instance ID.`,
       };
     } catch (err: any) {
       return {
@@ -290,20 +309,27 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    // Determine binding type from params
-    let binding: Binding;
-    if (params.value !== undefined) {
-      binding = { lit: params.value };
-    } else if (typeof params.variable === 'string') {
-      binding = { var: params.variable };
-    } else if (typeof params.expression === 'string') {
-      binding = { expr: { lang: 'hcl', value: params.expression } };
-    } else {
+    // Determine binding type from params — exactly one must be provided
+    const hasValue = params.value !== undefined;
+    const hasVariable = typeof params.variable === 'string';
+    const hasExpression = typeof params.expression === 'string';
+    const bindingCount = [hasValue, hasVariable, hasExpression].filter(Boolean).length;
+
+    if (bindingCount !== 1) {
       return {
         content:
           'Must provide exactly one of: value (literal), variable (var reference), or expression (HCL expression)',
         isError: true,
       };
+    }
+
+    let binding: Binding;
+    if (hasValue) {
+      binding = { lit: params.value };
+    } else if (hasVariable) {
+      binding = { var: params.variable as string };
+    } else {
+      binding = { expr: { lang: 'hcl', value: params.expression as string } };
     }
 
     let state: WorkspaceState;

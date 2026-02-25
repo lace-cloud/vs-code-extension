@@ -5,6 +5,7 @@ import type { ModuleDef } from '../types/ir';
 import { getToolHandler } from '../../chat/tool-registry';
 import { registerGraphWriteTools, type GraphWriteDeps } from '../../chat/tools/graph-write-tools';
 import { registerGraphReadTools } from '../../chat/tools/graph-read-tools';
+import { registerGenerateTools, type GenerateToolDeps } from '../../chat/tools/generate-tools';
 
 // ── Test workspace builder ──
 
@@ -81,6 +82,49 @@ function makeWorkspaceWithInstances(): WorkspaceState {
   };
 }
 
+/** Workspace where subnet has only cidr_block bound — vpc_id is unbound. */
+function makeWorkspaceWithUnboundSubnet(): WorkspaceState {
+  return {
+    schema_version: '1.0',
+    kind: 'module_bundle',
+    entry: { module_id: 'root', version: 'v1.0.0' },
+    modules: {
+      'root@v1.0.0': {
+        schema_version: '1.0',
+        kind: 'module_def',
+        id: 'root',
+        version: 'v1.0.0',
+        interface: { inputs: [], outputs: [] },
+        impl: {
+          kind: 'composite',
+          graph: {
+            instances: [
+              {
+                kind: 'module',
+                id: 'vpc',
+                use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+                inputs: { cidr_block: { lit: '10.0.0.0/16' } },
+              },
+              {
+                kind: 'module',
+                id: 'subnet',
+                use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+                inputs: {
+                  cidr_block: { lit: '10.0.1.0/24' },
+                },
+              },
+            ],
+            exports: { outputs: {} },
+          },
+        },
+      },
+      'aws/vpc@v1.0.0': vpcDef,
+      'aws/subnet@v1.0.0': subnetDef,
+    },
+    layouts: {},
+  };
+}
+
 function makeEmptyWorkspace(): WorkspaceState {
   return {
     schema_version: '1.0',
@@ -98,6 +142,43 @@ function makeEmptyWorkspace(): WorkspaceState {
           graph: { instances: [], exports: { outputs: {} } },
         },
       },
+    },
+    layouts: {},
+  };
+}
+
+/** Workspace where subnet has a dangling `out` reference to nonexistent instance. */
+function makeWorkspaceWithDanglingRef(): WorkspaceState {
+  return {
+    schema_version: '1.0',
+    kind: 'module_bundle',
+    entry: { module_id: 'root', version: 'v1.0.0' },
+    modules: {
+      'root@v1.0.0': {
+        schema_version: '1.0',
+        kind: 'module_def',
+        id: 'root',
+        version: 'v1.0.0',
+        interface: { inputs: [], outputs: [] },
+        impl: {
+          kind: 'composite',
+          graph: {
+            instances: [
+              {
+                kind: 'module',
+                id: 'subnet',
+                use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+                inputs: {
+                  vpc_id: { out: { module: 'ghost', name: 'vpc_id' } },
+                  cidr_block: { lit: '10.0.1.0/24' },
+                },
+              },
+            ],
+            exports: { outputs: {} },
+          },
+        },
+      },
+      'aws/subnet@v1.0.0': subnetDef,
     },
     layouts: {},
   };
@@ -124,9 +205,7 @@ function makeDeps(): GraphWriteDeps {
 describe('write tools', () => {
   beforeEach(() => {
     mockState = makeWorkspaceWithInstances();
-    // Re-register tools with fresh mock deps
     const deps = makeDeps();
-    // Override the captured deps by re-registering
     registerGraphWriteTools(deps);
     registerGraphReadTools({ requestGraphState: async () => mockState });
   });
@@ -282,7 +361,10 @@ describe('write tools', () => {
       expect(result.content).toContain('expression');
       const action = dispatched[0] as Extract<WorkspaceAction, { type: 'UPDATE_INPUTS' }>;
       expect(action.inputs.cidr_block).toEqual({
-        expr: { lang: 'hcl', value: 'var.env == "prod" ? "10.0.0.0/16" : "10.1.0.0/16"' },
+        expr: {
+          lang: 'hcl',
+          value: 'var.env == "prod" ? "10.0.0.0/16" : "10.1.0.0/16"',
+        },
       });
     });
 
@@ -295,6 +377,47 @@ describe('write tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('Must provide exactly one of');
+    });
+
+    test('rejects multiple binding types at once', async () => {
+      const handler = getToolHandler('lace_set_input')!;
+      const result = await handler({
+        instance_id: 'vpc',
+        input_name: 'cidr_block',
+        value: '10.0.0.0/16',
+        variable: 'vpc_cidr',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Must provide exactly one of');
+      expect(dispatched).toHaveLength(0);
+    });
+
+    test('rejects all three binding types at once', async () => {
+      const handler = getToolHandler('lace_set_input')!;
+      const result = await handler({
+        instance_id: 'vpc',
+        input_name: 'cidr_block',
+        value: '10.0.0.0/16',
+        variable: 'vpc_cidr',
+        expression: 'var.cidr',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Must provide exactly one of');
+      expect(dispatched).toHaveLength(0);
+    });
+
+    test('returns error for nonexistent instance', async () => {
+      const handler = getToolHandler('lace_set_input')!;
+      const result = await handler({
+        instance_id: 'nonexistent',
+        input_name: 'cidr_block',
+        value: '10.0.0.0/16',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('not found');
     });
   });
 
@@ -355,6 +478,162 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('empty');
+    });
+  });
+
+  describe('lace_validate_graph', () => {
+    test('passes valid graph', async () => {
+      const handler = getToolHandler('lace_validate_graph')!;
+      const result = await handler({});
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('Validation passed');
+    });
+
+    test('reports dangling reference errors', async () => {
+      mockState = makeWorkspaceWithDanglingRef();
+      const handler = getToolHandler('lace_validate_graph')!;
+      const result = await handler({});
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('error(s) found');
+      expect(result.content).toContain('ghost');
+    });
+
+    test('passes empty graph', async () => {
+      mockState = makeEmptyWorkspace();
+      const handler = getToolHandler('lace_validate_graph')!;
+      const result = await handler({});
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('Validation passed');
+    });
+  });
+});
+
+describe('generate tools', () => {
+  let triggerGenerate: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockState = makeWorkspaceWithInstances();
+    dispatched = [];
+    triggerGenerate = vi.fn();
+    const deps: GenerateToolDeps = {
+      requestGraphState: async () => mockState,
+      dispatchToCanvas: async (action) => {
+        dispatched.push(action);
+      },
+      triggerGenerate,
+    };
+    registerGenerateTools(deps);
+  });
+
+  describe('lace_auto_connect', () => {
+    test('auto-connects matching outputs to unbound inputs', async () => {
+      mockState = makeWorkspaceWithUnboundSubnet();
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({
+        source_instance: 'vpc',
+        target_instance: 'subnet',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('Auto-connected 1 wire(s)');
+      expect(result.content).toContain('vpc.vpc_id');
+      expect(dispatched).toHaveLength(1);
+      expect(dispatched[0]).toMatchObject({
+        type: 'CONNECT',
+        source_instance: 'vpc',
+        target_instance: 'subnet',
+        mapping: { from: 'vpc_id', to: 'vpc_id' },
+      });
+    });
+
+    test('skips inputs that already have any binding', async () => {
+      // subnet has both vpc_id (out binding) and cidr_block (lit binding)
+      mockState = makeWorkspaceWithInstances();
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({
+        source_instance: 'vpc',
+        target_instance: 'subnet',
+      });
+
+      // Both inputs are bound, so no auto-connections should be made
+      expect(result.content).toContain('No compatible connections found');
+      expect(dispatched).toHaveLength(0);
+    });
+
+    test('returns error for missing parameters', async () => {
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({ source_instance: 'vpc' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Missing required parameters');
+    });
+
+    test('returns error for nonexistent source', async () => {
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({
+        source_instance: 'nonexistent',
+        target_instance: 'subnet',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Source instance "nonexistent" not found');
+    });
+
+    test('returns error for nonexistent target', async () => {
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({
+        source_instance: 'vpc',
+        target_instance: 'nonexistent',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Target instance "nonexistent" not found');
+    });
+
+    test('returns no-match message on empty canvas', async () => {
+      mockState = makeEmptyWorkspace();
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({
+        source_instance: 'vpc',
+        target_instance: 'subnet',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('not found');
+    });
+  });
+
+  describe('lace_generate', () => {
+    test('triggers generation', async () => {
+      const handler = getToolHandler('lace_generate')!;
+      const result = await handler({});
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('Terraform generation triggered');
+      expect(triggerGenerate).toHaveBeenCalledOnce();
+    });
+
+    test('reports error when trigger throws', async () => {
+      triggerGenerate.mockImplementation(() => {
+        throw new Error('No canvas open');
+      });
+      // Re-register with the throwing mock
+      registerGenerateTools({
+        requestGraphState: async () => mockState,
+        dispatchToCanvas: async (action) => {
+          dispatched.push(action);
+        },
+        triggerGenerate,
+      });
+
+      const handler = getToolHandler('lace_generate')!;
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('No canvas open');
     });
   });
 });

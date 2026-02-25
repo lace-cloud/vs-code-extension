@@ -4,7 +4,6 @@
 
 import type { WorkspaceState } from '../../webview/types/workspace';
 import type { WorkspaceAction } from '../../webview/state/reducer';
-import { isOut } from '../../webview/types/ir';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { resolveSchema } from '../../webview/utils/resolve';
@@ -58,13 +57,8 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
     const sourceSchema = resolveSchema(state, source);
     const targetSchema = resolveSchema(state, target);
 
-    // Find which target inputs already have out bindings
-    const boundInputNames = new Set<string>();
-    for (const [name, binding] of Object.entries(target.inputs)) {
-      if (isOut(binding)) {
-        boundInputNames.add(name);
-      }
-    }
+    // Find which target inputs already have any binding (lit, var, expr, out)
+    const boundInputNames = new Set<string>(Object.keys(target.inputs));
 
     const matches = findAutoConnections(sourceSchema.outputs, targetSchema.inputs, boundInputNames);
 
