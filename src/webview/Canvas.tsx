@@ -3,7 +3,6 @@ import React, { useEffect, useState, useReducer, useMemo, useCallback, useRef } 
 import {
   ReactFlow,
   Controls,
-  ControlButton,
   MiniMap,
   useReactFlow,
   applyNodeChanges,
@@ -20,12 +19,11 @@ import SlidePanel from './components/SlidePanel';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
-import VariablesPanel from './components/panels/VariablesPanel';
-import OutputsPanel from './components/panels/OutputsPanel';
 import TerraformConfigPanel from './components/panels/TerraformConfigPanel';
 import ProvidersPanel from './components/panels/ProvidersPanel';
 import LocalsPanel from './components/panels/LocalsPanel';
 import EnvironmentsPanel from './components/panels/EnvironmentsPanel';
+import ActionBar, { type SettingsPanel } from './components/ActionBar';
 
 import type { WorkspaceState, GraphLayout } from './types/workspace';
 import type { ModuleBundle, CompositeGraph } from './types/ir';
@@ -37,6 +35,7 @@ import { CanvasContext, type CanvasCallbacks } from './state/context';
 import { deriveEdges } from './utils/derive';
 import { resolveSchema, resolveIconUrl } from './utils/resolve';
 import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
+import { inferVariables, inferOutputDefs, inferRequiredProviders } from './utils/infer';
 
 // ── Node types registration ──
 
@@ -75,6 +74,8 @@ type CompositeEditorProps = {
   onSave: () => void;
   onRefresh: () => void;
   onClearGraph: () => void;
+  onGenerate: () => void;
+  onOpenSettings: (panel: SettingsPanel) => void;
 };
 
 function CompositeEditor({
@@ -92,6 +93,8 @@ function CompositeEditor({
   onSave,
   onRefresh,
   onClearGraph,
+  onGenerate,
+  onOpenSettings,
 }: CompositeEditorProps) {
   const { fitView } = useReactFlow();
 
@@ -268,38 +271,14 @@ function CompositeEditor({
         pannable
         zoomable
       />
-      <Controls position="bottom-right" showInteractive={false}>
-        <ControlButton
-          onClick={onSave}
-          title="Save (Cmd+S)"
-          aria-label="Save"
-          className="react-flow__controls-button"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-            <path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z" />
-          </svg>
-        </ControlButton>
-        <ControlButton
-          onClick={onRefresh}
-          title="Refresh modules from registry"
-          aria-label="Refresh modules"
-          className="react-flow__controls-button"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-            <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-          </svg>
-        </ControlButton>
-        <ControlButton
-          onClick={onClearGraph}
-          title="Clear all modules"
-          aria-label="Clear all"
-          className="react-flow__controls-button"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-          </svg>
-        </ControlButton>
-      </Controls>
+      <Controls position="bottom-right" showInteractive={false} />
+      <ActionBar
+        onSave={onSave}
+        onRefresh={onRefresh}
+        onClearGraph={onClearGraph}
+        onGenerate={onGenerate}
+        onOpenSettings={onOpenSettings}
+      />
     </ReactFlow>
   );
 }
@@ -321,12 +300,7 @@ export default function Canvas() {
     target: string;
   } | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [variablesPanelOpen, setVariablesPanelOpen] = useState(false);
-  const [outputsPanelOpen, setOutputsPanelOpen] = useState(false);
-  const [terraformPanelOpen, setTerraformPanelOpen] = useState(false);
-  const [providersPanelOpen, setProvidersPanelOpen] = useState(false);
-  const [localsPanelOpen, setLocalsPanelOpen] = useState(false);
-  const [environmentsPanelOpen, setEnvironmentsPanelOpen] = useState(false);
+  const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
   const [validationErrors, setValidationErrors] = useState<
     Array<{ module_key?: string; instance_id?: string; message: string }>
   >([]);
@@ -361,7 +335,7 @@ export default function Canvas() {
     }
   }, []);
 
-  // ── Save action (used by Controls save button + Cmd+S) ──
+  // ── Save action (used by ActionBar save button + Cmd+S) ──
   const onSave = useCallback(() => {
     postToHost({ command: 'saveState', state: workspaceRef.current });
   }, []);
@@ -516,6 +490,53 @@ export default function Canvas() {
     });
   }, [semanticDispatch]);
 
+  // ── Generate: enrich bundle with inference then post to host ──
+  const onGenerate = useCallback(() => {
+    const ws = workspaceRef.current;
+    const mk = moduleKeyRef.current;
+    const bundle = toBundle(ws);
+    const entryDef = bundle.modules[mk];
+
+    if (entryDef && entryDef.impl.kind === 'composite') {
+      const graph = entryDef.impl.graph;
+
+      // Infer variables from var bindings
+      const inferredVars = inferVariables(graph.instances);
+
+      // Infer output defs from exports
+      const inferredOutputs = inferOutputDefs(graph.exports.outputs, graph.instances, (inst) =>
+        resolveSchema(ws, inst),
+      );
+
+      // Infer required providers from child modules
+      const inferredProviders = inferRequiredProviders(bundle.modules, mk);
+
+      // Enrich the entry module
+      bundle.modules[mk] = {
+        ...entryDef,
+        interface: {
+          inputs: inferredVars,
+          outputs: inferredOutputs,
+        },
+        terraform: {
+          ...entryDef.terraform,
+          required_providers: {
+            ...inferredProviders,
+            ...entryDef.terraform?.required_providers,
+          },
+        },
+      };
+    }
+
+    postToHost({ command: 'generateBundle', bundle });
+  }, []);
+
+  // ── Open settings panel ──
+  const onOpenSettings = useCallback((panel: SettingsPanel) => {
+    setSettingsPanel(panel);
+    setConfigTarget(null);
+  }, []);
+
   // ── Message handler: host → webview ──
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -544,7 +565,37 @@ export default function Canvas() {
         }
 
         case 'triggerGenerate': {
-          const bundle = toBundle(workspaceRef.current);
+          // Delegate to the same onGenerate logic used by ActionBar
+          const ws = workspaceRef.current;
+          const mk = moduleKeyRef.current;
+          const bundle = toBundle(ws);
+          const entryDef = bundle.modules[mk];
+
+          if (entryDef && entryDef.impl.kind === 'composite') {
+            const graph = entryDef.impl.graph;
+            const inferredVars = inferVariables(graph.instances);
+            const inferredOutputs = inferOutputDefs(
+              graph.exports.outputs,
+              graph.instances,
+              (inst) => resolveSchema(ws, inst),
+            );
+            const inferredProviders = inferRequiredProviders(bundle.modules, mk);
+            bundle.modules[mk] = {
+              ...entryDef,
+              interface: {
+                inputs: inferredVars,
+                outputs: inferredOutputs,
+              },
+              terraform: {
+                ...entryDef.terraform,
+                required_providers: {
+                  ...inferredProviders,
+                  ...entryDef.terraform?.required_providers,
+                },
+              },
+            };
+          }
+
           postToHost({ command: 'generateBundle', bundle });
           break;
         }
@@ -625,72 +676,6 @@ export default function Canvas() {
           break;
         }
 
-        case 'triggerVariables': {
-          setVariablesPanelOpen(true);
-          setOutputsPanelOpen(false);
-          setTerraformPanelOpen(false);
-          setProvidersPanelOpen(false);
-          setLocalsPanelOpen(false);
-          setEnvironmentsPanelOpen(false);
-          setConfigTarget(null);
-          break;
-        }
-
-        case 'triggerOutputs': {
-          setOutputsPanelOpen(true);
-          setVariablesPanelOpen(false);
-          setTerraformPanelOpen(false);
-          setProvidersPanelOpen(false);
-          setLocalsPanelOpen(false);
-          setEnvironmentsPanelOpen(false);
-          setConfigTarget(null);
-          break;
-        }
-
-        case 'triggerTerraformConfig': {
-          setTerraformPanelOpen(true);
-          setVariablesPanelOpen(false);
-          setOutputsPanelOpen(false);
-          setProvidersPanelOpen(false);
-          setLocalsPanelOpen(false);
-          setEnvironmentsPanelOpen(false);
-          setConfigTarget(null);
-          break;
-        }
-
-        case 'triggerProviders': {
-          setProvidersPanelOpen(true);
-          setVariablesPanelOpen(false);
-          setOutputsPanelOpen(false);
-          setTerraformPanelOpen(false);
-          setLocalsPanelOpen(false);
-          setEnvironmentsPanelOpen(false);
-          setConfigTarget(null);
-          break;
-        }
-
-        case 'triggerLocals': {
-          setLocalsPanelOpen(true);
-          setVariablesPanelOpen(false);
-          setOutputsPanelOpen(false);
-          setTerraformPanelOpen(false);
-          setProvidersPanelOpen(false);
-          setEnvironmentsPanelOpen(false);
-          setConfigTarget(null);
-          break;
-        }
-
-        case 'triggerEnvironments': {
-          setEnvironmentsPanelOpen(true);
-          setVariablesPanelOpen(false);
-          setOutputsPanelOpen(false);
-          setTerraformPanelOpen(false);
-          setProvidersPanelOpen(false);
-          setLocalsPanelOpen(false);
-          setConfigTarget(null);
-          break;
-        }
-
         case 'refreshModuleDefs': {
           const updatedModules = msg.updated_modules;
           if (updatedModules && Object.keys(updatedModules).length > 0) {
@@ -762,7 +747,7 @@ export default function Canvas() {
     <CanvasContext.Provider value={callbacks}>
       <div className="h-screen flex flex-col relative">
         {statusMessage && (
-          <div className="absolute top-11 left-4 z-20 bg-[#153238] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
+          <div className="absolute top-4 left-4 z-20 bg-[#153238] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
             {statusMessage}
           </div>
         )}
@@ -784,6 +769,8 @@ export default function Canvas() {
             onSave={onSave}
             onRefresh={onRefresh}
             onClearGraph={onClearGraph}
+            onGenerate={onGenerate}
+            onOpenSettings={onOpenSettings}
           />
 
           {/* Module config panel */}
@@ -851,52 +838,9 @@ export default function Canvas() {
             )}
           </SlidePanel>
 
-          {/* Variables panel */}
-          <SlidePanel open={variablesPanelOpen}>
-            {variablesPanelOpen && (
-              <VariablesPanel
-                variables={rootDef.interface.inputs}
-                all_instance_inputs={Object.fromEntries(
-                  graph.instances.map((inst) => [inst.id, inst.inputs]),
-                )}
-                onSave={(variables) => {
-                  semanticDispatch({
-                    type: 'SET_VARIABLES',
-                    module_key,
-                    variables,
-                  });
-                  setVariablesPanelOpen(false);
-                }}
-                onClose={() => setVariablesPanelOpen(false)}
-              />
-            )}
-          </SlidePanel>
-
-          {/* Outputs panel */}
-          <SlidePanel open={outputsPanelOpen}>
-            {outputsPanelOpen && (
-              <OutputsPanel
-                instances={graph.instances}
-                resolveInstanceSchema={(inst) => resolveSchema(workspace, inst)}
-                output_defs={rootDef.interface.outputs}
-                exports={graph.exports.outputs}
-                onSave={(output_defs, outputs) => {
-                  semanticDispatch({
-                    type: 'SET_EXPORTS',
-                    module_key,
-                    outputs,
-                    output_defs,
-                  });
-                  setOutputsPanelOpen(false);
-                }}
-                onClose={() => setOutputsPanelOpen(false)}
-              />
-            )}
-          </SlidePanel>
-
           {/* Terraform config panel */}
-          <SlidePanel open={terraformPanelOpen}>
-            {terraformPanelOpen && (
+          <SlidePanel open={settingsPanel === 'terraform'}>
+            {settingsPanel === 'terraform' && (
               <TerraformConfigPanel
                 terraform={rootDef.terraform}
                 onSave={(terraform) => {
@@ -905,16 +849,16 @@ export default function Canvas() {
                     module_key,
                     terraform,
                   });
-                  setTerraformPanelOpen(false);
+                  setSettingsPanel(null);
                 }}
-                onClose={() => setTerraformPanelOpen(false)}
+                onClose={() => setSettingsPanel(null)}
               />
             )}
           </SlidePanel>
 
           {/* Providers panel */}
-          <SlidePanel open={providersPanelOpen}>
-            {providersPanelOpen && (
+          <SlidePanel open={settingsPanel === 'providers'}>
+            {settingsPanel === 'providers' && (
               <ProvidersPanel
                 providers={rootDef.providers}
                 onSave={(providers) => {
@@ -923,16 +867,16 @@ export default function Canvas() {
                     module_key,
                     providers,
                   });
-                  setProvidersPanelOpen(false);
+                  setSettingsPanel(null);
                 }}
-                onClose={() => setProvidersPanelOpen(false)}
+                onClose={() => setSettingsPanel(null)}
               />
             )}
           </SlidePanel>
 
           {/* Locals panel */}
-          <SlidePanel open={localsPanelOpen}>
-            {localsPanelOpen && (
+          <SlidePanel open={settingsPanel === 'locals'}>
+            {settingsPanel === 'locals' && (
               <LocalsPanel
                 locals={graph.locals}
                 onSave={(locals) => {
@@ -941,16 +885,16 @@ export default function Canvas() {
                     module_key,
                     locals,
                   });
-                  setLocalsPanelOpen(false);
+                  setSettingsPanel(null);
                 }}
-                onClose={() => setLocalsPanelOpen(false)}
+                onClose={() => setSettingsPanel(null)}
               />
             )}
           </SlidePanel>
 
           {/* Environments panel */}
-          <SlidePanel open={environmentsPanelOpen}>
-            {environmentsPanelOpen && (
+          <SlidePanel open={settingsPanel === 'environments'}>
+            {settingsPanel === 'environments' && (
               <EnvironmentsPanel
                 environments={workspace.environments}
                 environment_backends={workspace.environment_backends}
@@ -963,9 +907,9 @@ export default function Canvas() {
                     type: 'SET_ENVIRONMENT_BACKENDS',
                     backends,
                   });
-                  setEnvironmentsPanelOpen(false);
+                  setSettingsPanel(null);
                 }}
-                onClose={() => setEnvironmentsPanelOpen(false)}
+                onClose={() => setSettingsPanel(null)}
               />
             )}
           </SlidePanel>

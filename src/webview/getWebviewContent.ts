@@ -44,141 +44,19 @@ export function getWebviewContent(
       display: flex;
       flex-direction: column;
     }
-
-    #menu-bar {
-      display: flex;
-      align-items: center;
-      background: #333;
-      color: white;
-      padding: 6px 10px;
-      font-size: 13px;
-      gap: 6px;
-    }
-
-    .menu-left {
-      display: flex;
-      gap: 4px;
-    }
-
-    .toolbar-btn {
-      padding: 4px 10px;
-      border-radius: 4px;
-      background: #444;
-      border: 1px solid #555;
-      color: #ccc;
-      font-size: 12px;
-      cursor: pointer;
-    }
-
-    .toolbar-btn:hover {
-      background: #555;
-      color: white;
-    }
-
-    .menu-right {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
   </style>
 </head>
 
 <body>
-  <div id="menu-bar">
-  <!-- LEFT: Variables / Outputs / Settings -->
-  <div class="menu-left">
-    <button id="variables-btn" class="toolbar-btn">Variables</button>
-    <button id="outputs-btn" class="toolbar-btn">Outputs</button>
-    <button id="terraform-btn" class="toolbar-btn">Terraform</button>
-    <button id="providers-btn" class="toolbar-btn">Providers</button>
-    <button id="locals-btn" class="toolbar-btn">Locals</button>
-    <button id="environments-btn" class="toolbar-btn">Environments</button>
-  </div>
-
-  <!-- RIGHT: Generate -->
-  <div class="menu-right">
-    <button
-      id="generate-btn"
-      style="
-        padding: 4px 12px;
-        border-radius: 4px;
-        background: #2ea043;
-        border: 1px solid #2ea043;
-        color: white;
-        font-size: 12px;
-        cursor: pointer;
-      "
-    >
-    Generate
-    </button>
-    </div>
-  </div>
-
   <div id="root"></div>
 
   <script nonce="${nonce}">
   window.addEventListener('DOMContentLoaded', () => {
-    const genBtn = document.getElementById('generate-btn');
-    if (genBtn) {
-      genBtn.addEventListener('click', () => {
-        window.postMessage({ command: 'triggerGenerate' }, '*');
-      });
-    }
-
-    const varsBtn = document.getElementById('variables-btn');
-    if (varsBtn) {
-      varsBtn.addEventListener('click', () => {
-        window.postMessage({ command: 'triggerVariables' }, '*');
-      });
-    }
-
-    const outsBtn = document.getElementById('outputs-btn');
-    if (outsBtn) {
-      outsBtn.addEventListener('click', () => {
-        window.postMessage({ command: 'triggerOutputs' }, '*');
-      });
-    }
-
-    const tfBtn = document.getElementById('terraform-btn');
-    if (tfBtn) {
-      tfBtn.addEventListener('click', () => {
-        window.postMessage({ command: 'triggerTerraformConfig' }, '*');
-      });
-    }
-
-    const provBtn = document.getElementById('providers-btn');
-    if (provBtn) {
-      provBtn.addEventListener('click', () => {
-        window.postMessage({ command: 'triggerProviders' }, '*');
-      });
-    }
-
-    const localsBtn = document.getElementById('locals-btn');
-    if (localsBtn) {
-      localsBtn.addEventListener('click', () => {
-        window.postMessage({ command: 'triggerLocals' }, '*');
-      });
-    }
-
-    const envsBtn = document.getElementById('environments-btn');
-    if (envsBtn) {
-      envsBtn.addEventListener('click', () => {
-        window.postMessage({ command: 'triggerEnvironments' }, '*');
-      });
-    }
-
-    // ── Save (Cmd+S triggers save via React app) ──
-    function triggerSave() {
-      window.postMessage({ command: 'triggerSave' }, '*');
-    }
-
     // ── Cmd+S / Ctrl+S keyboard shortcut ──
     document.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        triggerSave();
+        window.postMessage({ command: 'triggerSave' }, '*');
       }
     });
   });
