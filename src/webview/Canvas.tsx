@@ -754,6 +754,36 @@ export default function Canvas() {
           }
           break;
         }
+
+        // ── getGraphState: respond with current workspace state ──
+        case 'getGraphState': {
+          postToHost({
+            command: 'graphStateResponse',
+            requestId: msg.requestId,
+            state: workspaceRef.current,
+          });
+          break;
+        }
+
+        // ── dispatchAction: apply a reducer action from the host ──
+        case 'dispatchAction': {
+          try {
+            semanticDispatch(msg.action);
+            postToHost({
+              command: 'dispatchActionResponse',
+              requestId: msg.requestId,
+              success: true,
+            });
+          } catch (err: any) {
+            postToHost({
+              command: 'dispatchActionResponse',
+              requestId: msg.requestId,
+              success: false,
+              error: err.message ?? 'Unknown dispatch error',
+            });
+          }
+          break;
+        }
       }
     };
 

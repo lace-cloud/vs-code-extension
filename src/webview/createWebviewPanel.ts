@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import path from 'path';
 import fs from 'fs';
 
+import { randomUUID } from 'crypto';
+
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
 import { fromBundle, emptyWorkspace, type LayoutHints } from './utils/bundle';
@@ -19,6 +21,18 @@ const LACE_FILE = 'lace.json';
 /* ── State ── */
 
 let canvasPanel: vscode.WebviewPanel | undefined;
+
+/* ── Pending request map (UUID-keyed, mirrors RPC client pattern) ── */
+
+type PendingWebviewRequest = {
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+const pendingRequests = new Map<string, PendingWebviewRequest>();
+
+const WEBVIEW_REQUEST_TIMEOUT_MS = 5_000;
 
 /* ── Public API ── */
 
@@ -72,6 +86,44 @@ export function triggerSaveOnActiveCanvas() {
 /** Whether a canvas is currently open. */
 export function isCanvasOpen(): boolean {
   return canvasPanel !== undefined;
+}
+
+/** Request the current graph state from the webview (async, 5s timeout). */
+export function requestGraphState(): Promise<WorkspaceState> {
+  if (!canvasPanel) {
+    return Promise.reject(new Error('No canvas open'));
+  }
+  const requestId = randomUUID();
+  return new Promise<WorkspaceState>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingRequests.delete(requestId);
+      reject(new Error('requestGraphState timed out'));
+    }, WEBVIEW_REQUEST_TIMEOUT_MS);
+
+    pendingRequests.set(requestId, { resolve, reject, timeout });
+    postToWebview(canvasPanel!, { command: 'getGraphState', requestId });
+  });
+}
+
+/** Dispatch a reducer action to the canvas webview (async, 5s timeout). */
+export function dispatchToCanvas(action: import('./state/reducer').WorkspaceAction): Promise<void> {
+  if (!canvasPanel) {
+    return Promise.reject(new Error('No canvas open'));
+  }
+  const requestId = randomUUID();
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingRequests.delete(requestId);
+      reject(new Error('dispatchToCanvas timed out'));
+    }, WEBVIEW_REQUEST_TIMEOUT_MS);
+
+    pendingRequests.set(requestId, {
+      resolve,
+      reject,
+      timeout,
+    });
+    postToWebview(canvasPanel!, { command: 'dispatchAction', requestId, action });
+  });
 }
 
 /* ── Typed message helpers ── */
@@ -298,6 +350,37 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
         case 'markClean': {
           isDirtyHostSide = false;
           panel.title = `Lace · ${folderName}`;
+          break;
+        }
+
+        // ── graphStateResponse: resolve pending requestGraphState() ──
+        case 'graphStateResponse': {
+          const { requestId, state } = msg as Extract<
+            WebviewToHost,
+            { command: 'graphStateResponse' }
+          >;
+          const pending = pendingRequests.get(requestId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingRequests.delete(requestId);
+            pending.resolve(state);
+          }
+          break;
+        }
+
+        // ── dispatchActionResponse: resolve pending dispatchToCanvas() ──
+        case 'dispatchActionResponse': {
+          const resp = msg as Extract<WebviewToHost, { command: 'dispatchActionResponse' }>;
+          const pending = pendingRequests.get(resp.requestId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingRequests.delete(resp.requestId);
+            if (resp.success) {
+              pending.resolve(undefined);
+            } else {
+              pending.reject(new Error(resp.error ?? 'dispatchAction failed'));
+            }
+          }
           break;
         }
       }

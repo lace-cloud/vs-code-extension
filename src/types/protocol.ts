@@ -23,6 +23,12 @@ export type HostToWebview =
       command: 'refreshModuleDefs';
       updated_modules: Record<string, import('../webview/types/ir').ModuleDef>;
       icon_updates?: Record<string, string>;
+    }
+  | { command: 'getGraphState'; requestId: string }
+  | {
+      command: 'dispatchAction';
+      requestId: string;
+      action: import('../webview/state/reducer').WorkspaceAction;
     };
 
 // ── Webview → Host ──
@@ -36,7 +42,9 @@ export type WebviewToHost =
   | {
       command: 'refreshModules';
       module_keys: Record<string, { id: string; version: string }>;
-    };
+    }
+  | { command: 'graphStateResponse'; requestId: string; state: WorkspaceState }
+  | { command: 'dispatchActionResponse'; requestId: string; success: boolean; error?: string };
 
 // ── RPC diagnostic (matches Go's server.Diagnostic) ──
 

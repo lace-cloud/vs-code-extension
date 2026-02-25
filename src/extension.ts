@@ -14,7 +14,11 @@ import {
   triggerSaveOnActiveCanvas,
   getLaceDir,
   isCanvasOpen,
+  requestGraphState,
+  dispatchToCanvas,
 } from './webview/createWebviewPanel';
+
+import { registerChatParticipant } from './chat/participant';
 
 import { fromBundle } from './webview/utils/bundle';
 import type { ModuleDef } from './webview/types/ir';
@@ -314,6 +318,19 @@ export async function activate(context: vscode.ExtensionContext) {
         );
       },
     ),
+  );
+
+  /* ---------- Chat Participant (@lace) ---------- */
+
+  context.subscriptions.push(
+    registerChatParticipant(context, {
+      getRpcClient: () => server?.rpcClient ?? null,
+      getRegistryModules: () => registryProvider?.getModules() ?? [],
+      addModuleToActiveCanvas,
+      requestGraphState,
+      dispatchToCanvas,
+      triggerGenerate: triggerGenerateOnActiveCanvas,
+    }),
   );
 }
 

@@ -17,7 +17,301 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
+  "enabledApiProposals": [],
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "lace.chat",
+        "fullName": "Lace",
+        "name": "lace",
+        "description": "Compose Terraform infrastructure using natural language",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "add",
+            "description": "Add a module to the canvas"
+          },
+          {
+            "name": "connect",
+            "description": "Connect two modules"
+          },
+          {
+            "name": "describe",
+            "description": "Describe the current canvas state"
+          },
+          {
+            "name": "suggest",
+            "description": "Suggest infrastructure for your project"
+          },
+          {
+            "name": "generate",
+            "description": "Generate Terraform files"
+          },
+          {
+            "name": "validate",
+            "description": "Validate the current graph"
+          }
+        ]
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "lace_search_registry",
+        "displayName": "Search Registry",
+        "modelDescription": "Search the Lace module registry for Terraform modules by keyword, cloud system (aws/azure/gcp), or category. Returns module names, versions, and descriptions. Always use this before adding a module.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search keyword (e.g., 'vpc', 'database', 'load balancer')"
+            },
+            "system": {
+              "type": "string",
+              "description": "Cloud system filter: 'aws', 'azure', or 'gcp'"
+            },
+            "category": {
+              "type": "string",
+              "description": "Category filter (e.g., 'networking', 'compute', 'storage')"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max results (default 20)"
+            }
+          }
+        }
+      },
+      {
+        "name": "lace_describe_graph",
+        "displayName": "Describe Graph",
+        "modelDescription": "Get a summary of the current Lace canvas: all module instances, their connections, unbound inputs, variables, and exports. Use this to understand the current state before making changes.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "lace_add_module",
+        "displayName": "Add Module",
+        "modelDescription": "Add a Terraform module to the Lace canvas. Requires the exact module name from a registry search. The module will be placed on the canvas as a new instance.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Module name (e.g., 'aws/vpc', 'azure/resource-group')"
+            },
+            "system": {
+              "type": "string",
+              "description": "Cloud system: 'aws', 'azure', or 'gcp'. Helps disambiguate if name exists across systems."
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      },
+      {
+        "name": "lace_remove_module",
+        "displayName": "Remove Module",
+        "modelDescription": "Remove a module instance from the Lace canvas by its instance ID. Use lace_describe_graph first to find the correct instance_id.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "instance_id": {
+              "type": "string",
+              "description": "The instance ID to remove (e.g., 'vpc', 'subnet_1')"
+            }
+          },
+          "required": [
+            "instance_id"
+          ]
+        }
+      },
+      {
+        "name": "lace_connect",
+        "displayName": "Connect Modules",
+        "modelDescription": "Wire a specific output from one module instance to an input on another. Use lace_describe_graph first to see available outputs and inputs.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "source_instance": {
+              "type": "string",
+              "description": "Instance ID of the source module (has the output)"
+            },
+            "target_instance": {
+              "type": "string",
+              "description": "Instance ID of the target module (has the input)"
+            },
+            "source_output": {
+              "type": "string",
+              "description": "Name of the output on the source instance"
+            },
+            "target_input": {
+              "type": "string",
+              "description": "Name of the input on the target instance"
+            }
+          },
+          "required": [
+            "source_instance",
+            "target_instance",
+            "source_output",
+            "target_input"
+          ]
+        }
+      },
+      {
+        "name": "lace_disconnect",
+        "displayName": "Disconnect Input",
+        "modelDescription": "Remove a wire from a specific input on a module instance. This clears the binding on that input.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "target_instance": {
+              "type": "string",
+              "description": "Instance ID of the module with the input to disconnect"
+            },
+            "input_name": {
+              "type": "string",
+              "description": "Name of the input to disconnect"
+            }
+          },
+          "required": [
+            "target_instance",
+            "input_name"
+          ]
+        }
+      },
+      {
+        "name": "lace_set_input",
+        "displayName": "Set Input Value",
+        "modelDescription": "Set the value of an input on a module instance. Provide exactly one of: value (literal), variable (var reference), or expression (HCL). Use lace_describe_graph to see available inputs.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "instance_id": {
+              "type": "string",
+              "description": "Instance ID of the module"
+            },
+            "input_name": {
+              "type": "string",
+              "description": "Name of the input to set"
+            },
+            "value": {
+              "description": "Literal value (string, number, boolean, object, or array)"
+            },
+            "variable": {
+              "type": "string",
+              "description": "Variable name (creates a var.NAME reference)"
+            },
+            "expression": {
+              "type": "string",
+              "description": "HCL expression string"
+            }
+          },
+          "required": [
+            "instance_id",
+            "input_name"
+          ]
+        }
+      },
+      {
+        "name": "lace_rename_instance",
+        "displayName": "Rename Instance",
+        "modelDescription": "Rename a module instance on the canvas. The new name must be a valid Terraform identifier. All references (bindings, exports, depends_on) are updated automatically.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "old_id": {
+              "type": "string",
+              "description": "Current instance ID"
+            },
+            "new_id": {
+              "type": "string",
+              "description": "New instance ID (must be a valid Terraform identifier)"
+            }
+          },
+          "required": [
+            "old_id",
+            "new_id"
+          ]
+        }
+      },
+      {
+        "name": "lace_inspect_module",
+        "displayName": "Inspect Module",
+        "modelDescription": "Get full input/output schema details for a specific module from the registry. Shows input types, required/optional, defaults, and output types. Use this to understand what a module needs before adding or connecting it.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Module name (e.g., 'aws/vpc')"
+            },
+            "system": {
+              "type": "string",
+              "description": "Cloud system: 'aws', 'azure', or 'gcp'"
+            },
+            "version": {
+              "type": "string",
+              "description": "Specific version (optional, uses latest if omitted)"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      },
+      {
+        "name": "lace_validate_graph",
+        "displayName": "Validate Graph",
+        "modelDescription": "Run graph validation on the current canvas state. Checks for dangling references, missing modules, duplicate IDs, and invalid bindings. Use after making changes to verify correctness.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "lace_workspace_context",
+        "displayName": "Workspace Context",
+        "modelDescription": "Read the user's project files (package.json, Dockerfile, go.mod, README, main.tf, etc.) to understand what they are building. Use this to suggest appropriate infrastructure modules.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "lace_auto_connect",
+        "displayName": "Auto Connect",
+        "modelDescription": "Automatically wire compatible outputs from a source instance to unbound required inputs on a target instance using name and type matching. Use when you want best-effort wiring between two instances without specifying each connection.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "source_instance": {
+              "type": "string",
+              "description": "Instance ID of the source module (provides outputs)"
+            },
+            "target_instance": {
+              "type": "string",
+              "description": "Instance ID of the target module (needs inputs)"
+            }
+          },
+          "required": [
+            "source_instance",
+            "target_instance"
+          ]
+        }
+      },
+      {
+        "name": "lace_generate",
+        "displayName": "Generate Terraform",
+        "modelDescription": "Generate Terraform .tf files from the current canvas state. The canvas validates the graph first, then generates files into the .lace/ directory. This is a fire-and-forget action.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
