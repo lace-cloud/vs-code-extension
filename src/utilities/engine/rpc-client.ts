@@ -48,12 +48,26 @@ export class JSONRPCClient extends EventEmitter {
       line = line.trim();
 
       if (!line.startsWith('{')) {
-        console.warn('[lace][stdout]', line);
+        if (line) console.warn('[lace][stdout]', line);
+        return;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch (err) {
+        console.warn('[lace][stdout] malformed JSON:', line);
         return;
       }
 
       try {
-        const msg: RPCResponse = JSON.parse(line);
+        const msg = parsed as RPCResponse;
+
+        // Validate this is actually a JSON-RPC response we're expecting
+        if (msg.jsonrpc !== '2.0' || typeof msg.id !== 'number') {
+          console.warn('[lace][stdout] non-RPC JSON:', line);
+          return;
+        }
 
         const pending = this.pending.get(msg.id);
         if (!pending) {

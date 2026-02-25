@@ -53,6 +53,11 @@ function updateEngineStatus(state: string) {
   engineStatusBar.show();
 }
 
+/** Shell-quote a single argument (wrap in single quotes, escape inner quotes). */
+function shellQuote(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 /** Run a lace CLI terraform command in the integrated terminal. */
 function runTerraformCommand(subcommand: string, extraArgs: string[] = []) {
   const laceDir = getLaceDir();
@@ -69,7 +74,7 @@ function runTerraformCommand(subcommand: string, extraArgs: string[] = []) {
     cwd: laceDir,
   });
   terminal.show();
-  terminal.sendText(`${binaryPath} ${args.join(' ')}`);
+  terminal.sendText([binaryPath, ...args].map(shellQuote).join(' '));
 }
 
 /* ---------------------------------- */
@@ -130,10 +135,10 @@ export async function activate(context: vscode.ExtensionContext) {
       await openCanvas(context, server);
     }),
 
-    // ── Registry: refresh ──
+    // ── Registry: refresh (force bypasses cache) ──
     vscode.commands.registerCommand('lace.refreshRegistry', () => {
       registryProvider?.setRpcClient(server?.rpcClient ?? null);
-      registryProvider?.refresh();
+      registryProvider?.refresh(true);
     }),
 
     // ── Registry: click module in sidebar → detail panel ──

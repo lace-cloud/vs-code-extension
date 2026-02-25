@@ -3,6 +3,11 @@ import * as vscode from 'vscode';
 import type { JSONRPCClient } from '../utilities/engine/rpc-client';
 import type { RegistryModule } from '../types/protocol';
 
+// ── Constants ──
+
+const MAX_PAGES_PER_SYSTEM = 10;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 // ── Provider ──
 
 export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
@@ -16,6 +21,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   private globalState?: vscode.Memento;
   private favoriteModuleIds: string[] = [];
   private recentModuleIds: string[] = [];
+  private cache = new Map<string, { modules: RegistryModule[]; fetchedAt: number }>();
 
   constructor(globalState?: vscode.Memento) {
     this.globalState = globalState;
@@ -40,23 +46,31 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     this.updateWebview();
   }
 
-  /** Fetch all modules for a system, paginating until exhausted. */
-  private async fetchAllModules(system: string): Promise<RegistryModule[]> {
+  /** Fetch modules for a system with page cap, using cache when fresh. */
+  private async fetchAllModules(system: string, force = false): Promise<RegistryModule[]> {
     if (!this.rpcClient) return [];
+
+    const cached = this.cache.get(system);
+    if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      return cached.modules;
+    }
+
     const allModules: RegistryModule[] = [];
     let page = 1;
     const limit = 100;
-    while (true) {
+    while (page <= MAX_PAGES_PER_SYSTEM) {
       const result = await this.rpcClient.listRegistryModules({ system, page, limit });
       const modules = (result?.modules ?? []) as RegistryModule[];
       allModules.push(...modules);
       if (modules.length < limit) break;
       page++;
     }
+
+    this.cache.set(system, { modules: allModules, fetchedAt: Date.now() });
     return allModules;
   }
 
-  async refresh() {
+  async refresh(force = false) {
     if (!this.rpcClient) {
       this.modules = [];
       this.errorMessage = null;
@@ -69,9 +83,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     this.updateWebview();
 
     const [aws, azure, gcp] = await Promise.allSettled([
-      this.fetchAllModules('aws'),
-      this.fetchAllModules('azure'),
-      this.fetchAllModules('gcp'),
+      this.fetchAllModules('aws', force),
+      this.fetchAllModules('azure', force),
+      this.fetchAllModules('gcp', force),
     ]);
 
     const results = [aws, azure, gcp];
