@@ -330,7 +330,9 @@ export default function Canvas() {
   moduleKeyRef.current = module_key;
 
   // ── Undo stack (pre-dispatch snapshots, outside reducer to keep it pure) ──
-  const undoStack = useRef<WorkspaceState[]>([]);
+  type UndoEntry = { workspace: WorkspaceState; isDirty: boolean };
+  const undoStack = useRef<UndoEntry[]>([]);
+  const isDirtyRef = useRef(false);
   const UNDO_LIMIT = 50;
 
   const NON_UNDOABLE: WorkspaceAction['type'][] = [
@@ -343,22 +345,31 @@ export default function Canvas() {
   const semanticDispatch = useCallback((action: WorkspaceAction) => {
     // Push snapshot before dispatch (skip non-undoable actions)
     if (!NON_UNDOABLE.includes(action.type)) {
-      undoStack.current = [...undoStack.current.slice(-(UNDO_LIMIT - 1)), workspaceRef.current];
+      undoStack.current = [
+        ...undoStack.current.slice(-(UNDO_LIMIT - 1)),
+        { workspace: workspaceRef.current, isDirty: isDirtyRef.current },
+      ];
     }
     dispatch(action);
     if (action.type !== 'LOAD_WORKSPACE') {
       setIsDirty(true);
+      isDirtyRef.current = true;
       postToHost({ command: 'markDirty' });
     }
   }, []);
 
-  // ── Undo: pop last snapshot and load it directly ──
+  // ── Undo: pop last snapshot and restore state + dirty flag ──
   const onUndo = useCallback(() => {
-    const prev = undoStack.current.pop();
-    if (prev) {
-      dispatch({ type: 'LOAD_WORKSPACE', workspace: prev });
-      setIsDirty(true);
-      postToHost({ command: 'markDirty' });
+    const entry = undoStack.current.pop();
+    if (entry) {
+      dispatch({ type: 'LOAD_WORKSPACE', workspace: entry.workspace });
+      setIsDirty(entry.isDirty);
+      isDirtyRef.current = entry.isDirty;
+      if (entry.isDirty) {
+        postToHost({ command: 'markDirty' });
+      } else {
+        postToHost({ command: 'markClean' });
+      }
     }
   }, []);
 
@@ -576,6 +587,7 @@ export default function Canvas() {
           dispatch({ type: 'LOAD_WORKSPACE', workspace: msg.state });
           undoStack.current = [];
           setIsDirty(false);
+          isDirtyRef.current = false;
           setLoadGeneration((n) => n + 1);
           setFitViewTrigger((n) => n + 1);
           break;
@@ -589,6 +601,7 @@ export default function Canvas() {
 
         case 'saveConfirmed': {
           setIsDirty(false);
+          isDirtyRef.current = false;
           setStatusMessage('Saved');
           setTimeout(() => setStatusMessage(null), 1500);
           break;

@@ -293,6 +293,13 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           scheduleAutoSave();
           break;
         }
+
+        // ── markClean: undo restored to saved state ──
+        case 'markClean': {
+          isDirtyHostSide = false;
+          panel.title = `Lace · ${folderName}`;
+          break;
+        }
       }
     },
   );
