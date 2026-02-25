@@ -520,7 +520,6 @@ export default function Canvas() {
 
   // ── Event: clear all modules from graph ──
   const onClearGraph = useCallback(() => {
-    if (!window.confirm('Remove all modules from the canvas?')) return;
     semanticDispatch({
       type: 'CLEAR_GRAPH',
       module_key: moduleKeyRef.current,

@@ -136,7 +136,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onDeleteInstance = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!window.confirm(`Delete "${instance.id}"?`)) return;
       const dispatch = (window as any).__canvasDispatch;
       const moduleKey = (window as any).__activeModuleKey;
       if (dispatch && moduleKey) {
