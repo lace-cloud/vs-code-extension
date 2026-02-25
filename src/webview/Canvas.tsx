@@ -19,11 +19,8 @@ import SlidePanel from './components/SlidePanel';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
-import TerraformConfigPanel from './components/panels/TerraformConfigPanel';
-import ProvidersPanel from './components/panels/ProvidersPanel';
-import LocalsPanel from './components/panels/LocalsPanel';
-import EnvironmentsPanel from './components/panels/EnvironmentsPanel';
-import ActionBar, { type SettingsPanel } from './components/ActionBar';
+import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
+import ActionBar from './components/ActionBar';
 
 import type { WorkspaceState, GraphLayout } from './types/workspace';
 import type { ModuleBundle, CompositeGraph } from './types/ir';
@@ -76,7 +73,7 @@ type CompositeEditorProps = {
   onUndo: () => void;
   onClearGraph: () => void;
   onGenerate: () => void;
-  onOpenSettings: (panel: SettingsPanel) => void;
+  onOpenSettings: () => void;
 };
 
 function CompositeEditor({
@@ -303,7 +300,7 @@ export default function Canvas() {
     target: string;
   } | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
     Array<{ module_key?: string; instance_id?: string; message: string }>
   >([]);
@@ -572,8 +569,8 @@ export default function Canvas() {
   }, []);
 
   // ── Open settings panel ──
-  const onOpenSettings = useCallback((panel: SettingsPanel) => {
-    setSettingsPanel(panel);
+  const onOpenSettings = useCallback(() => {
+    setSettingsOpen(true);
     setConfigTarget(null);
   }, []);
 
@@ -882,78 +879,29 @@ export default function Canvas() {
             )}
           </SlidePanel>
 
-          {/* Terraform config panel */}
-          <SlidePanel open={settingsPanel === 'terraform'}>
-            {settingsPanel === 'terraform' && (
-              <TerraformConfigPanel
+          {/* Unified settings panel */}
+          <SlidePanel open={settingsOpen}>
+            {settingsOpen && (
+              <UnifiedSettingsPanel
                 terraform={rootDef.terraform}
-                onSave={(terraform) => {
-                  semanticDispatch({
-                    type: 'SET_TERRAFORM',
-                    module_key,
-                    terraform,
-                  });
-                  setSettingsPanel(null);
-                }}
-                onClose={() => setSettingsPanel(null)}
-              />
-            )}
-          </SlidePanel>
-
-          {/* Providers panel */}
-          <SlidePanel open={settingsPanel === 'providers'}>
-            {settingsPanel === 'providers' && (
-              <ProvidersPanel
                 providers={rootDef.providers}
-                onSave={(providers) => {
-                  semanticDispatch({
-                    type: 'SET_PROVIDERS',
-                    module_key,
-                    providers,
-                  });
-                  setSettingsPanel(null);
-                }}
-                onClose={() => setSettingsPanel(null)}
-              />
-            )}
-          </SlidePanel>
-
-          {/* Locals panel */}
-          <SlidePanel open={settingsPanel === 'locals'}>
-            {settingsPanel === 'locals' && (
-              <LocalsPanel
                 locals={graph.locals}
-                onSave={(locals) => {
-                  semanticDispatch({
-                    type: 'SET_LOCALS',
-                    module_key,
-                    locals,
-                  });
-                  setSettingsPanel(null);
-                }}
-                onClose={() => setSettingsPanel(null)}
-              />
-            )}
-          </SlidePanel>
-
-          {/* Environments panel */}
-          <SlidePanel open={settingsPanel === 'environments'}>
-            {settingsPanel === 'environments' && (
-              <EnvironmentsPanel
                 environments={workspace.environments}
                 environment_backends={workspace.environment_backends}
-                onSave={(environments, backends) => {
-                  semanticDispatch({
-                    type: 'SET_ENVIRONMENTS',
-                    environments,
-                  });
-                  semanticDispatch({
-                    type: 'SET_ENVIRONMENT_BACKENDS',
-                    backends,
-                  });
-                  setSettingsPanel(null);
+                onSaveTerraform={(terraform) => {
+                  semanticDispatch({ type: 'SET_TERRAFORM', module_key, terraform });
                 }}
-                onClose={() => setSettingsPanel(null)}
+                onSaveProviders={(providers) => {
+                  semanticDispatch({ type: 'SET_PROVIDERS', module_key, providers });
+                }}
+                onSaveLocals={(locals) => {
+                  semanticDispatch({ type: 'SET_LOCALS', module_key, locals });
+                }}
+                onSaveEnvironments={(environments, backends) => {
+                  semanticDispatch({ type: 'SET_ENVIRONMENTS', environments });
+                  semanticDispatch({ type: 'SET_ENVIRONMENT_BACKENDS', backends });
+                }}
+                onClose={() => setSettingsOpen(false)}
               />
             )}
           </SlidePanel>

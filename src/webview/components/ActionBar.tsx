@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { Panel } from '@xyflow/react';
 
 // ── Types ──
-
-export type SettingsPanel = 'terraform' | 'providers' | 'locals' | 'environments';
 
 type ActionBarProps = {
   onSave: () => void;
@@ -11,17 +9,8 @@ type ActionBarProps = {
   onUndo: () => void;
   onClearGraph: () => void;
   onGenerate: () => void;
-  onOpenSettings: (panel: SettingsPanel) => void;
+  onOpenSettings: () => void;
 };
-
-// ── Settings menu items ──
-
-const SETTINGS_ITEMS: { key: SettingsPanel; label: string }[] = [
-  { key: 'terraform', label: 'Terraform Config' },
-  { key: 'providers', label: 'Providers' },
-  { key: 'locals', label: 'Locals' },
-  { key: 'environments', label: 'Environments' },
-];
 
 // ── Component ──
 
@@ -33,21 +22,6 @@ export default function ActionBar({
   onGenerate,
   onOpenSettings,
 }: ActionBarProps) {
-  const [gearOpen, setGearOpen] = useState(false);
-  const gearRef = useRef<HTMLDivElement>(null);
-
-  // Dismiss gear dropdown on outside click
-  useEffect(() => {
-    if (!gearOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (gearRef.current && !gearRef.current.contains(e.target as Node)) {
-        setGearOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [gearOpen]);
-
   return (
     <Panel position="top-right">
       <div className="flex items-center gap-0 bg-[#1e1e1e]/80 backdrop-blur border border-[#333] rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
@@ -111,38 +85,17 @@ export default function ActionBar({
           </svg>
         </button>
 
-        {/* Gear dropdown container */}
-        <div ref={gearRef} className="relative">
-          <button
-            onClick={() => setGearOpen((prev) => !prev)}
-            title="Settings"
-            aria-label="Settings"
-            className={`w-8 h-8 flex items-center justify-center bg-transparent border-none cursor-pointer rounded-r-lg ${
-              gearOpen ? 'text-white' : 'text-[#999] hover:text-white'
-            }`}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 110-7.2 3.6 3.6 0 010 7.2z" />
-            </svg>
-          </button>
-
-          {gearOpen && (
-            <div className="absolute top-full right-0 mt-1 w-44 bg-[#252525] border border-[#444] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.5)] overflow-hidden z-50">
-              {SETTINGS_ITEMS.map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => {
-                    onOpenSettings(item.key);
-                    setGearOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs text-[#ccc] bg-transparent border-none cursor-pointer hover:bg-[#333] hover:text-white"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Gear button — opens unified settings panel */}
+        <button
+          onClick={onOpenSettings}
+          title="Settings"
+          aria-label="Settings"
+          className="w-8 h-8 flex items-center justify-center bg-transparent border-none text-[#999] hover:text-white cursor-pointer rounded-r-lg"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 110-7.2 3.6 3.6 0 010 7.2z" />
+          </svg>
+        </button>
       </div>
     </Panel>
   );

@@ -4,14 +4,6 @@ import type { LocalDef, Binding } from '../../types/ir';
 import { isLit, isExpr } from '../../types/ir';
 import { isValidTerraformIdentifier } from '../../utils/identifiers';
 
-// ── Props ──
-
-type Props = {
-  locals: LocalDef[] | undefined;
-  onSave: (locals: LocalDef[]) => void;
-  onClose: () => void;
-};
-
 // ── Shared styles ──
 
 const inputClasses =
@@ -74,9 +66,14 @@ function fromRows(rows: LocalRow[]): LocalDef[] {
     });
 }
 
-// ── Component ──
+// ── Content-only component (used by UnifiedSettingsPanel) ──
 
-export default function LocalsPanel({ locals, onSave, onClose }: Props) {
+type ContentProps = {
+  locals: LocalDef[] | undefined;
+  onSave: (locals: LocalDef[]) => void;
+};
+
+export function LocalsContent({ locals, onSave }: ContentProps) {
   const [rows, setRows] = useState<LocalRow[]>(() => toRows(locals));
 
   const addLocal = useCallback(() => {
@@ -117,8 +114,92 @@ export default function LocalsPanel({ locals, onSave, onClose }: Props) {
   });
 
   return (
+    <>
+      {rows.map((row, i) => (
+        <div key={i} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
+          {/* Name */}
+          <div className="flex gap-2 mb-2">
+            <input
+              value={row.name}
+              onChange={(e) => updateName(i, e.target.value)}
+              placeholder="Local name"
+              className={`${inputClasses} flex-1 font-mono ${nameErrors[i] ? 'border-[#e5484d]' : ''}`}
+            />
+            <button
+              onClick={() => removeLocal(i)}
+              className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
+            >
+              ✕
+            </button>
+          </div>
+          {nameErrors[i] && <div className="text-[10px] text-[#e5484d] mb-2">{nameErrors[i]}</div>}
+
+          {/* Mode selector */}
+          <div className="flex gap-1 mb-2">
+            <button
+              className={`${modeButtonBase} ${row.mode === 'literal' ? modeButtonActive : modeButtonInactive}`}
+              onClick={() => switchMode(i, 'literal')}
+            >
+              Literal
+            </button>
+            <button
+              className={`${modeButtonBase} ${row.mode === 'expression' ? modeButtonActive : modeButtonInactive}`}
+              onClick={() => switchMode(i, 'expression')}
+            >
+              Expression
+            </button>
+          </div>
+
+          {/* Value editor */}
+          {row.mode === 'literal' ? (
+            <textarea
+              value={row.litValue}
+              onChange={(e) => updateLitValue(i, e.target.value)}
+              placeholder='e.g. "my-bucket" or {"key": "value"}'
+              rows={3}
+              className={`${inputClasses} font-mono resize-y`}
+            />
+          ) : (
+            <textarea
+              value={row.exprValue}
+              onChange={(e) => updateExprValue(i, e.target.value)}
+              placeholder='e.g. "${var.environment}-${var.role_name}"'
+              rows={3}
+              className={`${inputClasses} font-mono resize-y`}
+            />
+          )}
+        </div>
+      ))}
+
+      <button
+        onClick={addLocal}
+        className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
+      >
+        + Add local
+      </button>
+
+      {/* Inline save */}
+      <button
+        className="w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2"
+        onClick={handleSave}
+      >
+        Save locals
+      </button>
+    </>
+  );
+}
+
+// ── Full panel (backwards compat — original default export) ──
+
+type Props = {
+  locals: LocalDef[] | undefined;
+  onSave: (locals: LocalDef[]) => void;
+  onClose: () => void;
+};
+
+export default function LocalsPanel({ locals, onSave, onClose }: Props) {
+  return (
     <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      {/* Header */}
       <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
         <h3 className="m-0 text-base">Locals</h3>
         <button
@@ -129,84 +210,9 @@ export default function LocalsPanel({ locals, onSave, onClose }: Props) {
           ✕
         </button>
       </header>
-
-      {/* Body */}
       <div className="flex-1 overflow-y-auto p-4 pb-24">
-        {rows.map((row, i) => (
-          <div key={i} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
-            {/* Name */}
-            <div className="flex gap-2 mb-2">
-              <input
-                value={row.name}
-                onChange={(e) => updateName(i, e.target.value)}
-                placeholder="Local name"
-                className={`${inputClasses} flex-1 font-mono ${nameErrors[i] ? 'border-[#e5484d]' : ''}`}
-              />
-              <button
-                onClick={() => removeLocal(i)}
-                className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-              >
-                ✕
-              </button>
-            </div>
-            {nameErrors[i] && (
-              <div className="text-[10px] text-[#e5484d] mb-2">{nameErrors[i]}</div>
-            )}
-
-            {/* Mode selector */}
-            <div className="flex gap-1 mb-2">
-              <button
-                className={`${modeButtonBase} ${row.mode === 'literal' ? modeButtonActive : modeButtonInactive}`}
-                onClick={() => switchMode(i, 'literal')}
-              >
-                Literal
-              </button>
-              <button
-                className={`${modeButtonBase} ${row.mode === 'expression' ? modeButtonActive : modeButtonInactive}`}
-                onClick={() => switchMode(i, 'expression')}
-              >
-                Expression
-              </button>
-            </div>
-
-            {/* Value editor */}
-            {row.mode === 'literal' ? (
-              <textarea
-                value={row.litValue}
-                onChange={(e) => updateLitValue(i, e.target.value)}
-                placeholder='e.g. "my-bucket" or {"key": "value"}'
-                rows={3}
-                className={`${inputClasses} font-mono resize-y`}
-              />
-            ) : (
-              <textarea
-                value={row.exprValue}
-                onChange={(e) => updateExprValue(i, e.target.value)}
-                placeholder='e.g. "${var.environment}-${var.role_name}"'
-                rows={3}
-                className={`${inputClasses} font-mono resize-y`}
-              />
-            )}
-          </div>
-        ))}
-
-        <button
-          onClick={addLocal}
-          className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none"
-        >
-          + Add local
-        </button>
+        <LocalsContent locals={locals} onSave={onSave} />
       </div>
-
-      {/* Footer */}
-      <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-30">
-        <button
-          className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer"
-          onClick={handleSave}
-        >
-          Save locals
-        </button>
-      </footer>
     </div>
   );
 }

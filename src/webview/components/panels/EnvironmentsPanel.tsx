@@ -2,18 +2,6 @@
 import React, { useState, useCallback } from 'react';
 import type { BackendConfig } from '../../types/ir';
 
-// ── Props ──
-
-type Props = {
-  environments: Record<string, Record<string, any>> | undefined;
-  environment_backends: Record<string, BackendConfig> | undefined;
-  onSave: (
-    environments: Record<string, Record<string, any>>,
-    backends: Record<string, BackendConfig>,
-  ) => void;
-  onClose: () => void;
-};
-
 // ── Shared styles ──
 
 const inputClasses =
@@ -95,14 +83,18 @@ function fromBackendRows(rows: BackendRow[]): Record<string, BackendConfig> {
   return result;
 }
 
-// ── Component ──
+// ── Content-only component (used by UnifiedSettingsPanel) ──
 
-export default function EnvironmentsPanel({
-  environments,
-  environment_backends,
-  onSave,
-  onClose,
-}: Props) {
+type ContentProps = {
+  environments: Record<string, Record<string, any>> | undefined;
+  environment_backends: Record<string, BackendConfig> | undefined;
+  onSave: (
+    environments: Record<string, Record<string, any>>,
+    backends: Record<string, BackendConfig>,
+  ) => void;
+};
+
+export function EnvironmentsContent({ environments, environment_backends, onSave }: ContentProps) {
   const [activeTab, setActiveTab] = useState<'environments' | 'backends'>('environments');
   const [envRows, setEnvRows] = useState<EnvRow[]>(() => toEnvRows(environments));
   const [backendRows, setBackendRows] = useState<BackendRow[]>(() =>
@@ -217,21 +209,9 @@ export default function EnvironmentsPanel({
   };
 
   return (
-    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      {/* Header */}
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <h3 className="m-0 text-base">Environments</h3>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </header>
-
+    <>
       {/* Tabs */}
-      <div className="flex border-b border-[#333] px-4">
+      <div className="flex border-b border-[#333] mb-3 -mx-4 px-4">
         <button
           className={`${tabClasses} ${activeTab === 'environments' ? 'bg-[#1e1e1e] text-white' : 'bg-transparent text-[#999]'}`}
           onClick={() => setActiveTab('environments')}
@@ -246,147 +226,183 @@ export default function EnvironmentsPanel({
         </button>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        {activeTab === 'environments' && (
-          <>
-            {envRows.map((env, ei) => (
-              <div key={ei} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
-                <div className="flex gap-2 mb-2">
-                  <input
-                    value={env.name}
-                    onChange={(e) => updateEnvName(ei, e.target.value)}
-                    placeholder="Environment name (e.g. dev)"
-                    className={`${inputClasses} flex-1 font-bold`}
-                  />
-                  <button
-                    onClick={() => removeEnv(ei)}
-                    className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="text-[11px] opacity-70 mb-2">Variable overrides</div>
-                {env.vars.map((v, vi) => (
-                  <div key={vi} className="flex gap-2 mb-1.5">
-                    <input
-                      value={v.key}
-                      onChange={(e) => updateEnvVar(ei, vi, 'key', e.target.value)}
-                      placeholder="Variable name"
-                      className={`${inputClasses} flex-1`}
-                    />
-                    <input
-                      value={v.value}
-                      onChange={(e) => updateEnvVar(ei, vi, 'value', e.target.value)}
-                      placeholder="Value"
-                      className={`${inputClasses} flex-1`}
-                    />
-                    <button
-                      onClick={() => removeEnvVar(ei, vi)}
-                      className="text-[#e5484d] text-[10px] px-1.5 cursor-pointer bg-transparent border-none"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+      {activeTab === 'environments' && (
+        <>
+          {envRows.map((env, ei) => (
+            <div key={ei} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
+              <div className="flex gap-2 mb-2">
+                <input
+                  value={env.name}
+                  onChange={(e) => updateEnvName(ei, e.target.value)}
+                  placeholder="Environment name (e.g. dev)"
+                  className={`${inputClasses} flex-1 font-bold`}
+                />
                 <button
-                  onClick={() => addEnvVar(ei)}
-                  className="text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1"
+                  onClick={() => removeEnv(ei)}
+                  className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
                 >
-                  + Add variable
+                  ✕
                 </button>
               </div>
-            ))}
-            <button
-              onClick={addEnv}
-              className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none"
-            >
-              + Add environment
-            </button>
-          </>
-        )}
 
-        {activeTab === 'backends' && (
-          <>
-            {backendRows.map((b, bi) => (
-              <div key={bi} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
-                <div className="flex gap-2 mb-2">
+              <div className="text-[11px] opacity-70 mb-2">Variable overrides</div>
+              {env.vars.map((v, vi) => (
+                <div key={vi} className="flex gap-2 mb-1.5">
                   <input
-                    value={b.envName}
-                    onChange={(e) => updateBackendEnvName(bi, e.target.value)}
-                    placeholder="Environment name"
-                    className={`${inputClasses} flex-1 font-bold`}
-                  />
-                  <select
-                    value={b.type}
-                    onChange={(e) => updateBackendType(bi, e.target.value)}
+                    value={v.key}
+                    onChange={(e) => updateEnvVar(ei, vi, 'key', e.target.value)}
+                    placeholder="Variable name"
                     className={`${inputClasses} flex-1`}
-                  >
-                    {BACKEND_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  <input
+                    value={v.value}
+                    onChange={(e) => updateEnvVar(ei, vi, 'value', e.target.value)}
+                    placeholder="Value"
+                    className={`${inputClasses} flex-1`}
+                  />
                   <button
-                    onClick={() => removeBackend(bi)}
-                    className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
+                    onClick={() => removeEnvVar(ei, vi)}
+                    className="text-[#e5484d] text-[10px] px-1.5 cursor-pointer bg-transparent border-none"
                   >
                     ✕
                   </button>
                 </div>
+              ))}
+              <button
+                onClick={() => addEnvVar(ei)}
+                className="text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1"
+              >
+                + Add variable
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addEnv}
+            className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
+          >
+            + Add environment
+          </button>
+        </>
+      )}
 
-                <div className="text-[11px] opacity-70 mb-2">Config</div>
-                {b.config.map((c, ci) => (
-                  <div key={ci} className="flex gap-2 mb-1.5">
-                    <input
-                      value={c.key}
-                      onChange={(e) => updateBackendConfig(bi, ci, 'key', e.target.value)}
-                      placeholder="Key"
-                      className={`${inputClasses} flex-1`}
-                    />
-                    <input
-                      value={c.value}
-                      onChange={(e) => updateBackendConfig(bi, ci, 'value', e.target.value)}
-                      placeholder="Value"
-                      className={`${inputClasses} flex-1`}
-                    />
-                    <button
-                      onClick={() => removeBackendConfig(bi, ci)}
-                      className="text-[#e5484d] text-[10px] px-1.5 cursor-pointer bg-transparent border-none"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={() => addBackendConfig(bi)}
-                  className="text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1"
+      {activeTab === 'backends' && (
+        <>
+          {backendRows.map((b, bi) => (
+            <div key={bi} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
+              <div className="flex gap-2 mb-2">
+                <input
+                  value={b.envName}
+                  onChange={(e) => updateBackendEnvName(bi, e.target.value)}
+                  placeholder="Environment name"
+                  className={`${inputClasses} flex-1 font-bold`}
+                />
+                <select
+                  value={b.type}
+                  onChange={(e) => updateBackendType(bi, e.target.value)}
+                  className={`${inputClasses} flex-1`}
                 >
-                  + Add config key
+                  {BACKEND_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => removeBackend(bi)}
+                  className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
+                >
+                  ✕
                 </button>
               </div>
-            ))}
-            <button
-              onClick={addBackend}
-              className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none"
-            >
-              + Add backend
-            </button>
-          </>
-        )}
-      </div>
 
-      {/* Footer */}
-      <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-30">
+              <div className="text-[11px] opacity-70 mb-2">Config</div>
+              {b.config.map((c, ci) => (
+                <div key={ci} className="flex gap-2 mb-1.5">
+                  <input
+                    value={c.key}
+                    onChange={(e) => updateBackendConfig(bi, ci, 'key', e.target.value)}
+                    placeholder="Key"
+                    className={`${inputClasses} flex-1`}
+                  />
+                  <input
+                    value={c.value}
+                    onChange={(e) => updateBackendConfig(bi, ci, 'value', e.target.value)}
+                    placeholder="Value"
+                    className={`${inputClasses} flex-1`}
+                  />
+                  <button
+                    onClick={() => removeBackendConfig(bi, ci)}
+                    className="text-[#e5484d] text-[10px] px-1.5 cursor-pointer bg-transparent border-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => addBackendConfig(bi)}
+                className="text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1"
+              >
+                + Add config key
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={addBackend}
+            className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
+          >
+            + Add backend
+          </button>
+        </>
+      )}
+
+      {/* Inline save */}
+      <button
+        className="w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2"
+        onClick={handleSave}
+      >
+        Save environments
+      </button>
+    </>
+  );
+}
+
+// ── Full panel (backwards compat — original default export) ──
+
+type Props = {
+  environments: Record<string, Record<string, any>> | undefined;
+  environment_backends: Record<string, BackendConfig> | undefined;
+  onSave: (
+    environments: Record<string, Record<string, any>>,
+    backends: Record<string, BackendConfig>,
+  ) => void;
+  onClose: () => void;
+};
+
+export default function EnvironmentsPanel({
+  environments,
+  environment_backends,
+  onSave,
+  onClose,
+}: Props) {
+  return (
+    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
+      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
+        <h3 className="m-0 text-base">Environments</h3>
         <button
-          className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer"
-          onClick={handleSave}
+          onClick={onClose}
+          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
+          aria-label="Close"
         >
-          Save environments
+          ✕
         </button>
-      </footer>
+      </header>
+      <div className="flex-1 overflow-y-auto p-4 pb-24">
+        <EnvironmentsContent
+          environments={environments}
+          environment_backends={environment_backends}
+          onSave={onSave}
+        />
+      </div>
     </div>
   );
 }

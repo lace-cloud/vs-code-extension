@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import type { InputDef, OutputDef, Binding } from '../../types/ir';
 import { isLit, isOut, isVar, isExpr } from '../../types/ir';
+import AccordionSection from '../AccordionSection';
 
 // ── Binding mode type ──
 
@@ -95,8 +96,6 @@ export default function ModuleConfigPanel({
     }
     return m;
   });
-
-  const [showOptional, setShowOptional] = useState(true);
 
   const updateBinding = useCallback((name: string, binding: Binding) => {
     setLocalBindings((prev) => ({ ...prev, [name]: binding }));
@@ -357,6 +356,9 @@ export default function ModuleConfigPanel({
     );
   }
 
+  // ── Depends On count ──
+  const dependsOnCount = localDependsOn.size;
+
   return (
     <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
       {/* Header */}
@@ -376,38 +378,35 @@ export default function ModuleConfigPanel({
       </header>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
+      <div className="flex-1 overflow-y-auto">
         {/* Required Inputs */}
         {requiredInputs.length > 0 && (
-          <>
-            <SectionTitle label="Required Inputs" />
+          <AccordionSection
+            title="Required Inputs"
+            defaultOpen
+            badge={`(${requiredInputs.length})`}
+          >
             {requiredInputs.map(renderInputField)}
-          </>
+          </AccordionSection>
         )}
 
         {/* Optional Inputs */}
         {optionalInputs.length > 0 && (
-          <>
-            <div
-              className={`flex items-center justify-between ${requiredInputs.length > 0 ? 'mt-4' : ''}`}
-            >
-              <SectionTitle label="Optional Inputs" className="mb-0" />
-              <button
-                onClick={() => setShowOptional((v) => !v)}
-                className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-full px-2.5 py-1.5 text-xs opacity-90"
-              >
-                {showOptional ? 'Hide' : 'Show'} ({optionalInputs.length})
-              </button>
-            </div>
-            <div className="h-2.5" />
-            {showOptional && optionalInputs.map(renderInputField)}
-          </>
+          <AccordionSection
+            title="Optional Inputs"
+            defaultOpen
+            badge={`(${optionalInputs.length})`}
+          >
+            {optionalInputs.map(renderInputField)}
+          </AccordionSection>
         )}
 
-        {/* depends_on */}
+        {/* Depends On */}
         {sibling_ids.length > 0 && (
-          <>
-            <SectionTitle label="Depends On" style={{ marginTop: 26 }} />
+          <AccordionSection
+            title="Depends On"
+            badge={dependsOnCount > 0 ? `(${dependsOnCount})` : undefined}
+          >
             <div className="text-[11px] opacity-60 mb-2">
               Select sibling instances this module depends on.
             </div>
@@ -435,13 +434,12 @@ export default function ModuleConfigPanel({
                 </label>
               );
             })}
-          </>
+          </AccordionSection>
         )}
 
         {/* Outputs */}
         {schema.outputs.length > 0 && (
-          <>
-            <SectionTitle label="Outputs" style={{ marginTop: 26 }} />
+          <AccordionSection title="Outputs" badge={`(${schema.outputs.length})`}>
             {schema.outputs.map((o) => (
               <div
                 key={o.name}
@@ -459,7 +457,7 @@ export default function ModuleConfigPanel({
                 )}
               </div>
             ))}
-          </>
+          </AccordionSection>
         )}
       </div>
 
@@ -473,26 +471,5 @@ export default function ModuleConfigPanel({
         </button>
       </footer>
     </div>
-  );
-}
-
-// ── Section Title ──
-
-function SectionTitle({
-  label,
-  style = {},
-  className = '',
-}: {
-  label: string;
-  style?: React.CSSProperties;
-  className?: string;
-}) {
-  return (
-    <h4
-      className={`m-0 mb-3 text-[13px] font-bold uppercase tracking-wide opacity-85 ${className}`}
-      style={style}
-    >
-      {label}
-    </h4>
   );
 }

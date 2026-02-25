@@ -2,14 +2,6 @@
 import React, { useState, useCallback } from 'react';
 import type { TerraformBlock, ProviderRequirement } from '../../types/ir';
 
-// ── Props ──
-
-type Props = {
-  terraform: TerraformBlock | undefined;
-  onSave: (terraform: TerraformBlock) => void;
-  onClose: () => void;
-};
-
 // ── Shared styles ──
 
 const inputClasses =
@@ -17,9 +9,14 @@ const inputClasses =
 
 const BACKEND_TYPES = ['s3', 'gcs', 'azurerm', 'local', 'remote'];
 
-// ── Component ──
+// ── Content-only component (used by UnifiedSettingsPanel) ──
 
-export default function TerraformConfigPanel({ terraform, onSave, onClose }: Props) {
+type ContentProps = {
+  terraform: TerraformBlock | undefined;
+  onSave: (terraform: TerraformBlock) => void;
+};
+
+export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
   const [requiredVersion, setRequiredVersion] = useState(terraform?.required_version ?? '');
   const [providers, setProviders] = useState<
     Array<{ name: string; source: string; version: string }>
@@ -114,8 +111,120 @@ export default function TerraformConfigPanel({ terraform, onSave, onClose }: Pro
   };
 
   return (
+    <>
+      {/* Required Version */}
+      <SectionTitle label="Required Version" />
+      <input
+        value={requiredVersion}
+        onChange={(e) => setRequiredVersion(e.target.value)}
+        placeholder=">= 1.5"
+        className={`${inputClasses} mb-4`}
+      />
+
+      {/* Required Providers */}
+      <SectionTitle label="Required Providers" />
+      {providers.map((p, i) => (
+        <div key={i} className="mb-3 p-2.5 bg-[#0f0f0f] border border-[#333] rounded-lg">
+          <div className="flex gap-2 mb-2">
+            <input
+              value={p.name}
+              onChange={(e) => updateProvider(i, 'name', e.target.value)}
+              placeholder="Name (e.g. aws)"
+              className={`${inputClasses} flex-1`}
+            />
+            <button
+              onClick={() => removeProvider(i)}
+              className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
+            >
+              Remove
+            </button>
+          </div>
+          <input
+            value={p.source}
+            onChange={(e) => updateProvider(i, 'source', e.target.value)}
+            placeholder="Source (e.g. hashicorp/aws)"
+            className={`${inputClasses} mb-2`}
+          />
+          <input
+            value={p.version}
+            onChange={(e) => updateProvider(i, 'version', e.target.value)}
+            placeholder="Version (e.g. ~> 5.0)"
+            className={inputClasses}
+          />
+        </div>
+      ))}
+      <button
+        onClick={addProvider}
+        className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
+      >
+        + Add provider
+      </button>
+
+      {/* Backend */}
+      <SectionTitle label="Backend" />
+      <select
+        value={backendType}
+        onChange={(e) => setBackendType(e.target.value)}
+        className={`${inputClasses} mb-3`}
+      >
+        {BACKEND_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+
+      {backendConfig.map((c, i) => (
+        <div key={i} className="flex gap-2 mb-2">
+          <input
+            value={c.key}
+            onChange={(e) => updateBackendKey(i, 'key', e.target.value)}
+            placeholder="Key"
+            className={`${inputClasses} flex-1`}
+          />
+          <input
+            value={c.value}
+            onChange={(e) => updateBackendKey(i, 'value', e.target.value)}
+            placeholder="Value"
+            className={`${inputClasses} flex-1`}
+          />
+          <button
+            onClick={() => removeBackendKey(i)}
+            className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={addBackendKey}
+        className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
+      >
+        + Add config key
+      </button>
+
+      {/* Inline save */}
+      <button
+        className="w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2"
+        onClick={handleSave}
+      >
+        Save configuration
+      </button>
+    </>
+  );
+}
+
+// ── Full panel (backwards compat — original default export) ──
+
+type Props = {
+  terraform: TerraformBlock | undefined;
+  onSave: (terraform: TerraformBlock) => void;
+  onClose: () => void;
+};
+
+export default function TerraformConfigPanel({ terraform, onSave, onClose }: Props) {
+  return (
     <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      {/* Header */}
       <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
         <h3 className="m-0 text-base">Terraform Configuration</h3>
         <button
@@ -126,110 +235,9 @@ export default function TerraformConfigPanel({ terraform, onSave, onClose }: Pro
           ✕
         </button>
       </header>
-
-      {/* Body */}
       <div className="flex-1 overflow-y-auto p-4 pb-24">
-        {/* Required Version */}
-        <SectionTitle label="Required Version" />
-        <input
-          value={requiredVersion}
-          onChange={(e) => setRequiredVersion(e.target.value)}
-          placeholder=">= 1.5"
-          className={`${inputClasses} mb-4`}
-        />
-
-        {/* Required Providers */}
-        <SectionTitle label="Required Providers" />
-        {providers.map((p, i) => (
-          <div key={i} className="mb-3 p-2.5 bg-[#0f0f0f] border border-[#333] rounded-lg">
-            <div className="flex gap-2 mb-2">
-              <input
-                value={p.name}
-                onChange={(e) => updateProvider(i, 'name', e.target.value)}
-                placeholder="Name (e.g. aws)"
-                className={`${inputClasses} flex-1`}
-              />
-              <button
-                onClick={() => removeProvider(i)}
-                className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-              >
-                Remove
-              </button>
-            </div>
-            <input
-              value={p.source}
-              onChange={(e) => updateProvider(i, 'source', e.target.value)}
-              placeholder="Source (e.g. hashicorp/aws)"
-              className={`${inputClasses} mb-2`}
-            />
-            <input
-              value={p.version}
-              onChange={(e) => updateProvider(i, 'version', e.target.value)}
-              placeholder="Version (e.g. ~> 5.0)"
-              className={inputClasses}
-            />
-          </div>
-        ))}
-        <button
-          onClick={addProvider}
-          className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
-        >
-          + Add provider
-        </button>
-
-        {/* Backend */}
-        <SectionTitle label="Backend" />
-        <select
-          value={backendType}
-          onChange={(e) => setBackendType(e.target.value)}
-          className={`${inputClasses} mb-3`}
-        >
-          {BACKEND_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-
-        {backendConfig.map((c, i) => (
-          <div key={i} className="flex gap-2 mb-2">
-            <input
-              value={c.key}
-              onChange={(e) => updateBackendKey(i, 'key', e.target.value)}
-              placeholder="Key"
-              className={`${inputClasses} flex-1`}
-            />
-            <input
-              value={c.value}
-              onChange={(e) => updateBackendKey(i, 'value', e.target.value)}
-              placeholder="Value"
-              className={`${inputClasses} flex-1`}
-            />
-            <button
-              onClick={() => removeBackendKey(i)}
-              className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={addBackendKey}
-          className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none"
-        >
-          + Add config key
-        </button>
+        <TerraformConfigContent terraform={terraform} onSave={onSave} />
       </div>
-
-      {/* Footer */}
-      <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-30">
-        <button
-          className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer"
-          onClick={handleSave}
-        >
-          Save configuration
-        </button>
-      </footer>
     </div>
   );
 }
