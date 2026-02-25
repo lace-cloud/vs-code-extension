@@ -389,6 +389,14 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
 
   panel.onDidDispose(async () => {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
+
+    // Reject any in-flight requestGraphState / dispatchToCanvas calls
+    for (const [id, pending] of pendingRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Canvas panel was closed'));
+      pendingRequests.delete(id);
+    }
+
     if (isDirtyHostSide) {
       const choice = await vscode.window.showWarningMessage(
         'You have unsaved canvas changes.',
