@@ -1,11 +1,16 @@
 // src/webview/components/panels/ProvidersPanel.tsx
 import React, { useState, useCallback } from 'react';
 import type { ProviderConfig } from '../../types/ir';
-
-// ── Shared styles ──
-
-const inputClasses =
-  'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
+import {
+  inputClasses,
+  saveButtonClasses,
+  removeButtonClasses,
+  removeButtonSmClasses,
+  addButtonClasses,
+  addButtonSmClasses,
+  rowCardClasses,
+} from '../../styles/panel';
+import PanelFrame from '../PanelFrame';
 
 // ── Local editing state ──
 
@@ -112,7 +117,7 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
   return (
     <>
       {rows.map((row, pi) => (
-        <div key={pi} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
+        <div key={pi} className={rowCardClasses}>
           <div className="flex gap-2 mb-2">
             <input
               value={row.name}
@@ -126,10 +131,7 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
               placeholder="Alias (optional)"
               className={`${inputClasses} flex-1`}
             />
-            <button
-              onClick={() => removeProvider(pi)}
-              className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-            >
+            <button onClick={() => removeProvider(pi)} className={removeButtonClasses}>
               ✕
             </button>
           </div>
@@ -149,35 +151,23 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
                 placeholder="Value"
                 className={`${inputClasses} flex-1`}
               />
-              <button
-                onClick={() => removeConfigEntry(pi, ei)}
-                className="text-[#e5484d] text-[10px] px-1.5 cursor-pointer bg-transparent border-none"
-              >
+              <button onClick={() => removeConfigEntry(pi, ei)} className={removeButtonSmClasses}>
                 ✕
               </button>
             </div>
           ))}
-          <button
-            onClick={() => addConfigEntry(pi)}
-            className="text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1"
-          >
+          <button onClick={() => addConfigEntry(pi)} className={addButtonSmClasses}>
             + Add config key
           </button>
         </div>
       ))}
 
-      <button
-        onClick={addProvider}
-        className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
-      >
+      <button onClick={addProvider} className={addButtonClasses}>
         + Add provider
       </button>
 
       {/* Inline save */}
-      <button
-        className="w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2"
-        onClick={handleSave}
-      >
+      <button className={saveButtonClasses} onClick={handleSave}>
         Save providers
       </button>
     </>
@@ -194,20 +184,8 @@ type Props = {
 
 export default function ProvidersPanel({ providers, onSave, onClose }: Props) {
   return (
-    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <h3 className="m-0 text-base">Providers</h3>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </header>
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        <ProvidersContent providers={providers} onSave={onSave} />
-      </div>
-    </div>
+    <PanelFrame title="Providers" onClose={onClose}>
+      <ProvidersContent providers={providers} onSave={onSave} />
+    </PanelFrame>
   );
 }

@@ -1,13 +1,15 @@
 // src/webview/components/panels/TerraformConfigPanel.tsx
 import React, { useState, useCallback } from 'react';
 import type { TerraformBlock, ProviderRequirement } from '../../types/ir';
-
-// ── Shared styles ──
-
-const inputClasses =
-  'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
-
-const BACKEND_TYPES = ['s3', 'gcs', 'azurerm', 'local', 'remote'];
+import {
+  inputClasses,
+  BACKEND_TYPES,
+  saveButtonClasses,
+  removeButtonClasses,
+  addButtonClasses,
+} from '../../styles/panel';
+import { parseConfigValue } from '../../utils/parseValue';
+import PanelFrame from '../PanelFrame';
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
@@ -97,11 +99,7 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
       const config: Record<string, any> = {};
       for (const c of backendConfig) {
         if (c.key.trim()) {
-          // Parse booleans and numbers
-          if (c.value === 'true') config[c.key.trim()] = true;
-          else if (c.value === 'false') config[c.key.trim()] = false;
-          else if (/^\d+$/.test(c.value)) config[c.key.trim()] = Number(c.value);
-          else config[c.key.trim()] = c.value;
+          config[c.key.trim()] = parseConfigValue(c.value);
         }
       }
       block.backend = { type: backendType, config };
@@ -132,10 +130,7 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
               placeholder="Name (e.g. aws)"
               className={`${inputClasses} flex-1`}
             />
-            <button
-              onClick={() => removeProvider(i)}
-              className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-            >
+            <button onClick={() => removeProvider(i)} className={removeButtonClasses}>
               Remove
             </button>
           </div>
@@ -153,10 +148,7 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
           />
         </div>
       ))}
-      <button
-        onClick={addProvider}
-        className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
-      >
+      <button onClick={addProvider} className={addButtonClasses}>
         + Add provider
       </button>
 
@@ -188,26 +180,17 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
             placeholder="Value"
             className={`${inputClasses} flex-1`}
           />
-          <button
-            onClick={() => removeBackendKey(i)}
-            className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-          >
+          <button onClick={() => removeBackendKey(i)} className={removeButtonClasses}>
             ✕
           </button>
         </div>
       ))}
-      <button
-        onClick={addBackendKey}
-        className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
-      >
+      <button onClick={addBackendKey} className={addButtonClasses}>
         + Add config key
       </button>
 
       {/* Inline save */}
-      <button
-        className="w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2"
-        onClick={handleSave}
-      >
+      <button className={saveButtonClasses} onClick={handleSave}>
         Save configuration
       </button>
     </>
@@ -224,21 +207,9 @@ type Props = {
 
 export default function TerraformConfigPanel({ terraform, onSave, onClose }: Props) {
   return (
-    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <h3 className="m-0 text-base">Terraform Configuration</h3>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </header>
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        <TerraformConfigContent terraform={terraform} onSave={onSave} />
-      </div>
-    </div>
+    <PanelFrame title="Terraform Configuration" onClose={onClose}>
+      <TerraformConfigContent terraform={terraform} onSave={onSave} />
+    </PanelFrame>
   );
 }
 

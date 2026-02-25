@@ -2,6 +2,7 @@
 import React from 'react';
 import type { TerraformBlock, ProviderConfig, LocalDef, BackendConfig } from '../../types/ir';
 import AccordionSection from '../AccordionSection';
+import PanelFrame from '../PanelFrame';
 import { TerraformConfigContent } from './TerraformConfigPanel';
 import { ProvidersContent } from './ProvidersPanel';
 import { LocalsContent } from './LocalsPanel';
@@ -36,41 +37,26 @@ export default function UnifiedSettingsPanel({
   onClose,
 }: Props) {
   return (
-    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      {/* Header */}
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <h3 className="m-0 text-base">Settings</h3>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </header>
+    <PanelFrame title="Settings" scrollable={false} onClose={onClose}>
+      <AccordionSection title="Terraform Config" defaultOpen>
+        <TerraformConfigContent terraform={terraform} onSave={onSaveTerraform} />
+      </AccordionSection>
 
-      {/* Scrollable body with accordion sections */}
-      <div className="flex-1 overflow-y-auto">
-        <AccordionSection title="Terraform Config" defaultOpen>
-          <TerraformConfigContent terraform={terraform} onSave={onSaveTerraform} />
-        </AccordionSection>
+      <AccordionSection title="Providers">
+        <ProvidersContent providers={providers} onSave={onSaveProviders} />
+      </AccordionSection>
 
-        <AccordionSection title="Providers">
-          <ProvidersContent providers={providers} onSave={onSaveProviders} />
-        </AccordionSection>
+      <AccordionSection title="Locals">
+        <LocalsContent locals={locals} onSave={onSaveLocals} />
+      </AccordionSection>
 
-        <AccordionSection title="Locals">
-          <LocalsContent locals={locals} onSave={onSaveLocals} />
-        </AccordionSection>
-
-        <AccordionSection title="Environments">
-          <EnvironmentsContent
-            environments={environments}
-            environment_backends={environment_backends}
-            onSave={onSaveEnvironments}
-          />
-        </AccordionSection>
-      </div>
-    </div>
+      <AccordionSection title="Environments">
+        <EnvironmentsContent
+          environments={environments}
+          environment_backends={environment_backends}
+          onSave={onSaveEnvironments}
+        />
+      </AccordionSection>
+    </PanelFrame>
   );
 }

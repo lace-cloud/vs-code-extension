@@ -3,19 +3,17 @@ import React, { useState, useCallback } from 'react';
 import type { LocalDef, Binding } from '../../types/ir';
 import { isLit, isExpr } from '../../types/ir';
 import { isValidTerraformIdentifier } from '../../utils/identifiers';
-
-// ── Shared styles ──
-
-const inputClasses =
-  'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
-
-const modeButtonBase =
-  'text-[10px] px-2 py-1 rounded cursor-pointer border transition-colors duration-100';
-
-const modeButtonActive = 'bg-[#1f6feb] border-[#1f6feb] text-white font-bold';
-
-const modeButtonInactive =
-  'bg-transparent border-[#555] text-[#999] hover:text-white hover:border-[#888]';
+import {
+  inputClasses,
+  modeButtonBase,
+  modeButtonActive,
+  modeButtonInactive,
+  saveButtonClasses,
+  removeButtonClasses,
+  addButtonClasses,
+  rowCardClasses,
+} from '../../styles/panel';
+import PanelFrame from '../PanelFrame';
 
 // ── Local editing state ──
 
@@ -116,7 +114,7 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
   return (
     <>
       {rows.map((row, i) => (
-        <div key={i} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
+        <div key={i} className={rowCardClasses}>
           {/* Name */}
           <div className="flex gap-2 mb-2">
             <input
@@ -125,10 +123,7 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
               placeholder="Local name"
               className={`${inputClasses} flex-1 font-mono ${nameErrors[i] ? 'border-[#e5484d]' : ''}`}
             />
-            <button
-              onClick={() => removeLocal(i)}
-              className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-            >
+            <button onClick={() => removeLocal(i)} className={removeButtonClasses}>
               ✕
             </button>
           </div>
@@ -171,18 +166,12 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
         </div>
       ))}
 
-      <button
-        onClick={addLocal}
-        className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
-      >
+      <button onClick={addLocal} className={addButtonClasses}>
         + Add local
       </button>
 
       {/* Inline save */}
-      <button
-        className="w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2"
-        onClick={handleSave}
-      >
+      <button className={saveButtonClasses} onClick={handleSave}>
         Save locals
       </button>
     </>
@@ -199,20 +188,8 @@ type Props = {
 
 export default function LocalsPanel({ locals, onSave, onClose }: Props) {
   return (
-    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <h3 className="m-0 text-base">Locals</h3>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </header>
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        <LocalsContent locals={locals} onSave={onSave} />
-      </div>
-    </div>
+    <PanelFrame title="Locals" onClose={onClose}>
+      <LocalsContent locals={locals} onSave={onSave} />
+    </PanelFrame>
   );
 }

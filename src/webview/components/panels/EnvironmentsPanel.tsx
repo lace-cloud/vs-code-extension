@@ -1,16 +1,23 @@
 // src/webview/components/panels/EnvironmentsPanel.tsx
 import React, { useState, useCallback } from 'react';
 import type { BackendConfig } from '../../types/ir';
+import {
+  inputClasses,
+  BACKEND_TYPES,
+  saveButtonClasses,
+  removeButtonClasses,
+  removeButtonSmClasses,
+  addButtonClasses,
+  addButtonSmClasses,
+  rowCardClasses,
+} from '../../styles/panel';
+import { parseConfigValue } from '../../utils/parseValue';
+import PanelFrame from '../PanelFrame';
 
 // ── Shared styles ──
 
-const inputClasses =
-  'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
-
 const tabClasses =
   'px-3 py-1.5 text-xs cursor-pointer border-none rounded-t-md transition-colors duration-100';
-
-const BACKEND_TYPES = ['s3', 'gcs', 'azurerm', 'local', 'remote'];
 
 // ── Local editing state ──
 
@@ -73,10 +80,7 @@ function fromBackendRows(rows: BackendRow[]): Record<string, BackendConfig> {
     const config: Record<string, any> = {};
     for (const c of row.config) {
       if (!c.key.trim()) continue;
-      if (c.value === 'true') config[c.key.trim()] = true;
-      else if (c.value === 'false') config[c.key.trim()] = false;
-      else if (/^\d+$/.test(c.value)) config[c.key.trim()] = Number(c.value);
-      else config[c.key.trim()] = c.value;
+      config[c.key.trim()] = parseConfigValue(c.value);
     }
     result[row.envName.trim()] = { type: row.type, config };
   }
@@ -229,7 +233,7 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
       {activeTab === 'environments' && (
         <>
           {envRows.map((env, ei) => (
-            <div key={ei} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
+            <div key={ei} className={rowCardClasses}>
               <div className="flex gap-2 mb-2">
                 <input
                   value={env.name}
@@ -237,10 +241,7 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
                   placeholder="Environment name (e.g. dev)"
                   className={`${inputClasses} flex-1 font-bold`}
                 />
-                <button
-                  onClick={() => removeEnv(ei)}
-                  className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-                >
+                <button onClick={() => removeEnv(ei)} className={removeButtonClasses}>
                   ✕
                 </button>
               </div>
@@ -260,26 +261,17 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
                     placeholder="Value"
                     className={`${inputClasses} flex-1`}
                   />
-                  <button
-                    onClick={() => removeEnvVar(ei, vi)}
-                    className="text-[#e5484d] text-[10px] px-1.5 cursor-pointer bg-transparent border-none"
-                  >
+                  <button onClick={() => removeEnvVar(ei, vi)} className={removeButtonSmClasses}>
                     ✕
                   </button>
                 </div>
               ))}
-              <button
-                onClick={() => addEnvVar(ei)}
-                className="text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1"
-              >
+              <button onClick={() => addEnvVar(ei)} className={addButtonSmClasses}>
                 + Add variable
               </button>
             </div>
           ))}
-          <button
-            onClick={addEnv}
-            className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
-          >
+          <button onClick={addEnv} className={addButtonClasses}>
             + Add environment
           </button>
         </>
@@ -288,7 +280,7 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
       {activeTab === 'backends' && (
         <>
           {backendRows.map((b, bi) => (
-            <div key={bi} className="mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounded-lg">
+            <div key={bi} className={rowCardClasses}>
               <div className="flex gap-2 mb-2">
                 <input
                   value={b.envName}
@@ -307,10 +299,7 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
                     </option>
                   ))}
                 </select>
-                <button
-                  onClick={() => removeBackend(bi)}
-                  className="text-[#e5484d] text-xs px-2 cursor-pointer bg-transparent border-none"
-                >
+                <button onClick={() => removeBackend(bi)} className={removeButtonClasses}>
                   ✕
                 </button>
               </div>
@@ -332,34 +321,25 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
                   />
                   <button
                     onClick={() => removeBackendConfig(bi, ci)}
-                    className="text-[#e5484d] text-[10px] px-1.5 cursor-pointer bg-transparent border-none"
+                    className={removeButtonSmClasses}
                   >
                     ✕
                   </button>
                 </div>
               ))}
-              <button
-                onClick={() => addBackendConfig(bi)}
-                className="text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1"
-              >
+              <button onClick={() => addBackendConfig(bi)} className={addButtonSmClasses}>
                 + Add config key
               </button>
             </div>
           ))}
-          <button
-            onClick={addBackend}
-            className="text-xs text-[#1f6feb] cursor-pointer bg-transparent border-none mb-4"
-          >
+          <button onClick={addBackend} className={addButtonClasses}>
             + Add backend
           </button>
         </>
       )}
 
       {/* Inline save */}
-      <button
-        className="w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2"
-        onClick={handleSave}
-      >
+      <button className={saveButtonClasses} onClick={handleSave}>
         Save environments
       </button>
     </>
@@ -385,24 +365,12 @@ export default function EnvironmentsPanel({
   onClose,
 }: Props) {
   return (
-    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <h3 className="m-0 text-base">Environments</h3>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </header>
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        <EnvironmentsContent
-          environments={environments}
-          environment_backends={environment_backends}
-          onSave={onSave}
-        />
-      </div>
-    </div>
+    <PanelFrame title="Environments" onClose={onClose}>
+      <EnvironmentsContent
+        environments={environments}
+        environment_backends={environment_backends}
+        onSave={onSave}
+      />
+    </PanelFrame>
   );
 }

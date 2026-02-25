@@ -3,6 +3,14 @@ import React, { useMemo, useState, useCallback } from 'react';
 import type { InputDef, OutputDef, Binding } from '../../types/ir';
 import { isLit, isOut, isVar, isExpr } from '../../types/ir';
 import AccordionSection from '../AccordionSection';
+import PanelFrame from '../PanelFrame';
+import {
+  inputClasses,
+  modeButtonBase,
+  modeButtonActive,
+  modeButtonInactive,
+  footerSaveButtonClasses,
+} from '../../styles/panel';
 
 // ── Binding mode type ──
 
@@ -50,19 +58,6 @@ type Props = {
   onDisconnect: (input_name: string) => void;
   onClose: () => void;
 };
-
-// ── Shared styles ──
-
-const inputClasses =
-  'w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs';
-
-const modeButtonBase =
-  'text-[10px] px-2 py-1 rounded cursor-pointer border transition-colors duration-100';
-
-const modeButtonActive = 'bg-[#1f6feb] border-[#1f6feb] text-white font-bold';
-
-const modeButtonInactive =
-  'bg-transparent border-[#555] text-[#999] hover:text-white hover:border-[#888]';
 
 // ── Component ──
 
@@ -359,117 +354,90 @@ export default function ModuleConfigPanel({
   // ── Depends On count ──
   const dependsOnCount = localDependsOn.size;
 
-  return (
-    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      {/* Header */}
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <div className="flex flex-col gap-1">
-          <div className="text-xs opacity-70">Module</div>
-          <h3 className="m-0 text-base">{instance_id}</h3>
-        </div>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-          aria-label="Close"
-          title="Close"
-        >
-          ✕
-        </button>
-      </header>
-
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Required Inputs */}
-        {requiredInputs.length > 0 && (
-          <AccordionSection
-            title="Required Inputs"
-            defaultOpen
-            badge={`(${requiredInputs.length})`}
-          >
-            {requiredInputs.map(renderInputField)}
-          </AccordionSection>
-        )}
-
-        {/* Optional Inputs */}
-        {optionalInputs.length > 0 && (
-          <AccordionSection
-            title="Optional Inputs"
-            defaultOpen
-            badge={`(${optionalInputs.length})`}
-          >
-            {optionalInputs.map(renderInputField)}
-          </AccordionSection>
-        )}
-
-        {/* Depends On */}
-        {sibling_ids.length > 0 && (
-          <AccordionSection
-            title="Depends On"
-            badge={dependsOnCount > 0 ? `(${dependsOnCount})` : undefined}
-          >
-            <div className="text-[11px] opacity-60 mb-2">
-              Select sibling instances this module depends on.
-            </div>
-            {sibling_ids.map((sibId) => {
-              const depKey = `module.${sibId}`;
-              return (
-                <label
-                  key={sibId}
-                  className="flex items-center gap-2 mb-1.5 text-xs cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={localDependsOn.has(depKey)}
-                    onChange={(e) => {
-                      setLocalDependsOn((prev) => {
-                        const next = new Set(prev);
-                        if (e.target.checked) next.add(depKey);
-                        else next.delete(depKey);
-                        return next;
-                      });
-                    }}
-                    className="accent-[#1f6feb]"
-                  />
-                  <span className="font-mono opacity-90">{depKey}</span>
-                </label>
-              );
-            })}
-          </AccordionSection>
-        )}
-
-        {/* Outputs */}
-        {schema.outputs.length > 0 && (
-          <AccordionSection title="Outputs" badge={`(${schema.outputs.length})`}>
-            {schema.outputs.map((o) => (
-              <div
-                key={o.name}
-                className="mb-2.5 text-xs opacity-85 bg-[#0f0f0f] border border-[#333] rounded-[10px] px-2.5 py-2.5"
-              >
-                <div className="flex justify-between gap-2.5">
-                  <strong className="text-xs">{o.name}</strong>
-                  <span className="font-mono opacity-75 text-[11px]">{o.type ?? ''}</span>
-                </div>
-                {o.description && (
-                  <div className="mt-1.5 text-[11px] opacity-70">{o.description}</div>
-                )}
-                {o.sensitive && (
-                  <div className="mt-1 text-[10px] text-yellow-400 opacity-80">⚠ sensitive</div>
-                )}
-              </div>
-            ))}
-          </AccordionSection>
-        )}
-      </div>
-
-      {/* Footer */}
-      <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-30">
-        <button
-          className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer"
-          onClick={handleSave}
-        >
-          Save configuration
-        </button>
-      </footer>
+  const title = (
+    <div className="flex flex-col gap-1">
+      <div className="text-xs opacity-70">Module</div>
+      <h3 className="m-0 text-base">{instance_id}</h3>
     </div>
+  );
+
+  const footer = (
+    <button className={footerSaveButtonClasses} onClick={handleSave}>
+      Save configuration
+    </button>
+  );
+
+  return (
+    <PanelFrame title={title} footer={footer} scrollable={false} onClose={onClose}>
+      {/* Required Inputs */}
+      {requiredInputs.length > 0 && (
+        <AccordionSection title="Required Inputs" defaultOpen badge={`(${requiredInputs.length})`}>
+          {requiredInputs.map(renderInputField)}
+        </AccordionSection>
+      )}
+
+      {/* Optional Inputs */}
+      {optionalInputs.length > 0 && (
+        <AccordionSection title="Optional Inputs" defaultOpen badge={`(${optionalInputs.length})`}>
+          {optionalInputs.map(renderInputField)}
+        </AccordionSection>
+      )}
+
+      {/* Depends On */}
+      {sibling_ids.length > 0 && (
+        <AccordionSection
+          title="Depends On"
+          badge={dependsOnCount > 0 ? `(${dependsOnCount})` : undefined}
+        >
+          <div className="text-[11px] opacity-60 mb-2">
+            Select sibling instances this module depends on.
+          </div>
+          {sibling_ids.map((sibId) => {
+            const depKey = `module.${sibId}`;
+            return (
+              <label key={sibId} className="flex items-center gap-2 mb-1.5 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localDependsOn.has(depKey)}
+                  onChange={(e) => {
+                    setLocalDependsOn((prev) => {
+                      const next = new Set(prev);
+                      if (e.target.checked) next.add(depKey);
+                      else next.delete(depKey);
+                      return next;
+                    });
+                  }}
+                  className="accent-[#1f6feb]"
+                />
+                <span className="font-mono opacity-90">{depKey}</span>
+              </label>
+            );
+          })}
+        </AccordionSection>
+      )}
+
+      {/* Outputs */}
+      {schema.outputs.length > 0 && (
+        <AccordionSection title="Outputs" badge={`(${schema.outputs.length})`}>
+          {schema.outputs.map((o) => (
+            <div
+              key={o.name}
+              className="mb-2.5 text-xs opacity-85 bg-[#0f0f0f] border border-[#333] rounded-[10px] px-2.5 py-2.5"
+            >
+              <div className="flex justify-between gap-2.5">
+                <strong className="text-xs">{o.name}</strong>
+                <span className="font-mono opacity-75 text-[11px]">{o.type ?? ''}</span>
+              </div>
+              {o.description && (
+                <div className="mt-1.5 text-[11px] opacity-70">{o.description}</div>
+              )}
+              {o.sensitive && (
+                <div className="mt-1 text-[10px] text-yellow-400 opacity-80">⚠ sensitive</div>
+              )}
+            </div>
+          ))}
+        </AccordionSection>
+      )}
+    </PanelFrame>
   );
 }

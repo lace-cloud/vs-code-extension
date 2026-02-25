@@ -2,6 +2,8 @@
 import React, { useMemo, useState } from 'react';
 import type { InputDef, OutputDef, Binding } from '../../types/ir';
 import { isOut } from '../../types/ir';
+import { inputClasses } from '../../styles/panel';
+import PanelFrame from '../PanelFrame';
 
 type Props = {
   source_instance: string;
@@ -45,91 +47,72 @@ export default function EdgeConfigPanel({
   const [from, setFrom] = useState<string>(defaultFrom);
   const [to, setTo] = useState<string>(defaultTo);
 
+  const title = (
+    <div>
+      <div className="text-xs opacity-70">Connection</div>
+      <div className="text-sm font-semibold mt-0.5">
+        {source_instance} → {target_instance}
+      </div>
+    </div>
+  );
+
+  const footer = (
+    <button
+      className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-lg font-semibold text-sm cursor-pointer"
+      disabled={!from || !to}
+      onClick={() => onConnect({ from, to })}
+    >
+      Save connection
+    </button>
+  );
+
   return (
-    <div className="w-[460px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
-      {/* Header */}
-      <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
-        <div>
-          <div className="text-xs opacity-70">Connection</div>
-          <div className="text-sm font-semibold mt-0.5">
-            {source_instance} → {target_instance}
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="cursor-pointer border border-[#333] bg-[#0f0f0f] text-white rounded-lg w-[34px] h-[34px]"
-        >
-          ✕
-        </button>
-      </header>
+    <PanelFrame title={title} width={460} footer={footer} onClose={onClose}>
+      <h4 className="m-0 mb-3 text-[13px] font-semibold uppercase tracking-wide opacity-85">
+        Map output to input
+      </h4>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        <h4 className="m-0 mb-3 text-[13px] font-semibold uppercase tracking-wide opacity-85">
-          Map output to input
-        </h4>
-
-        <div className="flex gap-3">
-          {/* From output */}
-          <div className="flex-1">
-            <label className="block text-xs font-medium opacity-90 mb-1.5">From Output</label>
-            <select
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs"
-            >
-              {outputs.map((o) => (
-                <option key={o.name} value={o.name}>
-                  {o.name}
-                  {o.type ? ` : ${o.type}` : ''}
-                </option>
-              ))}
-            </select>
-            <div className="text-[11px] opacity-60 mt-1.5">
-              {outputs.find((o) => o.name === from)?.description ?? ''}
-            </div>
-          </div>
-
-          {/* To input */}
-          <div className="flex-1">
-            <label className="block text-xs font-medium opacity-90 mb-1.5">To Input</label>
-            <select
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="w-full bg-[#0f0f0f] text-white border border-[#333] rounded-lg px-2.5 py-2.5 text-xs"
-            >
-              {sortedInputs.map((i) => (
-                <option key={i.name} value={i.name}>
-                  {i.required ? '★ ' : ''}
-                  {i.name}
-                  {i.type ? ` : ${i.type}` : ''}
-                </option>
-              ))}
-            </select>
-            <div className="text-[11px] opacity-60 mt-1.5">
-              {sortedInputs.find((i) => i.name === to)?.description ?? ''}
-            </div>
+      <div className="flex gap-3">
+        {/* From output */}
+        <div className="flex-1">
+          <label className="block text-xs font-medium opacity-90 mb-1.5">From Output</label>
+          <select value={from} onChange={(e) => setFrom(e.target.value)} className={inputClasses}>
+            {outputs.map((o) => (
+              <option key={o.name} value={o.name}>
+                {o.name}
+                {o.type ? ` : ${o.type}` : ''}
+              </option>
+            ))}
+          </select>
+          <div className="text-[11px] opacity-60 mt-1.5">
+            {outputs.find((o) => o.name === from)?.description ?? ''}
           </div>
         </div>
 
-        <div className="mt-4 text-xs opacity-80">
-          This will wire:
-          <div className="mt-1.5 font-mono text-[11px] opacity-90">
-            {source_instance}.outputs.{from} → {target_instance}.inputs.{to}
+        {/* To input */}
+        <div className="flex-1">
+          <label className="block text-xs font-medium opacity-90 mb-1.5">To Input</label>
+          <select value={to} onChange={(e) => setTo(e.target.value)} className={inputClasses}>
+            {sortedInputs.map((i) => (
+              <option key={i.name} value={i.name}>
+                {i.required ? '★ ' : ''}
+                {i.name}
+                {i.type ? ` : ${i.type}` : ''}
+              </option>
+            ))}
+          </select>
+          <div className="text-[11px] opacity-60 mt-1.5">
+            {sortedInputs.find((i) => i.name === to)?.description ?? ''}
           </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="p-4 border-t border-[#333] bg-[#1e1e1e] sticky bottom-0 z-50">
-        <button
-          className="w-full py-3 bg-[#1f6feb] text-white border-none rounded-lg font-semibold text-sm cursor-pointer"
-          disabled={!from || !to}
-          onClick={() => onConnect({ from, to })}
-        >
-          Save connection
-        </button>
-      </footer>
-    </div>
+      <div className="mt-4 text-xs opacity-80">
+        This will wire:
+        <div className="mt-1.5 font-mono text-[11px] opacity-90">
+          {source_instance}.outputs.{from} → {target_instance}.inputs.{to}
+        </div>
+      </div>
+    </PanelFrame>
   );
 }
