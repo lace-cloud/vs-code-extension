@@ -133,6 +133,23 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [instance],
   );
 
+  const onDeleteInstance = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!window.confirm(`Delete "${instance.id}"?`)) return;
+      const dispatch = (window as any).__canvasDispatch;
+      const moduleKey = (window as any).__activeModuleKey;
+      if (dispatch && moduleKey) {
+        dispatch({
+          type: 'DELETE_INSTANCE',
+          module_key: moduleKey,
+          instance_id: instance.id,
+        });
+      }
+    },
+    [instance.id],
+  );
+
   // ── Helpers ──
 
   const showIcon = data.icon_url && !imgFailed;
@@ -172,7 +189,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
         )}
       </div>
 
-      {/* ── Hover action button (refresh) ── */}
+      {/* ── Hover action buttons ── */}
       {hovered && isModuleInstance(instance) && (
         <button
           onClick={onRefreshModule}
@@ -182,6 +199,25 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="6" height="6">
             <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+          </svg>
+        </button>
+      )}
+      {hovered && (
+        <button
+          onClick={onDeleteInstance}
+          className="absolute rounded-full bg-[#153238] border border-solid text-[#e5484d] leading-none cursor-pointer flex items-center justify-center z-10"
+          style={{
+            top: -4,
+            right: -4,
+            width: 8,
+            height: 8,
+            padding: 0,
+            borderColor: 'rgba(229,72,77,0.4)',
+          }}
+          title="Delete instance"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="6" height="6">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
           </svg>
         </button>
       )}

@@ -307,7 +307,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       margin-top: 2px;
     }
 
-    .module-add, .module-star {
+    .module-star {
       flex-shrink: 0;
       width: 22px;
       height: 22px;
@@ -322,7 +322,6 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       font-size: 16px;
     }
 
-    .module-item:hover .module-add,
     .module-item:hover .module-star {
       display: flex;
     }
@@ -332,7 +331,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       color: #e2b340;
     }
 
-    .module-add:hover, .module-star:hover {
+    .module-star:hover {
       background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
     }
 
@@ -473,7 +472,6 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       html += '  </div>';
       html += '  <div class="module-actions">';
       html += '    <button class="module-star' + (isStarred ? ' starred' : '') + '" data-star-id="' + escHtml(m.id) + '" title="' + (isStarred ? 'Unfavorite' : 'Favorite') + '">' + (isStarred ? '&#x2605;' : '&#x2606;') + '</button>';
-      html += '    <button class="module-add" data-add-idx="' + idx + '" title="Add to Canvas">+</button>';
       html += '  </div>';
       html += '</div>';
       return html;
@@ -632,18 +630,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       // Click to show detail
       content.querySelectorAll('.module-item').forEach(el => {
         el.addEventListener('click', (e) => {
-          if (e.target.closest('.module-add') || e.target.closest('.module-star')) return;
+          if (e.target.closest('.module-star')) return;
           const idx = parseInt(el.dataset.idx);
           vscode.postMessage({ command: 'showDetail', module: allModules[idx] });
-        });
-      });
-
-      // Add to canvas button
-      content.querySelectorAll('.module-add').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const idx = parseInt(btn.dataset.addIdx);
-          vscode.postMessage({ command: 'addToCanvas', module: allModules[idx] });
         });
       });
 

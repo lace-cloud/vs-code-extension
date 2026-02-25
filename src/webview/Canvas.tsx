@@ -73,6 +73,7 @@ type CompositeEditorProps = {
   onNodesDelete: (nodes: Node[]) => void;
   onSave: () => void;
   onRefresh: () => void;
+  onUndo: () => void;
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: (panel: SettingsPanel) => void;
@@ -92,6 +93,7 @@ function CompositeEditor({
   onNodesDelete,
   onSave,
   onRefresh,
+  onUndo,
   onClearGraph,
   onGenerate,
   onOpenSettings,
@@ -275,6 +277,7 @@ function CompositeEditor({
       <ActionBar
         onSave={onSave}
         onRefresh={onRefresh}
+        onUndo={onUndo}
         onClearGraph={onClearGraph}
         onGenerate={onGenerate}
         onOpenSettings={onOpenSettings}
@@ -326,10 +329,34 @@ export default function Canvas() {
   const moduleKeyRef = useRef(module_key);
   moduleKeyRef.current = module_key;
 
+  // ── Undo stack (pre-dispatch snapshots, outside reducer to keep it pure) ──
+  const undoStack = useRef<WorkspaceState[]>([]);
+  const UNDO_LIMIT = 50;
+
+  const NON_UNDOABLE: WorkspaceAction['type'][] = [
+    'LOAD_WORKSPACE',
+    'SYNC_LAYOUT',
+    'REFRESH_MODULE_DEFS',
+  ];
+
   // ── Semantic dispatch wrapper ──
   const semanticDispatch = useCallback((action: WorkspaceAction) => {
+    // Push snapshot before dispatch (skip non-undoable actions)
+    if (!NON_UNDOABLE.includes(action.type)) {
+      undoStack.current = [...undoStack.current.slice(-(UNDO_LIMIT - 1)), workspaceRef.current];
+    }
     dispatch(action);
     if (action.type !== 'LOAD_WORKSPACE') {
+      setIsDirty(true);
+      postToHost({ command: 'markDirty' });
+    }
+  }, []);
+
+  // ── Undo: pop last snapshot and load it directly ──
+  const onUndo = useCallback(() => {
+    const prev = undoStack.current.pop();
+    if (prev) {
+      dispatch({ type: 'LOAD_WORKSPACE', workspace: prev });
       setIsDirty(true);
       postToHost({ command: 'markDirty' });
     }
@@ -365,17 +392,19 @@ export default function Canvas() {
     setTimeout(() => setStatusMessage(null), 5000);
   }, []);
 
-  // ── Expose dispatch globally for ModuleNode rename/delete/refresh ──
+  // ── Expose dispatch globally for ModuleNode rename/delete/refresh/undo ──
   useEffect(() => {
     (window as any).__canvasDispatch = semanticDispatch;
     (window as any).__activeModuleKey = module_key;
     (window as any).__canvasRefreshModule = refreshSingleModule;
+    (window as any).__canvasUndo = onUndo;
     return () => {
       delete (window as any).__canvasDispatch;
       delete (window as any).__activeModuleKey;
       delete (window as any).__canvasRefreshModule;
+      delete (window as any).__canvasUndo;
     };
-  }, [semanticDispatch, module_key, refreshSingleModule]);
+  }, [semanticDispatch, module_key, refreshSingleModule, onUndo]);
 
   // ── Context callbacks for nodes ──
   const callbacks: CanvasCallbacks = useMemo(
@@ -545,6 +574,7 @@ export default function Canvas() {
       switch (msg.command) {
         case 'loadState': {
           dispatch({ type: 'LOAD_WORKSPACE', workspace: msg.state });
+          undoStack.current = [];
           setIsDirty(false);
           setLoadGeneration((n) => n + 1);
           setFitViewTrigger((n) => n + 1);
@@ -768,6 +798,7 @@ export default function Canvas() {
             onNodesDelete={onNodesDelete}
             onSave={onSave}
             onRefresh={onRefresh}
+            onUndo={onUndo}
             onClearGraph={onClearGraph}
             onGenerate={onGenerate}
             onOpenSettings={onOpenSettings}

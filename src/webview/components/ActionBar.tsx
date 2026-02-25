@@ -8,6 +8,7 @@ export type SettingsPanel = 'terraform' | 'providers' | 'locals' | 'environments
 type ActionBarProps = {
   onSave: () => void;
   onRefresh: () => void;
+  onUndo: () => void;
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: (panel: SettingsPanel) => void;
@@ -27,6 +28,7 @@ const SETTINGS_ITEMS: { key: SettingsPanel; label: string }[] = [
 export default function ActionBar({
   onSave,
   onRefresh,
+  onUndo,
   onClearGraph,
   onGenerate,
   onOpenSettings,
@@ -80,6 +82,17 @@ export default function ActionBar({
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+          </svg>
+        </button>
+
+        <button
+          onClick={onUndo}
+          title="Undo (Cmd+Z)"
+          aria-label="Undo"
+          className="w-8 h-8 flex items-center justify-center bg-transparent border-none text-[#999] hover:text-white cursor-pointer"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" />
           </svg>
         </button>
 

@@ -58,6 +58,10 @@ export function getWebviewContent(
         e.preventDefault();
         window.postMessage({ command: 'triggerSave' }, '*');
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (window.__canvasUndo) window.__canvasUndo();
+      }
     });
   });
   </script>
