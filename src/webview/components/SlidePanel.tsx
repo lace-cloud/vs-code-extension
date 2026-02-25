@@ -15,8 +15,8 @@ export default function SlidePanel({ open, zIndex = 20, children }: SlidePanelPr
     clearTimeout(timeoutRef.current);
     if (open) {
       setMounted(true);
-      // Delay one frame so the browser paints the off-screen state first
-      requestAnimationFrame(() => setVisible(true));
+      // Double rAF: first frame paints the off-screen state, second triggers transition
+      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
     } else {
       setVisible(false);
       timeoutRef.current = setTimeout(() => setMounted(false), 200);
