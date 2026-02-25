@@ -1094,3 +1094,88 @@ test('s3_stack scenario: variables, var bindings, curated outputs', () => {
   expect(exports['bucket_arn']).toEqual({ out: { module: 's3_bucket', name: 'arn' } });
   expect(exports['bucket_id']).toEqual({ out: { module: 's3_bucket', name: 'id' } });
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// CLEAR_GRAPH
+// ══════════════════════════════════════════════════════════════════════
+
+test('CLEAR_GRAPH clears instances and exports', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+  ]);
+  // Set exports
+  const def = state.modules['root@v1.0.0'];
+  if (def.impl.kind === 'composite') {
+    def.impl.graph.exports.outputs['out1'] = { out: { module: 'a', name: 'arn' } };
+  }
+  const next = workspaceReducer(state, {
+    type: 'CLEAR_GRAPH',
+    module_key: 'root@v1.0.0',
+  });
+  expect(getInstances(next, 'root@v1.0.0')).toHaveLength(0);
+  expect(getExports(next, 'root@v1.0.0')).toEqual({});
+});
+
+test('CLEAR_GRAPH clears layout', () => {
+  const state = makeWorkspace(
+    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
+    {},
+    { 'root@v1.0.0': { nodes: { a: { position: { x: 100, y: 200 } } } } },
+  );
+  const next = workspaceReducer(state, {
+    type: 'CLEAR_GRAPH',
+    module_key: 'root@v1.0.0',
+  });
+  expect(next.layouts['root@v1.0.0'].nodes).toEqual({});
+});
+
+test('CLEAR_GRAPH GCs orphaned module defs', () => {
+  const leafDef: ModuleDef = {
+    schema_version: '1.0',
+    kind: 'module_def',
+    id: 'vpc',
+    version: 'v1.0.0',
+    interface: { inputs: [], outputs: [] },
+    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+  };
+  const state = makeWorkspace(
+    [{ kind: 'module', id: 'my-vpc', use: { module_id: 'vpc', version: 'v1.0.0' }, inputs: {} }],
+    { 'vpc@v1.0.0': leafDef },
+  );
+  expect(state.modules['vpc@v1.0.0']).toBeDefined();
+  const next = workspaceReducer(state, {
+    type: 'CLEAR_GRAPH',
+    module_key: 'root@v1.0.0',
+  });
+  expect(next.modules['vpc@v1.0.0']).toBeUndefined();
+  expect(next.modules['root@v1.0.0']).toBeDefined();
+});
+
+test('CLEAR_GRAPH preserves composite interface (variables/output defs)', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+  ]);
+  // Set interface
+  const withVars = workspaceReducer(state, {
+    type: 'SET_VARIABLES',
+    module_key: 'root@v1.0.0',
+    variables: [{ name: 'region', type: 'string', required: true }],
+  });
+  const next = workspaceReducer(withVars, {
+    type: 'CLEAR_GRAPH',
+    module_key: 'root@v1.0.0',
+  });
+  expect(next.modules['root@v1.0.0'].interface.inputs).toEqual([
+    { name: 'region', type: 'string', required: true },
+  ]);
+});
+
+test('CLEAR_GRAPH on invalid module_key returns state unchanged', () => {
+  const state = makeWorkspace([]);
+  const next = workspaceReducer(state, {
+    type: 'CLEAR_GRAPH',
+    module_key: 'nonexistent@v1.0.0',
+  });
+  expect(next).toBe(state);
+});

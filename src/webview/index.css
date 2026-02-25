@@ -99,6 +99,30 @@
   fill: #e0ff8a;
 }
 
+/* ── MiniMap ── */
+
+.react-flow__panel.bottom.left {
+  bottom: 40px;
+  left: 20px;
+}
+
+.react-flow__minimap {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(206, 254, 101, 0.15);
+}
+
+/* ── Slide panel ── */
+
+.slide-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  transition: transform 200ms ease-out;
+}
+
 /* ── Edge labels ── */
 
 .react-flow__edge-textbg {

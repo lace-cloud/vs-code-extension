@@ -188,7 +188,7 @@ export default function OutputsPanel({
   }, [available]);
 
   return (
-    <div className="absolute right-0 top-0 w-[460px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col z-20">
+    <div className="w-[460px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
       {/* Header */}
       <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
         <div className="flex flex-col gap-1">

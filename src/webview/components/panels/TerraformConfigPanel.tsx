@@ -114,7 +114,7 @@ export default function TerraformConfigPanel({ terraform, onSave, onClose }: Pro
   };
 
   return (
-    <div className="absolute right-0 top-0 w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col z-20">
+    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
       {/* Header */}
       <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
         <h3 className="m-0 text-base">Terraform Configuration</h3>

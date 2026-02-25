@@ -4,6 +4,7 @@ import {
   ReactFlow,
   Controls,
   ControlButton,
+  MiniMap,
   useReactFlow,
   applyNodeChanges,
   applyEdgeChanges,
@@ -15,6 +16,7 @@ import {
 } from '@xyflow/react';
 
 import ModuleNode from './components/nodes/ModuleNode';
+import SlidePanel from './components/SlidePanel';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
@@ -69,8 +71,10 @@ type CompositeEditorProps = {
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
+  onNodesDelete: (nodes: Node[]) => void;
   onSave: () => void;
   onRefresh: () => void;
+  onClearGraph: () => void;
 };
 
 function CompositeEditor({
@@ -84,35 +88,67 @@ function CompositeEditor({
   onDragStop,
   onConnect,
   onEdgesDelete,
+  onNodesDelete,
   onSave,
   onRefresh,
+  onClearGraph,
 }: CompositeEditorProps) {
   const { fitView } = useReactFlow();
 
   // ── Imperative fitView on load, drop, and navigation ──
   useEffect(() => {
-    const timer = setTimeout(() => fitView({ padding: 0.2 }), 50);
+    const timer = setTimeout(() => fitView({ padding: 0.2, maxZoom: 1.5 }), 50);
     return () => clearTimeout(timer);
   }, [fitViewTrigger, fitView]);
 
-  // ── Derive ReactFlow edges ──
-  const rfEdgesFromWorkspace: Edge[] = useMemo(
-    () =>
-      deriveEdges(graph.instances).map((e) => ({
+  // ── Derive ReactFlow edges (bundle labels for same source→target pair) ──
+  const rfEdgesFromWorkspace: Edge[] = useMemo(() => {
+    const derived = deriveEdges(graph.instances);
+
+    // Group by source→target pair to bundle labels
+    const pairCount = new Map<string, number>();
+    const pairLabels = new Map<string, string[]>();
+    for (const e of derived) {
+      const pairKey = `${e.source_instance}→${e.target_instance}`;
+      pairLabels.set(pairKey, [
+        ...(pairLabels.get(pairKey) ?? []),
+        `${e.mapping.from} → ${e.mapping.to}`,
+      ]);
+    }
+
+    return derived.map((e) => {
+      const pairKey = `${e.source_instance}→${e.target_instance}`;
+      const count = (pairCount.get(pairKey) ?? 0) + 1;
+      pairCount.set(pairKey, count);
+
+      const isFirst = count === 1;
+      const labels = pairLabels.get(pairKey) ?? [];
+      const bundledLabel = labels.length > 1 ? labels.join('\n') : labels[0];
+
+      return {
         id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
         source: e.source_instance,
         sourceHandle: 'out-right',
         target: e.target_instance,
         targetHandle: 'in-left',
         data: { mapping: e.mapping },
-        label: `${e.mapping.from} → ${e.mapping.to}`,
-        labelStyle: { fill: '#CEFE65', fontSize: 10 },
-        labelBgPadding: [0, 0] as [number, number],
-        labelBgBorderRadius: 0,
-        labelBgStyle: { fill: 'transparent' },
-      })),
-    [graph.instances],
-  );
+        ...(isFirst
+          ? {
+              label: bundledLabel,
+              labelStyle: { fill: '#CEFE65', fontSize: 10 },
+              labelBgPadding: [4, 2] as [number, number],
+              labelBgBorderRadius: 4,
+              labelBgStyle: { fill: 'rgba(22,22,22,0.85)' },
+            }
+          : {
+              labelStyle: { fill: '#CEFE65', fontSize: 10 },
+              labelBgPadding: [0, 0] as [number, number],
+              labelBgBorderRadius: 0,
+              labelBgStyle: { fill: 'transparent' },
+            }),
+      };
+    });
+  }, [graph.instances]);
 
   // ── Local edge state (for selection support) ──
   const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromWorkspace);
@@ -251,11 +287,22 @@ function CompositeEditor({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onEdgesDelete={onEdgesDelete}
+      onNodesDelete={onNodesDelete}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
+      minZoom={0.1}
+      maxZoom={4}
       style={gridStyle}
       proOptions={{ hideAttribution: true }}
     >
+      <MiniMap
+        position="bottom-left"
+        nodeColor="#CEFE65"
+        maskColor="rgba(22,22,22,0.8)"
+        bgColor="#153238"
+        pannable
+        zoomable
+      />
       <Controls position="bottom-right" showInteractive={false}>
         <ControlButton
           onClick={onSave}
@@ -275,6 +322,16 @@ function CompositeEditor({
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
             <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+          </svg>
+        </ControlButton>
+        <ControlButton
+          onClick={onClearGraph}
+          title="Clear all modules"
+          aria-label="Clear all"
+          className="react-flow__controls-button"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
           </svg>
         </ControlButton>
       </Controls>
@@ -469,6 +526,30 @@ export default function Canvas() {
     },
     [semanticDispatch],
   );
+
+  // ── Event: node delete (select node + Delete/Backspace) ──
+  const onNodesDelete = useCallback(
+    (nodes: Node[]) => {
+      const mk = moduleKeyRef.current;
+      for (const node of nodes) {
+        semanticDispatch({
+          type: 'DELETE_INSTANCE',
+          module_key: mk,
+          instance_id: node.id,
+        });
+      }
+    },
+    [semanticDispatch],
+  );
+
+  // ── Event: clear all modules from graph ──
+  const onClearGraph = useCallback(() => {
+    if (!window.confirm('Remove all modules from the canvas?')) return;
+    semanticDispatch({
+      type: 'CLEAR_GRAPH',
+      module_key: moduleKeyRef.current,
+    });
+  }, [semanticDispatch]);
 
   // ── Message handler: host → webview ──
   useEffect(() => {
@@ -734,177 +815,195 @@ export default function Canvas() {
             onDragStop={onDragStop}
             onConnect={onConnect}
             onEdgesDelete={onEdgesDelete}
+            onNodesDelete={onNodesDelete}
             onSave={onSave}
             onRefresh={onRefresh}
+            onClearGraph={onClearGraph}
           />
 
           {/* Module config panel */}
-          {configTarget && configInstance && configSchema && (
-            <ModuleConfigPanel
-              instance_id={configTarget}
-              schema={configSchema}
-              inputs={configInstance.inputs}
-              composite_variables={rootDef.interface.inputs}
-              sibling_ids={graph.instances.map((i) => i.id).filter((id) => id !== configTarget)}
-              depends_on={configInstance.depends_on}
-              onSave={(inputs) => {
-                semanticDispatch({
-                  type: 'UPDATE_INPUTS',
-                  module_key,
-                  instance_id: configTarget,
-                  inputs,
-                });
-                setConfigTarget(null);
-              }}
-              onSaveDependsOn={(depends_on) => {
-                semanticDispatch({
-                  type: 'SET_DEPENDS_ON',
-                  module_key,
-                  instance_id: configTarget,
-                  depends_on,
-                });
-              }}
-              onDisconnect={(input_name) => {
-                semanticDispatch({
-                  type: 'DISCONNECT',
-                  module_key,
-                  target_instance: configTarget,
-                  input_name,
-                });
-                setConfigTarget(null);
-              }}
-              onClose={() => setConfigTarget(null)}
-            />
-          )}
+          <SlidePanel open={!!(configTarget && configInstance && configSchema)}>
+            {configTarget && configInstance && configSchema && (
+              <ModuleConfigPanel
+                instance_id={configTarget}
+                schema={configSchema}
+                inputs={configInstance.inputs}
+                composite_variables={rootDef.interface.inputs}
+                sibling_ids={graph.instances.map((i) => i.id).filter((id) => id !== configTarget)}
+                depends_on={configInstance.depends_on}
+                onSave={(inputs) => {
+                  semanticDispatch({
+                    type: 'UPDATE_INPUTS',
+                    module_key,
+                    instance_id: configTarget,
+                    inputs,
+                  });
+                  setConfigTarget(null);
+                }}
+                onSaveDependsOn={(depends_on) => {
+                  semanticDispatch({
+                    type: 'SET_DEPENDS_ON',
+                    module_key,
+                    instance_id: configTarget,
+                    depends_on,
+                  });
+                }}
+                onDisconnect={(input_name) => {
+                  semanticDispatch({
+                    type: 'DISCONNECT',
+                    module_key,
+                    target_instance: configTarget,
+                    input_name,
+                  });
+                  setConfigTarget(null);
+                }}
+                onClose={() => setConfigTarget(null)}
+              />
+            )}
+          </SlidePanel>
 
           {/* Edge config panel */}
-          {edgeConfigState && edgeSourceInst && edgeTargetInst && (
-            <EdgeConfigPanel
-              source_instance={edgeConfigState.source}
-              target_instance={edgeConfigState.target}
-              source_schema={resolveSchema(workspace, edgeSourceInst)}
-              target_schema={resolveSchema(workspace, edgeTargetInst)}
-              target_inputs={edgeTargetInst.inputs}
-              onConnect={(mapping) => {
-                semanticDispatch({
-                  type: 'CONNECT',
-                  module_key,
-                  source_instance: edgeConfigState.source,
-                  target_instance: edgeConfigState.target,
-                  mapping,
-                });
-                setEdgeConfigState(null);
-              }}
-              onClose={() => setEdgeConfigState(null)}
-            />
-          )}
+          <SlidePanel open={!!(edgeConfigState && edgeSourceInst && edgeTargetInst)} zIndex={40}>
+            {edgeConfigState && edgeSourceInst && edgeTargetInst && (
+              <EdgeConfigPanel
+                source_instance={edgeConfigState.source}
+                target_instance={edgeConfigState.target}
+                source_schema={resolveSchema(workspace, edgeSourceInst)}
+                target_schema={resolveSchema(workspace, edgeTargetInst)}
+                target_inputs={edgeTargetInst.inputs}
+                onConnect={(mapping) => {
+                  semanticDispatch({
+                    type: 'CONNECT',
+                    module_key,
+                    source_instance: edgeConfigState.source,
+                    target_instance: edgeConfigState.target,
+                    mapping,
+                  });
+                  setEdgeConfigState(null);
+                }}
+                onClose={() => setEdgeConfigState(null)}
+              />
+            )}
+          </SlidePanel>
 
           {/* Variables panel */}
-          {variablesPanelOpen && (
-            <VariablesPanel
-              variables={rootDef.interface.inputs}
-              all_instance_inputs={Object.fromEntries(
-                graph.instances.map((inst) => [inst.id, inst.inputs]),
-              )}
-              onSave={(variables) => {
-                semanticDispatch({
-                  type: 'SET_VARIABLES',
-                  module_key,
-                  variables,
-                });
-                setVariablesPanelOpen(false);
-              }}
-              onClose={() => setVariablesPanelOpen(false)}
-            />
-          )}
+          <SlidePanel open={variablesPanelOpen}>
+            {variablesPanelOpen && (
+              <VariablesPanel
+                variables={rootDef.interface.inputs}
+                all_instance_inputs={Object.fromEntries(
+                  graph.instances.map((inst) => [inst.id, inst.inputs]),
+                )}
+                onSave={(variables) => {
+                  semanticDispatch({
+                    type: 'SET_VARIABLES',
+                    module_key,
+                    variables,
+                  });
+                  setVariablesPanelOpen(false);
+                }}
+                onClose={() => setVariablesPanelOpen(false)}
+              />
+            )}
+          </SlidePanel>
 
           {/* Outputs panel */}
-          {outputsPanelOpen && (
-            <OutputsPanel
-              instances={graph.instances}
-              resolveInstanceSchema={(inst) => resolveSchema(workspace, inst)}
-              output_defs={rootDef.interface.outputs}
-              exports={graph.exports.outputs}
-              onSave={(output_defs, outputs) => {
-                semanticDispatch({
-                  type: 'SET_EXPORTS',
-                  module_key,
-                  outputs,
-                  output_defs,
-                });
-                setOutputsPanelOpen(false);
-              }}
-              onClose={() => setOutputsPanelOpen(false)}
-            />
-          )}
+          <SlidePanel open={outputsPanelOpen}>
+            {outputsPanelOpen && (
+              <OutputsPanel
+                instances={graph.instances}
+                resolveInstanceSchema={(inst) => resolveSchema(workspace, inst)}
+                output_defs={rootDef.interface.outputs}
+                exports={graph.exports.outputs}
+                onSave={(output_defs, outputs) => {
+                  semanticDispatch({
+                    type: 'SET_EXPORTS',
+                    module_key,
+                    outputs,
+                    output_defs,
+                  });
+                  setOutputsPanelOpen(false);
+                }}
+                onClose={() => setOutputsPanelOpen(false)}
+              />
+            )}
+          </SlidePanel>
 
           {/* Terraform config panel */}
-          {terraformPanelOpen && (
-            <TerraformConfigPanel
-              terraform={rootDef.terraform}
-              onSave={(terraform) => {
-                semanticDispatch({
-                  type: 'SET_TERRAFORM',
-                  module_key,
-                  terraform,
-                });
-                setTerraformPanelOpen(false);
-              }}
-              onClose={() => setTerraformPanelOpen(false)}
-            />
-          )}
+          <SlidePanel open={terraformPanelOpen}>
+            {terraformPanelOpen && (
+              <TerraformConfigPanel
+                terraform={rootDef.terraform}
+                onSave={(terraform) => {
+                  semanticDispatch({
+                    type: 'SET_TERRAFORM',
+                    module_key,
+                    terraform,
+                  });
+                  setTerraformPanelOpen(false);
+                }}
+                onClose={() => setTerraformPanelOpen(false)}
+              />
+            )}
+          </SlidePanel>
 
           {/* Providers panel */}
-          {providersPanelOpen && (
-            <ProvidersPanel
-              providers={rootDef.providers}
-              onSave={(providers) => {
-                semanticDispatch({
-                  type: 'SET_PROVIDERS',
-                  module_key,
-                  providers,
-                });
-                setProvidersPanelOpen(false);
-              }}
-              onClose={() => setProvidersPanelOpen(false)}
-            />
-          )}
+          <SlidePanel open={providersPanelOpen}>
+            {providersPanelOpen && (
+              <ProvidersPanel
+                providers={rootDef.providers}
+                onSave={(providers) => {
+                  semanticDispatch({
+                    type: 'SET_PROVIDERS',
+                    module_key,
+                    providers,
+                  });
+                  setProvidersPanelOpen(false);
+                }}
+                onClose={() => setProvidersPanelOpen(false)}
+              />
+            )}
+          </SlidePanel>
 
           {/* Locals panel */}
-          {localsPanelOpen && (
-            <LocalsPanel
-              locals={graph.locals}
-              onSave={(locals) => {
-                semanticDispatch({
-                  type: 'SET_LOCALS',
-                  module_key,
-                  locals,
-                });
-                setLocalsPanelOpen(false);
-              }}
-              onClose={() => setLocalsPanelOpen(false)}
-            />
-          )}
+          <SlidePanel open={localsPanelOpen}>
+            {localsPanelOpen && (
+              <LocalsPanel
+                locals={graph.locals}
+                onSave={(locals) => {
+                  semanticDispatch({
+                    type: 'SET_LOCALS',
+                    module_key,
+                    locals,
+                  });
+                  setLocalsPanelOpen(false);
+                }}
+                onClose={() => setLocalsPanelOpen(false)}
+              />
+            )}
+          </SlidePanel>
 
           {/* Environments panel */}
-          {environmentsPanelOpen && (
-            <EnvironmentsPanel
-              environments={workspace.environments}
-              environment_backends={workspace.environment_backends}
-              onSave={(environments, backends) => {
-                semanticDispatch({
-                  type: 'SET_ENVIRONMENTS',
-                  environments,
-                });
-                semanticDispatch({
-                  type: 'SET_ENVIRONMENT_BACKENDS',
-                  backends,
-                });
-                setEnvironmentsPanelOpen(false);
-              }}
-              onClose={() => setEnvironmentsPanelOpen(false)}
-            />
-          )}
+          <SlidePanel open={environmentsPanelOpen}>
+            {environmentsPanelOpen && (
+              <EnvironmentsPanel
+                environments={workspace.environments}
+                environment_backends={workspace.environment_backends}
+                onSave={(environments, backends) => {
+                  semanticDispatch({
+                    type: 'SET_ENVIRONMENTS',
+                    environments,
+                  });
+                  semanticDispatch({
+                    type: 'SET_ENVIRONMENT_BACKENDS',
+                    backends,
+                  });
+                  setEnvironmentsPanelOpen(false);
+                }}
+                onClose={() => setEnvironmentsPanelOpen(false)}
+              />
+            )}
+          </SlidePanel>
         </div>
       </div>
     </CanvasContext.Provider>

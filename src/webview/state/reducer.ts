@@ -64,6 +64,8 @@ export type WorkspaceAction =
   | { type: 'SET_DEPENDS_ON'; module_key: string; instance_id: string; depends_on: string[] }
   | { type: 'SET_ENVIRONMENTS'; environments: WorkspaceState['environments'] }
   | { type: 'SET_ENVIRONMENT_BACKENDS'; backends: WorkspaceState['environment_backends'] }
+  // ── Graph management ──
+  | { type: 'CLEAR_GRAPH'; module_key: string }
   // ── Refresh ──
   | { type: 'REFRESH_MODULE_DEFS'; updated_modules: Record<string, ModuleDef> };
 
@@ -133,6 +135,8 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
       return handleSyncLayout(state, action);
     case 'LOAD_WORKSPACE':
       return gcOrphanedModules(action.workspace);
+    case 'CLEAR_GRAPH':
+      return handleClearGraph(state, action);
 
     // ── Composite interface ──
     case 'SET_VARIABLES':
@@ -604,6 +608,34 @@ function handleDeleteInstance(
   }
 
   return gcOrphanedModules(newState);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// CLEAR_GRAPH
+// ══════════════════════════════════════════════════════════════════════
+
+function handleClearGraph(
+  state: WorkspaceState,
+  action: Extract<WorkspaceAction, { type: 'CLEAR_GRAPH' }>,
+): WorkspaceState {
+  const { module_key } = action;
+  const def = state.modules[module_key];
+  if (!def || def.impl.kind !== 'composite') return state;
+
+  const clearedState = updateCompositeGraph(state, module_key, (graph) => ({
+    ...graph,
+    instances: [],
+    exports: { outputs: {} },
+    locals: undefined,
+  }));
+
+  // Clear layout for this module
+  const { [module_key]: _removed, ...restLayouts } = clearedState.layouts;
+
+  return gcOrphanedModules({
+    ...clearedState,
+    layouts: { ...restLayouts, [module_key]: { nodes: {} } },
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════════

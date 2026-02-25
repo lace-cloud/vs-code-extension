@@ -358,7 +358,7 @@ export default function ModuleConfigPanel({
   }
 
   return (
-    <div className="absolute right-0 top-0 w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col z-20">
+    <div className="w-[420px] h-full bg-[#1e1e1e] border-l border-[#333] flex flex-col">
       {/* Header */}
       <header className="p-4 border-b border-[#333] flex justify-between items-center shrink-0">
         <div className="flex flex-col gap-1">

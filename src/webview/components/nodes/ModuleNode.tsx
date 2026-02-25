@@ -120,18 +120,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [ctx, instance.id],
   );
 
-  const onDelete = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const dispatch = (window as any).__canvasDispatch;
-      const moduleKey = (window as any).__activeModuleKey;
-      if (dispatch && moduleKey) {
-        dispatch({ type: 'DELETE_INSTANCE', module_key: moduleKey, instance_id: id });
-      }
-    },
-    [id],
-  );
-
   const onRefreshModule = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -184,30 +172,18 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
         )}
       </div>
 
-      {/* ── Hover action buttons ── */}
-      {hovered && (
-        <>
-          <button
-            onClick={onDelete}
-            className="absolute rounded-full bg-[#e5484d] border-none text-white leading-none cursor-pointer flex items-center justify-center z-10"
-            style={{ top: -4, right: -4, width: 8, height: 8, fontSize: 5 }}
-            title="Delete"
-          >
-            ✕
-          </button>
-          {isModuleInstance(instance) && (
-            <button
-              onClick={onRefreshModule}
-              className="absolute rounded-full bg-[#153238] border border-[rgba(206,254,101,0.3)] border-solid text-[#CEFE65] leading-none cursor-pointer flex items-center justify-center z-10"
-              style={{ top: -4, left: -4, width: 8, height: 8, padding: 0 }}
-              title="Refresh from registry"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" width="6" height="6">
-                <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-              </svg>
-            </button>
-          )}
-        </>
+      {/* ── Hover action button (refresh) ── */}
+      {hovered && isModuleInstance(instance) && (
+        <button
+          onClick={onRefreshModule}
+          className="absolute rounded-full bg-[#153238] border border-[rgba(206,254,101,0.3)] border-solid text-[#CEFE65] leading-none cursor-pointer flex items-center justify-center z-10"
+          style={{ top: -4, left: -4, width: 8, height: 8, padding: 0 }}
+          title="Refresh from registry"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="6" height="6">
+            <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+          </svg>
+        </button>
       )}
 
       {/* ── Handles (CSS controls visibility) ── */}
