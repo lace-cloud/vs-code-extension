@@ -13,6 +13,14 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   private rpcClient: JSONRPCClient | null = null;
   private loading = false;
   private errorMessage: string | null = null;
+  private globalState?: vscode.Memento;
+  private favoriteModuleIds: string[] = [];
+  private recentModuleIds: string[] = [];
+
+  constructor(globalState?: vscode.Memento) {
+    this.globalState = globalState;
+    this.favoriteModuleIds = globalState?.get<string[]>('lace.favorites', []) ?? [];
+  }
 
   setRpcClient(client: JSONRPCClient | null) {
     this.rpcClient = client;
@@ -21,6 +29,15 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   /** Get all loaded modules (for command palette quick pick). */
   getModules(): RegistryModule[] {
     return this.modules;
+  }
+
+  /** Track a module as recently used (prepend, deduplicate, cap at 10). */
+  trackRecentlyUsed(moduleId: string) {
+    this.recentModuleIds = [
+      moduleId,
+      ...this.recentModuleIds.filter((id) => id !== moduleId),
+    ].slice(0, 10);
+    this.updateWebview();
   }
 
   /** Fetch all modules for a system, paginating until exhausted. */
@@ -90,7 +107,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     };
 
     // Handle messages from the webview
-    webviewView.webview.onDidReceiveMessage((msg) => {
+    webviewView.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.command) {
         case 'showDetail':
           vscode.commands.executeCommand('lace.showModuleDetail', msg.module);
@@ -101,6 +118,18 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         case 'refresh':
           vscode.commands.executeCommand('lace.refreshRegistry');
           break;
+        case 'toggleFavorite': {
+          const id = msg.moduleId as string;
+          const idx = this.favoriteModuleIds.indexOf(id);
+          if (idx >= 0) {
+            this.favoriteModuleIds.splice(idx, 1);
+          } else {
+            this.favoriteModuleIds.push(id);
+          }
+          await this.globalState?.update('lace.favorites', this.favoriteModuleIds);
+          this.updateWebview();
+          break;
+        }
       }
     });
 
@@ -115,6 +144,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   private buildHtml(): string {
     const modulesJson = JSON.stringify(this.modules);
     const errorJson = JSON.stringify(this.errorMessage);
+    const favoritesJson = JSON.stringify(this.favoriteModuleIds);
+    const recentJson = JSON.stringify(this.recentModuleIds);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -158,6 +189,34 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-input-placeholderForeground, #888);
     }
 
+    /* ── Category chips ── */
+    #chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px 8px 2px;
+    }
+
+    .chip {
+      padding: 2px 8px;
+      font-size: 11px;
+      border-radius: 10px;
+      border: 1px solid var(--vscode-badge-background, #4d4d4d);
+      background: transparent;
+      color: var(--vscode-descriptionForeground, #888);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .chip:hover {
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+
+    .chip.active {
+      background: var(--vscode-badge-background, #4d4d4d);
+      color: var(--vscode-badge-foreground, #fff);
+    }
+
     .module-list {
       padding: 0 4px 8px;
     }
@@ -179,10 +238,15 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       border-radius: 4px;
       cursor: pointer;
       gap: 8px;
+      user-select: none;
     }
 
     .module-item:hover {
       background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+
+    .module-item.dragging {
+      opacity: 0.5;
     }
 
     .module-icon {
@@ -196,6 +260,13 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       justify-content: center;
       font-size: 13px;
       margin-top: 1px;
+      overflow: hidden;
+    }
+
+    .module-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
     }
 
     .module-info {
@@ -228,7 +299,15 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       text-overflow: ellipsis;
     }
 
-    .module-add {
+    .module-actions {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-top: 2px;
+    }
+
+    .module-add, .module-star {
       flex-shrink: 0;
       width: 22px;
       height: 22px;
@@ -241,14 +320,19 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       align-items: center;
       justify-content: center;
       font-size: 16px;
-      margin-top: 2px;
     }
 
-    .module-item:hover .module-add {
+    .module-item:hover .module-add,
+    .module-item:hover .module-star {
       display: flex;
     }
 
-    .module-add:hover {
+    .module-star.starred {
+      display: flex;
+      color: #e2b340;
+    }
+
+    .module-add:hover, .module-star:hover {
       background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
     }
 
@@ -260,17 +344,82 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       line-height: 1.5;
     }
 
-    .loading {
-      padding: 20px 12px;
-      text-align: center;
-      color: var(--vscode-descriptionForeground, #888);
-      font-size: 12px;
-    }
-
     .result-count {
       padding: 2px 8px 4px;
       font-size: 11px;
       color: var(--vscode-descriptionForeground, #888);
+    }
+
+    /* ── Retry button ── */
+    .retry-btn {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 4px 14px;
+      font-size: 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #fff);
+    }
+
+    .retry-btn:hover {
+      background: var(--vscode-button-hoverBackground, #1177bb);
+    }
+
+    /* ── Skeleton loading ── */
+    .skeleton-group {
+      padding: 0 4px;
+    }
+
+    .skeleton-header {
+      height: 12px;
+      width: 50px;
+      margin: 10px 8px 6px;
+      border-radius: 3px;
+      background: var(--vscode-badge-background, #4d4d4d);
+      opacity: 0.4;
+    }
+
+    .skeleton-item {
+      display: flex;
+      align-items: flex-start;
+      padding: 6px 8px;
+      gap: 8px;
+    }
+
+    .skeleton-icon {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--vscode-badge-background, #4d4d4d) 25%, transparent 50%, var(--vscode-badge-background, #4d4d4d) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    .skeleton-lines {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 2px;
+    }
+
+    .skeleton-line {
+      height: 10px;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--vscode-badge-background, #4d4d4d) 25%, transparent 50%, var(--vscode-badge-background, #4d4d4d) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    .skeleton-line:first-child { width: 70%; }
+    .skeleton-line:last-child { width: 45%; }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
     }
   </style>
 </head>
@@ -284,6 +433,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       autofocus
     />
   </div>
+  <div id="chips"></div>
   <div id="content"></div>
 
   <script>
@@ -291,18 +441,89 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const allModules = ${modulesJson};
     const loading = ${this.loading};
     const errorMessage = ${errorJson};
+    const favoriteIds = ${favoritesJson};
+    const recentIds = ${recentJson};
 
     const searchInput = document.getElementById('search');
+    const chipsEl = document.getElementById('chips');
     const content = document.getElementById('content');
 
+    let activeCategories = [];
+    let debounceTimer = null;
+
+    // ── Helpers ──
+
+    function escHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function renderModuleItem(m, idx) {
+      const cats = (m.categories || []).join(', ');
+      const isStarred = favoriteIds.includes(m.id);
+      const iconHtml = m.icon_url
+        ? '<img src="' + escHtml(m.icon_url) + '" />'
+        : (m.kind === 'composite' ? '&#x1F4E6;' : '&#x2699;&#xFE0F;');
+      let html = '<div class="module-item" draggable="true" data-idx="' + idx + '">';
+      html += '  <div class="module-icon">' + iconHtml + '</div>';
+      html += '  <div class="module-info">';
+      html += '    <div class="module-name">' + escHtml(m.name) + '<span class="module-version">v' + escHtml(m.version) + '</span></div>';
+      if (cats) html += '    <div class="module-categories">' + escHtml(cats) + '</div>';
+      html += '  </div>';
+      html += '  <div class="module-actions">';
+      html += '    <button class="module-star' + (isStarred ? ' starred' : '') + '" data-star-id="' + escHtml(m.id) + '" title="' + (isStarred ? 'Unfavorite' : 'Favorite') + '">' + (isStarred ? '&#x2605;' : '&#x2606;') + '</button>';
+      html += '    <button class="module-add" data-add-idx="' + idx + '" title="Add to Canvas">+</button>';
+      html += '  </div>';
+      html += '</div>';
+      return html;
+    }
+
+    // ── Category chips ──
+
+    function renderChips(query) {
+      if (query || allModules.length === 0) {
+        chipsEl.innerHTML = '';
+        chipsEl.style.display = 'none';
+        return;
+      }
+      chipsEl.style.display = 'flex';
+      const cats = new Set();
+      allModules.forEach(m => (m.categories || []).forEach(c => cats.add(c)));
+      const sorted = [...cats].sort();
+      chipsEl.innerHTML = sorted.map(c => {
+        const active = activeCategories.includes(c);
+        return '<button class="chip' + (active ? ' active' : '') + '" data-cat="' + escHtml(c) + '">' + escHtml(c) + '</button>';
+      }).join('');
+
+      chipsEl.querySelectorAll('.chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const cat = btn.dataset.cat;
+          const idx = activeCategories.indexOf(cat);
+          if (idx >= 0) activeCategories.splice(idx, 1);
+          else activeCategories.push(cat);
+          render(searchInput.value);
+        });
+      });
+    }
+
+    // ── Main render ──
+
     function render(filter) {
+      const q = (filter || '').toLowerCase().trim();
+
+      renderChips(q);
+
       if (loading) {
-        content.innerHTML = '<div class="loading">Loading registry...</div>';
+        content.innerHTML = renderSkeleton();
         return;
       }
 
       if (errorMessage) {
-        content.innerHTML = '<div class="empty-state">' + escHtml(errorMessage) + '</div>';
+        content.innerHTML = '<div class="empty-state">' + escHtml(errorMessage) + '<br/><button class="retry-btn" id="retryBtn">Retry</button></div>';
+        document.getElementById('retryBtn').addEventListener('click', () => {
+          vscode.postMessage({ command: 'refresh' });
+        });
         return;
       }
 
@@ -311,7 +532,6 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      const q = (filter || '').toLowerCase().trim();
       const filtered = q
         ? allModules.filter(m =>
             m.name.toLowerCase().includes(q) ||
@@ -319,11 +539,42 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
             (m.categories || []).some(c => c.toLowerCase().includes(q)) ||
             (m.description || '').toLowerCase().includes(q)
           )
-        : allModules;
+        : activeCategories.length > 0
+          ? allModules.filter(m =>
+              (m.categories || []).some(c => activeCategories.includes(c))
+            )
+          : allModules;
 
       if (filtered.length === 0) {
-        content.innerHTML = '<div class="empty-state">No modules match "' + escHtml(q) + '"</div>';
+        const msg = q ? 'No modules match "' + escHtml(q) + '"' : 'No modules match selected categories';
+        content.innerHTML = '<div class="empty-state">' + msg + '</div>';
         return;
+      }
+
+      let html = '';
+
+      // Favorites & recently used (only when no search active)
+      if (!q && activeCategories.length === 0) {
+        const favModules = favoriteIds.map(id => allModules.find(m => m.id === id)).filter(Boolean);
+        const recModules = recentIds.map(id => allModules.find(m => m.id === id)).filter(Boolean);
+
+        if (favModules.length > 0) {
+          html += '<div class="module-list">';
+          html += '<div class="system-header">&#x2605; FAVORITES</div>';
+          favModules.forEach(m => {
+            html += renderModuleItem(m, allModules.indexOf(m));
+          });
+          html += '</div>';
+        }
+
+        if (recModules.length > 0) {
+          html += '<div class="module-list">';
+          html += '<div class="system-header">&#x1F552; RECENTLY USED</div>';
+          recModules.forEach(m => {
+            html += renderModuleItem(m, allModules.indexOf(m));
+          });
+          html += '</div>';
+        }
       }
 
       // Group by system
@@ -331,13 +582,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       filtered.forEach(m => {
         const sys = m.system || 'other';
         if (!grouped[sys]) grouped[sys] = [];
-        // Deduplicate by id
         if (!grouped[sys].some(x => x.id === m.id)) {
           grouped[sys].push(m);
         }
       });
 
-      let html = '';
       if (q) {
         html += '<div class="result-count">' + filtered.length + ' module' + (filtered.length !== 1 ? 's' : '') + '</div>';
       }
@@ -348,32 +597,48 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         html += '<div class="system-header">' + escHtml(sys.toUpperCase()) + '</div>';
         const sorted = grouped[sys].sort((a, b) => a.name.localeCompare(b.name));
         for (const m of sorted) {
-          const cats = (m.categories || []).join(', ');
-          const idx = allModules.indexOf(m);
-          html += '<div class="module-item" data-idx="' + idx + '">';
-          html += '  <div class="module-icon">' + (m.kind === 'composite' ? '📦' : '⚙️') + '</div>';
-          html += '  <div class="module-info">';
-          html += '    <div class="module-name">' + escHtml(m.name) + '<span class="module-version">v' + escHtml(m.version) + '</span></div>';
-          if (cats) html += '    <div class="module-categories">' + escHtml(cats) + '</div>';
-          html += '  </div>';
-          html += '  <button class="module-add" data-add-idx="' + idx + '" title="Add to Canvas">+</button>';
-          html += '</div>';
+          html += renderModuleItem(m, allModules.indexOf(m));
         }
       }
 
       html += '</div>';
       content.innerHTML = html;
 
-      // Click handlers
+      attachHandlers();
+    }
+
+    function renderSkeleton() {
+      let html = '';
+      for (let g = 0; g < 3; g++) {
+        html += '<div class="skeleton-group">';
+        html += '  <div class="skeleton-header"></div>';
+        for (let i = 0; i < 4; i++) {
+          html += '  <div class="skeleton-item">';
+          html += '    <div class="skeleton-icon"></div>';
+          html += '    <div class="skeleton-lines">';
+          html += '      <div class="skeleton-line"></div>';
+          html += '      <div class="skeleton-line"></div>';
+          html += '    </div>';
+          html += '  </div>';
+        }
+        html += '</div>';
+      }
+      return html;
+    }
+
+    // ── Event handlers ──
+
+    function attachHandlers() {
+      // Click to show detail
       content.querySelectorAll('.module-item').forEach(el => {
         el.addEventListener('click', (e) => {
-          // Don't trigger if the + button was clicked
-          if (e.target.closest('.module-add')) return;
+          if (e.target.closest('.module-add') || e.target.closest('.module-star')) return;
           const idx = parseInt(el.dataset.idx);
           vscode.postMessage({ command: 'showDetail', module: allModules[idx] });
         });
       });
 
+      // Add to canvas button
       content.querySelectorAll('.module-add').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -381,16 +646,38 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
           vscode.postMessage({ command: 'addToCanvas', module: allModules[idx] });
         });
       });
+
+      // Favorite star button
+      content.querySelectorAll('.module-star').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          vscode.postMessage({ command: 'toggleFavorite', moduleId: btn.dataset.starId });
+        });
+      });
+
+      // Drag-and-drop
+      content.querySelectorAll('.module-item').forEach(el => {
+        el.addEventListener('dragstart', (e) => {
+          el.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData('text/plain', el.dataset.idx);
+        });
+        el.addEventListener('dragend', (e) => {
+          el.classList.remove('dragging');
+          // If cursor left the webview (coordinates reset to 0,0), add to canvas
+          if (e.clientX === 0 && e.clientY === 0) {
+            const idx = parseInt(el.dataset.idx);
+            vscode.postMessage({ command: 'addToCanvas', module: allModules[idx] });
+          }
+        });
+      });
     }
 
-    function escHtml(s) {
-      const d = document.createElement('div');
-      d.textContent = s;
-      return d.innerHTML;
-    }
+    // ── Search with debounce ──
 
     searchInput.addEventListener('input', () => {
-      render(searchInput.value);
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => render(searchInput.value), 150);
     });
 
     render('');

@@ -77,7 +77,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   /* ---------- Registry Browser (sidebar) ---------- */
 
-  registryProvider = new RegistrySidebarProvider();
+  registryProvider = new RegistrySidebarProvider(context.globalState);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(RegistrySidebarProvider.viewType, registryProvider),
@@ -149,6 +149,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       dropModuleToCanvas(node.module);
+      registryProvider?.trackRecentlyUsed(node.module.id);
     }),
 
     // ── Command Palette: Add Module ──
@@ -179,6 +180,7 @@ export async function activate(context: vscode.ExtensionContext) {
           await new Promise((r) => setTimeout(r, 500));
         }
         dropModuleToCanvas(pick.module);
+        registryProvider?.trackRecentlyUsed(pick.module.id);
       }
     }),
 
