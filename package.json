@@ -400,7 +400,7 @@
         },
         "lace.autoSave": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Automatically save canvas changes. When disabled, use Cmd+S to save manually."
         }
       }

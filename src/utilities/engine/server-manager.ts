@@ -39,6 +39,11 @@ export class ServerManager extends EventEmitter {
 
       this.process.stderr?.on('data', (d) => console.warn('[lace]', d.toString()));
 
+      this.process.on('error', (err) => {
+        this.setState('error');
+        this.emit('error', err);
+      });
+
       this.process.on('exit', (code) => {
         this.setState('stopped');
         if (code !== 0) {
@@ -50,6 +55,7 @@ export class ServerManager extends EventEmitter {
 
       await this.client.initialize('0.1.0');
 
+      this.restartCount = 0;
       this.setState('running');
     } catch (err) {
       this.setState('error');

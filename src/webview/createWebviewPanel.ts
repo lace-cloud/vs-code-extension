@@ -201,10 +201,11 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
   // ── Host-side dirty tracking + auto-save ──
 
   let isDirtyHostSide = false;
+  let lastKnownState: WorkspaceState | undefined;
   let autoSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
   function scheduleAutoSave() {
-    const autoSave = vscode.workspace.getConfiguration('lace').get<boolean>('autoSave', false);
+    const autoSave = vscode.workspace.getConfiguration('lace').get<boolean>('autoSave', true);
     if (!autoSave) return;
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
     autoSaveTimer = setTimeout(() => {
@@ -251,6 +252,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           const state = (msg as any).state as WorkspaceState;
           writeLaceJson(laceDir, state);
           isDirtyHostSide = false;
+          lastKnownState = undefined;
           panel.title = `Lace · ${folderName}`;
           postToWebview(panel, { command: 'saveConfirmed' });
           break;
@@ -338,9 +340,10 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           break;
         }
 
-        // ── markDirty: update title + track host-side dirty state ──
+        // ── markDirty: update title + mirror state host-side ──
         case 'markDirty': {
           isDirtyHostSide = true;
+          lastKnownState = (msg as Extract<WebviewToHost, { command: 'markDirty' }>).state;
           panel.title = `Lace · ${folderName} ●`;
           scheduleAutoSave();
           break;
@@ -397,18 +400,8 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
       pendingRequests.delete(id);
     }
 
-    if (isDirtyHostSide) {
-      const choice = await vscode.window.showWarningMessage(
-        'You have unsaved canvas changes.',
-        'Save',
-        "Don't Save",
-      );
-      if (choice === 'Save') {
-        // The webview is already destroyed, but we tracked dirty state host-side.
-        // We cannot retrieve the latest state from the webview at this point.
-        // The last written state is already on disk from auto-save or manual save.
-        // If the webview had unsaved changes, they are lost — this prompt informs the user.
-      }
+    if (isDirtyHostSide && lastKnownState) {
+      writeLaceJson(laceDir, lastKnownState);
     }
     canvasPanel = undefined;
   });

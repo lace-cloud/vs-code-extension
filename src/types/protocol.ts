@@ -37,7 +37,7 @@ export type WebviewToHost =
   | { command: 'webviewReady' }
   | { command: 'saveState'; state: WorkspaceState }
   | { command: 'generateBundle'; bundle: ModuleBundle }
-  | { command: 'markDirty' }
+  | { command: 'markDirty'; state: WorkspaceState }
   | { command: 'markClean' }
   | {
       command: 'refreshModules';

@@ -356,7 +356,7 @@ export default function Canvas() {
     if (action.type !== 'LOAD_WORKSPACE') {
       setIsDirty(true);
       isDirtyRef.current = true;
-      postToHost({ command: 'markDirty' });
+      postToHost({ command: 'markDirty', state: workspaceRef.current });
     }
   }, []);
 
@@ -368,7 +368,7 @@ export default function Canvas() {
       setIsDirty(entry.isDirty);
       isDirtyRef.current = entry.isDirty;
       if (entry.isDirty) {
-        postToHost({ command: 'markDirty' });
+        postToHost({ command: 'markDirty', state: workspaceRef.current });
       } else {
         postToHost({ command: 'markClean' });
       }
@@ -425,7 +425,7 @@ export default function Canvas() {
       openConfig: (id) => setConfigTarget(id),
       markDirty: () => {
         setIsDirty(true);
-        postToHost({ command: 'markDirty' });
+        postToHost({ command: 'markDirty', state: workspaceRef.current });
       },
     }),
     [],
