@@ -22,7 +22,7 @@ export class ServerManager extends EventEmitter {
   }
 
   async start(): Promise<void> {
-    if (this.state !== 'stopped') {
+    if (this.state === 'running' || this.state === 'starting') {
       return;
     }
 
@@ -40,8 +40,9 @@ export class ServerManager extends EventEmitter {
       this.process.stderr?.on('data', (d) => console.warn('[lace]', d.toString()));
 
       this.process.on('error', (err) => {
-        this.setState('error');
         this.emit('error', err);
+        this.setState('stopped');
+        this.maybeRestart();
       });
 
       this.process.on('exit', (code) => {
