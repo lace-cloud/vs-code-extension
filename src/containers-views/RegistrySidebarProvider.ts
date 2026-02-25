@@ -254,6 +254,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .system-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
       padding: 6px 8px 4px;
       font-size: 11px;
       font-weight: 600;
@@ -261,6 +264,31 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       letter-spacing: 0.5px;
       color: var(--vscode-sideBarSectionHeader-foreground, #bbb);
       margin-top: 4px;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 4px;
+    }
+
+    .system-header:hover {
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+
+    .system-header .chevron {
+      font-size: 10px;
+      transition: transform 0.15s ease;
+    }
+
+    .system-header.collapsed .chevron {
+      transform: rotate(-90deg);
+    }
+
+    .system-body.collapsed {
+      display: none;
+    }
+
+    .module-count {
+      font-weight: 400;
+      color: var(--vscode-descriptionForeground, #888);
     }
 
     .module-item {
@@ -484,6 +512,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     let activeCategories = [];
     let filtersVisible = false;
+    let collapsedSystems = new Set();
     let debounceTimer = null;
 
     filterToggle.addEventListener('click', () => {
@@ -644,11 +673,19 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
       const systems = Object.keys(grouped).sort();
       for (const sys of systems) {
-        html += '<div class="system-header">' + escHtml(sys.toUpperCase()) + '</div>';
+        const isCollapsed = collapsedSystems.has(sys);
+        const count = grouped[sys].length;
+        html += '<div class="system-header' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
+        html += '<span class="chevron">&#x25BE;</span> ';
+        html += escHtml(sys.toUpperCase());
+        html += ' <span class="module-count">(' + count + ')</span>';
+        html += '</div>';
+        html += '<div class="system-body' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
         const sorted = grouped[sys].sort((a, b) => a.name.localeCompare(b.name));
         for (const m of sorted) {
           html += renderModuleItem(m, allModules.indexOf(m));
         }
+        html += '</div>';
       }
 
       html += '</div>';
@@ -679,6 +716,21 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     // ── Event handlers ──
 
     function attachHandlers() {
+      // Toggle system section collapse
+      content.querySelectorAll('.system-header[data-sys]').forEach(hdr => {
+        hdr.addEventListener('click', () => {
+          const sys = hdr.dataset.sys;
+          if (collapsedSystems.has(sys)) {
+            collapsedSystems.delete(sys);
+          } else {
+            collapsedSystems.add(sys);
+          }
+          hdr.classList.toggle('collapsed');
+          const body = content.querySelector('.system-body[data-sys="' + sys + '"]');
+          if (body) body.classList.toggle('collapsed');
+        });
+      });
+
       // Click to show detail
       content.querySelectorAll('.module-item').forEach(el => {
         el.addEventListener('click', (e) => {
