@@ -155,7 +155,22 @@ function readLaceJson(laceDir: string): any | undefined {
 function writeLaceJson(laceDir: string, state: WorkspaceState): void {
   ensureLaceDir(laceDir);
   const filePath = path.join(laceDir, LACE_FILE);
-  fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
+  const tmpPath = filePath + '.tmp';
+  const bakPath = filePath + '.bak';
+
+  // Write to temp file first, then atomically rename
+  fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf-8');
+
+  // Rotate: current → .bak (overwrite previous backup)
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.renameSync(filePath, bakPath);
+    }
+  } catch {
+    // .bak rotation is best-effort
+  }
+
+  fs.renameSync(tmpPath, filePath);
 }
 
 // ══════════════════════════════════════════════════════════════════════

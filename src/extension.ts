@@ -82,11 +82,15 @@ function runTerraformCommand(subcommand: string, extraArgs: string[] = []) {
 /* ---------------------------------- */
 
 export async function activate(context: vscode.ExtensionContext) {
-  console.log('Lace Extension Activated');
+  /* ---------- Output Channel ---------- */
+
+  const outputChannel = vscode.window.createOutputChannel('Lace');
+  context.subscriptions.push(outputChannel);
+  outputChannel.appendLine('Lace extension activated');
 
   /* ---------- Registry Browser (sidebar) ---------- */
 
-  registryProvider = new RegistrySidebarProvider(context.globalState);
+  registryProvider = new RegistrySidebarProvider(context.globalState, outputChannel);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(RegistrySidebarProvider.viewType, registryProvider),
@@ -94,7 +98,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   /* ---------- Lace Engine ---------- */
 
-  server = new ServerManager();
+  server = new ServerManager(outputChannel);
 
   engineStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(engineStatusBar);

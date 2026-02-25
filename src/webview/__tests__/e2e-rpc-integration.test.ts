@@ -238,7 +238,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
 
     const result = await client.validate({
       bundle: {
-        schema_version: '2.0',
+        schema_version: '2.0' as any,
         kind: 'module_bundle',
         entry: { module_id: 'ghost', version: 'v1' },
         modules: {},

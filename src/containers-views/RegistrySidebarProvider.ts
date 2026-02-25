@@ -22,9 +22,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   private favoriteModuleIds: string[] = [];
   private recentModuleIds: string[] = [];
   private cache = new Map<string, { modules: RegistryModule[]; fetchedAt: number }>();
+  private outputChannel: vscode.OutputChannel | null = null;
 
-  constructor(globalState?: vscode.Memento) {
+  constructor(globalState?: vscode.Memento, outputChannel?: vscode.OutputChannel) {
     this.globalState = globalState;
+    this.outputChannel = outputChannel ?? null;
     this.favoriteModuleIds = globalState?.get<string[]>('lace.favorites', []) ?? [];
   }
 
@@ -55,6 +57,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       return cached.modules;
     }
 
+    const start = Date.now();
     const allModules: RegistryModule[] = [];
     let page = 1;
     const limit = 100;
@@ -65,6 +68,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       if (modules.length < limit) break;
       page++;
     }
+
+    const elapsed = Date.now() - start;
+    this.outputChannel?.appendLine(
+      `[registry] ${system}: ${allModules.length} modules in ${page} page(s) (${elapsed}ms)`,
+    );
 
     this.cache.set(system, { modules: allModules, fetchedAt: Date.now() });
     return allModules;

@@ -12,9 +12,15 @@ export class ServerManager extends EventEmitter {
   private state: ServerState = 'stopped';
   private restartCount = 0;
   private readonly maxRestarts = 3;
+  private outputChannel: vscode.OutputChannel | null = null;
 
-  constructor() {
+  constructor(outputChannel?: vscode.OutputChannel) {
     super();
+    this.outputChannel = outputChannel ?? null;
+  }
+
+  private log(msg: string): void {
+    this.outputChannel?.appendLine(`[${new Date().toISOString()}] ${msg}`);
   }
 
   get rpcClient(): JSONRPCClient | null {
@@ -32,33 +38,42 @@ export class ServerManager extends EventEmitter {
       .getConfiguration('lace')
       .get<string>('binaryPath', '/usr/local/bin/lace');
 
+    this.log(`Starting engine: ${binaryPath} module serve`);
+
     try {
       this.process = spawn(binaryPath, ['module', 'serve'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-      this.process.stderr?.on('data', (d) => console.warn('[lace]', d.toString()));
+      this.process.stderr?.on('data', (d) => {
+        const text = d.toString().trimEnd();
+        this.log(`[stderr] ${text}`);
+      });
 
       this.process.on('error', (err) => {
+        this.log(`Process error: ${err.message}`);
         this.emit('error', err);
         this.setState('stopped');
         this.maybeRestart();
       });
 
       this.process.on('exit', (code) => {
+        this.log(`Process exited with code ${code}`);
         this.setState('stopped');
         if (code !== 0) {
           this.maybeRestart();
         }
       });
 
-      this.client = new JSONRPCClient(this.process);
+      this.client = new JSONRPCClient(this.process, 30_000, this.outputChannel);
 
       await this.client.initialize('0.1.0');
 
       this.restartCount = 0;
+      this.log('Engine initialized successfully');
       this.setState('running');
-    } catch (err) {
+    } catch (err: any) {
+      this.log(`Start failed: ${err.message}`);
       this.setState('error');
       throw err;
     }
@@ -87,6 +102,7 @@ export class ServerManager extends EventEmitter {
   }
 
   private setState(state: ServerState): void {
+    this.log(`State: ${this.state} → ${state}`);
     this.state = state;
     this.emit('state', state);
   }
@@ -103,6 +119,8 @@ export class ServerManager extends EventEmitter {
     }
 
     this.restartCount++;
-    setTimeout(() => this.start(), 1000 * this.restartCount);
+    const delayMs = 1000 * this.restartCount;
+    this.log(`Scheduling restart ${this.restartCount}/${this.maxRestarts} in ${delayMs}ms`);
+    setTimeout(() => this.start(), delayMs);
   }
 }

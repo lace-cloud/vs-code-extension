@@ -1,6 +1,8 @@
 import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as readline from 'readline';
+import type { ModuleBundle } from '../../webview/types/ir';
+import type { Diagnostic, RegistryModule } from '../../types/protocol';
 
 interface RPCRequest {
   jsonrpc: '2.0';
@@ -22,6 +24,39 @@ interface PendingRequest {
   timeout: NodeJS.Timeout;
 }
 
+/** Minimal log sink interface (matches vscode.OutputChannel.appendLine). */
+type LogSink = { appendLine(line: string): void } | null;
+
+// ── RPC result envelopes ──
+
+type RegistryListResult = {
+  modules: RegistryModule[];
+  pagination?: { page: number; limit: number; total: number };
+};
+
+type RegistryVersionResult = {
+  name: string;
+  system: string;
+  version: string;
+  deploy_bundle?: ModuleBundle;
+};
+
+type RegistryModuleResult = {
+  name: string;
+  system: string;
+  versions: Array<{ version: string; description?: string }>;
+};
+
+type GenerateResult = {
+  filesWritten?: string[];
+  diagnostics?: Diagnostic[];
+};
+
+type ValidateResult = {
+  valid?: boolean;
+  diagnostics?: Diagnostic[];
+};
+
 export class JSONRPCClient extends EventEmitter {
   private nextId = 1;
   private pending = new Map<number, PendingRequest>();
@@ -30,6 +65,7 @@ export class JSONRPCClient extends EventEmitter {
   constructor(
     private process: ChildProcess,
     private timeoutMs = 30_000,
+    private log: LogSink = null,
   ) {
     super();
     this.setupReader();
@@ -48,7 +84,7 @@ export class JSONRPCClient extends EventEmitter {
       line = line.trim();
 
       if (!line.startsWith('{')) {
-        if (line) console.warn('[lace][stdout]', line);
+        if (line) this.log?.appendLine(`[rpc] non-JSON stdout: ${line}`);
         return;
       }
 
@@ -56,7 +92,7 @@ export class JSONRPCClient extends EventEmitter {
       try {
         parsed = JSON.parse(line);
       } catch (err) {
-        console.warn('[lace][stdout] malformed JSON:', line);
+        this.log?.appendLine(`[rpc] malformed JSON: ${line}`);
         return;
       }
 
@@ -65,7 +101,7 @@ export class JSONRPCClient extends EventEmitter {
 
         // Validate this is actually a JSON-RPC response we're expecting
         if (msg.jsonrpc !== '2.0' || typeof msg.id !== 'number') {
-          console.warn('[lace][stdout] non-RPC JSON:', line);
+          this.log?.appendLine(`[rpc] non-RPC JSON: ${line}`);
           return;
         }
 
@@ -136,7 +172,7 @@ export class JSONRPCClient extends EventEmitter {
     limit?: number;
     organization?: string;
   }) {
-    return this.call<{ modules: any[]; pagination?: any }>('registry/list', params);
+    return this.call<RegistryListResult>('registry/list', params);
   }
 
   getRegistryVersion(params: {
@@ -145,15 +181,15 @@ export class JSONRPCClient extends EventEmitter {
     version: string;
     organization?: string;
   }) {
-    return this.call<any>('registry/version', params);
+    return this.call<RegistryVersionResult>('registry/version', params);
   }
 
   getRegistryModule(params: { name: string; system: string; organization?: string }) {
-    return this.call<{ name: string; system: string; versions: any[] }>('registry/get', params);
+    return this.call<RegistryModuleResult>('registry/get', params);
   }
 
   generate(params: {
-    bundle: any;
+    bundle: ModuleBundle;
     outputDir: string;
     options?: {
       dryRun?: boolean;
@@ -162,20 +198,11 @@ export class JSONRPCClient extends EventEmitter {
       overwrite?: boolean;
     };
   }) {
-    return this.call<{ filesWritten?: string[]; diagnostics?: any[] }>('generate', params);
+    return this.call<GenerateResult>('generate', params);
   }
 
-  validate(params: { bundle: any }) {
-    return this.call<{
-      valid?: boolean;
-      diagnostics?: Array<{
-        severity: string;
-        message: string;
-        file?: string;
-        line?: number;
-        column?: number;
-      }>;
-    }>('validate', params);
+  validate(params: { bundle: ModuleBundle }) {
+    return this.call<ValidateResult>('validate', params);
   }
 
   dispose(): void {
