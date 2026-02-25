@@ -29,6 +29,27 @@ export function inferVariables(instances: Instance[]): InputDef[] {
   return result;
 }
 
+// ── inferOutputExports ──
+//
+// Auto-infer output exports from all child module instances. For each
+// instance, resolve its schema and create an OutputExport entry for
+// every output. Naming: `<instance_id>_<output_name>`.
+// Resource/data instances with no resolvable outputs are skipped.
+
+export function inferOutputExports(
+  instances: Instance[],
+  resolveSchema: (inst: Instance) => ResolvedSchema,
+): Record<string, OutputExport> {
+  const result: Record<string, OutputExport> = {};
+  for (const inst of instances) {
+    const schema = resolveSchema(inst);
+    for (const out of schema.outputs) {
+      result[`${inst.id}_${out.name}`] = { out: { module: inst.id, name: out.name } };
+    }
+  }
+  return result;
+}
+
 // ── inferOutputDefs ──
 //
 // For each export where isOutExport(exp), find the source instance,

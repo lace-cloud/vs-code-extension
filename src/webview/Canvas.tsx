@@ -23,7 +23,7 @@ import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
 import ActionBar from './components/ActionBar';
 
 import type { WorkspaceState, GraphLayout } from './types/workspace';
-import type { ModuleBundle, CompositeGraph } from './types/ir';
+import type { ModuleBundle, CompositeGraph, Instance } from './types/ir';
 import { isOut } from './types/ir';
 import type { WebviewToHost } from '../types/protocol';
 
@@ -32,7 +32,12 @@ import { CanvasContext, type CanvasCallbacks } from './state/context';
 import { deriveEdges } from './utils/derive';
 import { resolveSchema, resolveIconUrl } from './utils/resolve';
 import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
-import { inferVariables, inferOutputDefs, inferRequiredProviders } from './utils/infer';
+import {
+  inferVariables,
+  inferOutputExports,
+  inferOutputDefs,
+  inferRequiredProviders,
+} from './utils/infer';
 
 // ── Node types registration ──
 
@@ -535,24 +540,23 @@ export default function Canvas() {
 
     if (entryDef && entryDef.impl.kind === 'composite') {
       const graph = entryDef.impl.graph;
+      const resolve = (inst: Instance) => resolveSchema(ws, inst);
 
-      // Infer variables from var bindings
       const inferredVars = inferVariables(graph.instances);
-
-      // Infer output defs from exports
-      const inferredOutputs = inferOutputDefs(graph.exports.outputs, graph.instances, (inst) =>
-        resolveSchema(ws, inst),
-      );
-
-      // Infer required providers from child modules
+      const inferredExports = inferOutputExports(graph.instances, resolve);
+      const mergedExports = { ...inferredExports, ...graph.exports.outputs };
+      const inferredOutputs = inferOutputDefs(mergedExports, graph.instances, resolve);
       const inferredProviders = inferRequiredProviders(bundle.modules, mk);
 
-      // Enrich the entry module
       bundle.modules[mk] = {
         ...entryDef,
         interface: {
           inputs: inferredVars,
           outputs: inferredOutputs,
+        },
+        impl: {
+          kind: 'composite' as const,
+          graph: { ...graph, exports: { outputs: mergedExports } },
         },
         terraform: {
           ...entryDef.terraform,
@@ -612,18 +616,23 @@ export default function Canvas() {
 
           if (entryDef && entryDef.impl.kind === 'composite') {
             const graph = entryDef.impl.graph;
+            const resolve = (inst: Instance) => resolveSchema(ws, inst);
+
             const inferredVars = inferVariables(graph.instances);
-            const inferredOutputs = inferOutputDefs(
-              graph.exports.outputs,
-              graph.instances,
-              (inst) => resolveSchema(ws, inst),
-            );
+            const inferredExports = inferOutputExports(graph.instances, resolve);
+            const mergedExports = { ...inferredExports, ...graph.exports.outputs };
+            const inferredOutputs = inferOutputDefs(mergedExports, graph.instances, resolve);
             const inferredProviders = inferRequiredProviders(bundle.modules, mk);
+
             bundle.modules[mk] = {
               ...entryDef,
               interface: {
                 inputs: inferredVars,
                 outputs: inferredOutputs,
+              },
+              impl: {
+                kind: 'composite' as const,
+                graph: { ...graph, exports: { outputs: mergedExports } },
               },
               terraform: {
                 ...entryDef.terraform,
