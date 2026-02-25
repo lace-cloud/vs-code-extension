@@ -54,6 +54,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     const cached = this.cache.get(system);
     if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      this.outputChannel?.appendLine(
+        `[registry] ${system}: cache hit (${cached.modules.length} modules, age ${Math.round((Date.now() - cached.fetchedAt) / 1000)}s)`,
+      );
       return cached.modules;
     }
 

@@ -74,6 +74,7 @@ export class ServerManager extends EventEmitter {
       this.setState('running');
     } catch (err: any) {
       this.log(`Start failed: ${err.message}`);
+      this.outputChannel?.show(true);
       this.setState('error');
       throw err;
     }
@@ -109,6 +110,8 @@ export class ServerManager extends EventEmitter {
 
   private maybeRestart(): void {
     if (this.restartCount >= this.maxRestarts) {
+      this.log(`Max restarts (${this.maxRestarts}) exhausted — giving up`);
+      this.outputChannel?.show(true);
       return;
     }
 

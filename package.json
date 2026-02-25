@@ -380,6 +380,10 @@
       {
         "command": "lace.terraformDocs",
         "title": "Lace: Terraform Docs"
+      },
+      {
+        "command": "lace.openLogs",
+        "title": "Lace: Open Logs"
       }
     ],
     "configuration": {

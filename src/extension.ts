@@ -86,7 +86,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const outputChannel = vscode.window.createOutputChannel('Lace');
   context.subscriptions.push(outputChannel);
-  outputChannel.appendLine('Lace extension activated');
+  const extVersion = context.extension.packageJSON.version ?? 'unknown';
+  outputChannel.appendLine(`Lace extension v${extVersion} activated (${process.platform})`);
 
   /* ---------- Registry Browser (sidebar) ---------- */
 
@@ -129,6 +130,9 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.startEngine', () => server?.start()),
     vscode.commands.registerCommand('lace.stopEngine', () => server?.stop()),
     vscode.commands.registerCommand('lace.restartEngine', () => server?.restart()),
+
+    // ── Logs ──
+    vscode.commands.registerCommand('lace.openLogs', () => outputChannel.show()),
 
     // ── Canvas (single entry point) ──
     vscode.commands.registerCommand('lace.openCanvas', async () => {
