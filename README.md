@@ -2,15 +2,12 @@
 
 Build Terraform infrastructure visually. Browse a module registry, wire inputs and outputs on a canvas, and generate production-ready `.tf` files — all inside VS Code.
 
-<!-- TODO: Replace with a screenshot or GIF of the Lace canvas in action -->
-
-![Lace Canvas](https://placeholder.com/lace-canvas-screenshot.png)
-
 ## Features
 
 - **Visual canvas** — Drag-and-drop module composition with a node-based editor
 - **Module registry sidebar** — Browse, search, and inspect modules without leaving VS Code
 - **Wire inputs and outputs** — Connect module outputs to other module inputs visually
+- **`@lace` chat participant** — Compose infrastructure using natural language in VS Code Chat (e.g. `@lace add an AWS VPC and connect it to a subnet`)
 - **Configure everything** — Variables, outputs, providers, locals, and environments through dedicated config panels
 - **Generate Terraform** — Produce production-ready `.tf` files with one click
 - **Terraform tooling** — Validate, format, security scan, and generate docs via integrated terminal commands
@@ -24,7 +21,7 @@ Build Terraform infrastructure visually. Browse a module registry, wire inputs a
 - [Lace CLI](https://lace.cloud) installed and available on your PATH
 - Authenticated via `lace login`
 
-### Workflow
+### Quick Start
 
 1. Open a workspace folder in VS Code
 2. Run **Lace: Open Canvas** from the command palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
@@ -33,6 +30,28 @@ Build Terraform infrastructure visually. Browse a module registry, wire inputs a
 5. Wire module outputs to other module inputs by dragging connections on the canvas
 6. Configure variables, providers, and other settings through the config panels
 7. Run **Lace: Generate Terraform** to produce `.tf` files
+
+### Using `@lace` in VS Code Chat
+
+Open the Chat panel and mention `@lace` to compose infrastructure with natural language:
+
+```
+@lace add an AWS VPC and a public subnet, then connect them
+@lace describe the current canvas
+@lace suggest infrastructure for my project
+@lace generate terraform files
+```
+
+Slash commands are also available:
+
+| Command     | Description                             |
+| ----------- | --------------------------------------- |
+| `/add`      | Add a module to the canvas              |
+| `/connect`  | Connect two modules                     |
+| `/describe` | Describe the current canvas state       |
+| `/suggest`  | Suggest infrastructure for your project |
+| `/generate` | Generate Terraform files                |
+| `/validate` | Validate the current graph              |
 
 ## Commands
 

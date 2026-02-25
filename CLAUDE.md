@@ -8,7 +8,7 @@ talks to a Go CLI binary (`lace`) over JSON-RPC stdin/stdout.
 ## Build & Test
 
 ```
-npm run test:unit        # 95+ unit tests (no binary needed) — run after EVERY change
+npm run test:unit        # 225+ unit tests (no binary needed) — run after EVERY change
 npm run test:e2e         # 6 tests (requires lace + terraform)
 npx tsc --noEmit         # Type-check — must be zero errors
 npm run build            # Rspack build (host + webview)
@@ -24,13 +24,14 @@ npm run build            # Rspack build (host + webview)
 
 ## Architecture
 
-| Layer          | Directory                                                                                                 | Environment              |
-| -------------- | --------------------------------------------------------------------------------------------------------- | ------------------------ |
-| Extension host | `extension.ts`, `createWebviewPanel.ts`, `ModuleDetailPanel.ts`, `containers-views/`, `utilities/engine/` | Node.js                  |
-| Webview UI     | `webview/Canvas.tsx`, `webview/components/`, `webview/state/context.ts`                                   | Browser                  |
-| Pure logic     | `webview/state/reducer.ts`, `webview/utils/`                                                              | Either (no runtime deps) |
-| Types          | `types/protocol.ts`, `webview/types/`                                                                     | Shared                   |
-| Tests          | `webview/__tests__/`                                                                                      | Vitest                   |
+| Layer          | Directory                                                                                                 | Environment                |
+| -------------- | --------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Extension host | `extension.ts`, `createWebviewPanel.ts`, `ModuleDetailPanel.ts`, `containers-views/`, `utilities/engine/` | Node.js                    |
+| Chat           | `chat/participant.ts`, `chat/tools/`, `chat/system-prompt.ts`                                             | Node.js (VS Code Chat API) |
+| Webview UI     | `webview/Canvas.tsx`, `webview/components/`, `webview/state/context.ts`                                   | Browser                    |
+| Pure logic     | `webview/state/reducer.ts`, `webview/utils/`                                                              | Either (no runtime deps)   |
+| Types          | `types/protocol.ts`, `webview/types/`                                                                     | Shared                     |
+| Tests          | `webview/__tests__/`                                                                                      | Vitest                     |
 
 ## How to Work on This Codebase
 

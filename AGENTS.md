@@ -4,20 +4,20 @@ This document is for AI coding agents (Claude, Copilot, Cursor, etc.) working on
 
 ## What This Project Is
 
-A VS Code extension for visually composing Terraform modules. Users browse modules from a registry sidebar, add them to a ReactFlow canvas, wire inputs/outputs, configure settings, and generate `.tf` files. The extension talks to a Go CLI binary (`lace`) over JSON-RPC stdin/stdout. All state persists in a `.lace/` directory at the workspace root.
+A VS Code extension for visually composing Terraform modules. Users browse modules from a registry sidebar, add them to a ReactFlow canvas, wire inputs/outputs, configure settings, and generate `.tf` files. Users can also compose infrastructure via natural language using the `@lace` chat participant in VS Code Chat. The extension talks to a Go CLI binary (`lace`) over JSON-RPC stdin/stdout. All state persists in a `.lace/` directory at the workspace root.
 
 ## Build & Test Commands
 
 ```bash
 npm test                    # Run all tests: unit + E2E (Vitest)
-npm run test:unit           # Unit tests only (99 tests, no binary needed)
+npm run test:unit           # Unit tests only (225+ tests, no binary needed)
 npm run test:e2e            # E2E tests only (6 tests, requires lace + terraform)
 npm run test:watch          # Watch mode (unit tests)
 npm run build               # Rspack build (both host + webview)
 npx tsc --noEmit            # Type-check only (must be zero errors)
 ```
 
-Always run `npm run test:unit` after any change. All 95 unit tests must pass. TypeScript must compile with zero errors.
+Always run `npm run test:unit` after any change. All 225+ unit tests must pass. TypeScript must compile with zero errors.
 
 E2E tests require the `lace` binary and `terraform` to be installed. They spawn a real `lace module serve` process and talk JSON-RPC. If the binary is missing, the tests fail with install instructions. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
 
@@ -159,6 +159,8 @@ It handles the nested spread `state → modules → module → impl → graph` a
 | Pure logic        | `webview/utils/`                                | bundle, derive, validate, resolve, identifiers, record    |
 | State management  | `webview/state/`                                | reducer (pure), context (React context)                   |
 | UI components     | `webview/components/`                           | nodes, panels                                             |
+| Chat participant  | `chat/`                                         | `@lace` chat participant, tool registry, LM tools         |
+| Chat tools        | `chat/tools/`                                   | registry, graph-read, graph-write, workspace, generate    |
 | Tests             | `webview/__tests__/`                            | Unit test files + fixtures                                |
 | E2E tests         | `webview/__tests__/e2e-rpc-integration.test.ts` | Spawns real CLI, full RPC pipeline                        |
 | CI/CD             | `.github/workflows/ci.yml`                      | GitHub Actions: unit + E2E with lace + terraform          |
@@ -205,7 +207,16 @@ E2E tests (`__tests__/e2e-rpc-integration.test.ts`) spawn the real `lace module 
 | `bundle.test.ts`              | `toBundle`/`fromBundle` boundary                    |
 | `validate.test.ts`            | `validateWorkspace` checks                          |
 | `scaffold.test.ts`            | `emptyWorkspace` factory + round-trip fidelity      |
-| Other files                   | Individual utility tests                            |
+| `chat-tools.test.ts`          | Chat participant graph-write and graph-read tools   |
+| `registry-tools.test.ts`      | Chat participant registry search and inspect tools  |
+| `graph-summary.test.ts`       | `summarizeGraph` for chat descriptions              |
+| `auto-connect.test.ts`        | Auto-connect name/type matching logic               |
+| `normalize.test.ts`           | Binding and instance normalization                  |
+| `resolve.test.ts`             | Module reference resolution                         |
+| `parseValue.test.ts`          | HCL literal parsing                                 |
+| `identifiers.test.ts`         | Terraform identifier validation                     |
+| `derive.test.ts`              | Wire derivation from bindings                       |
+| `infer.test.ts`               | Type inference utilities                            |
 
 ### Adding E2E tests
 
@@ -222,6 +233,26 @@ E2E tests follow this pattern:
 ## CI/CD
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to `main`/`develop`. It installs Node.js, npm dependencies, the Lace CLI binary (from `releases.lace.cloud`), and Terraform (via `hashicorp/setup-terraform@v3`), then runs unit and E2E tests in sequence.
+
+## Chat Participant (`@lace`)
+
+The `@lace` chat participant lets users compose infrastructure via natural language in VS Code Chat. It uses the VS Code Chat Participant API and Language Model Tools API.
+
+### Architecture
+
+- **`chat/participant.ts`** — Registration + agentic tool loop. Runs up to 15 tool rounds per request.
+- **`chat/tool-registry.ts`** — Simple `Map<string, ToolHandler>`. Each tool returns `{ content: string, isError?: boolean }`.
+- **`chat/tools/`** — Five tool groups: `registry-tools` (search, inspect), `graph-read-tools` (describe, validate), `graph-write-tools` (add, remove, connect, disconnect, set-input, rename, auto-connect), `workspace-tools` (read project files), `generate-tools` (fire-and-forget generate).
+- **`chat/system-prompt.ts`** — System prompt injected into every chat request.
+- **`chat/graph-summary.ts`** — Summarizes workspace state into natural-language descriptions for the LM.
+- **`chat/auto-connect.ts`** — Name/type matching logic for best-effort wiring between instances.
+- **`chat/telemetry.ts`** — Session-level telemetry (start, tool invocations, feedback).
+
+### Key constraints
+
+- Chat tools run in the **extension host** (Node.js). They dispatch reducer actions to the webview via `dispatchToCanvas`.
+- Tools that modify the graph (`graph-write-tools`) read the current state via `requestGraphState()`, apply reducer actions, and push the updated state back.
+- Tool schemas are declared in `package.json` under `contributes.languageModelTools`. The tool names must match exactly between `package.json` and the handler registration.
 
 ## Common Gotchas
 
