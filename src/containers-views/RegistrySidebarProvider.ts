@@ -245,10 +245,6 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-list-hoverBackground, #2a2d2e);
     }
 
-    .module-item.dragging {
-      opacity: 0.5;
-    }
-
     .module-icon {
       flex-shrink: 0;
       width: 26px;
@@ -307,7 +303,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       margin-top: 2px;
     }
 
-    .module-star {
+    .module-star,
+    .module-add {
       flex-shrink: 0;
       width: 22px;
       height: 22px;
@@ -322,7 +319,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       font-size: 16px;
     }
 
-    .module-item:hover .module-star {
+    .module-item:hover .module-star,
+    .module-item:hover .module-add {
       display: flex;
     }
 
@@ -331,7 +329,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       color: #e2b340;
     }
 
-    .module-star:hover {
+    .module-star:hover,
+    .module-add:hover {
       background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
     }
 
@@ -464,13 +463,14 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       const iconHtml = m.icon_url
         ? '<img src="' + escHtml(m.icon_url) + '" />'
         : (m.kind === 'composite' ? '&#x1F4E6;' : '&#x2699;&#xFE0F;');
-      let html = '<div class="module-item" draggable="true" data-idx="' + idx + '">';
+      let html = '<div class="module-item" data-idx="' + idx + '">';
       html += '  <div class="module-icon">' + iconHtml + '</div>';
       html += '  <div class="module-info">';
       html += '    <div class="module-name">' + escHtml(m.name) + '<span class="module-version">v' + escHtml(m.version) + '</span></div>';
       if (cats) html += '    <div class="module-categories">' + escHtml(cats) + '</div>';
       html += '  </div>';
       html += '  <div class="module-actions">';
+      html += '    <button class="module-add" data-add-idx="' + idx + '" title="Add to canvas">+</button>';
       html += '    <button class="module-star' + (isStarred ? ' starred' : '') + '" data-star-id="' + escHtml(m.id) + '" title="' + (isStarred ? 'Unfavorite' : 'Favorite') + '">' + (isStarred ? '&#x2605;' : '&#x2606;') + '</button>';
       html += '  </div>';
       html += '</div>';
@@ -630,7 +630,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       // Click to show detail
       content.querySelectorAll('.module-item').forEach(el => {
         el.addEventListener('click', (e) => {
-          if (e.target.closest('.module-star')) return;
+          if (e.target.closest('.module-star') || e.target.closest('.module-add')) return;
           const idx = parseInt(el.dataset.idx);
           vscode.postMessage({ command: 'showDetail', module: allModules[idx] });
         });
@@ -644,20 +644,12 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         });
       });
 
-      // Drag-and-drop
-      content.querySelectorAll('.module-item').forEach(el => {
-        el.addEventListener('dragstart', (e) => {
-          el.classList.add('dragging');
-          e.dataTransfer.effectAllowed = 'copy';
-          e.dataTransfer.setData('text/plain', el.dataset.idx);
-        });
-        el.addEventListener('dragend', (e) => {
-          el.classList.remove('dragging');
-          // If cursor left the webview (coordinates reset to 0,0), add to canvas
-          if (e.clientX === 0 && e.clientY === 0) {
-            const idx = parseInt(el.dataset.idx);
-            vscode.postMessage({ command: 'addToCanvas', module: allModules[idx] });
-          }
+      // Add to canvas button
+      content.querySelectorAll('.module-add').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.dataset.addIdx);
+          vscode.postMessage({ command: 'addToCanvas', module: allModules[idx] });
         });
       });
     }
