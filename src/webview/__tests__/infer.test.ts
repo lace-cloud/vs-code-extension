@@ -55,19 +55,7 @@ describe('inferVariables', () => {
     expect(result[0].name).toBe('region');
   });
 
-  test('returns empty array when no var bindings exist', () => {
-    const instances: Instance[] = [
-      {
-        kind: 'module',
-        id: 'a',
-        use: { module_id: 'mod-a', version: 'v1' },
-        inputs: { bucket: { lit: 'my-bucket' } },
-      },
-    ];
-    expect(inferVariables(instances)).toEqual([]);
-  });
-
-  test('only var bindings produce variables (mixed binding types)', () => {
+  test('only var bindings produce variables (lit and out ignored)', () => {
     const instances: Instance[] = [
       {
         kind: 'module',
@@ -112,23 +100,6 @@ describe('inferOutputExports', () => {
       my_bucket_arn: { out: { module: 'my_bucket', name: 'arn' } },
       my_bucket_id: { out: { module: 'my_bucket', name: 'id' } },
     });
-  });
-
-  test('names follow <instance_id>_<output_name> convention', () => {
-    const instances: Instance[] = [
-      {
-        kind: 'module',
-        id: 'vpc',
-        use: { module_id: 'aws-vpc', version: 'v1' },
-        inputs: {},
-      },
-    ];
-    const resolveSchema = (): ResolvedSchema => ({
-      inputs: [],
-      outputs: [{ name: 'subnet_ids', type: 'list(string)' }],
-    });
-    const result = inferOutputExports(instances, resolveSchema);
-    expect(Object.keys(result)).toEqual(['vpc_subnet_ids']);
   });
 
   test('returns empty for instances with no resolvable outputs', () => {
@@ -234,6 +205,101 @@ describe('inferOutputDefs', () => {
     const result = inferOutputDefs(exports, instances, resolveSchema);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('bucket_arn');
+  });
+
+  test('inferOutputExports → inferOutputDefs pipeline produces typed output defs', () => {
+    const inferred = inferOutputExports(instances, resolveSchema);
+    const defs = inferOutputDefs(inferred, instances, resolveSchema);
+    expect(defs).toEqual([
+      { name: 'my_bucket_arn', type: 'string' },
+      { name: 'my_bucket_id', type: 'string' },
+    ]);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// Generate-time enrichment (integration: mirrors Canvas.tsx onGenerate)
+// ══════════════════════════════════════════════════════════════════════
+
+describe('generate-time output enrichment', () => {
+  const instances: Instance[] = [
+    {
+      kind: 'module',
+      id: 'bucket',
+      use: { module_id: 'aws-s3', version: 'v1' },
+      inputs: { name: { var: 'bucket_name' } },
+    },
+    {
+      kind: 'module',
+      id: 'vpc',
+      use: { module_id: 'aws-vpc', version: 'v1' },
+      inputs: {},
+    },
+  ];
+
+  const resolve = (inst: Instance): ResolvedSchema => {
+    if (inst.id === 'bucket') {
+      return {
+        inputs: [{ name: 'name', type: 'string', required: true }],
+        outputs: [
+          { name: 'arn', type: 'string' },
+          { name: 'id', type: 'string' },
+        ],
+      };
+    }
+    if (inst.id === 'vpc') {
+      return {
+        inputs: [],
+        outputs: [{ name: 'vpc_id', type: 'string' }],
+      };
+    }
+    return { inputs: [], outputs: [] };
+  };
+
+  test('manual exports override inferred exports for same key', () => {
+    const manualExports: Record<string, OutputExport> = {
+      // Override the auto-inferred bucket_arn with a custom source
+      bucket_arn: { out: { module: 'vpc', name: 'vpc_id' } },
+    };
+
+    const inferredExports = inferOutputExports(instances, resolve);
+    const mergedExports = { ...inferredExports, ...manualExports };
+
+    // Manual export wins for 'bucket_arn'
+    expect(mergedExports['bucket_arn']).toEqual({ out: { module: 'vpc', name: 'vpc_id' } });
+    // Inferred exports for other keys are preserved
+    expect(mergedExports['bucket_id']).toEqual({ out: { module: 'bucket', name: 'id' } });
+    expect(mergedExports['vpc_vpc_id']).toEqual({ out: { module: 'vpc', name: 'vpc_id' } });
+  });
+
+  test('enriched bundle contains both graph.exports wiring and interface.outputs metadata', () => {
+    const existingExports: Record<string, OutputExport> = {};
+
+    const inferredExports = inferOutputExports(instances, resolve);
+    const mergedExports = { ...inferredExports, ...existingExports };
+    const outputDefs = inferOutputDefs(mergedExports, instances, resolve);
+
+    // Wiring: every instance output has an export entry
+    expect(Object.keys(mergedExports)).toHaveLength(3);
+    expect(mergedExports['bucket_arn']).toEqual({ out: { module: 'bucket', name: 'arn' } });
+    expect(mergedExports['bucket_id']).toEqual({ out: { module: 'bucket', name: 'id' } });
+    expect(mergedExports['vpc_vpc_id']).toEqual({ out: { module: 'vpc', name: 'vpc_id' } });
+
+    // Type metadata: one OutputDef per export, with resolved types
+    expect(outputDefs).toHaveLength(3);
+    expect(outputDefs).toContainEqual({ name: 'bucket_arn', type: 'string' });
+    expect(outputDefs).toContainEqual({ name: 'bucket_id', type: 'string' });
+    expect(outputDefs).toContainEqual({ name: 'vpc_vpc_id', type: 'string' });
+  });
+
+  test('empty graph produces no exports and no output defs', () => {
+    const emptyInstances: Instance[] = [];
+    const inferredExports = inferOutputExports(emptyInstances, resolve);
+    const mergedExports = { ...inferredExports };
+    const outputDefs = inferOutputDefs(mergedExports, emptyInstances, resolve);
+
+    expect(mergedExports).toEqual({});
+    expect(outputDefs).toEqual([]);
   });
 });
 

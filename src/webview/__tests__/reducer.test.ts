@@ -1107,3 +1107,213 @@ test('CLEAR_GRAPH on invalid module_key returns state unchanged', () => {
   });
   expect(next).toBe(state);
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_TERRAFORM
+// ══════════════════════════════════════════════════════════════════════
+
+test('SET_TERRAFORM sets terraform block on module def', () => {
+  const state = makeWorkspace([]);
+  const terraform = {
+    required_version: '>= 1.5.0',
+    required_providers: {
+      aws: { source: 'hashicorp/aws', version: '~> 5.0' },
+    },
+  };
+  const next = workspaceReducer(state, {
+    type: 'SET_TERRAFORM',
+    module_key: 'root@v1.0.0',
+    terraform,
+  });
+  expect(next.modules['root@v1.0.0'].terraform).toEqual(terraform);
+});
+
+test('SET_TERRAFORM replaces existing terraform block', () => {
+  const state = makeWorkspace([]);
+  const first = workspaceReducer(state, {
+    type: 'SET_TERRAFORM',
+    module_key: 'root@v1.0.0',
+    terraform: { required_version: '>= 1.0.0' },
+  });
+  const second = workspaceReducer(first, {
+    type: 'SET_TERRAFORM',
+    module_key: 'root@v1.0.0',
+    terraform: { required_version: '>= 1.5.0' },
+  });
+  expect(second.modules['root@v1.0.0'].terraform).toEqual({ required_version: '>= 1.5.0' });
+});
+
+test('SET_TERRAFORM on non-existent module_key returns state unchanged', () => {
+  const state = makeWorkspace([]);
+  const next = workspaceReducer(state, {
+    type: 'SET_TERRAFORM',
+    module_key: 'nonexistent@v1.0.0',
+    terraform: { required_version: '>= 1.0.0' },
+  });
+  expect(next).toBe(state);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_PROVIDERS
+// ══════════════════════════════════════════════════════════════════════
+
+test('SET_PROVIDERS sets provider configurations on module def', () => {
+  const state = makeWorkspace([]);
+  const providers = [
+    { name: 'aws', config: { region: 'us-east-1' } },
+    { name: 'aws', alias: 'west', config: { region: 'us-west-2' } },
+  ];
+  const next = workspaceReducer(state, {
+    type: 'SET_PROVIDERS',
+    module_key: 'root@v1.0.0',
+    providers,
+  });
+  expect(next.modules['root@v1.0.0'].providers).toEqual(providers);
+});
+
+test('SET_PROVIDERS on non-existent module_key returns state unchanged', () => {
+  const state = makeWorkspace([]);
+  const next = workspaceReducer(state, {
+    type: 'SET_PROVIDERS',
+    module_key: 'nonexistent@v1.0.0',
+    providers: [],
+  });
+  expect(next).toBe(state);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_LOCALS
+// ══════════════════════════════════════════════════════════════════════
+
+test('SET_LOCALS sets locals on composite graph', () => {
+  const state = makeWorkspace([]);
+  const locals: import('../types/ir').LocalDef[] = [
+    { name: 'prefix', value: { lit: 'prod' } },
+    { name: 'tags', value: { expr: { lang: 'hcl', value: '{ env = "production" }' } } },
+  ];
+  const next = workspaceReducer(state, {
+    type: 'SET_LOCALS',
+    module_key: 'root@v1.0.0',
+    locals,
+  });
+  const def = next.modules['root@v1.0.0'];
+  if (def.impl.kind !== 'composite') throw new Error('Not composite');
+  expect(def.impl.graph.locals).toEqual(locals);
+});
+
+test('SET_LOCALS with empty array sets locals to undefined', () => {
+  const state = makeWorkspace([]);
+  // First set some locals
+  const withLocals = workspaceReducer(state, {
+    type: 'SET_LOCALS',
+    module_key: 'root@v1.0.0',
+    locals: [{ name: 'x', value: { lit: '1' } }],
+  });
+  // Then clear them
+  const next = workspaceReducer(withLocals, {
+    type: 'SET_LOCALS',
+    module_key: 'root@v1.0.0',
+    locals: [],
+  });
+  const def = next.modules['root@v1.0.0'];
+  if (def.impl.kind !== 'composite') throw new Error('Not composite');
+  expect(def.impl.graph.locals).toBeUndefined();
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_DEPENDS_ON
+// ══════════════════════════════════════════════════════════════════════
+
+test('SET_DEPENDS_ON sets depends_on on target instance', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+  ]);
+  const next = workspaceReducer(state, {
+    type: 'SET_DEPENDS_ON',
+    module_key: 'root@v1.0.0',
+    instance_id: 'b',
+    depends_on: ['module.a'],
+  });
+  expect(getInst(next, 'b').depends_on).toEqual(['module.a']);
+});
+
+test('SET_DEPENDS_ON with empty array removes depends_on', () => {
+  const state = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    {
+      kind: 'module',
+      id: 'b',
+      use: { module_id: 'y', version: 'v1' },
+      inputs: {},
+      depends_on: ['module.a'],
+    },
+  ]);
+  const next = workspaceReducer(state, {
+    type: 'SET_DEPENDS_ON',
+    module_key: 'root@v1.0.0',
+    instance_id: 'b',
+    depends_on: [],
+  });
+  expect(getInst(next, 'b').depends_on).toBeUndefined();
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// SET_ENVIRONMENTS / SET_ENVIRONMENT_BACKENDS
+// ══════════════════════════════════════════════════════════════════════
+
+test('SET_ENVIRONMENTS sets environment map on workspace', () => {
+  const state = makeWorkspace([]);
+  const environments = {
+    dev: { region: 'us-east-1' },
+    prod: { region: 'us-west-2' },
+  };
+  const next = workspaceReducer(state, {
+    type: 'SET_ENVIRONMENTS',
+    environments,
+  });
+  expect(next.environments).toEqual(environments);
+});
+
+test('SET_ENVIRONMENT_BACKENDS sets backend configs on workspace', () => {
+  const state = makeWorkspace([]);
+  const backends = {
+    dev: { type: 's3', config: { bucket: 'dev-state' } },
+    prod: { type: 's3', config: { bucket: 'prod-state' } },
+  };
+  const next = workspaceReducer(state, {
+    type: 'SET_ENVIRONMENT_BACKENDS',
+    backends,
+  });
+  expect(next.environment_backends).toEqual(backends);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// DROP_BUNDLE edge cases
+// ══════════════════════════════════════════════════════════════════════
+
+test('DROP_BUNDLE with non-composite deploy entry returns state unchanged', () => {
+  const state = makeWorkspace([]);
+  const deploy_bundle: import('../types/ir').ModuleBundle = {
+    schema_version: '1.0',
+    kind: 'module_bundle',
+    entry: { module_id: 'leaf-only', version: 'v1.0.0' },
+    modules: {
+      'leaf-only@v1.0.0': {
+        schema_version: '1.0',
+        kind: 'module_def',
+        id: 'leaf-only',
+        version: 'v1.0.0',
+        interface: { inputs: [], outputs: [] },
+        impl: { kind: 'leaf', source: { kind: 'registry' } },
+      },
+    },
+  };
+  const next = workspaceReducer(state, {
+    type: 'DROP_BUNDLE',
+    module_key: 'root@v1.0.0',
+    deploy_bundle,
+    positions: {},
+  });
+  expect(next).toBe(state);
+});

@@ -114,6 +114,57 @@ test('catches use references pointing to modules not in workspace', () => {
   expect(errors.some((e) => e.message.includes('unknown module'))).toBe(true);
 });
 
+test('depends_on with module. prefix referencing valid instance produces no error', () => {
+  const ws = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    {
+      kind: 'module',
+      id: 'b',
+      use: { module_id: 'x', version: 'v1' },
+      inputs: {},
+      depends_on: ['module.a'],
+    },
+  ]);
+  const errors = validateWorkspace(ws);
+  expect(errors.filter((e) => e.message.includes('depends_on'))).toHaveLength(0);
+});
+
+test('depends_on with module. prefix referencing unknown instance catches error', () => {
+  const ws = makeWorkspace([
+    {
+      kind: 'module',
+      id: 'a',
+      use: { module_id: 'x', version: 'v1' },
+      inputs: {},
+      depends_on: ['module.ghost'],
+    },
+  ]);
+  const errors = validateWorkspace(ws);
+  expect(
+    errors.some((e) => e.message.includes('depends_on') && e.message.includes('module.ghost')),
+  ).toBe(true);
+});
+
+test('detects multiple error types simultaneously', () => {
+  const ws = makeWorkspace([
+    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { kind: 'module', id: 'a', use: { module_id: 'y', version: 'v1' }, inputs: {} }, // duplicate
+    {
+      kind: 'module',
+      id: 'b',
+      use: { module_id: 'missing-mod', version: 'v1' },
+      inputs: { x: { out: { module: 'nonexistent', name: 'v' } } }, // bad binding
+      depends_on: ['ghost'], // bad depends_on
+    },
+  ]);
+  const errors = validateWorkspace(ws);
+  expect(errors.some((e) => e.message.includes('Duplicate'))).toBe(true);
+  expect(errors.some((e) => e.message.includes('unknown instance "nonexistent"'))).toBe(true);
+  expect(errors.some((e) => e.message.includes('depends_on'))).toBe(true);
+  expect(errors.some((e) => e.message.includes('unknown module'))).toBe(true);
+  expect(errors.length).toBeGreaterThanOrEqual(4);
+});
+
 test('catches export outputs referencing unknown instances', () => {
   const ws = makeWorkspace(
     [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],

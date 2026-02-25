@@ -41,6 +41,34 @@ test('lit and var bindings produce no edges', () => {
   expect(deriveEdges(instances)).toHaveLength(0);
 });
 
+test('multiple out bindings from different sources produce multiple edges', () => {
+  const instances: Instance[] = [
+    { kind: 'module', id: 'vpc', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { kind: 'module', id: 'bucket', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+    {
+      kind: 'module',
+      id: 'lambda',
+      use: { module_id: 'z', version: 'v1' },
+      inputs: {
+        vpc_id: { out: { module: 'vpc', name: 'id' } },
+        bucket_arn: { out: { module: 'bucket', name: 'arn' } },
+      },
+    },
+  ];
+  const edges = deriveEdges(instances);
+  expect(edges).toHaveLength(2);
+  expect(edges).toContainEqual({
+    source_instance: 'vpc',
+    target_instance: 'lambda',
+    mapping: { from: 'id', to: 'vpc_id' },
+  });
+  expect(edges).toContainEqual({
+    source_instance: 'bucket',
+    target_instance: 'lambda',
+    mapping: { from: 'arn', to: 'bucket_arn' },
+  });
+});
+
 test('deriveWires produces wire format from edges', () => {
   const instances: Instance[] = [
     { kind: 'module', id: 'vpc', use: { module_id: 'x', version: 'v1' }, inputs: {} },
