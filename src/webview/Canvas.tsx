@@ -101,54 +101,19 @@ function CompositeEditor({
     return () => clearTimeout(timer);
   }, [fitViewTrigger, fitView]);
 
-  // ── Derive ReactFlow edges (bundle labels for same source→target pair) ──
-  const rfEdgesFromWorkspace: Edge[] = useMemo(() => {
-    const derived = deriveEdges(graph.instances);
-
-    // Group by source→target pair to bundle labels
-    const pairCount = new Map<string, number>();
-    const pairLabels = new Map<string, string[]>();
-    for (const e of derived) {
-      const pairKey = `${e.source_instance}→${e.target_instance}`;
-      pairLabels.set(pairKey, [
-        ...(pairLabels.get(pairKey) ?? []),
-        `${e.mapping.from} → ${e.mapping.to}`,
-      ]);
-    }
-
-    return derived.map((e) => {
-      const pairKey = `${e.source_instance}→${e.target_instance}`;
-      const count = (pairCount.get(pairKey) ?? 0) + 1;
-      pairCount.set(pairKey, count);
-
-      const isFirst = count === 1;
-      const labels = pairLabels.get(pairKey) ?? [];
-      const bundledLabel = labels.length > 1 ? labels.join('\n') : labels[0];
-
-      return {
+  // ── Derive ReactFlow edges (no labels — wired badges under nodes show mappings) ──
+  const rfEdgesFromWorkspace: Edge[] = useMemo(
+    () =>
+      deriveEdges(graph.instances).map((e) => ({
         id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
         source: e.source_instance,
         sourceHandle: 'out-right',
         target: e.target_instance,
         targetHandle: 'in-left',
         data: { mapping: e.mapping },
-        ...(isFirst
-          ? {
-              label: bundledLabel,
-              labelStyle: { fill: '#CEFE65', fontSize: 10 },
-              labelBgPadding: [4, 2] as [number, number],
-              labelBgBorderRadius: 4,
-              labelBgStyle: { fill: 'rgba(22,22,22,0.85)' },
-            }
-          : {
-              labelStyle: { fill: '#CEFE65', fontSize: 10 },
-              labelBgPadding: [0, 0] as [number, number],
-              labelBgBorderRadius: 0,
-              labelBgStyle: { fill: 'transparent' },
-            }),
-      };
-    });
-  }, [graph.instances]);
+      })),
+    [graph.instances],
+  );
 
   // ── Local edge state (for selection support) ──
   const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromWorkspace);

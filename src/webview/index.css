@@ -123,8 +123,3 @@
   transition: transform 200ms ease-out;
 }
 
-/* ── Edge labels ── */
-
-.react-flow__edge-textbg {
-  fill: transparent;
-}
