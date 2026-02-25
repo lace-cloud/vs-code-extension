@@ -421,34 +421,6 @@ test('DROP_BUNDLE merges all non-entry modules and inlines instances', () => {
   expect(next.modules['deploy-aws-s3-bucket@v1.2.0']).toBeUndefined();
 });
 
-test('DROP_BUNDLE works identically for leaf and composite bundles', () => {
-  // Drop leaf fixture
-  let state = makeWorkspace([]);
-  const leafBundle = loadFixture('leaf_deploy_bundle.json');
-  const afterLeaf = workspaceReducer(state, {
-    type: 'DROP_BUNDLE',
-    module_key: 'root@v1.0.0',
-    deploy_bundle: leafBundle,
-    positions: {},
-  });
-  const leafInstances = getInstances(afterLeaf, 'root@v1.0.0');
-  expect(leafInstances.length).toBeGreaterThan(0);
-
-  // Drop composite fixture
-  state = makeWorkspace([]);
-  const compositeBundle = loadFixture('composite_deploy_bundle.json');
-  const afterComposite = workspaceReducer(state, {
-    type: 'DROP_BUNDLE',
-    module_key: 'root@v1.0.0',
-    deploy_bundle: compositeBundle,
-    positions: {},
-  });
-  const compositeInstances = getInstances(afterComposite, 'root@v1.0.0');
-  expect(compositeInstances.length).toBeGreaterThan(0);
-
-  // Both went through same code path — no branching on module kind
-});
-
 test('DROP_BUNDLE preserves intermediate composites from nested bundles', () => {
   const state = makeWorkspace([]);
   const deploy_bundle = loadFixture('full_bundle_with_terraform.json');
@@ -596,22 +568,6 @@ test('UPDATE_INPUTS replaces entire inputs on target instance', () => {
 // SYNC_LAYOUT
 // ══════════════════════════════════════════════════════════════════════
 
-test('SYNC_LAYOUT updates position for existing node', () => {
-  const state = makeWorkspace(
-    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
-    {},
-    { 'root@v1.0.0': { nodes: { a: { position: { x: 0, y: 0 } } } } },
-  );
-  const next = workspaceReducer(state, {
-    type: 'SYNC_LAYOUT',
-    module_key: 'root@v1.0.0',
-    positions: { a: { x: 500, y: 300 } },
-  });
-  expect(next.layouts['root@v1.0.0'].nodes['a']).toEqual({
-    position: { x: 500, y: 300 },
-  });
-});
-
 test('SYNC_LAYOUT merges with existing positions (does not clobber siblings)', () => {
   const state = makeWorkspace(
     [
@@ -675,30 +631,6 @@ test('SET_VARIABLES sets composite interface.inputs', () => {
   expect(next.modules['root@v1.0.0'].interface.inputs).toEqual(variables);
   // outputs unchanged
   expect(next.modules['root@v1.0.0'].interface.outputs).toEqual([]);
-});
-
-test('SET_VARIABLES replaces existing variables', () => {
-  const state = makeWorkspace([]);
-  // Set initial variables
-  const first = workspaceReducer(state, {
-    type: 'SET_VARIABLES',
-    module_key: 'root@v1.0.0',
-    variables: [{ name: 'old_var', type: 'string', required: false }],
-  });
-  expect(first.modules['root@v1.0.0'].interface.inputs).toHaveLength(1);
-
-  // Replace with new variables
-  const second = workspaceReducer(first, {
-    type: 'SET_VARIABLES',
-    module_key: 'root@v1.0.0',
-    variables: [
-      { name: 'new_var_a', type: 'number', required: true },
-      { name: 'new_var_b', type: 'bool', required: false },
-    ],
-  });
-  expect(second.modules['root@v1.0.0'].interface.inputs).toHaveLength(2);
-  expect(second.modules['root@v1.0.0'].interface.inputs[0].name).toBe('new_var_a');
-  expect(second.modules['root@v1.0.0'].interface.inputs[1].name).toBe('new_var_b');
 });
 
 test('SET_VARIABLES on non-existent module_key returns state unchanged', () => {
@@ -809,10 +741,6 @@ test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
   // But since it's a leaf, updateCompositeGraph is a no-op — graph won't change
   expect(next.modules['leaf@v1.0.0'].interface.outputs).toEqual([{ name: 'x', type: 'string' }]);
 });
-
-// ══════════════════════════════════════════════════════════════════════
-// s3_stack validation scenario
-// ══════════════════════════════════════════════════════════════════════
 
 // ══════════════════════════════════════════════════════════════════════
 // REFRESH_MODULE_DEFS

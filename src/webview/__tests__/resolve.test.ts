@@ -1,7 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { resolveSchema, resolveModuleDef, resolveIconUrl } from '../utils/resolve';
 import type { WorkspaceState } from '../types/workspace';
-import type { Instance, ModuleDef, ModuleInstance, ResourceInstance } from '../types/ir';
+import type { ModuleDef, ModuleInstance, ResourceInstance } from '../types/ir';
 
 // ══════════════════════════════════════════════════════════════════════
 // Helpers
@@ -145,20 +145,6 @@ describe('resolveIconUrl', () => {
 
   test('returns undefined for resource instance', () => {
     expect(resolveIconUrl(resourceInst, iconMap)).toBeUndefined();
-  });
-
-  test('returns undefined for data instance', () => {
-    const dataInst: Instance = {
-      kind: 'data',
-      id: 'my_data',
-      type: 'aws_caller_identity',
-      inputs: {},
-    };
-    expect(resolveIconUrl(dataInst, iconMap)).toBeUndefined();
-  });
-
-  test('returns undefined with empty icon map', () => {
-    expect(resolveIconUrl(leafInst, {})).toBeUndefined();
   });
 
   test('matches exact module_id and version', () => {

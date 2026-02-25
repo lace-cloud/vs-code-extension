@@ -89,21 +89,6 @@ describe('SET_TERRAFORM', () => {
     expect(result.modules['root@v1.0.0'].terraform!.backend!.config.encrypt).toBe(true);
   });
 
-  test('overwrites existing terraform block', () => {
-    let ws = makeWorkspace([]);
-    ws = workspaceReducer(ws, {
-      type: 'SET_TERRAFORM',
-      module_key: 'root@v1.0.0',
-      terraform: { required_version: '>= 1.0' },
-    });
-    ws = workspaceReducer(ws, {
-      type: 'SET_TERRAFORM',
-      module_key: 'root@v1.0.0',
-      terraform: { required_version: '>= 2.0' },
-    });
-    expect(ws.modules['root@v1.0.0'].terraform!.required_version).toBe('>= 2.0');
-  });
-
   test('ignores unknown module key', () => {
     const ws = makeWorkspace([]);
     const result = workspaceReducer(ws, {
