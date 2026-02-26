@@ -1,44 +1,33 @@
 import { describe, it, expect } from 'vitest';
 import { emptyWorkspace, toBundle, fromBundle } from '../utils/bundle';
+import { makeModuleKey } from '../utils/identifiers';
 
 describe('emptyWorkspace', () => {
-  it('creates a valid workspace from a folder name', () => {
+  it('creates a complete empty workspace structure', () => {
     const ws = emptyWorkspace('my-project');
+    const rootKey = makeModuleKey(ws.entry.module_id, ws.entry.version);
+    const rootDef = ws.modules[rootKey];
+
+    // Entry
     expect(ws.schema_version).toBe('1.0');
     expect(ws.kind).toBe('module_bundle');
-    expect(ws.entry.module_id).toBe('my-project');
-    expect(ws.entry.version).toBe('v1.0.0');
+    expect(ws.entry).toEqual({ module_id: 'my-project', version: 'v1.0.0' });
+
+    // Root module def
+    expect(rootDef).toBeDefined();
+    expect(rootDef.kind).toBe('module_def');
+    expect(rootDef.graph.instances).toEqual([]);
+    expect(rootDef.graph.exports.outputs).toEqual({});
+    expect(rootDef.interface.inputs).toEqual([]);
+    expect(rootDef.interface.outputs).toEqual([]);
+
+    // Layout
+    expect(ws.layouts[rootKey]).toEqual({ nodes: {} });
   });
 
   it('sanitizes folder name to terraform identifier', () => {
     const ws = emptyWorkspace('My Cool Project!');
     expect(ws.entry.module_id).toBe('My_Cool_Project_');
-  });
-
-  it('has a root composite module with empty graph', () => {
-    const ws = emptyWorkspace('test');
-    const rootKey = `${ws.entry.module_id}@${ws.entry.version}`;
-    const rootDef = ws.modules[rootKey];
-
-    expect(rootDef).toBeDefined();
-    expect(rootDef.kind).toBe('module_def');
-    expect(rootDef.graph).toBeDefined();
-    expect(rootDef.graph.instances).toEqual([]);
-    expect(rootDef.graph.exports.outputs).toEqual({});
-  });
-
-  it('has an empty layout for the root module', () => {
-    const ws = emptyWorkspace('test');
-    const rootKey = `${ws.entry.module_id}@${ws.entry.version}`;
-    expect(ws.layouts?.[rootKey]).toEqual({ nodes: {} });
-  });
-
-  it('has empty interface on root module', () => {
-    const ws = emptyWorkspace('test');
-    const rootKey = `${ws.entry.module_id}@${ws.entry.version}`;
-    const rootDef = ws.modules[rootKey];
-    expect(rootDef.interface.inputs).toEqual([]);
-    expect(rootDef.interface.outputs).toEqual([]);
   });
 
   it('round-trips through toBundle → fromBundle', () => {
@@ -50,7 +39,7 @@ describe('emptyWorkspace', () => {
     expect(restored.entry).toEqual(ws.entry);
     expect(restored.schema_version).toBe(ws.schema_version);
 
-    const rootKey = `${ws.entry.module_id}@${ws.entry.version}`;
+    const rootKey = makeModuleKey(ws.entry.module_id, ws.entry.version);
     const original = ws.modules[rootKey];
     const roundTripped = restored.modules[rootKey];
 

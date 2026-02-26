@@ -1,65 +1,7 @@
 import { test, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { workspaceReducer } from '../state/reducer';
-import type { WorkspaceState } from '../types/workspace';
-import type { Instance, ModuleDef, ModuleBundle } from '../types/ir';
-
-function loadFixture(name: string): ModuleBundle {
-  return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
-}
-
-/** Build a minimal workspace with one composite and some instances */
-function makeWorkspace(
-  instances: Instance[],
-  modules: Record<string, ModuleDef> = {},
-  layouts: Record<string, any> = {},
-): WorkspaceState {
-  const moduleKey = 'root@v1.0.0';
-  const rootDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
-    id: 'root',
-    version: 'v1.0.0',
-    interface: { inputs: [], outputs: [] },
-    graph: {
-      instances,
-      exports: { outputs: {} },
-    },
-  };
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: { [moduleKey]: rootDef, ...modules },
-    layouts: {
-      [moduleKey]: layouts[moduleKey] || { nodes: {} },
-      ...layouts,
-    },
-  };
-}
-
-/** Get an instance from the root composite */
-function getInst(state: WorkspaceState, id: string): Instance {
-  const def = state.modules['root@v1.0.0'];
-  const inst = def.graph.instances.find((i) => i.id === id);
-  if (!inst) {
-    throw new Error(`Instance ${id} not found`);
-  }
-  return inst;
-}
-
-/** Get all instances from the root composite */
-function getInstances(state: WorkspaceState, key: string): Instance[] {
-  const def = state.modules[key];
-  return def.graph.instances;
-}
-
-/** Get exports from the root composite */
-function getExports(state: WorkspaceState, key: string) {
-  const def = state.modules[key];
-  return def.graph.exports.outputs;
-}
+import type { ModuleDef } from '../types/ir';
+import { loadFixture, makeWorkspace, getInst, getInstances, getExports } from './helpers';
 
 // ══════════════════════════════════════════════════════════════════════
 // CONNECT

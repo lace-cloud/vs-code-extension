@@ -8,6 +8,7 @@ import type { Instance, Binding } from '../webview/types/ir';
 import { isModuleInstance, isOut, isVar, isLit, isExpr } from '../webview/types/ir';
 import { deriveEdges } from '../webview/utils/derive';
 import { resolveSchema } from '../webview/utils/resolve';
+import { makeModuleKey } from '../webview/utils/identifiers';
 
 // ── Output types ──
 
@@ -55,7 +56,7 @@ function describeBinding(b: Binding): string {
 // ── Main ──
 
 export function summarizeGraph(workspace: WorkspaceState): GraphSummary {
-  const entryKey = `${workspace.entry.module_id}@${workspace.entry.version}`;
+  const entryKey = makeModuleKey(workspace.entry.module_id, workspace.entry.version);
   const entryDef = workspace.modules[entryKey];
 
   if (!entryDef) {

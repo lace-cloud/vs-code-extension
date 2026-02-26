@@ -1,59 +1,11 @@
 // src/webview/__tests__/terraform-config.test.ts
 import { test, expect, describe } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { workspaceReducer } from '../state/reducer';
 import { fromBundle, toBundle } from '../utils/bundle';
 import { validateWorkspace } from '../utils/validate';
-import type { WorkspaceState } from '../types/workspace';
-import type { Instance, ModuleDef, ModuleBundle } from '../types/ir';
-
-function loadFixture(name: string): any {
-  return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
-}
-
-/** Build a minimal workspace with one composite and some instances */
-function makeWorkspace(
-  instances: Instance[],
-  modules: Record<string, ModuleDef> = {},
-  layouts: Record<string, any> = {},
-): WorkspaceState {
-  const moduleKey = 'root@v1.0.0';
-  const rootDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
-    id: 'root',
-    version: 'v1.0.0',
-    interface: { inputs: [], outputs: [] },
-    graph: {
-      instances,
-      exports: { outputs: {} },
-    },
-  };
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: { [moduleKey]: rootDef, ...modules },
-    layouts: {
-      [moduleKey]: layouts[moduleKey] || { nodes: {} },
-      ...layouts,
-    },
-  };
-}
-
-function getGraph(state: WorkspaceState, key: string) {
-  const def = state.modules[key];
-  if (!def) throw new Error('Module not found');
-  return def.graph;
-}
-
-function getInst(state: WorkspaceState, id: string, key = 'root@v1.0.0'): Instance {
-  const graph = getGraph(state, key);
-  const inst = graph.instances.find((i) => i.id === id);
-  if (!inst) throw new Error(`Instance ${id} not found`);
-  return inst;
-}
+import type { ModuleDef, ModuleBundle } from '../types/ir';
+import { makeModuleKey } from '../utils/identifiers';
+import { loadFixture, makeWorkspace, getGraph, getInst } from './helpers';
 
 // ══════════════════════════════════════════════════════════════════════
 // SET_TERRAFORM
@@ -342,7 +294,7 @@ describe('Full bundle with terraform — round-trip', () => {
     expect(errors).toHaveLength(0);
 
     // Entry module loaded
-    const entryKey = `${raw.entry.module_id}@${raw.entry.version}`;
+    const entryKey = makeModuleKey(raw.entry.module_id, raw.entry.version);
     const entryDef = workspace.modules[entryKey];
     expect(entryDef).toBeDefined();
 
@@ -376,7 +328,7 @@ describe('Full bundle with terraform — round-trip', () => {
     const { workspace } = fromBundle(raw);
     const bundle = toBundle(workspace);
 
-    const entryKey = `${raw.entry.module_id}@${raw.entry.version}`;
+    const entryKey = makeModuleKey(raw.entry.module_id, raw.entry.version);
     const entryDef = bundle.modules[entryKey];
 
     // Terraform block round-trips

@@ -6,11 +6,24 @@ import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import type { RegistryModule } from '../../types/protocol';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
+import { makeModuleKey } from '../../webview/utils/identifiers';
 
 export type RegistryToolDeps = {
   getRpcClient: () => JSONRPCClient | null;
   getRegistryModules: () => RegistryModule[];
 };
+
+function formatModuleLine(m: {
+  name: string;
+  system: string;
+  version: string;
+  categories?: string[];
+  description?: string;
+}): string {
+  const cats = m.categories?.length ? ` [${m.categories.join(', ')}]` : '';
+  const desc = m.description ? ` — ${m.description}` : '';
+  return `- **${m.name}** (${m.system}, v${m.version})${cats}${desc}`;
+}
 
 export function registerRegistryTools(deps: RegistryToolDeps): void {
   registerTool('lace_search_registry', async (params): Promise<ToolResult> => {
@@ -35,11 +48,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
           return { content: 'No modules found matching your search.' };
         }
 
-        const lines = modules.map((m: any) => {
-          const cats = m.categories?.length ? ` [${m.categories.join(', ')}]` : '';
-          const desc = m.description ? ` — ${m.description}` : '';
-          return `- **${m.name}** (${m.system}, v${m.version})${cats}${desc}`;
-        });
+        const lines = modules.map(formatModuleLine);
 
         return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
       } catch (err: any) {
@@ -72,11 +81,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
       return { content: 'No modules found matching your search.' };
     }
 
-    const lines = modules.map((m) => {
-      const cats = m.categories?.length ? ` [${m.categories.join(', ')}]` : '';
-      const desc = m.description ? ` — ${m.description}` : '';
-      return `- **${m.name}** (${m.system}, v${m.version})${cats}${desc}`;
-    });
+    const lines = modules.map(formatModuleLine);
 
     return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
   });
@@ -154,7 +159,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
       }
 
       // Extract the entry module's interface from the deploy bundle
-      const entryKey = `${deployBundle.entry.module_id}@${deployBundle.entry.version}`;
+      const entryKey = makeModuleKey(deployBundle.entry.module_id, deployBundle.entry.version);
       const entryDef = deployBundle.modules?.[entryKey];
 
       const lines: string[] = [];

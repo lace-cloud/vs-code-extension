@@ -32,6 +32,7 @@ import { CanvasContext, type CanvasCallbacks } from './state/context';
 import { deriveEdges } from './utils/derive';
 import { resolveSchema, resolveIconUrl } from './utils/resolve';
 import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
+import { makeModuleKey } from './utils/identifiers';
 import {
   inferVariables,
   inferOutputExports,
@@ -50,6 +51,12 @@ const nodeTypes = {
 function postToHost(msg: WebviewToHost) {
   window.vscode.postMessage(msg);
 }
+
+// ── Toast duration constants ──
+
+const TOAST_BRIEF = 1500;
+const TOAST_INFO = 3000;
+const TOAST_SLOW = 5000;
 
 // ══════════════════════════════════════════════════════════════════════
 // CompositeEditor — renders the ReactFlow viewport for a valid graph.
@@ -322,7 +329,7 @@ export default function Canvas() {
   const [iconMap, setIconMap] = useState<Record<string, string>>({});
 
   // ── Active module key (entry composite) ──
-  const module_key = `${workspace.entry.module_id}@${workspace.entry.version}`;
+  const module_key = makeModuleKey(workspace.entry.module_id, workspace.entry.version);
   const rootDef = workspace.modules[module_key];
 
   // Stable ref for workspace (used in message handler to avoid stale closure)
@@ -383,7 +390,7 @@ export default function Canvas() {
   // ── Refresh action (re-fetch module defs from registry) ──
   const onRefresh = useCallback(() => {
     const ws = workspaceRef.current;
-    const entryKey = `${ws.entry.module_id}@${ws.entry.version}`;
+    const entryKey = makeModuleKey(ws.entry.module_id, ws.entry.version);
     const module_keys: Record<string, { id: string; version: string }> = {};
     for (const [key, def] of Object.entries(ws.modules)) {
       if (key !== entryKey) {
@@ -392,7 +399,7 @@ export default function Canvas() {
     }
     postToHost({ command: 'refreshModules', module_keys });
     setStatusMessage('Refreshing...');
-    setTimeout(() => setStatusMessage(null), 5000);
+    setTimeout(() => setStatusMessage(null), TOAST_SLOW);
   }, []);
 
   // ── Single-module refresh (called from ModuleNode hover button) ──
@@ -402,7 +409,7 @@ export default function Canvas() {
       module_keys: { [moduleKey]: { id, version } },
     });
     setStatusMessage('Refreshing...');
-    setTimeout(() => setStatusMessage(null), 5000);
+    setTimeout(() => setStatusMessage(null), TOAST_SLOW);
   }, []);
 
   // ── Expose dispatch globally for ModuleNode rename/delete/refresh/undo ──
@@ -532,7 +539,7 @@ export default function Canvas() {
   }, [semanticDispatch]);
 
   // ── Generate: enrich bundle with inference then post to host ──
-  const onGenerate = useCallback(() => {
+  const enrichAndGenerate = useCallback(() => {
     const ws = workspaceRef.current;
     const mk = moduleKeyRef.current;
     const bundle = toBundle(ws);
@@ -600,57 +607,24 @@ export default function Canvas() {
           setIsDirty(false);
           isDirtyRef.current = false;
           setStatusMessage('Saved');
-          setTimeout(() => setStatusMessage(null), 1500);
+          setTimeout(() => setStatusMessage(null), TOAST_BRIEF);
           break;
         }
 
         case 'triggerGenerate': {
-          // Delegate to the same onGenerate logic used by ActionBar
-          const ws = workspaceRef.current;
-          const mk = moduleKeyRef.current;
-          const bundle = toBundle(ws);
-          const entryDef = bundle.modules[mk];
-
-          if (entryDef) {
-            const graph = entryDef.graph;
-            const resolve = (inst: Instance) => resolveSchema(ws, inst);
-
-            const inferredVars = inferVariables(graph.instances);
-            const inferredExports = inferOutputExports(graph.instances, resolve);
-            const mergedExports = { ...inferredExports, ...graph.exports.outputs };
-            const inferredOutputs = inferOutputDefs(mergedExports, graph.instances, resolve);
-            const inferredProviders = inferRequiredProviders(bundle.modules, mk);
-
-            bundle.modules[mk] = {
-              ...entryDef,
-              interface: {
-                inputs: inferredVars,
-                outputs: inferredOutputs,
-              },
-              graph: { ...graph, exports: { outputs: mergedExports } },
-              terraform: {
-                ...entryDef.terraform,
-                required_providers: {
-                  ...inferredProviders,
-                  ...entryDef.terraform?.required_providers,
-                },
-              },
-            };
-          }
-
-          postToHost({ command: 'generateBundle', bundle });
+          enrichAndGenerate();
           break;
         }
 
         case 'generateSuccess': {
           setStatusMessage('Successfully generated');
-          setTimeout(() => setStatusMessage(null), 3000);
+          setTimeout(() => setStatusMessage(null), TOAST_INFO);
           break;
         }
 
         case 'generateError': {
           setStatusMessage(`Generate error: ${msg.message}`);
-          setTimeout(() => setStatusMessage(null), 5000);
+          setTimeout(() => setStatusMessage(null), TOAST_SLOW);
           break;
         }
 
@@ -661,7 +635,7 @@ export default function Canvas() {
           // Store icon_url for this module (from registry metadata)
           const dropIconUrl: string | undefined = msg.icon_url;
           if (dropIconUrl) {
-            const iconKey = `${deployBundle.entry.module_id}@${deployBundle.entry.version}`;
+            const iconKey = makeModuleKey(deployBundle.entry.module_id, deployBundle.entry.version);
             setIconMap((prev) => ({ ...prev, [iconKey]: dropIconUrl }));
           }
 
@@ -672,7 +646,7 @@ export default function Canvas() {
           }
 
           // Build positions map for entry composite's instances
-          const entryKey = `${deployBundle.entry.module_id}@${deployBundle.entry.version}`;
+          const entryKey = makeModuleKey(deployBundle.entry.module_id, deployBundle.entry.version);
           const entryDef = parsed.modules[entryKey];
           const positions: Record<string, { x: number; y: number }> = {};
 
@@ -735,7 +709,7 @@ export default function Canvas() {
             setStatusMessage('All modules up to date');
           }
           // Host sends triggerSave after this to persist the reconciled state.
-          setTimeout(() => setStatusMessage(null), 3000);
+          setTimeout(() => setStatusMessage(null), TOAST_INFO);
           break;
         }
 
@@ -743,7 +717,7 @@ export default function Canvas() {
           setValidationErrors(msg.errors ?? []);
           if (msg.errors?.length > 0) {
             setStatusMessage(`Validation: ${msg.errors.length} error(s) found`);
-            setTimeout(() => setStatusMessage(null), 5000);
+            setTimeout(() => setStatusMessage(null), TOAST_SLOW);
           }
           break;
         }
@@ -841,7 +815,7 @@ export default function Canvas() {
             onRefresh={onRefresh}
             onUndo={onUndo}
             onClearGraph={onClearGraph}
-            onGenerate={onGenerate}
+            onGenerate={enrichAndGenerate}
             onOpenSettings={onOpenSettings}
           />
 

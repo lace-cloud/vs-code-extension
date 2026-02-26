@@ -1,5 +1,6 @@
 import type { WorkspaceState } from '../types/workspace';
 import { isOut, isModuleInstance, isOutExport } from '../types/ir';
+import { depBareId, makeModuleKey } from './identifiers';
 
 export type GraphError = {
   module_key?: string;
@@ -45,7 +46,7 @@ export function validateWorkspace(workspace: WorkspaceState): GraphError[] {
       if (inst.depends_on) {
         for (const dep of inst.depends_on) {
           // depends_on may use "module.NAME" format — strip prefix for lookup
-          const bareId = dep.startsWith('module.') ? dep.slice(7) : dep;
+          const bareId = depBareId(dep);
           if (!instanceIds.has(bareId) && !instanceIds.has(dep)) {
             errors.push({
               module_key: key,
@@ -58,7 +59,7 @@ export function validateWorkspace(workspace: WorkspaceState): GraphError[] {
 
       // Check: use references pointing to modules not in workspace
       if (isModuleInstance(inst)) {
-        const refKey = `${inst.use.module_id}@${inst.use.version}`;
+        const refKey = makeModuleKey(inst.use.module_id, inst.use.version);
         const found =
           workspace.modules[refKey] ||
           Object.values(workspace.modules).some((m) => m.id === inst.use.module_id);

@@ -1,12 +1,8 @@
 import { test, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { fromBundle, toBundle } from '../utils/bundle';
 import type { ModuleBundle } from '../types/ir';
-
-function loadFixture(name: string): any {
-  return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
-}
+import { makeModuleKey } from '../utils/identifiers';
+import { loadFixture } from './helpers';
 
 test('round-trip: leaf deploy_bundle', () => {
   const original = loadFixture('leaf_deploy_bundle.json');
@@ -80,7 +76,7 @@ test('fromBundle normalizes instance kind: empty → module', () => {
 test('fromBundle strips wires from graph', () => {
   const original = loadFixture('composite_deploy_bundle.json');
   const { workspace } = fromBundle(original);
-  const entryKey = `${original.entry.module_id}@${original.entry.version}`;
+  const entryKey = makeModuleKey(original.entry.module_id, original.entry.version);
   const def = workspace.modules[entryKey];
   expect(def.graph.wires).toBeUndefined();
 });

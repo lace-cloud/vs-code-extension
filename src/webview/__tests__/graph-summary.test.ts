@@ -1,69 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { summarizeGraph } from '../../chat/graph-summary';
-import type { WorkspaceState } from '../types/workspace';
-import type { ModuleDef, Instance } from '../types/ir';
-
-/** Build a minimal workspace for summarizer testing */
-function makeWorkspace(
-  instances: Instance[],
-  exports: Record<string, any> = {},
-  extraModules: Record<string, ModuleDef> = {},
-  variables: { name: string; type: string; required: boolean }[] = [],
-): WorkspaceState {
-  const moduleKey = 'root@v1.0.0';
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: {
-      [moduleKey]: {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: 'root',
-        version: 'v1.0.0',
-        interface: { inputs: variables, outputs: [] },
-        graph: {
-          instances,
-          exports: { outputs: exports },
-        },
-      },
-      ...extraModules,
-    },
-    layouts: {},
-  };
-}
-
-const vpcDef: ModuleDef = {
-  schema_version: '1.0',
-  kind: 'module_def',
-  id: 'aws/vpc',
-  version: 'v1.0.0',
-  interface: {
-    inputs: [
-      { name: 'cidr_block', type: 'string', required: true },
-      { name: 'enable_dns', type: 'bool', required: false },
-    ],
-    outputs: [{ name: 'vpc_id', type: 'string' }],
-  },
-  source: { kind: 'registry' },
-  graph: { instances: [], exports: { outputs: {} } },
-};
-
-const subnetDef: ModuleDef = {
-  schema_version: '1.0',
-  kind: 'module_def',
-  id: 'aws/subnet',
-  version: 'v1.0.0',
-  interface: {
-    inputs: [
-      { name: 'vpc_id', type: 'string', required: true },
-      { name: 'cidr_block', type: 'string', required: true },
-    ],
-    outputs: [{ name: 'subnet_id', type: 'string' }],
-  },
-  source: { kind: 'registry' },
-  graph: { instances: [], exports: { outputs: {} } },
-};
+import { makeWorkspace, vpcDef, subnetDef } from './helpers';
 
 describe('summarizeGraph', () => {
   test('empty canvas', () => {
@@ -85,7 +22,6 @@ describe('summarizeGraph', () => {
           inputs: { cidr_block: { lit: '10.0.0.0/16' } },
         },
       ],
-      {},
       { 'aws/vpc@v1.0.0': vpcDef },
     );
     const summary = summarizeGraph(ws);
@@ -108,7 +44,6 @@ describe('summarizeGraph', () => {
           inputs: {},
         },
       ],
-      {},
       { 'aws/vpc@v1.0.0': vpcDef },
     );
     const summary = summarizeGraph(ws);
@@ -138,7 +73,6 @@ describe('summarizeGraph', () => {
           },
         },
       ],
-      {},
       { 'aws/vpc@v1.0.0': vpcDef, 'aws/subnet@v1.0.0': subnetDef },
     );
     const summary = summarizeGraph(ws);
@@ -166,7 +100,6 @@ describe('summarizeGraph', () => {
           },
         },
       ],
-      {},
       { 'aws/vpc@v1.0.0': vpcDef },
     );
     const summary = summarizeGraph(ws);
@@ -187,8 +120,9 @@ describe('summarizeGraph', () => {
           inputs: { cidr_block: { var: 'vpc_cidr' } },
         },
       ],
-      { vpc_id: { out: { module: 'vpc', name: 'vpc_id' } } },
       { 'aws/vpc@v1.0.0': vpcDef },
+      {},
+      { vpc_id: { out: { module: 'vpc', name: 'vpc_id' } } },
       [{ name: 'vpc_cidr', type: 'string', required: true }],
     );
     const summary = summarizeGraph(ws);

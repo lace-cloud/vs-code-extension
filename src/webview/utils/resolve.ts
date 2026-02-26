@@ -1,6 +1,7 @@
 import type { Instance, ModuleDef, InputDef, OutputDef } from '../types/ir';
 import { isModuleInstance } from '../types/ir';
 import type { WorkspaceState } from '../types/workspace';
+import { makeModuleKey } from './identifiers';
 
 export type ResolvedSchema = { inputs: InputDef[]; outputs: OutputDef[] };
 const EMPTY_SCHEMA: ResolvedSchema = { inputs: [], outputs: [] };
@@ -9,7 +10,7 @@ export function resolveModuleDef(workspace: WorkspaceState, inst: Instance): Mod
   if (!isModuleInstance(inst)) {
     return undefined;
   }
-  const exactKey = `${inst.use.module_id}@${inst.use.version}`;
+  const exactKey = makeModuleKey(inst.use.module_id, inst.use.version);
   if (workspace.modules[exactKey]) {
     return workspace.modules[exactKey];
   }
@@ -34,6 +35,6 @@ export function resolveIconUrl(
   iconMap: Record<string, string>,
 ): string | undefined {
   if (!isModuleInstance(inst)) return undefined;
-  const key = `${inst.use.module_id}@${inst.use.version}`;
+  const key = makeModuleKey(inst.use.module_id, inst.use.version);
   return iconMap[key];
 }

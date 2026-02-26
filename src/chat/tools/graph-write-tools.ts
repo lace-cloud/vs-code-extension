@@ -11,7 +11,7 @@ import { isModuleInstance } from '../../webview/types/ir';
 import type { WorkspaceAction } from '../../webview/state/reducer';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { isValidTerraformIdentifier } from '../../webview/utils/identifiers';
+import { isValidTerraformIdentifier, makeModuleKey } from '../../webview/utils/identifiers';
 
 export type GraphWriteDeps = {
   getRpcClient: () => JSONRPCClient | null;
@@ -25,7 +25,7 @@ export type GraphWriteDeps = {
 
 /** Get the entry module key and the composite graph from workspace state. */
 function getEntryGraph(state: WorkspaceState) {
-  const entryKey = `${state.entry.module_id}@${state.entry.version}`;
+  const entryKey = makeModuleKey(state.entry.module_id, state.entry.version);
   const entryDef = state.modules[entryKey];
   if (!entryDef) return undefined;
   return { entryKey, graph: entryDef.graph };

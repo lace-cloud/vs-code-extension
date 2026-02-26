@@ -1,177 +1,74 @@
 import { test, expect, describe, beforeEach, vi } from 'vitest';
 import type { WorkspaceState } from '../types/workspace';
 import type { WorkspaceAction } from '../state/reducer';
-import type { ModuleDef } from '../types/ir';
 import { getToolHandler } from '../../chat/tool-registry';
 import { registerGraphWriteTools, type GraphWriteDeps } from '../../chat/tools/graph-write-tools';
 import { registerGraphReadTools } from '../../chat/tools/graph-read-tools';
 import { registerGenerateTools, type GenerateToolDeps } from '../../chat/tools/generate-tools';
+import { makeWorkspace, makeEmptyWorkspace, vpcDef, subnetDef } from './helpers';
 
-// ── Test workspace builder ──
+// ── Pre-built workspace variants ──
 
-const vpcDef: ModuleDef = {
-  schema_version: '1.0',
-  kind: 'module_def',
-  id: 'aws/vpc',
-  version: 'v1.0.0',
-  interface: {
-    inputs: [
-      { name: 'cidr_block', type: 'string', required: true },
-      { name: 'enable_dns', type: 'bool', required: false },
-    ],
-    outputs: [{ name: 'vpc_id', type: 'string' }],
-  },
-  source: { kind: 'registry' },
-  graph: { instances: [], exports: { outputs: {} } },
-};
-
-const subnetDef: ModuleDef = {
-  schema_version: '1.0',
-  kind: 'module_def',
-  id: 'aws/subnet',
-  version: 'v1.0.0',
-  interface: {
-    inputs: [
-      { name: 'vpc_id', type: 'string', required: true },
-      { name: 'cidr_block', type: 'string', required: true },
-    ],
-    outputs: [{ name: 'subnet_id', type: 'string' }],
-  },
-  source: { kind: 'registry' },
-  graph: { instances: [], exports: { outputs: {} } },
-};
+const vpcSubnetModules = { 'aws/vpc@v1.0.0': vpcDef, 'aws/subnet@v1.0.0': subnetDef };
 
 function makeWorkspaceWithInstances(): WorkspaceState {
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: {
-      'root@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: 'root',
-        version: 'v1.0.0',
-        interface: { inputs: [], outputs: [] },
-        graph: {
-          instances: [
-            {
-              kind: 'module',
-              id: 'vpc',
-              use: { module_id: 'aws/vpc', version: 'v1.0.0' },
-              inputs: { cidr_block: { lit: '10.0.0.0/16' } },
-            },
-            {
-              kind: 'module',
-              id: 'subnet',
-              use: { module_id: 'aws/subnet', version: 'v1.0.0' },
-              inputs: {
-                vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
-                cidr_block: { lit: '10.0.1.0/24' },
-              },
-            },
-          ],
-          exports: { outputs: {} },
+  return makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'vpc',
+        use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+        inputs: { cidr_block: { lit: '10.0.0.0/16' } },
+      },
+      {
+        kind: 'module',
+        id: 'subnet',
+        use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+        inputs: {
+          vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
+          cidr_block: { lit: '10.0.1.0/24' },
         },
       },
-      'aws/vpc@v1.0.0': vpcDef,
-      'aws/subnet@v1.0.0': subnetDef,
-    },
-    layouts: {},
-  };
+    ],
+    vpcSubnetModules,
+  );
 }
 
-/** Workspace where subnet has only cidr_block bound — vpc_id is unbound. */
 function makeWorkspaceWithUnboundSubnet(): WorkspaceState {
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: {
-      'root@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: 'root',
-        version: 'v1.0.0',
-        interface: { inputs: [], outputs: [] },
-        graph: {
-          instances: [
-            {
-              kind: 'module',
-              id: 'vpc',
-              use: { module_id: 'aws/vpc', version: 'v1.0.0' },
-              inputs: { cidr_block: { lit: '10.0.0.0/16' } },
-            },
-            {
-              kind: 'module',
-              id: 'subnet',
-              use: { module_id: 'aws/subnet', version: 'v1.0.0' },
-              inputs: {
-                cidr_block: { lit: '10.0.1.0/24' },
-              },
-            },
-          ],
-          exports: { outputs: {} },
-        },
+  return makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'vpc',
+        use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+        inputs: { cidr_block: { lit: '10.0.0.0/16' } },
       },
-      'aws/vpc@v1.0.0': vpcDef,
-      'aws/subnet@v1.0.0': subnetDef,
-    },
-    layouts: {},
-  };
+      {
+        kind: 'module',
+        id: 'subnet',
+        use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+        inputs: { cidr_block: { lit: '10.0.1.0/24' } },
+      },
+    ],
+    vpcSubnetModules,
+  );
 }
 
-function makeEmptyWorkspace(): WorkspaceState {
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: {
-      'root@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: 'root',
-        version: 'v1.0.0',
-        interface: { inputs: [], outputs: [] },
-        graph: { instances: [], exports: { outputs: {} } },
-      },
-    },
-    layouts: {},
-  };
-}
-
-/** Workspace where subnet has a dangling `out` reference to nonexistent instance. */
 function makeWorkspaceWithDanglingRef(): WorkspaceState {
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: {
-      'root@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: 'root',
-        version: 'v1.0.0',
-        interface: { inputs: [], outputs: [] },
-        graph: {
-          instances: [
-            {
-              kind: 'module',
-              id: 'subnet',
-              use: { module_id: 'aws/subnet', version: 'v1.0.0' },
-              inputs: {
-                vpc_id: { out: { module: 'ghost', name: 'vpc_id' } },
-                cidr_block: { lit: '10.0.1.0/24' },
-              },
-            },
-          ],
-          exports: { outputs: {} },
+  return makeWorkspace(
+    [
+      {
+        kind: 'module',
+        id: 'subnet',
+        use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+        inputs: {
+          vpc_id: { out: { module: 'ghost', name: 'vpc_id' } },
+          cidr_block: { lit: '10.0.1.0/24' },
         },
       },
-      'aws/subnet@v1.0.0': subnetDef,
-    },
-    layouts: {},
-  };
+    ],
+    { 'aws/subnet@v1.0.0': subnetDef },
+  );
 }
 
 // ── Test setup ──

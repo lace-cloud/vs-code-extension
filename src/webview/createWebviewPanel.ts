@@ -88,42 +88,36 @@ export function isCanvasOpen(): boolean {
   return canvasPanel !== undefined;
 }
 
-/** Request the current graph state from the webview (async, 5s timeout). */
-export function requestGraphState(): Promise<WorkspaceState> {
+/** Send a request to the webview and wait for a response (UUID-correlated, 5s timeout). */
+function makeWebviewRequest<T>(label: string, msg: Omit<HostToWebview, 'requestId'>): Promise<T> {
   if (!canvasPanel) {
     return Promise.reject(new Error('No canvas open'));
   }
   const requestId = randomUUID();
-  return new Promise<WorkspaceState>((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => {
       pendingRequests.delete(requestId);
-      reject(new Error('requestGraphState timed out'));
+      reject(new Error(`${label} timed out`));
     }, WEBVIEW_REQUEST_TIMEOUT_MS);
 
     pendingRequests.set(requestId, { resolve, reject, timeout });
-    postToWebview(canvasPanel!, { command: 'getGraphState', requestId });
+    postToWebview(canvasPanel!, { ...msg, requestId } as HostToWebview);
   });
+}
+
+/** Request the current graph state from the webview (async, 5s timeout). */
+export function requestGraphState(): Promise<WorkspaceState> {
+  return makeWebviewRequest<WorkspaceState>('requestGraphState', {
+    command: 'getGraphState',
+  } as any);
 }
 
 /** Dispatch a reducer action to the canvas webview (async, 5s timeout). */
 export function dispatchToCanvas(action: import('./state/reducer').WorkspaceAction): Promise<void> {
-  if (!canvasPanel) {
-    return Promise.reject(new Error('No canvas open'));
-  }
-  const requestId = randomUUID();
-  return new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      pendingRequests.delete(requestId);
-      reject(new Error('dispatchToCanvas timed out'));
-    }, WEBVIEW_REQUEST_TIMEOUT_MS);
-
-    pendingRequests.set(requestId, {
-      resolve,
-      reject,
-      timeout,
-    });
-    postToWebview(canvasPanel!, { command: 'dispatchAction', requestId, action });
-  });
+  return makeWebviewRequest<void>('dispatchToCanvas', {
+    command: 'dispatchAction',
+    action,
+  } as any);
 }
 
 /* ── Typed message helpers ── */

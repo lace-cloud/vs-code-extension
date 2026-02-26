@@ -8,6 +8,7 @@ import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { resolveSchema } from '../../webview/utils/resolve';
 import { findAutoConnections } from '../auto-connect';
+import { makeModuleKey } from '../../webview/utils/identifiers';
 
 export type GenerateToolDeps = {
   requestGraphState: () => Promise<WorkspaceState>;
@@ -37,7 +38,7 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
       return { content: `Cannot read canvas: ${err.message}`, isError: true };
     }
 
-    const entryKey = `${state.entry.module_id}@${state.entry.version}`;
+    const entryKey = makeModuleKey(state.entry.module_id, state.entry.version);
     const entryDef = state.modules[entryKey];
     if (!entryDef) {
       return { content: 'Canvas has no composite graph.', isError: true };

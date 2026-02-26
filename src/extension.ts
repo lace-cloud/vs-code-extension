@@ -22,6 +22,7 @@ import { registerChatParticipant } from './chat/participant';
 
 import { fromBundle } from './webview/utils/bundle';
 import type { ModuleDef } from './webview/types/ir';
+import { makeModuleKey } from './webview/utils/identifiers';
 
 import { ServerManager } from './utilities/engine/server-manager';
 import { requireClient, handleRpcError } from './utilities/engine/rpc-errors';
@@ -286,7 +287,10 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
 
                 const { workspace: parsed } = fromBundle(deployBundle);
-                const parsedEntryKey = `${deployBundle.entry.module_id}@${deployBundle.entry.version}`;
+                const parsedEntryKey = makeModuleKey(
+                  deployBundle.entry.module_id,
+                  deployBundle.entry.version,
+                );
 
                 // Collect non-entry module defs
                 for (const [defKey, def] of Object.entries(parsed.modules)) {

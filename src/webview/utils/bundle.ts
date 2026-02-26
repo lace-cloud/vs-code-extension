@@ -12,7 +12,7 @@ import type {
 import type { WorkspaceState, GraphLayout } from '../types/workspace';
 import { mapRecord } from './record';
 import { deriveWires } from './derive';
-import { toTerraformIdentifier } from './identifiers';
+import { toTerraformIdentifier, makeModuleKey } from './identifiers';
 
 // ── Layout Hints ──
 
@@ -29,8 +29,8 @@ type ParsedEntry = { def: ModuleDef; layout?: GraphLayout };
 
 // ── Layout Constants ──
 
-const SPACING_X = 260;
-const SPACING_Y = 180;
+export const SPACING_X = 260;
+export const SPACING_Y = 180;
 
 // ══════════════════════════════════════════════════════════════════════
 // toBundle
@@ -165,10 +165,17 @@ function normalizeInstance(raw: any): Instance {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// normalizeBinding
+// normalizeBinding / normalizeOutputExport
 // ══════════════════════════════════════════════════════════════════════
 
-export function normalizeBinding(raw: any): Binding {
+/**
+ * Normalize a raw binding/export from the Go wire format into exactly one
+ * discriminated union variant: { out }, { var }, { expr }, or { lit }.
+ *
+ * Expected input shape (Go Binding with omitempty):
+ *   { out?: { module, name }, var?: string, expr?: { lang, value }, lit?: any }
+ */
+function normalizeBindingShape(raw: any): Binding {
   if (raw.out && raw.out.module && raw.out.name) {
     return { out: { module: raw.out.module, name: raw.out.name } };
   }
@@ -181,22 +188,12 @@ export function normalizeBinding(raw: any): Binding {
   return { lit: raw.lit ?? null };
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// normalizeOutputExport
-// ══════════════════════════════════════════════════════════════════════
+export function normalizeBinding(raw: any): Binding {
+  return normalizeBindingShape(raw);
+}
 
-export function normalizeOutputExport(raw: any): OutputExport {
-  // Same logic as normalizeBinding — same shapes
-  if (raw.out && raw.out.module && raw.out.name) {
-    return { out: { module: raw.out.module, name: raw.out.name } };
-  }
-  if (typeof raw.var === 'string' && raw.var !== '') {
-    return { var: raw.var };
-  }
-  if (raw.expr && raw.expr.lang && raw.expr.value) {
-    return { expr: { lang: raw.expr.lang, value: raw.expr.value } };
-  }
-  return { lit: raw.lit ?? null };
+function normalizeOutputExport(raw: any): OutputExport {
+  return normalizeBindingShape(raw) as OutputExport;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -229,7 +226,7 @@ export function computeLayout(
 
 export function emptyWorkspace(name: string): WorkspaceState {
   const root_id = toTerraformIdentifier(name);
-  const root_key = `${root_id}@v1.0.0`;
+  const root_key = makeModuleKey(root_id, 'v1.0.0');
   return {
     schema_version: '1.0',
     kind: 'module_bundle',

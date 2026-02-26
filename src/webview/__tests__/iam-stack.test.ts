@@ -1,34 +1,10 @@
 import { describe, test, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { fromBundle, toBundle } from '../utils/bundle';
 import { workspaceReducer } from '../state/reducer';
 import { validateWorkspace } from '../utils/validate';
 import type { ModuleBundle } from '../types/ir';
 import type { WorkspaceState } from '../types/workspace';
-
-function loadFixture(name: string): ModuleBundle {
-  return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
-}
-
-function makeEmptyWorkspace(): WorkspaceState {
-  return {
-    schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
-    modules: {
-      'root@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
-        id: 'root',
-        version: 'v1.0.0',
-        interface: { inputs: [], outputs: [] },
-        graph: { instances: [], exports: { outputs: {} } },
-      },
-    },
-    layouts: { 'root@v1.0.0': { nodes: {} } },
-  };
-}
+import { loadFixture, makeEmptyWorkspace } from './helpers';
 
 function dropBundle(fixture: ModuleBundle): WorkspaceState {
   return workspaceReducer(makeEmptyWorkspace(), {

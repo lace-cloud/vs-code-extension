@@ -13,7 +13,8 @@ import type {
 } from '../types/ir';
 import { isOut, isVar, isOutExport, isModuleInstance } from '../types/ir';
 import type { WorkspaceState } from '../types/workspace';
-import { uniqueInstanceId } from '../utils/identifiers';
+import { uniqueInstanceId, depBareId, makeModuleKey } from '../utils/identifiers';
+import { computeLayout } from '../utils/bundle';
 
 // ══════════════════════════════════════════════════════════════════════
 // WorkspaceAction — full type union (all phases)
@@ -105,8 +106,28 @@ function depRenameInstance(dep: string, oldId: string, newId: string): string {
   return dep;
 }
 
-function depBareId(dep: string): string {
-  return dep.startsWith('module.') ? dep.slice(7) : dep;
+// ══════════════════════════════════════════════════════════════════════
+// Binding / depends_on transform helpers
+// ══════════════════════════════════════════════════════════════════════
+
+/** Transform each binding in an input map. Return undefined from fn to remove the entry. */
+function mapBindings(
+  inputs: Record<string, Binding>,
+  fn: (binding: Binding, name: string) => Binding | undefined,
+): Record<string, Binding> {
+  const result: Record<string, Binding> = {};
+  for (const [name, binding] of Object.entries(inputs)) {
+    const mapped = fn(binding, name);
+    if (mapped !== undefined) {
+      result[name] = mapped;
+    }
+  }
+  return result;
+}
+
+/** Normalize depends_on: empty/undefined → omit. */
+function normalizeDependsOn(deps: string[] | undefined): { depends_on: string[] } | {} {
+  return deps && deps.length > 0 ? { depends_on: deps } : {};
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -187,7 +208,7 @@ function flattenInstances(
       continue;
     }
 
-    const defKey = `${inst.use.module_id}@${inst.use.version}`;
+    const defKey = makeModuleKey(inst.use.module_id, inst.use.version);
     const def =
       allModules[defKey] ?? Object.values(allModules).find((m) => m.id === inst.use.module_id);
 
@@ -235,12 +256,60 @@ function flattenInstances(
   return result;
 }
 
+/** Deduplicate instance IDs against existing ones and cascade renames through bindings. */
+function resolveIdCollisions(
+  instances: Instance[],
+  existingIds: Set<string>,
+): { instances: Instance[]; renameMap: Map<string, string> } {
+  const renameMap = new Map<string, string>();
+  const ids = new Set(existingIds);
+
+  for (const inst of instances) {
+    const newId = uniqueInstanceId(inst.id, ids);
+    if (newId !== inst.id) {
+      renameMap.set(inst.id, newId);
+    }
+    ids.add(newId);
+  }
+
+  if (renameMap.size === 0) {
+    return { instances, renameMap };
+  }
+
+  const renamed = instances.map((inst) => {
+    const newId = renameMap.get(inst.id) ?? inst.id;
+
+    const newInputs = mapBindings(inst.inputs, (binding) => {
+      if (isOut(binding) && renameMap.has(binding.out.module)) {
+        return { out: { module: renameMap.get(binding.out.module)!, name: binding.out.name } };
+      }
+      return binding;
+    });
+
+    const newDependsOn = inst.depends_on?.map((dep) => {
+      const bare = depBareId(dep);
+      const renamed = renameMap.get(bare);
+      if (renamed) return dep.startsWith('module.') ? `module.${renamed}` : renamed;
+      return dep;
+    });
+
+    return {
+      ...inst,
+      id: newId,
+      inputs: newInputs,
+      ...normalizeDependsOn(newDependsOn),
+    } as Instance;
+  });
+
+  return { instances: renamed, renameMap };
+}
+
 function handleDropBundle(
   state: WorkspaceState,
   action: Extract<WorkspaceAction, { type: 'DROP_BUNDLE' }>,
 ): WorkspaceState {
   const { module_key, deploy_bundle, positions } = action;
-  const entryKey = `${deploy_bundle.entry.module_id}@${deploy_bundle.entry.version}`;
+  const entryKey = makeModuleKey(deploy_bundle.entry.module_id, deploy_bundle.entry.version);
   const entryDef = deploy_bundle.modules[entryKey];
 
   if (!entryDef) {
@@ -271,68 +340,23 @@ function handleDropBundle(
     allModulesForResolution,
   );
 
-  // 4. Handle ID collisions
-  const renameMap = new Map<string, string>(); // old_id → new_id
-
-  for (const inst of entryInstances) {
-    const newId = uniqueInstanceId(inst.id, existingIds);
-    if (newId !== inst.id) {
-      renameMap.set(inst.id, newId);
-    }
-    existingIds.add(newId);
-  }
-
-  // Apply renames to instances
-  const newInstances: Instance[] = entryInstances.map((inst) => {
-    const newId = renameMap.get(inst.id) ?? inst.id;
-
-    // Update out bindings within the dropped set that reference renamed instances
-    const newInputs: Record<string, Binding> = {};
-    for (const [name, binding] of Object.entries(inst.inputs)) {
-      if (isOut(binding) && renameMap.has(binding.out.module)) {
-        newInputs[name] = {
-          out: { module: renameMap.get(binding.out.module)!, name: binding.out.name },
-        };
-      } else {
-        newInputs[name] = binding;
-      }
-    }
-
-    // Update depends_on references (entries may be "module.X" format)
-    const newDependsOn = inst.depends_on?.map((dep) => {
-      const bare = depBareId(dep);
-      const renamed = renameMap.get(bare);
-      if (renamed) {
-        return dep.startsWith('module.') ? `module.${renamed}` : renamed;
-      }
-      return dep;
-    });
-
-    return {
-      ...inst,
-      id: newId,
-      inputs: newInputs,
-      ...(newDependsOn ? { depends_on: newDependsOn } : {}),
-    } as Instance;
-  });
+  // 4. Handle ID collisions and apply renames
+  const { instances: newInstances, renameMap } = resolveIdCollisions(entryInstances, existingIds);
 
   // 5. Add layout entries from positions
   const existingLayout = state.layouts[module_key] || { nodes: {} };
-  const newLayoutNodes = { ...existingLayout.nodes };
+  // Build position hints: prefer user-supplied positions, map renamed IDs
+  const positionHints: Record<string, { x: number; y: number }> = {};
   for (const inst of newInstances) {
     const originalId = [...renameMap.entries()].find(([, v]) => v === inst.id)?.[0] ?? inst.id;
     if (positions[originalId]) {
-      newLayoutNodes[inst.id] = { position: positions[originalId] };
+      positionHints[inst.id] = positions[originalId];
     } else if (positions[inst.id]) {
-      newLayoutNodes[inst.id] = { position: positions[inst.id] };
-    } else {
-      const idx = newInstances.indexOf(inst);
-      const cols = Math.max(2, Math.ceil(Math.sqrt(newInstances.length)));
-      const col = idx % cols;
-      const row = Math.floor(idx / cols);
-      newLayoutNodes[inst.id] = { position: { x: col * 260, y: row * 180 } };
+      positionHints[inst.id] = positions[inst.id];
     }
   }
+  const dropLayout = computeLayout(newInstances, positionHints);
+  const newLayoutNodes = { ...existingLayout.nodes, ...dropLayout.nodes };
 
   // 6. Build new state
   const updatedGraph: CompositeGraph = {
@@ -436,14 +460,12 @@ function handleRenameInstance(
       const updatedId = inst.id === old_id ? new_id : inst.id;
 
       // Update out bindings referencing old_id
-      const updatedInputs: Record<string, Binding> = {};
-      for (const [name, binding] of Object.entries(inst.inputs)) {
+      const updatedInputs = mapBindings(inst.inputs, (binding) => {
         if (isOut(binding) && binding.out.module === old_id) {
-          updatedInputs[name] = { out: { module: new_id, name: binding.out.name } };
-        } else {
-          updatedInputs[name] = binding;
+          return { out: { module: new_id, name: binding.out.name } };
         }
-      }
+        return binding;
+      });
 
       // Update depends_on (entries may be "module.X" format)
       const updatedDependsOn = inst.depends_on?.map((dep) =>
@@ -454,7 +476,7 @@ function handleRenameInstance(
         ...inst,
         id: updatedId,
         inputs: updatedInputs,
-        ...(updatedDependsOn ? { depends_on: updatedDependsOn } : {}),
+        ...normalizeDependsOn(updatedDependsOn),
       } as Instance;
     }),
     // Update exports
@@ -507,7 +529,7 @@ function collectReachableModuleKeys(
 
     for (const inst of def.graph.instances) {
       if (isModuleInstance(inst)) {
-        const refKey = `${inst.use.module_id}@${inst.use.version}`;
+        const refKey = makeModuleKey(inst.use.module_id, inst.use.version);
         if (!reachable.has(refKey)) {
           queue.push(refKey);
         }
@@ -520,7 +542,7 @@ function collectReachableModuleKeys(
 
 /** Remove module defs not reachable from the entry module. */
 function gcOrphanedModules(state: WorkspaceState): WorkspaceState {
-  const entryKey = `${state.entry.module_id}@${state.entry.version}`;
+  const entryKey = makeModuleKey(state.entry.module_id, state.entry.version);
   const reachable = collectReachableModuleKeys(state.modules, entryKey);
 
   const moduleKeys = Object.keys(state.modules);
@@ -554,28 +576,23 @@ function handleDeleteInstance(
       .filter((inst) => inst.id !== instance_id)
       .map((inst) => {
         // Remove out bindings referencing deleted instance
-        const cleanedInputs: Record<string, Binding> = {};
-        for (const [name, binding] of Object.entries(inst.inputs)) {
+        const cleanedInputs = mapBindings(inst.inputs, (binding) => {
           if (isOut(binding) && binding.out.module === instance_id) {
-            // Skip — remove the binding
-          } else {
-            cleanedInputs[name] = binding;
+            return undefined; // Remove the binding
           }
-        }
+          return binding;
+        });
 
         // Remove from depends_on (entries may be "module.X" format)
         const cleanedDependsOn = inst.depends_on?.filter(
           (dep) => !depMatchesInstance(dep, instance_id),
         );
 
-        // Build result without depends_on, then add it back only if non-empty
         const { depends_on: _deps, ...instWithoutDeps } = inst;
         return {
           ...instWithoutDeps,
           inputs: cleanedInputs,
-          ...(cleanedDependsOn && cleanedDependsOn.length > 0
-            ? { depends_on: cleanedDependsOn }
-            : {}),
+          ...normalizeDependsOn(cleanedDependsOn),
         } as Instance;
       }),
     // Clean up exports referencing deleted instance
@@ -765,11 +782,11 @@ function handleSetDependsOn(
   const { module_key, instance_id, depends_on } = action;
   return updateCompositeGraph(state, module_key, (graph) => ({
     ...graph,
-    instances: graph.instances.map((inst) =>
-      inst.id === instance_id
-        ? { ...inst, depends_on: depends_on.length > 0 ? depends_on : undefined }
-        : inst,
-    ),
+    instances: graph.instances.map((inst) => {
+      if (inst.id !== instance_id) return inst;
+      const { depends_on: _old, ...rest } = inst;
+      return { ...rest, ...normalizeDependsOn(depends_on) } as Instance;
+    }),
   }));
 }
 

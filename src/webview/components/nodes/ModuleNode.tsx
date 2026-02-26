@@ -2,7 +2,7 @@ import React, { useContext, useState, useCallback, useRef, useEffect } from 'rea
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { Instance, InputDef, OutputDef } from '../../types/ir';
 import { isOut, isModuleInstance } from '../../types/ir';
-import { isValidTerraformIdentifier } from '../../utils/identifiers';
+import { isValidTerraformIdentifier, makeModuleKey } from '../../utils/identifiers';
 import { CanvasContext } from '../../state/context';
 
 // ── Node data contract (serializable — no callbacks) ──
@@ -126,7 +126,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       if (!isModuleInstance(instance)) return;
       const refreshFn = (window as any).__canvasRefreshModule;
       if (refreshFn) {
-        const moduleKey = `${instance.use.module_id}@${instance.use.version}`;
+        const moduleKey = makeModuleKey(instance.use.module_id, instance.use.version);
         refreshFn(moduleKey, instance.use.module_id, instance.use.version);
       }
     },

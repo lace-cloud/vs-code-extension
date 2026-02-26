@@ -34,6 +34,7 @@ import { workspaceReducer } from '../state/reducer';
 import { validateWorkspace } from '../utils/validate';
 import type { WorkspaceState } from '../types/workspace';
 import type { ModuleBundle } from '../types/ir';
+import { makeModuleKey } from '../utils/identifiers';
 
 /* ── Binary resolution ── */
 
@@ -81,7 +82,7 @@ function loadFixture(name: string): any {
 }
 
 function rootKey(ws: WorkspaceState): string {
-  return `${ws.entry.module_id}@${ws.entry.version}`;
+  return makeModuleKey(ws.entry.module_id, ws.entry.version);
 }
 
 function entryGraph(ws: WorkspaceState) {
