@@ -2,16 +2,11 @@ import { test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { workspaceReducer } from '../state/reducer';
-import { fromBundle } from '../utils/bundle';
 import type { WorkspaceState } from '../types/workspace';
 import type { Instance, ModuleDef, ModuleBundle } from '../types/ir';
 
 function loadFixture(name: string): ModuleBundle {
-  const raw = JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
-  // Normalize through fromBundle to handle old impl format in fixtures
-  const { workspace } = fromBundle(raw);
-  const { layouts: _layouts, ...bundle } = workspace;
-  return bundle;
+  return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
 }
 
 /** Build a minimal workspace with one composite and some instances */

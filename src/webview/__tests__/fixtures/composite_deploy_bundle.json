@@ -23,40 +23,37 @@
           { "name": "bucket_id", "type": "string", "description": "The name of the primary bucket" }
         ]
       },
-      "impl": {
-        "kind": "composite",
-        "graph": {
-          "instances": [
-            {
-              "id": "s3_bucket",
-              "use": { "module_id": "aws-s3-bucket", "version": "v1.2.0" },
-              "inputs": {
-                "bucket_name": { "lit": {} },
-                "tags": { "lit": {} },
-                "versioning_enabled": { "lit": {} },
-                "acl": { "lit": {} }
-              }
-            },
-            {
-              "id": "s3_bucket_versioning",
-              "use": { "module_id": "aws-s3-bucket-versioning", "version": "v1.0.0" },
-              "inputs": {
-                "bucket_id": { "out": { "module": "s3_bucket", "name": "id" } },
-                "enabled": { "lit": {} }
-              }
+      "graph": {
+        "instances": [
+          {
+            "id": "s3_bucket",
+            "use": { "module_id": "aws-s3-bucket", "version": "v1.2.0" },
+            "inputs": {
+              "bucket_name": { "lit": {} },
+              "tags": { "lit": {} },
+              "versioning_enabled": { "lit": {} },
+              "acl": { "lit": {} }
             }
-          ],
-          "wires": [
-            {
-              "from": { "module": "s3_bucket", "port": "outputs.id" },
-              "to": { "module": "s3_bucket_versioning", "port": "inputs.bucket_id" }
+          },
+          {
+            "id": "s3_bucket_versioning",
+            "use": { "module_id": "aws-s3-bucket-versioning", "version": "v1.0.0" },
+            "inputs": {
+              "bucket_id": { "out": { "module": "s3_bucket", "name": "id" } },
+              "enabled": { "lit": {} }
             }
-          ],
-          "exports": {
-            "outputs": {
-              "bucket_arn": { "out": { "module": "s3_bucket", "name": "arn" } },
-              "bucket_id": { "out": { "module": "s3_bucket", "name": "id" } }
-            }
+          }
+        ],
+        "wires": [
+          {
+            "from": { "module": "s3_bucket", "port": "outputs.id" },
+            "to": { "module": "s3_bucket_versioning", "port": "inputs.bucket_id" }
+          }
+        ],
+        "exports": {
+          "outputs": {
+            "bucket_arn": { "out": { "module": "s3_bucket", "name": "arn" } },
+            "bucket_id": { "out": { "module": "s3_bucket", "name": "id" } }
           }
         }
       }
@@ -89,13 +86,14 @@
           }
         ]
       },
-      "impl": {
-        "kind": "leaf",
-        "source": {
-          "kind": "git",
-          "repo": "https://github.com/example/terraform-aws-s3-bucket.git",
-          "ref": "v1.2.0"
-        }
+      "source": {
+        "kind": "git",
+        "repo": "https://github.com/example/terraform-aws-s3-bucket.git",
+        "ref": "v1.2.0"
+      },
+      "graph": {
+        "instances": [],
+        "exports": { "outputs": {} }
       }
     },
     "aws-s3-bucket-versioning@v1.0.0": {
@@ -122,13 +120,14 @@
           }
         ]
       },
-      "impl": {
-        "kind": "leaf",
-        "source": {
-          "kind": "git",
-          "repo": "https://github.com/example/terraform-aws-s3-versioning.git",
-          "ref": "v1.0.0"
-        }
+      "source": {
+        "kind": "git",
+        "repo": "https://github.com/example/terraform-aws-s3-versioning.git",
+        "ref": "v1.0.0"
+      },
+      "graph": {
+        "instances": [],
+        "exports": { "outputs": {} }
       }
     }
   }

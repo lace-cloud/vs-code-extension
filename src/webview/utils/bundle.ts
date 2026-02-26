@@ -95,9 +95,7 @@ export function fromBundle(bundle: ModuleBundle, hints?: LayoutHints): ParseResu
 // ══════════════════════════════════════════════════════════════════════
 
 function parseModuleDef(key: string, raw: any, hints?: LayoutHints): ParsedEntry {
-  // Backward compat: accept old CLI wire format { impl: { graph: ... } }
-  // during the transition window. Remove once CLI deploy is complete.
-  const rawGraph = raw.graph ?? raw.impl?.graph ?? { instances: [], exports: { outputs: {} } };
+  const rawGraph = raw.graph;
 
   // Normalize instances
   const instances: Instance[] = (rawGraph.instances || []).map((inst: any) =>
@@ -125,12 +123,8 @@ function parseModuleDef(key: string, raw: any, hints?: LayoutHints): ParsedEntry
     ...(locals ? { locals } : {}),
   };
 
-  // Build def — strip impl if present (old format), keep source if present
-  const { impl: _impl, ...rest } = raw;
-  const source = raw.source ?? raw.impl?.source;
   const def: ModuleDef = {
-    ...rest,
-    ...(source ? { source } : {}),
+    ...raw,
     graph: normalizedGraph,
   };
 
