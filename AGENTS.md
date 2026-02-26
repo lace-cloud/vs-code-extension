@@ -10,14 +10,14 @@ A VS Code extension for visually composing Terraform modules. Users browse modul
 
 ```bash
 npm test                    # Run all tests: unit + E2E (Vitest)
-npm run test:unit           # Unit tests only (225+ tests, no binary needed)
+npm run test:unit           # Unit tests only (238 tests, no binary needed)
 npm run test:e2e            # E2E tests only (6 tests, requires lace + terraform)
 npm run test:watch          # Watch mode (unit tests)
 npm run build               # Rspack build (both host + webview)
 npx tsc --noEmit            # Type-check only (must be zero errors)
 ```
 
-Always run `npm run test:unit` after any change. All 225+ unit tests must pass. TypeScript must compile with zero errors.
+Always run `npm run test:unit` after any change. All 238 unit tests must pass. TypeScript must compile with zero errors.
 
 E2E tests require the `lace` binary and `terraform` to be installed. They spawn a real `lace module serve` process and talk JSON-RPC. If the binary is missing, the tests fail with install instructions. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
 
@@ -103,7 +103,7 @@ This is a structural identity: workspace IS a bundle plus layouts. `toBundle` st
 
 ### Module keys
 
-Modules are keyed as `"${id}@${version}"` in the flat `modules` record. Example: `"iam-stack@v1.0.0"`. The `entry` field references the root composite by `{ module_id, version }`.
+Modules are keyed as `"${id}@${version}"` in the flat `modules` record. Example: `"iam-stack@v1.0.0"`. Use `makeModuleKey(id, version)` from `utils/identifiers.ts` to construct keys — never inline the template literal. The `entry` field references the root composite by `{ module_id, version }`.
 
 ### Protocol types in `src/types/protocol.ts`
 
@@ -132,7 +132,7 @@ The full union is in `reducer.ts`. Every action carries `module_key` (except wor
 1. Add the action type to the `WorkspaceAction` union in `reducer.ts`.
 2. Create a `handleXxx` function following the existing pattern (extract fields, return new state with spreads).
 3. Add the case to the switch in `workspaceReducer`.
-4. Add tests in `__tests__/` — use the existing `makeWorkspace()` helper from `reducer.test.ts` or `terraform-config.test.ts`.
+4. Add tests in `__tests__/` — use `makeWorkspace()` and other helpers from `__tests__/helpers.ts`.
 5. Run `npm test` — all tests must pass.
 
 ### The `updateCompositeGraph` helper
@@ -217,6 +217,9 @@ E2E tests (`__tests__/e2e-rpc-integration.test.ts`) spawn the real `lace module 
 | `identifiers.test.ts`         | Terraform identifier validation                     |
 | `derive.test.ts`              | Wire derivation from bindings                       |
 | `infer.test.ts`               | Type inference utilities                            |
+| `iam-stack.test.ts`           | Nested composite IAM stack pipeline consistency     |
+| `PanelFrame.test.tsx`         | PanelFrame component rendering                      |
+| `helpers.ts`                  | Shared test utilities (not a test file)             |
 
 ### Adding E2E tests
 
@@ -260,7 +263,7 @@ The `@lace` chat participant lets users compose infrastructure via natural langu
 
 2. **Instance `kind` normalization.** Go omits `kind` for module instances (`omitempty`). `fromBundle` normalizes empty/missing `kind` to `'module'`. The Go generator handles this.
 
-3. **`depends_on` entries use `module.` prefix.** The wire format is `["module.iam_role", "module.iam_policy"]`. Helper functions in `reducer.ts` handle prefix-aware comparisons: `depMatchesInstance`, `depRenameInstance`, `depBareId`.
+3. **`depends_on` entries use `module.` prefix.** The wire format is `["module.iam_role", "module.iam_policy"]`. Helper functions handle prefix-aware comparisons: `depBareId` in `utils/identifiers.ts`, `depMatchesInstance` and `depRenameInstance` in `state/reducer.ts`.
 
 4. **Layout consistency.** Every operation that adds/removes/renames instances must also update the corresponding `GraphLayout` in `state.layouts[module_key]`. Forgetting this causes nodes to appear at (0,0).
 

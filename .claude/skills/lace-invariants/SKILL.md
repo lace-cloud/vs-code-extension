@@ -55,8 +55,9 @@ Missing any one of these causes silent data corruption.
 ### depends_on Format
 
 Entries may be bare `"iam_role"` or prefixed `"module.iam_role"`.
-Use the existing helpers: `depMatchesInstance()`, `depRenameInstance()`,
-`depBareId()`. Do not write your own prefix logic.
+Use the existing helpers: `depMatchesInstance()`, `depRenameInstance()` (in
+`state/reducer.ts`), and `depBareId()` (in `utils/identifiers.ts`). Do not
+write your own prefix logic.
 
 ### Layout Consistency
 
@@ -69,8 +70,8 @@ this causes nodes to appear at (0,0) on the canvas.
 1. Add the action type to the `WorkspaceAction` union in `reducer.ts`
 2. Create a `handleXxx` function following the existing spread pattern
 3. Add the case to the switch in `workspaceReducer`
-4. Add tests in `__tests__/` using `makeWorkspace()` helper
-5. Run `npm run test:unit` — all 95+ tests must pass
+4. Add tests in `__tests__/` using `makeWorkspace()` from `__tests__/helpers.ts`
+5. Run `npm run test:unit` — all 238 tests must pass
 6. Run `npx tsc --noEmit` — zero errors
 
 ## Type System

@@ -8,7 +8,7 @@ talks to a Go CLI binary (`lace`) over JSON-RPC stdin/stdout.
 ## Build & Test
 
 ```
-npm run test:unit        # 225+ unit tests (no binary needed) — run after EVERY change
+npm run test:unit        # 238 unit tests (no binary needed) — run after EVERY change
 npm run test:e2e         # 6 tests (requires lace + terraform)
 npx tsc --noEmit         # Type-check — must be zero errors
 npm run build            # Rspack build (host + webview)

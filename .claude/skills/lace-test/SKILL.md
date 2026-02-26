@@ -12,7 +12,7 @@ description: >
 Vitest, not Jest. Config in `vitest.config.ts`.
 
 ```bash
-npm run test:unit        # 95+ unit tests, no binary needed
+npm run test:unit        # 238 unit tests, no binary needed
 npm run test:e2e         # 6 tests, requires lace + terraform binaries
 npm run test:watch       # Watch mode (unit tests)
 npm test                 # All tests
@@ -26,24 +26,30 @@ Tests are pure logic — no external processes, no filesystem, no network.
 
 ### Workspace Factory
 
-Use `makeWorkspace()` from existing test files (defined in `reducer.test.ts`
-and `terraform-config.test.ts`). It builds a valid `WorkspaceState` with a
-root composite module and layout. Example:
+Use shared helpers from `__tests__/helpers.ts`. Key exports:
+
+- `makeWorkspace(instances, modules?, layouts?, exports?, inputs?)` — builds a valid `WorkspaceState` with a root composite
+- `makeEmptyWorkspace()` — shorthand for `makeWorkspace([])`
+- `loadFixture(name)` — loads JSON from `__tests__/fixtures/`
+- `getGraph`, `getInst`, `getInstances`, `getExports` — accessor helpers
+- `vpcDef`, `subnetDef` — common module definitions for tests
+
+Example:
 
 ```typescript
-const ws = makeWorkspace({
-  instances: [
-    { id: 'vpc', kind: 'module', use: { module_id: 'vpc', version: 'v1.0.0' }, inputs: {} },
-    {
-      id: 'web',
-      kind: 'module',
-      use: { module_id: 'web', version: 'v1.0.0' },
-      inputs: {
-        vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
-      },
+import { makeWorkspace, getInst } from './helpers';
+
+const ws = makeWorkspace([
+  { id: 'vpc', kind: 'module', use: { module_id: 'vpc', version: 'v1.0.0' }, inputs: {} },
+  {
+    id: 'web',
+    kind: 'module',
+    use: { module_id: 'web', version: 'v1.0.0' },
+    inputs: {
+      vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
     },
-  ],
-});
+  },
+]);
 ```
 
 For bundle tests, use `emptyWorkspace()` from `utils/bundle.ts`.
@@ -94,6 +100,16 @@ Descriptive names that state behavior, not implementation:
 | `utils/derive.ts`                     | `derive.test.ts`                       |
 | `utils/resolve.ts`                    | `resolve.test.ts`                      |
 | `utils/identifiers.ts`                | `identifiers.test.ts`                  |
+| `utils/normalize` (binding/instance)  | `normalize.test.ts`                    |
+| `utils/parseValue` (HCL literals)     | `parseValue.test.ts`                   |
+| `utils/infer` (type inference)        | `infer.test.ts`                        |
+| `chat/auto-connect.ts`                | `auto-connect.test.ts`                 |
+| `chat/graph-summary.ts`               | `graph-summary.test.ts`                |
+| `chat/tools/graph-write-tools.ts`     | `chat-tools.test.ts`                   |
+| `chat/tools/registry-tools.ts`        | `registry-tools.test.ts`               |
+| Nested composite pipeline             | `iam-stack.test.ts`                    |
+| `emptyWorkspace` factory              | `scaffold.test.ts`                     |
+| `components/panels/PanelFrame`        | `PanelFrame.test.tsx`                  |
 | Full RPC pipeline                     | `e2e-rpc-integration.test.ts`          |
 
 New reducer actions go in `reducer.test.ts`. New terraform config actions
@@ -108,6 +124,8 @@ file or extend the matching one.
 - `leaf_deploy_bundle.json`
 - `bundle_with_bad_module.json`
 - `composite_deploy_bundle.json`
+- `iam_stack_deploy_bundle.json`
+- `policy_attachment_deploy_bundle.json`
 
 Use these for `fromBundle`/`toBundle` round-trip tests. Do not fabricate
 bundle JSON by hand when a fixture exists.
