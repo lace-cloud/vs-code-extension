@@ -21,7 +21,8 @@ const vpcDef: ModuleDef = {
     ],
     outputs: [{ name: 'vpc_id', type: 'string' }],
   },
-  impl: { kind: 'leaf', source: { kind: 'registry' } },
+  source: { kind: 'registry' },
+  graph: { instances: [], exports: { outputs: {} } },
 };
 
 const subnetDef: ModuleDef = {
@@ -36,7 +37,8 @@ const subnetDef: ModuleDef = {
     ],
     outputs: [{ name: 'subnet_id', type: 'string' }],
   },
-  impl: { kind: 'leaf', source: { kind: 'registry' } },
+  source: { kind: 'registry' },
+  graph: { instances: [], exports: { outputs: {} } },
 };
 
 function makeWorkspaceWithInstances(): WorkspaceState {
@@ -51,28 +53,25 @@ function makeWorkspaceWithInstances(): WorkspaceState {
         id: 'root',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: {
-            instances: [
-              {
-                kind: 'module',
-                id: 'vpc',
-                use: { module_id: 'aws/vpc', version: 'v1.0.0' },
-                inputs: { cidr_block: { lit: '10.0.0.0/16' } },
+        graph: {
+          instances: [
+            {
+              kind: 'module',
+              id: 'vpc',
+              use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+              inputs: { cidr_block: { lit: '10.0.0.0/16' } },
+            },
+            {
+              kind: 'module',
+              id: 'subnet',
+              use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+              inputs: {
+                vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
+                cidr_block: { lit: '10.0.1.0/24' },
               },
-              {
-                kind: 'module',
-                id: 'subnet',
-                use: { module_id: 'aws/subnet', version: 'v1.0.0' },
-                inputs: {
-                  vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
-                  cidr_block: { lit: '10.0.1.0/24' },
-                },
-              },
-            ],
-            exports: { outputs: {} },
-          },
+            },
+          ],
+          exports: { outputs: {} },
         },
       },
       'aws/vpc@v1.0.0': vpcDef,
@@ -95,27 +94,24 @@ function makeWorkspaceWithUnboundSubnet(): WorkspaceState {
         id: 'root',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: {
-            instances: [
-              {
-                kind: 'module',
-                id: 'vpc',
-                use: { module_id: 'aws/vpc', version: 'v1.0.0' },
-                inputs: { cidr_block: { lit: '10.0.0.0/16' } },
+        graph: {
+          instances: [
+            {
+              kind: 'module',
+              id: 'vpc',
+              use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+              inputs: { cidr_block: { lit: '10.0.0.0/16' } },
+            },
+            {
+              kind: 'module',
+              id: 'subnet',
+              use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+              inputs: {
+                cidr_block: { lit: '10.0.1.0/24' },
               },
-              {
-                kind: 'module',
-                id: 'subnet',
-                use: { module_id: 'aws/subnet', version: 'v1.0.0' },
-                inputs: {
-                  cidr_block: { lit: '10.0.1.0/24' },
-                },
-              },
-            ],
-            exports: { outputs: {} },
-          },
+            },
+          ],
+          exports: { outputs: {} },
         },
       },
       'aws/vpc@v1.0.0': vpcDef,
@@ -137,10 +133,7 @@ function makeEmptyWorkspace(): WorkspaceState {
         id: 'root',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: { instances: [], exports: { outputs: {} } },
-        },
+        graph: { instances: [], exports: { outputs: {} } },
       },
     },
     layouts: {},
@@ -160,22 +153,19 @@ function makeWorkspaceWithDanglingRef(): WorkspaceState {
         id: 'root',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: {
-            instances: [
-              {
-                kind: 'module',
-                id: 'subnet',
-                use: { module_id: 'aws/subnet', version: 'v1.0.0' },
-                inputs: {
-                  vpc_id: { out: { module: 'ghost', name: 'vpc_id' } },
-                  cidr_block: { lit: '10.0.1.0/24' },
-                },
+        graph: {
+          instances: [
+            {
+              kind: 'module',
+              id: 'subnet',
+              use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+              inputs: {
+                vpc_id: { out: { module: 'ghost', name: 'vpc_id' } },
+                cidr_block: { lit: '10.0.1.0/24' },
               },
-            ],
-            exports: { outputs: {} },
-          },
+            },
+          ],
+          exports: { outputs: {} },
         },
       },
       'aws/subnet@v1.0.0': subnetDef,

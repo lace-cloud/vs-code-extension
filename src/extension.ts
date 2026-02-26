@@ -180,7 +180,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const items = modules.map((m) => ({
         label: `$(symbol-module) ${m.name}`,
         description: `v${m.version}`,
-        detail: `${m.system} · ${m.kind}${m.categories?.length ? ' · ' + m.categories.join(', ') : ''}`,
+        detail: `${m.system}${m.categories?.length ? ' · ' + m.categories.join(', ') : ''}`,
         module: m,
       }));
 

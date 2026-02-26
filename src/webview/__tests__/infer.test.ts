@@ -315,7 +315,8 @@ describe('inferRequiredProviders', () => {
       id,
       version,
       interface: { inputs: [], outputs: [] },
-      impl: { kind: 'leaf', source: { kind: 'registry' } },
+      source: { kind: 'registry' },
+      graph: { instances: [], exports: { outputs: {} } },
       ...(terraform ? { terraform } : {}),
     };
   }

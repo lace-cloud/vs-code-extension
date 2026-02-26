@@ -558,7 +558,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       const isStarred = favoriteIds.includes(m.id);
       const iconHtml = m.icon_url
         ? '<img src="' + escHtml(m.icon_url) + '" />'
-        : (m.kind === 'composite' ? '&#x1F4E6;' : '&#x2699;&#xFE0F;');
+        : '&#x1F4E6;';
       let html = '<div class="module-item" data-idx="' + idx + '">';
       html += '  <div class="module-icon">' + iconHtml + '</div>';
       html += '  <div class="module-info">';

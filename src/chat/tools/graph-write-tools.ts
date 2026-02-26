@@ -27,8 +27,8 @@ export type GraphWriteDeps = {
 function getEntryGraph(state: WorkspaceState) {
   const entryKey = `${state.entry.module_id}@${state.entry.version}`;
   const entryDef = state.modules[entryKey];
-  if (!entryDef || entryDef.impl.kind !== 'composite') return undefined;
-  return { entryKey, graph: entryDef.impl.graph };
+  if (!entryDef) return undefined;
+  return { entryKey, graph: entryDef.graph };
 }
 
 /** Find an instance by ID in the entry graph. */

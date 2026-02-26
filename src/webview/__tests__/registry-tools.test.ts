@@ -10,7 +10,6 @@ const awsVpc: RegistryModule = {
   name: 'aws/vpc',
   version: 'v1.0.0',
   system: 'aws',
-  kind: 'leaf',
   description: 'Create an AWS VPC with configurable CIDR',
   categories: ['networking'],
   icon_url: 'https://example.com/vpc.svg',
@@ -21,7 +20,6 @@ const awsSubnet: RegistryModule = {
   name: 'aws/subnet',
   version: 'v1.0.0',
   system: 'aws',
-  kind: 'leaf',
   description: 'Create subnets within a VPC',
   categories: ['networking'],
 };
@@ -31,7 +29,6 @@ const azureRg: RegistryModule = {
   name: 'azure/resource-group',
   version: 'v2.0.0',
   system: 'azure',
-  kind: 'leaf',
   description: 'Azure resource group',
   categories: ['core'],
 };
@@ -191,7 +188,8 @@ describe('lace_inspect_module', () => {
                 ],
                 outputs: [{ name: 'vpc_id', type: 'string', description: 'The VPC ID' }],
               },
-              impl: { kind: 'leaf', source: { kind: 'registry' } },
+              source: { kind: 'registry' },
+              graph: { instances: [], exports: { outputs: {} } },
             },
           },
         },

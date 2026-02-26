@@ -79,17 +79,14 @@ function updateCompositeGraph(
   fn: (graph: CompositeGraph) => CompositeGraph,
 ): WorkspaceState {
   const def = state.modules[module_key];
-  if (!def || def.impl.kind !== 'composite') {
+  if (!def) {
     return state;
   }
   return {
     ...state,
     modules: {
       ...state.modules,
-      [module_key]: {
-        ...def,
-        impl: { ...def.impl, graph: fn(def.impl.graph) },
-      },
+      [module_key]: { ...def, graph: fn(def.graph) },
     },
   };
 }
@@ -194,14 +191,14 @@ function flattenInstances(
     const def =
       allModules[defKey] ?? Object.values(allModules).find((m) => m.id === inst.use.module_id);
 
-    if (!def || def.impl.kind !== 'composite') {
-      // Leaf or unresolved — keep as-is
+    if (!def || def.graph.instances.length === 0) {
+      // Leaf-like (no sub-instances) or unresolved — keep as-is
       result.push(inst);
       continue;
     }
 
-    // Composite — unpack its graph's instances recursively
-    const subGraph = def.impl.graph;
+    // Has sub-instances — unpack its graph's instances recursively
+    const subGraph = def.graph;
     const subInstances = flattenInstances(subGraph.instances, allModules);
 
     for (const subInst of subInstances) {
@@ -246,7 +243,7 @@ function handleDropBundle(
   const entryKey = `${deploy_bundle.entry.module_id}@${deploy_bundle.entry.version}`;
   const entryDef = deploy_bundle.modules[entryKey];
 
-  if (!entryDef || entryDef.impl.kind !== 'composite') {
+  if (!entryDef) {
     return state;
   }
 
@@ -260,17 +257,17 @@ function handleDropBundle(
 
   // 2. Get existing instance IDs in the target composite
   const targetDef = state.modules[module_key];
-  if (!targetDef || targetDef.impl.kind !== 'composite') {
+  if (!targetDef) {
     return state;
   }
 
-  const existingInstances = [...targetDef.impl.graph.instances];
+  const existingInstances = [...targetDef.graph.instances];
   const existingIds = new Set(existingInstances.map((i) => i.id));
 
   // 3. Flatten: recursively unpack composite instances to leaves
   const allModulesForResolution = { ...mergedModules, ...deploy_bundle.modules };
   const entryInstances: Instance[] = flattenInstances(
-    entryDef.impl.graph.instances,
+    entryDef.graph.instances,
     allModulesForResolution,
   );
 
@@ -339,7 +336,7 @@ function handleDropBundle(
 
   // 6. Build new state
   const updatedGraph: CompositeGraph = {
-    ...targetDef.impl.graph,
+    ...targetDef.graph,
     instances: [...existingInstances, ...newInstances],
   };
 
@@ -349,7 +346,7 @@ function handleDropBundle(
       ...mergedModules,
       [module_key]: {
         ...targetDef,
-        impl: { kind: 'composite', graph: updatedGraph },
+        graph: updatedGraph,
       },
     },
     layouts: {
@@ -506,9 +503,9 @@ function collectReachableModuleKeys(
     reachable.add(key);
 
     const def = modules[key];
-    if (!def || def.impl.kind !== 'composite') continue;
+    if (!def) continue;
 
-    for (const inst of def.impl.graph.instances) {
+    for (const inst of def.graph.instances) {
       if (isModuleInstance(inst)) {
         const refKey = `${inst.use.module_id}@${inst.use.version}`;
         if (!reachable.has(refKey)) {
@@ -620,7 +617,7 @@ function handleClearGraph(
 ): WorkspaceState {
   const { module_key } = action;
   const def = state.modules[module_key];
-  if (!def || def.impl.kind !== 'composite') return state;
+  if (!def) return state;
 
   const clearedState = updateCompositeGraph(state, module_key, (graph) => ({
     ...graph,

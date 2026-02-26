@@ -12,10 +12,7 @@ export function validateWorkspace(workspace: WorkspaceState): GraphError[] {
   const errors: GraphError[] = [];
 
   for (const [key, def] of Object.entries(workspace.modules)) {
-    if (def.impl.kind !== 'composite') {
-      continue;
-    }
-    const graph = def.impl.graph;
+    const graph = def.graph;
     const instanceIds = new Set(graph.instances.map((i) => i.id));
 
     // Check: duplicate instance IDs within a composite

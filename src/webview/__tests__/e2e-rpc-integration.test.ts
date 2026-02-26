@@ -86,8 +86,7 @@ function rootKey(ws: WorkspaceState): string {
 
 function entryGraph(ws: WorkspaceState) {
   const def = ws.modules[rootKey(ws)];
-  if (def.impl.kind !== 'composite') throw new Error('Entry is not composite');
-  return def.impl.graph;
+  return def.graph;
 }
 
 /* ── Tests ── */
@@ -161,13 +160,11 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     expect(Object.keys(bundle.modules)).toHaveLength(3); // root + 2 leaf defs
 
     const exportedRoot = bundle.modules[rk];
-    if (exportedRoot.impl.kind === 'composite') {
-      expect(exportedRoot.impl.graph.wires).toHaveLength(1);
-      expect(exportedRoot.impl.graph.wires![0]).toEqual({
-        from: { module: 's3_bucket', port: 'outputs.id' },
-        to: { module: 's3_bucket_versioning', port: 'inputs.bucket_id' },
-      });
-    }
+    expect(exportedRoot.graph.wires).toHaveLength(1);
+    expect(exportedRoot.graph.wires![0]).toEqual({
+      from: { module: 's3_bucket', port: 'outputs.id' },
+      to: { module: 's3_bucket_versioning', port: 'inputs.bucket_id' },
+    });
 
     // layouts must NOT leak into the wire format
     expect((bundle as any).layouts).toBeUndefined();
@@ -271,20 +268,17 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
             id: 'root',
             version: 'v1.0.0',
             interface: { inputs: [], outputs: [] },
-            impl: {
-              kind: 'composite',
-              graph: {
-                instances: [
-                  {
-                    id: 'orphan',
-                    kind: 'module',
-                    use: { module_id: 'does-not-exist', version: 'v1.0.0' },
-                    inputs: {},
-                  },
-                ],
-                wires: [],
-                exports: { outputs: {} },
-              },
+            graph: {
+              instances: [
+                {
+                  id: 'orphan',
+                  kind: 'module',
+                  use: { module_id: 'does-not-exist', version: 'v1.0.0' },
+                  inputs: {},
+                },
+              ],
+              wires: [],
+              exports: { outputs: {} },
             },
           },
         },
@@ -370,9 +364,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     expect(result.valid).toBe(true);
 
     // 2 wires (one per pair)
-    if (bundle.modules[rk].impl.kind === 'composite') {
-      expect(bundle.modules[rk].impl.graph.wires).toHaveLength(2);
-    }
+    expect(bundle.modules[rk].graph.wires).toHaveLength(2);
 
     // Dry-run generate should produce all 4 module blocks
     const genResult = await client.call<{ files?: Record<string, string>; diagnostics?: any[] }>(

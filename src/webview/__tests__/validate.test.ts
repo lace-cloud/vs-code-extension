@@ -21,12 +21,9 @@ function makeWorkspace(
         id: 'root',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: {
-            instances,
-            exports: { outputs: exports },
-          },
+        graph: {
+          instances,
+          exports: { outputs: exports },
         },
       },
       ...extraModules,
@@ -54,7 +51,8 @@ test('valid workspace produces no errors', () => {
         id: 'x',
         version: 'v1',
         interface: { inputs: [], outputs: [] },
-        impl: { kind: 'leaf', source: { kind: 'registry', ref: 'x/aws/v1' } },
+        source: { kind: 'registry', ref: 'x/aws/v1' },
+        graph: { instances: [], exports: { outputs: {} } },
       },
     },
   );

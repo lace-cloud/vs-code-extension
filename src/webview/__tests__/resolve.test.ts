@@ -17,7 +17,8 @@ function makeLeafDef(id: string, version: string): ModuleDef {
       inputs: [{ name: 'vpc_id', type: 'string', required: true }],
       outputs: [{ name: 'arn', type: 'string' }],
     },
-    impl: { kind: 'leaf', source: { kind: 'registry' } },
+    source: { kind: 'registry' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
 }
 

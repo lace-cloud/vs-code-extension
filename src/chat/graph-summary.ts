@@ -58,7 +58,7 @@ export function summarizeGraph(workspace: WorkspaceState): GraphSummary {
   const entryKey = `${workspace.entry.module_id}@${workspace.entry.version}`;
   const entryDef = workspace.modules[entryKey];
 
-  if (!entryDef || entryDef.impl.kind !== 'composite') {
+  if (!entryDef) {
     return {
       module_name: workspace.entry.module_id,
       instance_count: 0,
@@ -70,7 +70,7 @@ export function summarizeGraph(workspace: WorkspaceState): GraphSummary {
     };
   }
 
-  const graph = entryDef.impl.graph;
+  const graph = entryDef.graph;
   const allUnbound: GraphSummary['unbound_required_inputs'] = [];
 
   // Summarize instances

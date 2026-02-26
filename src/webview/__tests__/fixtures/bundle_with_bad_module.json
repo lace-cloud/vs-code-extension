@@ -30,12 +30,15 @@
       "kind": "module_def",
       "id": "bad-module",
       "version": "v1.0.0",
-      "description": "Module with missing impl.kind",
+      "description": "Module with invalid instances field",
       "interface": {
         "inputs": [],
         "outputs": []
       },
-      "impl": {}
+      "graph": {
+        "instances": "NOT_AN_ARRAY",
+        "exports": { "outputs": {} }
+      }
     }
   }
 }

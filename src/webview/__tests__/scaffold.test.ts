@@ -22,12 +22,9 @@ describe('emptyWorkspace', () => {
 
     expect(rootDef).toBeDefined();
     expect(rootDef.kind).toBe('module_def');
-    expect(rootDef.impl.kind).toBe('composite');
-
-    if (rootDef.impl.kind === 'composite') {
-      expect(rootDef.impl.graph.instances).toEqual([]);
-      expect(rootDef.impl.graph.exports.outputs).toEqual({});
-    }
+    expect(rootDef.graph).toBeDefined();
+    expect(rootDef.graph.instances).toEqual([]);
+    expect(rootDef.graph.exports.outputs).toEqual({});
   });
 
   it('has an empty layout for the root module', () => {

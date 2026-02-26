@@ -63,7 +63,6 @@ export type RegistryModule = {
   name: string;
   system: string;
   version: string;
-  kind: 'leaf' | 'composite';
   categories?: string[];
   description?: string;
   icon_url?: string;

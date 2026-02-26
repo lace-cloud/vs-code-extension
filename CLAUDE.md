@@ -16,7 +16,7 @@ npm run build            # Rspack build (host + webview)
 
 ## Critical Rules
 
-1. `toBundle` and `fromBundle` in `utils/bundle.ts` are **frozen** — do not modify them
+1. `toBundle` and `fromBundle` in `utils/bundle.ts` are the **serialization boundary** — modify with care (wire protocol compat)
 2. Wire format types in `types/ir.ts` are **snake_case matching Go** — never rename
 3. Wires are derived, never stored — workspace state must not contain wires
 4. Reducer is pure — no mutations, no side effects, explicit spreads only

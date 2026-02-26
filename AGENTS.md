@@ -23,12 +23,12 @@ E2E tests require the `lace` binary and `terraform` to be installed. They spawn 
 
 ## Critical Invariants — Do Not Break These
 
-### 1. `toBundle` and `fromBundle` are frozen
+### 1. `toBundle` and `fromBundle` are the serialization boundary
 
-`src/webview/utils/bundle.ts` — These two functions are the boundary between workspace state and wire format. **Do not change them.** If you think you need to, you're approaching the problem wrong.
+`src/webview/utils/bundle.ts` — These two functions are the boundary between workspace state and wire format. Changes require careful consideration of wire protocol compatibility with the Go CLI.
 
-- `toBundle(workspace)`: Strips `layouts`, injects derived `wires` into composite graphs.
-- `fromBundle(bundle, hints?)`: Normalizes bindings, computes layouts, strips wires. Collects errors without throwing.
+- `toBundle(workspace)`: Strips `layouts`, injects derived `wires` into graphs.
+- `fromBundle(bundle, hints?)`: Normalizes bindings, computes layouts, strips wires. Collects errors without throwing. Includes a backward-compat shim that accepts both `{ graph: ... }` and legacy `{ impl: { graph: ... } }` formats during the CLI transition.
 
 ### 2. Wire format matches Go JSON tags exactly
 
@@ -71,15 +71,15 @@ type Binding =
   | { out: { module: string; name: string } }
   | { expr: { lang: 'hcl'; value: string } };
 type Instance = ModuleInstance | ResourceInstance | DataInstance; // discriminated on `kind`
-type ModuleImpl = LeafImpl | CompositeImpl; // discriminated on `kind`
 type ModuleDef = {
   schema_version;
   kind;
   id;
   version;
   description?;
+  source?; // present for leaf modules (registry/git/local)
   interface;
-  impl;
+  graph; // always present — every module has a graph
   terraform?;
   providers?;
 };
@@ -147,7 +147,7 @@ function updateCompositeGraph(
 ): WorkspaceState;
 ```
 
-It handles the nested spread `state → modules → module → impl → graph` and is a no-op if the module isn't composite.
+It handles the nested spread `state → modules → module → graph` and is a no-op if the module doesn't exist.
 
 ## File Organization Conventions
 

@@ -1,7 +1,7 @@
 import type { ModuleBundle } from './ir';
 
 export type WorkspaceState = ModuleBundle & {
-  layouts: Record<string, GraphLayout>; // keyed by module map key, composites only
+  layouts: Record<string, GraphLayout>; // keyed by module map key
 };
 
 export type GraphLayout = {

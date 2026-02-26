@@ -39,11 +39,11 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
 
     const entryKey = `${state.entry.module_id}@${state.entry.version}`;
     const entryDef = state.modules[entryKey];
-    if (!entryDef || entryDef.impl.kind !== 'composite') {
+    if (!entryDef) {
       return { content: 'Canvas has no composite graph.', isError: true };
     }
 
-    const graph = entryDef.impl.graph;
+    const graph = entryDef.graph;
     const source = graph.instances.find((i) => i.id === sourceInstance);
     const target = graph.instances.find((i) => i.id === targetInstance);
 

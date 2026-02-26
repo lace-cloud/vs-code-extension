@@ -451,9 +451,9 @@ export default function Canvas() {
       const ws = workspaceRef.current;
       const mk = moduleKeyRef.current;
       const def = ws.modules[mk];
-      if (!def || def.impl.kind !== 'composite') return;
+      if (!def) return;
 
-      const instances = def.impl.graph.instances;
+      const instances = def.graph.instances;
       const sourceInst = instances.find((i) => i.id === conn.source);
       const targetInst = instances.find((i) => i.id === conn.target);
       if (!sourceInst || !targetInst) return;
@@ -538,8 +538,8 @@ export default function Canvas() {
     const bundle = toBundle(ws);
     const entryDef = bundle.modules[mk];
 
-    if (entryDef && entryDef.impl.kind === 'composite') {
-      const graph = entryDef.impl.graph;
+    if (entryDef) {
+      const graph = entryDef.graph;
       const resolve = (inst: Instance) => resolveSchema(ws, inst);
 
       const inferredVars = inferVariables(graph.instances);
@@ -554,10 +554,7 @@ export default function Canvas() {
           inputs: inferredVars,
           outputs: inferredOutputs,
         },
-        impl: {
-          kind: 'composite' as const,
-          graph: { ...graph, exports: { outputs: mergedExports } },
-        },
+        graph: { ...graph, exports: { outputs: mergedExports } },
         terraform: {
           ...entryDef.terraform,
           required_providers: {
@@ -614,8 +611,8 @@ export default function Canvas() {
           const bundle = toBundle(ws);
           const entryDef = bundle.modules[mk];
 
-          if (entryDef && entryDef.impl.kind === 'composite') {
-            const graph = entryDef.impl.graph;
+          if (entryDef) {
+            const graph = entryDef.graph;
             const resolve = (inst: Instance) => resolveSchema(ws, inst);
 
             const inferredVars = inferVariables(graph.instances);
@@ -630,10 +627,7 @@ export default function Canvas() {
                 inputs: inferredVars,
                 outputs: inferredOutputs,
               },
-              impl: {
-                kind: 'composite' as const,
-                graph: { ...graph, exports: { outputs: mergedExports } },
-              },
+              graph: { ...graph, exports: { outputs: mergedExports } },
               terraform: {
                 ...entryDef.terraform,
                 required_providers: {
@@ -684,11 +678,10 @@ export default function Canvas() {
 
           // Count existing instances to offset new drops
           const currentDef = workspaceRef.current.modules[moduleKeyRef.current];
-          const existingCount =
-            currentDef?.impl.kind === 'composite' ? currentDef.impl.graph.instances.length : 0;
+          const existingCount = currentDef?.graph.instances.length ?? 0;
 
-          if (entryDef?.impl.kind === 'composite') {
-            const instances = entryDef.impl.graph.instances;
+          if (entryDef) {
+            const instances = entryDef.graph.instances;
             const cols = Math.max(2, Math.ceil(Math.sqrt(instances.length)));
 
             // Offset each successive drop: arrange in a grid with spacing
@@ -799,11 +792,11 @@ export default function Canvas() {
   // Clean early return — every hook above runs unconditionally.
   // Graph-dependent hooks live in CompositeEditor, which only
   // mounts when this guard passes.
-  if (!rootDef || rootDef.impl.kind !== 'composite') {
-    return <ErrorState message={`Root module "${module_key}" is not a composite.`} />;
+  if (!rootDef) {
+    return <ErrorState message={`Root module "${module_key}" not found.`} />;
   }
 
-  const graph = rootDef.impl.graph;
+  const graph = rootDef.graph;
   const layout = workspace.layouts[module_key];
 
   // ── Config panel target data ──

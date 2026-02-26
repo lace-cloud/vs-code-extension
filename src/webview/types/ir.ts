@@ -74,20 +74,6 @@ export type ModuleSource = {
   ref?: string;
 };
 
-// ── Module Implementation (discriminated union) ──
-
-export type LeafImpl = {
-  kind: 'leaf';
-  source: ModuleSource;
-};
-
-export type CompositeImpl = {
-  kind: 'composite';
-  graph: CompositeGraph;
-};
-
-export type ModuleImpl = LeafImpl | CompositeImpl;
-
 // ── Composite Graph ──
 
 export type CompositeGraph = {
@@ -141,8 +127,9 @@ export type ModuleDef = {
   id: string;
   version: string;
   description?: string;
+  source?: ModuleSource;
   interface: { inputs: InputDef[]; outputs: OutputDef[] };
-  impl: ModuleImpl;
+  graph: CompositeGraph;
   terraform?: TerraformBlock;
   providers?: ProviderConfig[];
 };

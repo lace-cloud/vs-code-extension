@@ -69,7 +69,7 @@ export async function showModuleDetail(
 
       if (deployBundle?.modules) {
         const moduleDefs = Object.values(deployBundle.modules) as any[];
-        const leafDef = moduleDefs.find((d: any) => d.impl?.kind === 'leaf') ?? moduleDefs[0];
+        const leafDef = moduleDefs.find((d: any) => d.source != null) ?? moduleDefs[0];
         if (leafDef?.interface) {
           moduleInterface = leafDef.interface;
         }
@@ -104,8 +104,8 @@ function buildHtml(
   description?: string,
   fetchError?: string | null,
 ): string {
-  const kindBadge = mod.kind === 'composite' ? 'Composite' : 'Leaf';
-  const kindColor = mod.kind === 'composite' ? '#1f6feb' : '#2ea043';
+  const kindBadge = 'Module';
+  const kindColor = '#1f6feb';
 
   const inputsHtml = iface?.inputs?.length
     ? iface.inputs
@@ -388,7 +388,7 @@ function buildHtml(
 
   <!-- Header -->
   <div class="header">
-    <div class="header-icon">${mod.kind === 'composite' ? '📦' : '⚙️'}</div>
+    <div class="header-icon">📦</div>
     <div class="header-info">
       <h1>${esc(mod.name)}</h1>
       <div class="header-meta">
@@ -514,7 +514,7 @@ function buildUsageExample(
 ): string {
   const lines: string[] = [];
   lines.push(`# ${mod.name} (${mod.system})`);
-  lines.push(`# Kind: ${mod.kind} | Version: v${mod.version}`);
+  lines.push(`# Version: v${mod.version}`);
   lines.push('');
   if (iface?.inputs?.length) {
     lines.push('# Inputs:');

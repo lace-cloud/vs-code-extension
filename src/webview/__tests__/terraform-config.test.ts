@@ -25,12 +25,9 @@ function makeWorkspace(
     id: 'root',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: {
-      kind: 'composite',
-      graph: {
-        instances,
-        exports: { outputs: {} },
-      },
+    graph: {
+      instances,
+      exports: { outputs: {} },
     },
   };
   return {
@@ -47,8 +44,8 @@ function makeWorkspace(
 
 function getGraph(state: WorkspaceState, key: string) {
   const def = state.modules[key];
-  if (def.impl.kind !== 'composite') throw new Error('Not composite');
-  return def.impl.graph;
+  if (!def) throw new Error('Module not found');
+  return def.graph;
 }
 
 function getInst(state: WorkspaceState, id: string, key = 'root@v1.0.0'): Instance {
@@ -181,7 +178,7 @@ describe('SET_LOCALS', () => {
     expect(getGraph(ws, 'root@v1.0.0').locals).toBeUndefined();
   });
 
-  test('ignores non-composite module', () => {
+  test('sets locals on any module (including leaf-like)', () => {
     const ws = makeWorkspace([], {
       'leaf@v1.0.0': {
         schema_version: '1.0',
@@ -189,15 +186,17 @@ describe('SET_LOCALS', () => {
         id: 'leaf',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: { kind: 'leaf', source: { kind: 'registry', ref: 'leaf/aws/v1.0.0' } },
+        source: { kind: 'registry', ref: 'leaf/aws/v1.0.0' },
+        graph: { instances: [], exports: { outputs: {} } },
       },
     });
+    const locals = [{ name: 'foo', value: { lit: 'bar' } as const }];
     const result = workspaceReducer(ws, {
       type: 'SET_LOCALS',
       module_key: 'leaf@v1.0.0',
-      locals: [{ name: 'foo', value: { lit: 'bar' } }],
+      locals,
     });
-    expect(result).toBe(ws);
+    expect(result.modules['leaf@v1.0.0'].graph.locals).toEqual(locals);
   });
 });
 
@@ -359,10 +358,8 @@ describe('Full bundle with terraform — round-trip', () => {
     expect(entryDef.providers![1].alias).toBe('west');
 
     // Locals present
-    if (entryDef.impl.kind === 'composite') {
-      expect(entryDef.impl.graph.locals).toHaveLength(2);
-      expect(entryDef.impl.graph.locals![0].name).toBe('common_tags');
-    }
+    expect(entryDef.graph.locals).toHaveLength(2);
+    expect(entryDef.graph.locals![0].name).toBe('common_tags');
 
     // Environments present
     expect(workspace.environments).toBeDefined();
@@ -391,12 +388,10 @@ describe('Full bundle with terraform — round-trip', () => {
     expect(entryDef.providers).toHaveLength(2);
 
     // Locals round-trip (with wires injected)
-    if (entryDef.impl.kind === 'composite') {
-      expect(entryDef.impl.graph.locals).toHaveLength(2);
-      // Wires should be derived
-      expect(entryDef.impl.graph.wires).toBeDefined();
-      expect(entryDef.impl.graph.wires!.length).toBeGreaterThan(0);
-    }
+    expect(entryDef.graph.locals).toHaveLength(2);
+    // Wires should be derived
+    expect(entryDef.graph.wires).toBeDefined();
+    expect(entryDef.graph.wires!.length).toBeGreaterThan(0);
 
     // Environments round-trip
     expect(bundle.environments).toBeDefined();
@@ -430,10 +425,8 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
         id: 'aws-iam-role',
         version: 'v2.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'leaf',
-          source: { kind: 'git', repo: 'example/terraform-aws-iam-role.git', ref: 'v2.0.0' },
-        },
+        source: { kind: 'git', repo: 'example/terraform-aws-iam-role.git', ref: 'v2.0.0' },
+        graph: { instances: [], exports: { outputs: {} } },
       },
       'aws-iam-policy@v1.0.0': {
         schema_version: '1.0',
@@ -441,10 +434,8 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
         id: 'aws-iam-policy',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'leaf',
-          source: { kind: 'git', repo: 'example/terraform-aws-iam-policy.git', ref: 'v1.0.0' },
-        },
+        source: { kind: 'git', repo: 'example/terraform-aws-iam-policy.git', ref: 'v1.0.0' },
+        graph: { instances: [], exports: { outputs: {} } },
       },
       'aws-iam-role-policy-attachment@v1.0.0': {
         schema_version: '1.0',
@@ -452,14 +443,12 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
         id: 'aws-iam-role-policy-attachment',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'leaf',
-          source: {
-            kind: 'git',
-            repo: 'example/terraform-aws-iam-role-policy-attachment.git',
-            ref: 'v1.0.0',
-          },
+        source: {
+          kind: 'git',
+          repo: 'example/terraform-aws-iam-role-policy-attachment.git',
+          ref: 'v1.0.0',
         },
+        graph: { instances: [], exports: { outputs: {} } },
       },
     };
 
@@ -593,16 +582,14 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
     expect(bundle.modules['root@v1.0.0'].providers).toHaveLength(2);
     expect(bundle.environments).toBeDefined();
     expect(bundle.environment_backends).toBeDefined();
-    if (bundle.modules['root@v1.0.0'].impl.kind === 'composite') {
-      expect(bundle.modules['root@v1.0.0'].impl.graph.locals).toHaveLength(2);
-      // depends_on preserved
-      const attachment = bundle.modules['root@v1.0.0'].impl.graph.instances.find(
-        (i) => i.id === 'iam_policy_attachment',
-      );
-      expect(attachment!.depends_on).toEqual(['module.iam_role', 'module.iam_policy']);
-      // Wires derived
-      expect(bundle.modules['root@v1.0.0'].impl.graph.wires!.length).toBe(2);
-    }
+    expect(bundle.modules['root@v1.0.0'].graph.locals).toHaveLength(2);
+    // depends_on preserved
+    const attachment = bundle.modules['root@v1.0.0'].graph.instances.find(
+      (i) => i.id === 'iam_policy_attachment',
+    );
+    expect(attachment!.depends_on).toEqual(['module.iam_role', 'module.iam_policy']);
+    // Wires derived
+    expect(bundle.modules['root@v1.0.0'].graph.wires!.length).toBe(2);
 
     // 8. Graph validation passes
     const errors = validateWorkspace(state);

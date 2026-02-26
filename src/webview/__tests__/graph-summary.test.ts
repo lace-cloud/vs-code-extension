@@ -22,12 +22,9 @@ function makeWorkspace(
         id: 'root',
         version: 'v1.0.0',
         interface: { inputs: variables, outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: {
-            instances,
-            exports: { outputs: exports },
-          },
+        graph: {
+          instances,
+          exports: { outputs: exports },
         },
       },
       ...extraModules,
@@ -48,7 +45,8 @@ const vpcDef: ModuleDef = {
     ],
     outputs: [{ name: 'vpc_id', type: 'string' }],
   },
-  impl: { kind: 'leaf', source: { kind: 'registry' } },
+  source: { kind: 'registry' },
+  graph: { instances: [], exports: { outputs: {} } },
 };
 
 const subnetDef: ModuleDef = {
@@ -63,7 +61,8 @@ const subnetDef: ModuleDef = {
     ],
     outputs: [{ name: 'subnet_id', type: 'string' }],
   },
-  impl: { kind: 'leaf', source: { kind: 'registry' } },
+  source: { kind: 'registry' },
+  graph: { instances: [], exports: { outputs: {} } },
 };
 
 describe('summarizeGraph', () => {

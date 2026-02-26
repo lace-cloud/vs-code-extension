@@ -42,17 +42,11 @@ export function toBundle(workspace: WorkspaceState): ModuleBundle {
 }
 
 function injectWires(def: ModuleDef): ModuleDef {
-  if (def.impl.kind !== 'composite') {
-    return def;
-  }
   return {
     ...def,
-    impl: {
-      ...def.impl,
-      graph: {
-        ...def.impl.graph,
-        wires: deriveWires(def.impl.graph.instances),
-      },
+    graph: {
+      ...def.graph,
+      wires: deriveWires(def.graph.instances),
     },
   };
 }
@@ -101,60 +95,49 @@ export function fromBundle(bundle: ModuleBundle, hints?: LayoutHints): ParseResu
 // ══════════════════════════════════════════════════════════════════════
 
 function parseModuleDef(key: string, raw: any, hints?: LayoutHints): ParsedEntry {
-  if (!raw.impl || !raw.impl.kind) {
-    throw new Error(`Module "${key}" has no impl.kind`);
+  // Backward compat: accept old CLI wire format { impl: { graph: ... } }
+  // during the transition window. Remove once CLI deploy is complete.
+  const rawGraph = raw.graph ?? raw.impl?.graph ?? { instances: [], exports: { outputs: {} } };
+
+  // Normalize instances
+  const instances: Instance[] = (rawGraph.instances || []).map((inst: any) =>
+    normalizeInstance(inst),
+  );
+
+  // Normalize exports
+  const rawExports = rawGraph.exports?.outputs || {};
+  const normalizedExports: Record<string, OutputExport> = {};
+  for (const [name, exp] of Object.entries(rawExports)) {
+    normalizedExports[name] = normalizeOutputExport(exp);
   }
 
-  if (raw.impl.kind === 'leaf') {
-    return { def: raw as ModuleDef };
-  }
+  // Normalize locals
+  const locals = rawGraph.locals
+    ? rawGraph.locals.map((l: any) => ({
+        name: l.name,
+        value: normalizeBinding(l.value),
+      }))
+    : undefined;
 
-  if (raw.impl.kind === 'composite') {
-    const graph = raw.impl.graph;
-    if (!graph) {
-      throw new Error(`Composite module "${key}" has no graph`);
-    }
+  const normalizedGraph: CompositeGraph = {
+    instances,
+    exports: { outputs: normalizedExports },
+    ...(locals ? { locals } : {}),
+  };
 
-    // Normalize instances
-    const instances: Instance[] = (graph.instances || []).map((inst: any) =>
-      normalizeInstance(inst),
-    );
+  // Build def — strip impl if present (old format), keep source if present
+  const { impl: _impl, ...rest } = raw;
+  const source = raw.source ?? raw.impl?.source;
+  const def: ModuleDef = {
+    ...rest,
+    ...(source ? { source } : {}),
+    graph: normalizedGraph,
+  };
 
-    // Normalize exports
-    const rawExports = graph.exports?.outputs || {};
-    const normalizedExports: Record<string, OutputExport> = {};
-    for (const [name, exp] of Object.entries(rawExports)) {
-      normalizedExports[name] = normalizeOutputExport(exp);
-    }
+  // Compute layout only if there are instances to lay out
+  const layout = instances.length > 0 ? computeLayout(instances, hints?.[key]) : undefined;
 
-    // Normalize locals
-    const locals = graph.locals
-      ? graph.locals.map((l: any) => ({
-          name: l.name,
-          value: normalizeBinding(l.value),
-        }))
-      : undefined;
-
-    // Strip wires — they are derived, not stored in workspace
-    const normalizedGraph: CompositeGraph = {
-      instances,
-      exports: { outputs: normalizedExports },
-      ...(locals ? { locals } : {}),
-    };
-
-    // Remove wires key entirely (destructured above, not in restGraph)
-    const def: ModuleDef = {
-      ...raw,
-      impl: { kind: 'composite' as const, graph: normalizedGraph },
-    };
-
-    // Compute layout
-    const layout = computeLayout(instances, hints?.[key]);
-
-    return { def, layout };
-  }
-
-  throw new Error(`Module "${key}" has unknown impl.kind: "${raw.impl.kind}"`);
+  return { def, layout: layout ?? { nodes: {} } };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -264,10 +247,7 @@ export function emptyWorkspace(name: string): WorkspaceState {
         id: root_id,
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: {
-          kind: 'composite',
-          graph: { instances: [], exports: { outputs: {} } },
-        },
+        graph: { instances: [], exports: { outputs: {} } },
       },
     },
     layouts: { [root_key]: { nodes: {} } },

@@ -2,11 +2,16 @@ import { test, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { workspaceReducer } from '../state/reducer';
+import { fromBundle } from '../utils/bundle';
 import type { WorkspaceState } from '../types/workspace';
-import type { Instance, ModuleDef } from '../types/ir';
+import type { Instance, ModuleDef, ModuleBundle } from '../types/ir';
 
-function loadFixture(name: string): any {
-  return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
+function loadFixture(name: string): ModuleBundle {
+  const raw = JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
+  // Normalize through fromBundle to handle old impl format in fixtures
+  const { workspace } = fromBundle(raw);
+  const { layouts: _layouts, ...bundle } = workspace;
+  return bundle;
 }
 
 /** Build a minimal workspace with one composite and some instances */
@@ -22,12 +27,9 @@ function makeWorkspace(
     id: 'root',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: {
-      kind: 'composite',
-      graph: {
-        instances,
-        exports: { outputs: {} },
-      },
+    graph: {
+      instances,
+      exports: { outputs: {} },
     },
   };
   return {
@@ -45,10 +47,7 @@ function makeWorkspace(
 /** Get an instance from the root composite */
 function getInst(state: WorkspaceState, id: string): Instance {
   const def = state.modules['root@v1.0.0'];
-  if (def.impl.kind !== 'composite') {
-    throw new Error('Not composite');
-  }
-  const inst = def.impl.graph.instances.find((i) => i.id === id);
+  const inst = def.graph.instances.find((i) => i.id === id);
   if (!inst) {
     throw new Error(`Instance ${id} not found`);
   }
@@ -58,19 +57,13 @@ function getInst(state: WorkspaceState, id: string): Instance {
 /** Get all instances from the root composite */
 function getInstances(state: WorkspaceState, key: string): Instance[] {
   const def = state.modules[key];
-  if (def.impl.kind !== 'composite') {
-    throw new Error('Not composite');
-  }
-  return def.impl.graph.instances;
+  return def.graph.instances;
 }
 
 /** Get exports from the root composite */
 function getExports(state: WorkspaceState, key: string) {
   const def = state.modules[key];
-  if (def.impl.kind !== 'composite') {
-    throw new Error('Not composite');
-  }
-  return def.impl.graph.exports.outputs;
+  return def.graph.exports.outputs;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -151,11 +144,9 @@ test('RENAME_INSTANCE cascades to exports', () => {
   ]);
   // Manually set exports referencing 'a'
   const def = state.modules['root@v1.0.0'];
-  if (def.impl.kind === 'composite') {
-    def.impl.graph.exports.outputs['role_arn'] = {
-      out: { module: 'a', name: 'arn' },
-    };
-  }
+  def.graph.exports.outputs['role_arn'] = {
+    out: { module: 'a', name: 'arn' },
+  };
 
   const next = workspaceReducer(state, {
     type: 'RENAME_INSTANCE',
@@ -269,11 +260,9 @@ test('DELETE_INSTANCE cleans up exports referencing deleted instance', () => {
     { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
   ]);
   const def = state.modules['root@v1.0.0'];
-  if (def.impl.kind === 'composite') {
-    def.impl.graph.exports.outputs['role_arn'] = {
-      out: { module: 'a', name: 'arn' },
-    };
-  }
+  def.graph.exports.outputs['role_arn'] = {
+    out: { module: 'a', name: 'arn' },
+  };
   const next = workspaceReducer(state, {
     type: 'DELETE_INSTANCE',
     module_key: 'root@v1.0.0',
@@ -333,7 +322,8 @@ test('DELETE_INSTANCE removes orphaned module defs from state.modules', () => {
     id: 'rds-instance',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+    source: { kind: 'git', repo: 'test', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const state = makeWorkspace(
     [
@@ -369,7 +359,8 @@ test('DELETE_INSTANCE preserves module defs still referenced by other instances'
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+    source: { kind: 'git', repo: 'test', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const state = makeWorkspace(
     [
@@ -512,7 +503,8 @@ test('LOAD_WORKSPACE removes orphaned module defs not referenced by any instance
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+    source: { kind: 'git', repo: 'test', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const orphanDef: ModuleDef = {
     schema_version: '1.0',
@@ -520,7 +512,8 @@ test('LOAD_WORKSPACE removes orphaned module defs not referenced by any instance
     id: 'rds-instance',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+    source: { kind: 'git', repo: 'test', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   // Simulate loading a lace.json that has orphaned defs from earlier bugs
   const dirtyState = makeWorkspace(
@@ -674,11 +667,7 @@ test('SET_EXPORTS sets both interface.outputs and graph.exports.outputs', () => 
   expect(next.modules['root@v1.0.0'].interface.outputs).toEqual(output_defs);
   // graph.exports.outputs updated
   const def = next.modules['root@v1.0.0'];
-  if (def.impl.kind === 'composite') {
-    expect(def.impl.graph.exports.outputs).toEqual(outputs);
-  } else {
-    throw new Error('Expected composite');
-  }
+  expect(def.graph.exports.outputs).toEqual(outputs);
 });
 
 test('SET_EXPORTS replaces existing exports', () => {
@@ -693,9 +682,7 @@ test('SET_EXPORTS replaces existing exports', () => {
     output_defs: [{ name: 'old_out', type: 'string' }],
   });
   const firstDef = first.modules['root@v1.0.0'];
-  if (firstDef.impl.kind === 'composite') {
-    expect(firstDef.impl.graph.exports.outputs['old_out']).toBeDefined();
-  }
+  expect(firstDef.graph.exports.outputs['old_out']).toBeDefined();
 
   // Replace
   const second = workspaceReducer(first, {
@@ -705,12 +692,10 @@ test('SET_EXPORTS replaces existing exports', () => {
     output_defs: [{ name: 'new_out', type: 'string' }],
   });
   const secondDef = second.modules['root@v1.0.0'];
-  if (secondDef.impl.kind === 'composite') {
-    expect(secondDef.impl.graph.exports.outputs['old_out']).toBeUndefined();
-    expect(secondDef.impl.graph.exports.outputs['new_out']).toEqual({
-      out: { module: 'a', name: 'id' },
-    });
-  }
+  expect(secondDef.graph.exports.outputs['old_out']).toBeUndefined();
+  expect(secondDef.graph.exports.outputs['new_out']).toEqual({
+    out: { module: 'a', name: 'id' },
+  });
   expect(second.modules['root@v1.0.0'].interface.outputs).toEqual([
     { name: 'new_out', type: 'string' },
   ]);
@@ -725,7 +710,8 @@ test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
     id: 'leaf',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+    source: { kind: 'git', repo: 'test', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const stateWithLeaf = {
     ...state,
@@ -756,7 +742,8 @@ test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and roo
       inputs: [{ name: 'bucket_name', type: 'string', required: true }],
       outputs: [{ name: 'arn', type: 'string' }],
     },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old-repo', ref: 'v1.2.0' } },
+    source: { kind: 'git', repo: 'old-repo', ref: 'v1.2.0' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const state = makeWorkspace(
     [
@@ -780,7 +767,8 @@ test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and roo
       ],
       outputs: [{ name: 'arn', type: 'string' }],
     },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'fixed-repo', ref: 'v1.2.0' } },
+    source: { kind: 'git', repo: 'fixed-repo', ref: 'v1.2.0' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
 
   const next = workspaceReducer(state, {
@@ -790,12 +778,12 @@ test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and roo
 
   // Module def is updated
   const def = next.modules['aws-s3-bucket@v1.2.0'];
-  expect((def.impl as any).source.repo).toBe('fixed-repo');
+  expect((def.source as any).repo).toBe('fixed-repo');
   expect(def.interface.inputs).toHaveLength(2);
 
   // Root composite preserved
   expect(next.modules['root@v1.0.0']).toBeDefined();
-  expect(next.modules['root@v1.0.0'].impl.kind).toBe('composite');
+  expect(next.modules['root@v1.0.0'].graph).toBeDefined();
 
   // Instance inputs preserved
   const s3 = getInst(next, 's3');
@@ -820,7 +808,8 @@ test('REFRESH_MODULE_DEFS preserves layouts', () => {
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old', ref: 'v1' } },
+    source: { kind: 'git', repo: 'old', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const state = makeWorkspace(
     [
@@ -837,7 +826,7 @@ test('REFRESH_MODULE_DEFS preserves layouts', () => {
 
   const updatedDef: ModuleDef = {
     ...leafDef,
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'new', ref: 'v1' } },
+    source: { kind: 'git', repo: 'new', ref: 'v1' },
   };
 
   const next = workspaceReducer(state, {
@@ -860,7 +849,8 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
       inputs: [{ name: 'name', type: 'string', required: true }],
       outputs: [{ name: 'id', type: 'string' }],
     },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old', ref: 'v1' } },
+    source: { kind: 'git', repo: 'old', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const versioningDef: ModuleDef = {
     schema_version: '1.0',
@@ -871,7 +861,8 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
       inputs: [{ name: 'bucket_id', type: 'string', required: true }],
       outputs: [],
     },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'old', ref: 'v1' } },
+    source: { kind: 'git', repo: 'old', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
 
   const state = makeWorkspace(
@@ -901,11 +892,11 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
     updated_modules: {
       'aws-s3-bucket@v1.0.0': {
         ...bucketDef,
-        impl: { kind: 'leaf', source: { kind: 'git', repo: 'new', ref: 'v1' } },
+        source: { kind: 'git', repo: 'new', ref: 'v1' },
       },
       'aws-s3-versioning@v1.0.0': {
         ...versioningDef,
-        impl: { kind: 'leaf', source: { kind: 'git', repo: 'new', ref: 'v1' } },
+        source: { kind: 'git', repo: 'new', ref: 'v1' },
       },
     },
   });
@@ -915,8 +906,8 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
   expect(v.inputs.bucket_id).toEqual({ out: { module: 'bucket', name: 'id' } });
 
   // Defs updated
-  expect((next.modules['aws-s3-bucket@v1.0.0'].impl as any).source.repo).toBe('new');
-  expect((next.modules['aws-s3-versioning@v1.0.0'].impl as any).source.repo).toBe('new');
+  expect((next.modules['aws-s3-bucket@v1.0.0'].source as any).repo).toBe('new');
+  expect((next.modules['aws-s3-versioning@v1.0.0'].source as any).repo).toBe('new');
 });
 
 test('REFRESH_MODULE_DEFS does not guard against entry overwrite (host responsibility)', () => {
@@ -930,14 +921,15 @@ test('REFRESH_MODULE_DEFS does not guard against entry overwrite (host responsib
     id: 'root',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'bad', ref: 'v1' } },
+    source: { kind: 'git', repo: 'bad', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const next = workspaceReducer(state, {
     type: 'REFRESH_MODULE_DEFS',
     updated_modules: { 'root@v1.0.0': bogusRoot },
   });
   // Reducer allows it — host must filter entry key before dispatching
-  expect(next.modules['root@v1.0.0'].impl.kind).toBe('leaf');
+  expect(next.modules['root@v1.0.0'].source).toBeDefined();
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1034,9 +1026,7 @@ test('CLEAR_GRAPH clears instances and exports', () => {
   ]);
   // Set exports
   const def = state.modules['root@v1.0.0'];
-  if (def.impl.kind === 'composite') {
-    def.impl.graph.exports.outputs['out1'] = { out: { module: 'a', name: 'arn' } };
-  }
+  def.graph.exports.outputs['out1'] = { out: { module: 'a', name: 'arn' } };
   const next = workspaceReducer(state, {
     type: 'CLEAR_GRAPH',
     module_key: 'root@v1.0.0',
@@ -1065,7 +1055,8 @@ test('CLEAR_GRAPH GCs orphaned module defs', () => {
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
-    impl: { kind: 'leaf', source: { kind: 'git', repo: 'test', ref: 'v1' } },
+    source: { kind: 'git', repo: 'test', ref: 'v1' },
+    graph: { instances: [], exports: { outputs: {} } },
   };
   const state = makeWorkspace(
     [{ kind: 'module', id: 'my-vpc', use: { module_id: 'vpc', version: 'v1.0.0' }, inputs: {} }],
@@ -1197,8 +1188,7 @@ test('SET_LOCALS sets locals on composite graph', () => {
     locals,
   });
   const def = next.modules['root@v1.0.0'];
-  if (def.impl.kind !== 'composite') throw new Error('Not composite');
-  expect(def.impl.graph.locals).toEqual(locals);
+  expect(def.graph.locals).toEqual(locals);
 });
 
 test('SET_LOCALS with empty array sets locals to undefined', () => {
@@ -1216,8 +1206,7 @@ test('SET_LOCALS with empty array sets locals to undefined', () => {
     locals: [],
   });
   const def = next.modules['root@v1.0.0'];
-  if (def.impl.kind !== 'composite') throw new Error('Not composite');
-  expect(def.impl.graph.locals).toBeUndefined();
+  expect(def.graph.locals).toBeUndefined();
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1292,7 +1281,7 @@ test('SET_ENVIRONMENT_BACKENDS sets backend configs on workspace', () => {
 // DROP_BUNDLE edge cases
 // ══════════════════════════════════════════════════════════════════════
 
-test('DROP_BUNDLE with non-composite deploy entry returns state unchanged', () => {
+test('DROP_BUNDLE with leaf-like deploy entry (no instances) preserves existing graph', () => {
   const state = makeWorkspace([]);
   const deploy_bundle: import('../types/ir').ModuleBundle = {
     schema_version: '1.0',
@@ -1305,7 +1294,8 @@ test('DROP_BUNDLE with non-composite deploy entry returns state unchanged', () =
         id: 'leaf-only',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        impl: { kind: 'leaf', source: { kind: 'registry' } },
+        source: { kind: 'registry' },
+        graph: { instances: [], exports: { outputs: {} } },
       },
     },
   };
@@ -1315,5 +1305,7 @@ test('DROP_BUNDLE with non-composite deploy entry returns state unchanged', () =
     deploy_bundle,
     positions: {},
   });
-  expect(next).toBe(state);
+  // No new instances added — graph should still be empty
+  const instances = getInstances(next, 'root@v1.0.0');
+  expect(instances).toHaveLength(0);
 });

@@ -38,7 +38,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
         const lines = modules.map((m: any) => {
           const cats = m.categories?.length ? ` [${m.categories.join(', ')}]` : '';
           const desc = m.description ? ` — ${m.description}` : '';
-          return `- **${m.name}** (${m.system}, v${m.version}, ${m.kind})${cats}${desc}`;
+          return `- **${m.name}** (${m.system}, v${m.version})${cats}${desc}`;
         });
 
         return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
@@ -75,7 +75,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     const lines = modules.map((m) => {
       const cats = m.categories?.length ? ` [${m.categories.join(', ')}]` : '';
       const desc = m.description ? ` — ${m.description}` : '';
-      return `- **${m.name}** (${m.system}, v${m.version}, ${m.kind})${cats}${desc}`;
+      return `- **${m.name}** (${m.system}, v${m.version})${cats}${desc}`;
     });
 
     return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
@@ -135,7 +135,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     if (!client) {
       // Return basic info from local cache
       return {
-        content: `**${match.name}** (${match.system}, v${match.version}, ${match.kind})\n${match.description ?? 'No description.'}\n\n_Lace engine not running — cannot fetch full interface schema._`,
+        content: `**${match.name}** (${match.system}, v${match.version})\n${match.description ?? 'No description.'}\n\n_Lace engine not running — cannot fetch full interface schema._`,
       };
     }
 
@@ -158,7 +158,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
       const entryDef = deployBundle.modules?.[entryKey];
 
       const lines: string[] = [];
-      lines.push(`**${match.name}** (${match.system}, v${match.version}, ${match.kind})`);
+      lines.push(`**${match.name}** (${match.system}, v${match.version})`);
       if (match.description) lines.push(match.description);
       lines.push('');
 
