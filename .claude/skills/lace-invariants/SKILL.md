@@ -39,7 +39,7 @@ Go JSON struct tags exactly: `module_id`, `required_version`, `depends_on`,
 - NO mutations. All updates use explicit `{ ...obj }` spreads.
 - NO `Object.assign`. NO Proxy libraries. NO side effects.
 - Use `updateCompositeGraph(state, module_key, fn)` for graph mutations —
-  it handles the nested spread `state → modules → module → impl → graph`.
+  it handles the nested spread `state → modules → module → graph`.
 
 ### Cascading Operations
 
@@ -77,7 +77,6 @@ this causes nodes to appear at (0,0) on the canvas.
 
 - Binding is a discriminated union: `{ lit }`, `{ var }`, `{ out }`, `{ expr }`
 - Instance is discriminated on `kind`: `'module'`, `'resource'`, `'data'`
-- ModuleImpl is discriminated on `kind`: `'leaf'`, `'composite'`
 - Use type guards (`isOut`, `isVar`, `isLit`, `isExpr`, `isModuleInstance`)
   for narrowing. NEVER use `as` casts or `!` assertions downstream of
   `fromBundle`. `any` is only acceptable at boundaries.

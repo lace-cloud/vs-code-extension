@@ -697,7 +697,7 @@ function handleSetExports(
     ...def,
     interface: { ...def.interface, outputs: output_defs },
   };
-  // Update impl.graph.exports.outputs with the wiring
+  // Update graph.exports.outputs with the wiring
   return updateCompositeGraph(
     { ...state, modules: { ...state.modules, [module_key]: withInterface } },
     module_key,

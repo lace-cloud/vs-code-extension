@@ -65,7 +65,7 @@ describe('RENAME_INSTANCE', () => {
     });
 
     // Assert — check all cascade targets
-    const graph = result.modules[ROOT_KEY].impl.graph;
+    const graph = result.modules[ROOT_KEY].graph;
     // 1. Sibling out bindings updated
     // 2. Export outputs updated
     // 3. depends_on entries updated

@@ -28,7 +28,7 @@ E2E tests require the `lace` binary and `terraform` to be installed. They spawn 
 `src/webview/utils/bundle.ts` — These two functions are the boundary between workspace state and wire format. Changes require careful consideration of wire protocol compatibility with the Go CLI.
 
 - `toBundle(workspace)`: Strips `layouts`, injects derived `wires` into graphs.
-- `fromBundle(bundle, hints?)`: Normalizes bindings, computes layouts, strips wires. Collects errors without throwing. Includes a backward-compat shim that accepts both `{ graph: ... }` and legacy `{ impl: { graph: ... } }` formats during the CLI transition.
+- `fromBundle(bundle, hints?)`: Normalizes bindings, computes layouts, strips wires. Collects errors without throwing.
 
 ### 2. Wire format matches Go JSON tags exactly
 
