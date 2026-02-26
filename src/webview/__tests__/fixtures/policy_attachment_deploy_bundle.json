@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.0",
+  "kind": "module_bundle",
+  "entry": {
+    "module_id": "cloudwatch-logs-policy",
+    "version": "v1.0.0"
+  },
+  "modules": {
+    "cloudwatch-logs-policy@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "cloudwatch-logs-policy",
+      "version": "v1.0.0",
+      "description": "CloudWatch Logs IAM policy with role attachment",
+      "interface": {
+        "inputs": [
+          {
+            "name": "role_name",
+            "type": "string",
+            "required": true,
+            "description": "IAM role name to attach the policy to"
+          },
+          {
+            "name": "policy_name",
+            "type": "string",
+            "required": true,
+            "description": "Name of the IAM policy"
+          },
+          {
+            "name": "actions",
+            "type": "list(string)",
+            "required": true,
+            "description": "IAM actions for this policy"
+          },
+          {
+            "name": "resources",
+            "type": "list(string)",
+            "required": true,
+            "description": "IAM resource ARNs"
+          }
+        ],
+        "outputs": [
+          { "name": "policy_arn", "type": "string", "description": "ARN of the policy created" }
+        ]
+      },
+      "graph": {
+        "instances": [
+          {
+            "id": "policy",
+            "kind": "module",
+            "use": { "module_id": "aws-iam-policy", "version": "v1.0.0" },
+            "inputs": {
+              "policy_name": { "var": "policy_name" },
+              "policy_document": {
+                "expr": {
+                  "lang": "hcl",
+                  "value": "jsonencode({Version = \"2012-10-17\", Statement = [{Effect = \"Allow\", Action = var.actions, Resource = var.resources}]})"
+                }
+              }
+            }
+          },
+          {
+            "id": "attachment",
+            "kind": "module",
+            "use": { "module_id": "aws-iam-policy-attachment", "version": "v1.0.0" },
+            "inputs": {
+              "role_name": { "var": "role_name" },
+              "policy_arn": { "out": { "module": "policy", "name": "policy_arn" } }
+            }
+          }
+        ],
+        "wires": [
+          {
+            "from": { "module": "policy", "port": "outputs.policy_arn" },
+            "to": { "module": "attachment", "port": "inputs.policy_arn" }
+          }
+        ],
+        "exports": {
+          "outputs": {
+            "policy_arn": { "out": { "module": "policy", "name": "policy_arn" } }
+          }
+        }
+      }
+    },
+    "aws-iam-policy@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "aws-iam-policy",
+      "version": "v1.0.0",
+      "description": "Creates an IAM policy",
+      "interface": {
+        "inputs": [
+          {
+            "name": "policy_name",
+            "type": "string",
+            "required": true,
+            "description": "Name of the policy"
+          },
+          {
+            "name": "policy_document",
+            "type": "string",
+            "required": true,
+            "description": "Policy document JSON"
+          },
+          { "name": "tags", "type": "map(string)", "description": "Tags for the policy" }
+        ],
+        "outputs": [
+          { "name": "policy_arn", "type": "string", "description": "The ARN of the policy" }
+        ]
+      },
+      "source": {
+        "kind": "git",
+        "repo": "https://github.com/lace-cloud/registry-tf.git",
+        "subdir": "aws/iam/policy",
+        "ref": "v1.0.0"
+      },
+      "graph": {
+        "instances": [],
+        "exports": { "outputs": {} }
+      }
+    },
+    "aws-iam-policy-attachment@v1.0.0": {
+      "schema_version": "1.0",
+      "kind": "module_def",
+      "id": "aws-iam-policy-attachment",
+      "version": "v1.0.0",
+      "description": "Attaches an IAM policy to a role",
+      "interface": {
+        "inputs": [
+          {
+            "name": "role_name",
+            "type": "string",
+            "required": true,
+            "description": "IAM role name"
+          },
+          {
+            "name": "policy_arn",
+            "type": "string",
+            "required": true,
+            "description": "Policy ARN to attach"
+          }
+        ],
+        "outputs": [
+          { "name": "attachment_id", "type": "string", "description": "The attachment identifier" }
+        ]
+      },
+      "source": {
+        "kind": "git",
+        "repo": "https://github.com/lace-cloud/registry-tf.git",
+        "subdir": "aws/iam/policy_attachment",
+        "ref": "v1.0.0"
+      },
+      "graph": {
+        "instances": [],
+        "exports": { "outputs": {} }
+      }
+    }
+  }
+}
