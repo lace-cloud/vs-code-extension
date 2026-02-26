@@ -80,6 +80,14 @@ function loadFixture(name: string): any {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
 }
 
+/** Normalize a raw fixture through fromBundle (matches Canvas.tsx production path). */
+function loadNormalizedBundle(name: string): ModuleBundle {
+  const raw = loadFixture(name);
+  const { workspace } = fromBundle(raw);
+  const { layouts: _layouts, ...bundle } = workspace;
+  return bundle;
+}
+
 function rootKey(ws: WorkspaceState): string {
   return `${ws.entry.module_id}@${ws.entry.version}`;
 }
@@ -126,7 +134,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     let ws = emptyWorkspace('my-infra');
     const rk = rootKey(ws);
 
-    const deployBundle: ModuleBundle = loadFixture('composite_deploy_bundle.json');
+    const deployBundle: ModuleBundle = loadNormalizedBundle('composite_deploy_bundle.json');
     ws = workspaceReducer(ws, {
       type: 'DROP_BUNDLE',
       module_key: rk,
@@ -334,7 +342,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
 
     let ws = emptyWorkspace('dedup-test');
     const rk = rootKey(ws);
-    const deployBundle: ModuleBundle = loadFixture('composite_deploy_bundle.json');
+    const deployBundle: ModuleBundle = loadNormalizedBundle('composite_deploy_bundle.json');
 
     // Drop the same bundle twice
     ws = workspaceReducer(ws, {
