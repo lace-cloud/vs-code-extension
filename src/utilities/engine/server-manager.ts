@@ -28,6 +28,10 @@ export class ServerManager extends EventEmitter {
     return this.client;
   }
 
+  get currentState(): ServerState {
+    return this.state;
+  }
+
   async start(): Promise<void> {
     if (this.state === 'running' || this.state === 'starting') {
       return;
@@ -114,6 +118,14 @@ export class ServerManager extends EventEmitter {
       this.emit('auth', { authenticated: true, user: result.user });
     }
     return result;
+  }
+
+  async logout(): Promise<void> {
+    if (!this.client) throw new Error('Engine not running');
+    const result = await this.client.authLogout();
+    if (result.success) {
+      this.emit('auth', { authenticated: false });
+    }
   }
 
   async checkAuth(): Promise<AuthStatusResult | null> {

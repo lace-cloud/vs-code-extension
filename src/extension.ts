@@ -110,8 +110,12 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   server.on('auth', (status: { authenticated: boolean; user?: { name?: string } }) => {
+    registryProvider?.setAuthenticated(status.authenticated);
     if (status.authenticated) {
       registryProvider?.setRpcClient(server?.rpcClient ?? null);
+      registryProvider?.refresh();
+    } else {
+      registryProvider?.setRpcClient(null);
       registryProvider?.refresh();
     }
   });
@@ -131,13 +135,17 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.restartEngine', () => server?.restart()),
 
     vscode.commands.registerCommand('lace.login', async () => {
+      if (!server || server.currentState !== 'running') {
+        vscode.window.showWarningMessage('Start the Lace engine first.');
+        return;
+      }
       const token = await vscode.window.showInputBox({
         prompt: 'GitHub Personal Access Token',
         password: true,
         placeHolder: 'ghp_...',
         ignoreFocusOut: true,
       });
-      if (!token || !server) return;
+      if (!token) return;
       try {
         const result = await server.login(token);
         if (result.success) {
@@ -148,6 +156,21 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (err: unknown) {
         vscode.window.showErrorMessage(
           `Login failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('lace.logout', async () => {
+      if (!server || server.currentState !== 'running') {
+        vscode.window.showWarningMessage('Lace engine is not running.');
+        return;
+      }
+      try {
+        await server.logout();
+        vscode.window.showInformationMessage('Logged out of Lace.');
+      } catch (err: unknown) {
+        vscode.window.showErrorMessage(
+          `Logout failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }),

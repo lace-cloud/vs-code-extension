@@ -18,6 +18,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   private rpcClient: JSONRPCClient | null = null;
   private loading = false;
   private errorMessage: string | null = null;
+  private authenticated = false;
   private globalState?: vscode.Memento;
   private favoriteModuleIds: string[] = [];
   private recentModuleIds: string[] = [];
@@ -32,6 +33,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
   setRpcClient(client: JSONRPCClient | null) {
     this.rpcClient = client;
+  }
+
+  setAuthenticated(value: boolean) {
+    this.authenticated = value;
+    this.updateWebview();
   }
 
   /** Get all loaded modules (for command palette quick pick). */
@@ -174,6 +180,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const errorJson = JSON.stringify(this.errorMessage);
     const favoritesJson = JSON.stringify(this.favoriteModuleIds);
     const recentJson = JSON.stringify(this.recentModuleIds);
+    const hasEngine = this.rpcClient !== null;
+    const authenticated = this.authenticated;
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -532,6 +540,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const errorMessage = ${errorJson};
     const favoriteIds = ${favoritesJson};
     const recentIds = ${recentJson};
+    const hasEngine = ${hasEngine};
+    const authenticated = ${authenticated};
 
     const searchInput = document.getElementById('search');
     const chipsEl = document.getElementById('chips');
@@ -635,10 +645,16 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       }
 
       if (allModules.length === 0) {
-        content.innerHTML = '<div class="empty-state">No modules available.<br/>Is the Lace engine running?<br/><button class="retry-btn" id="loginBtn">Login with GitHub</button></div>';
-        document.getElementById('loginBtn').addEventListener('click', () => {
-          vscode.postMessage({ command: 'login' });
-        });
+        if (!hasEngine) {
+          content.innerHTML = '<div class="empty-state">No modules available.<br/>Is the Lace engine running?</div>';
+        } else if (!authenticated) {
+          content.innerHTML = '<div class="empty-state">No modules available.<br/><button class="retry-btn" id="loginBtn">Login with GitHub</button></div>';
+          document.getElementById('loginBtn').addEventListener('click', () => {
+            vscode.postMessage({ command: 'login' });
+          });
+        } else {
+          content.innerHTML = '<div class="empty-state">No modules available.</div>';
+        }
         return;
       }
 

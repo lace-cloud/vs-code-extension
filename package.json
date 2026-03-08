@@ -386,6 +386,10 @@
         "title": "Lace: Login with GitHub"
       },
       {
+        "command": "lace.logout",
+        "title": "Lace: Logout"
+      },
+      {
         "command": "lace.openLogs",
         "title": "Lace: Open Logs"
       }
