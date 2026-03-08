@@ -18,7 +18,7 @@ npm run build            # Rspack build (host + webview)
 
 1. **The extension has NO IR types.** All IR knowledge (Bundle, Module, Binding, etc.) lives in the Go CLI. The extension only uses RenderModel types from `webview/types/render.ts`.
 2. All canvas mutations go through the CLI via JSON-RPC (`action/*` methods). The extension never modifies state directly.
-3. File I/O (canvas persistence, encryption) is handled by the CLI via `session/open`, `session/save`, `session/close`.
+3. File I/O (canvas persistence, protobuf encoding) is handled by the CLI via `session/open`, `session/save`, `session/close`.
 4. Two Rspack entries — do not import VS Code APIs in webview code or DOM APIs in host code.
 5. The `CanvasEngine` interface (`webview/engine.ts`) is the contract between webview and CLI — all operations are async RPC calls.
 
