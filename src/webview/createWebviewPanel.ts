@@ -12,11 +12,14 @@ import { validateWorkspace } from './utils/validate';
 import type { WorkspaceState } from './types/workspace';
 import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
+import { encodeCanvasState, decodeCanvasState } from './canvas-encoding';
 
 /* ── Constants ── */
 
 const LACE_DIR = '.lace';
-const LACE_FILE = 'lace.json';
+const CANVAS_DIR = '.canvas';
+const CANVAS_FILE = 'state.lace';
+const LEGACY_FILE = 'lace.json';
 
 /* ── State ── */
 
@@ -134,28 +137,40 @@ function ensureLaceDir(laceDir: string): void {
   }
 }
 
-function readLaceJson(laceDir: string): any | undefined {
-  const filePath = path.join(laceDir, LACE_FILE);
+function readCanvasState(laceDir: string): WorkspaceState | undefined {
+  // Try binary format first
+  const binaryPath = path.join(laceDir, CANVAS_DIR, CANVAS_FILE);
   try {
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (fs.existsSync(binaryPath)) {
+      const buf = fs.readFileSync(binaryPath);
+      return decodeCanvasState(buf);
     }
   } catch (err) {
-    console.warn('Failed to read lace.json:', err);
+    console.warn('Failed to read binary canvas state:', err);
   }
+
+  // Fallback: legacy JSON
+  const legacyPath = path.join(laceDir, LEGACY_FILE);
+  try {
+    if (fs.existsSync(legacyPath)) {
+      return JSON.parse(fs.readFileSync(legacyPath, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('Failed to read legacy lace.json:', err);
+  }
+
   return undefined;
 }
 
-function writeLaceJson(laceDir: string, state: WorkspaceState): void {
-  ensureLaceDir(laceDir);
-  const filePath = path.join(laceDir, LACE_FILE);
+function writeCanvasState(laceDir: string, state: WorkspaceState): void {
+  const canvasDir = path.join(laceDir, CANVAS_DIR);
+  ensureLaceDir(canvasDir);
+  const filePath = path.join(canvasDir, CANVAS_FILE);
   const tmpPath = filePath + '.tmp';
   const bakPath = filePath + '.bak';
 
-  // Write to temp file first, then atomically rename
-  fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf-8');
+  fs.writeFileSync(tmpPath, encodeCanvasState(state));
 
-  // Rotate: current → .bak (overwrite previous backup)
   try {
     if (fs.existsSync(filePath)) {
       fs.renameSync(filePath, bakPath);
@@ -165,6 +180,17 @@ function writeLaceJson(laceDir: string, state: WorkspaceState): void {
   }
 
   fs.renameSync(tmpPath, filePath);
+}
+
+function migrateLegacyFile(laceDir: string): void {
+  const legacyPath = path.join(laceDir, LEGACY_FILE);
+  const legacyBakPath = legacyPath + '.bak';
+  try {
+    if (fs.existsSync(legacyPath)) fs.unlinkSync(legacyPath);
+    if (fs.existsSync(legacyBakPath)) fs.unlinkSync(legacyBakPath);
+  } catch {
+    // Best-effort cleanup
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -227,9 +253,9 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
   panel.webview.onDidReceiveMessage(
     async (msg: WebviewToHost | { command: string; [key: string]: any }) => {
       switch (msg.command) {
-        // ── webviewReady: load .lace/lace.json or create empty workspace ──
+        // ── webviewReady: load canvas state or create empty workspace ──
         case 'webviewReady': {
-          const saved = readLaceJson(laceDir);
+          const saved = readCanvasState(laceDir);
           if (saved) {
             // Parse through fromBundle for validation + normalization.
             // Preserve saved layout positions as hints.
@@ -247,19 +273,24 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
               console.warn('Bundle parse errors:', errors);
             }
             postToWebview(panel, { command: 'loadState', state: workspace });
+
+            // Migrate legacy lace.json → binary format
+            if (!fs.existsSync(path.join(laceDir, CANVAS_DIR, CANVAS_FILE))) {
+              writeCanvasState(laceDir, workspace);
+              migrateLegacyFile(laceDir);
+            }
           } else {
-            // No .lace/lace.json — create empty workspace
             const workspace = emptyWorkspace(folderName);
-            writeLaceJson(laceDir, workspace);
+            writeCanvasState(laceDir, workspace);
             postToWebview(panel, { command: 'loadState', state: workspace });
           }
           break;
         }
 
-        // ── saveState: write to .lace/lace.json ──
+        // ── saveState: write to .lace/.canvas/state.lace ──
         case 'saveState': {
           const state = (msg as any).state as WorkspaceState;
-          writeLaceJson(laceDir, state);
+          writeCanvasState(laceDir, state);
           isDirtyHostSide = false;
           lastKnownState = undefined;
           panel.title = `Lace · ${folderName}`;
@@ -410,7 +441,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
     }
 
     if (isDirtyHostSide && lastKnownState) {
-      writeLaceJson(laceDir, lastKnownState);
+      writeCanvasState(laceDir, lastKnownState);
     }
     canvasPanel = undefined;
   });

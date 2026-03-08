@@ -50,7 +50,7 @@ Wires (edges) are derived from `out` bindings by `deriveEdges()` for ReactFlow r
 
 ### 6. `.lace/` is the persistence model
 
-All state lives in `.lace/lace.json` at the workspace root. Generated `.tf` files go into the same `.lace/` directory. There is no global storage, no Store class, no component naming. One workspace = one component.
+All state lives in `.lace/.canvas/state.lace` (binary format) at the workspace root. Generated `.tf` files go into the same `.lace/` directory. There is no global storage, no Store class, no component naming. One workspace = one component.
 
 ### 7. Registry browsing is host-side
 
@@ -298,4 +298,4 @@ The `@lace` chat participant lets users compose infrastructure via natural langu
 
 **Dev:** `typescript`, `vitest`, `rspack`, `tailwindcss`, `postcss`, `prettier`, `husky`, `lint-staged`.
 
-Do not add native dependencies (sqlite3, better-sqlite3, node-gyp, etc.). The extension relies on zero native Node.js modules — persistence uses `.lace/lace.json`, and the CLI handles all heavy lifting.
+Do not add native dependencies (sqlite3, better-sqlite3, node-gyp, etc.). The extension relies on zero native Node.js modules — persistence uses `.lace/.canvas/state.lace`, and the CLI handles all heavy lifting.

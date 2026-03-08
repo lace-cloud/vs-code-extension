@@ -78,7 +78,7 @@ in order. Do not skip or reorder:
 
 ## Persistence
 
-- All state in `.lace/lace.json` at workspace root
+- All state in `.lace/.canvas/state.lace` (binary) at workspace root
 - Generated `.tf` files in the `.lace/` directory
 - No global storage, no Store class, no database
 - `getLaceDir()` resolves the path from `vscode.workspace.workspaceFolders`

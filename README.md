@@ -79,7 +79,7 @@ Slash commands are also available:
 
 ## How It Works
 
-Lace connects to a module registry through its CLI backend. When you add modules to the canvas and wire them together, Lace maintains a project file (`lace.json`) that captures your composition. When you generate, Lace produces standard Terraform files (`.tf`) from your visual design.
+Lace connects to a module registry through its CLI backend. When you add modules to the canvas and wire them together, Lace maintains a project file (`.lace/.canvas/state.lace`) that captures your composition. When you generate, Lace produces standard Terraform files (`.tf`) from your visual design.
 
 All project files live in a `.lace/` directory at your workspace root. This directory is meant to be version-controlled alongside the rest of your code.
 
