@@ -8,7 +8,7 @@ import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { resolveSchema } from '../../webview/utils/resolve';
 import { findAutoConnections } from '../auto-connect';
-import { makeModuleKey } from '../../webview/utils/identifiers';
+import { findChild } from '../../webview/utils/children';
 
 export type GenerateToolDeps = {
   requestGraphState: () => Promise<WorkspaceState>;
@@ -38,15 +38,14 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
       return { content: `Cannot read canvas: ${err.message}`, isError: true };
     }
 
-    const entryKey = makeModuleKey(state.entry.module_id, state.entry.version);
+    const entryKey = state.entry;
     const entryDef = state.modules[entryKey];
     if (!entryDef) {
       return { content: 'Canvas has no composite graph.', isError: true };
     }
 
-    const graph = entryDef.graph;
-    const source = graph.instances.find((i) => i.id === sourceInstance);
-    const target = graph.instances.find((i) => i.id === targetInstance);
+    const source = findChild(entryDef, sourceInstance);
+    const target = findChild(entryDef, targetInstance);
 
     if (!source) {
       return { content: `Source instance "${sourceInstance}" not found.`, isError: true };
@@ -59,7 +58,7 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
     const targetSchema = resolveSchema(state, target);
 
     // Find which target inputs already have any binding (lit, var, expr, out)
-    const boundInputNames = new Set<string>(Object.keys(target.inputs));
+    const boundInputNames = new Set<string>(Object.keys(target.inputs ?? {}));
 
     const matches = findAutoConnections(sourceSchema.outputs, targetSchema.inputs, boundInputNames);
 

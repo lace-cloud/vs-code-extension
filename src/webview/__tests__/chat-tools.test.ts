@@ -15,15 +15,13 @@ function makeWorkspaceWithInstances(): WorkspaceState {
   return makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'vpc',
-        use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+        module: 'aws/vpc@v1.0.0',
         inputs: { cidr_block: { lit: '10.0.0.0/16' } },
       },
       {
-        kind: 'module',
         id: 'subnet',
-        use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+        module: 'aws/subnet@v1.0.0',
         inputs: {
           vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
           cidr_block: { lit: '10.0.1.0/24' },
@@ -38,15 +36,13 @@ function makeWorkspaceWithUnboundSubnet(): WorkspaceState {
   return makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'vpc',
-        use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+        module: 'aws/vpc@v1.0.0',
         inputs: { cidr_block: { lit: '10.0.0.0/16' } },
       },
       {
-        kind: 'module',
         id: 'subnet',
-        use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+        module: 'aws/subnet@v1.0.0',
         inputs: { cidr_block: { lit: '10.0.1.0/24' } },
       },
     ],
@@ -58,9 +54,8 @@ function makeWorkspaceWithDanglingRef(): WorkspaceState {
   return makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'subnet',
-        use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+        module: 'aws/subnet@v1.0.0',
         inputs: {
           vpc_id: { out: { module: 'ghost', name: 'vpc_id' } },
           cidr_block: { lit: '10.0.1.0/24' },

@@ -3,9 +3,9 @@ import { test, expect, describe } from 'vitest';
 import { workspaceReducer } from '../state/reducer';
 import { fromBundle, toBundle } from '../utils/bundle';
 import { validateWorkspace } from '../utils/validate';
-import type { ModuleDef, ModuleBundle } from '../types/ir';
-import { makeModuleKey } from '../utils/identifiers';
-import { loadFixture, makeWorkspace, getGraph, getInst } from './helpers';
+import type { Module, Bundle } from '../types/ir';
+import { allChildren } from '../utils/children';
+import { loadFixture, makeWorkspace, getChild } from './helpers';
 
 // ══════════════════════════════════════════════════════════════════════
 // SET_TERRAFORM
@@ -93,7 +93,7 @@ describe('SET_PROVIDERS', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe('SET_LOCALS', () => {
-  test('sets locals on a composite graph', () => {
+  test('sets locals on a composite module', () => {
     const ws = makeWorkspace([]);
     const result = workspaceReducer(ws, {
       type: 'SET_LOCALS',
@@ -107,10 +107,10 @@ describe('SET_LOCALS', () => {
       ],
     });
 
-    const graph = getGraph(result, 'root@v1.0.0');
-    expect(graph.locals).toHaveLength(2);
-    expect(graph.locals![0].name).toBe('common_tags');
-    expect(graph.locals![1].name).toBe('full_role_name');
+    const mod = result.modules['root@v1.0.0'];
+    expect(mod.locals).toHaveLength(2);
+    expect(mod.locals![0].name).toBe('common_tags');
+    expect(mod.locals![1].name).toBe('full_role_name');
   });
 
   test('clears locals when empty array', () => {
@@ -120,26 +120,24 @@ describe('SET_LOCALS', () => {
       module_key: 'root@v1.0.0',
       locals: [{ name: 'foo', value: { lit: 'bar' } }],
     });
-    expect(getGraph(ws, 'root@v1.0.0').locals).toHaveLength(1);
+    expect(ws.modules['root@v1.0.0'].locals).toHaveLength(1);
 
     ws = workspaceReducer(ws, {
       type: 'SET_LOCALS',
       module_key: 'root@v1.0.0',
       locals: [],
     });
-    expect(getGraph(ws, 'root@v1.0.0').locals).toBeUndefined();
+    expect(ws.modules['root@v1.0.0'].locals).toBeUndefined();
   });
 
   test('sets locals on any module (including leaf-like)', () => {
     const ws = makeWorkspace([], {
       'leaf@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'leaf',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        source: { kind: 'registry', ref: 'leaf/aws/v1.0.0' },
-        graph: { instances: [], exports: { outputs: {} } },
+        source: { kind: 'registry' },
+        exports: { outputs: {} },
       },
     });
     const locals = [{ name: 'foo', value: { lit: 'bar' } as const }];
@@ -148,7 +146,7 @@ describe('SET_LOCALS', () => {
       module_key: 'leaf@v1.0.0',
       locals,
     });
-    expect(result.modules['leaf@v1.0.0'].graph.locals).toEqual(locals);
+    expect(result.modules['leaf@v1.0.0'].locals).toEqual(locals);
   });
 });
 
@@ -159,9 +157,9 @@ describe('SET_LOCALS', () => {
 describe('SET_DEPENDS_ON', () => {
   test('sets depends_on on an instance', () => {
     const ws = makeWorkspace([
-      { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-      { kind: 'module', id: 'b', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-      { kind: 'module', id: 'c', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+      { id: 'a', module: 'x@v1' },
+      { id: 'b', module: 'x@v1' },
+      { id: 'c', module: 'x@v1' },
     ]);
 
     const result = workspaceReducer(ws, {
@@ -171,20 +169,18 @@ describe('SET_DEPENDS_ON', () => {
       depends_on: ['module.a', 'module.b'],
     });
 
-    const inst = getInst(result, 'c');
+    const inst = getChild(result, 'c');
     expect(inst.depends_on).toEqual(['module.a', 'module.b']);
   });
 
   test('clears depends_on when empty array', () => {
     const ws = makeWorkspace([
       {
-        kind: 'module',
         id: 'a',
-        use: { module_id: 'x', version: 'v1' },
-        inputs: {},
+        module: 'x@v1',
         depends_on: ['module.b'],
       },
-      { kind: 'module', id: 'b', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+      { id: 'b', module: 'x@v1' },
     ]);
 
     const result = workspaceReducer(ws, {
@@ -194,21 +190,19 @@ describe('SET_DEPENDS_ON', () => {
       depends_on: [],
     });
 
-    const inst = getInst(result, 'a');
+    const inst = getChild(result, 'a');
     expect(inst.depends_on).toBeUndefined();
   });
 
   test('only affects targeted instance', () => {
     const ws = makeWorkspace([
       {
-        kind: 'module',
         id: 'a',
-        use: { module_id: 'x', version: 'v1' },
-        inputs: {},
+        module: 'x@v1',
         depends_on: ['module.c'],
       },
-      { kind: 'module', id: 'b', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-      { kind: 'module', id: 'c', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+      { id: 'b', module: 'x@v1' },
+      { id: 'c', module: 'x@v1' },
     ]);
 
     const result = workspaceReducer(ws, {
@@ -218,8 +212,8 @@ describe('SET_DEPENDS_ON', () => {
       depends_on: ['module.a'],
     });
 
-    expect(getInst(result, 'a').depends_on).toEqual(['module.c']); // unchanged
-    expect(getInst(result, 'b').depends_on).toEqual(['module.a']); // set
+    expect(getChild(result, 'a').depends_on).toEqual(['module.c']); // unchanged
+    expect(getChild(result, 'b').depends_on).toEqual(['module.a']); // set
   });
 });
 
@@ -289,12 +283,12 @@ describe('SET_ENVIRONMENT_BACKENDS', () => {
 
 describe('Full bundle with terraform — round-trip', () => {
   test('fromBundle parses full_bundle_with_terraform.json', () => {
-    const raw = loadFixture('full_bundle_with_terraform.json') as ModuleBundle;
+    const raw = loadFixture('full_bundle_with_terraform.json') as Bundle;
     const { workspace, errors } = fromBundle(raw);
     expect(errors).toHaveLength(0);
 
     // Entry module loaded
-    const entryKey = makeModuleKey(raw.entry.module_id, raw.entry.version);
+    const entryKey = workspace.entry;
     const entryDef = workspace.modules[entryKey];
     expect(entryDef).toBeDefined();
 
@@ -310,8 +304,8 @@ describe('Full bundle with terraform — round-trip', () => {
     expect(entryDef.providers![1].alias).toBe('west');
 
     // Locals present
-    expect(entryDef.graph.locals).toHaveLength(2);
-    expect(entryDef.graph.locals![0].name).toBe('common_tags');
+    expect(entryDef.locals).toHaveLength(2);
+    expect(entryDef.locals![0].name).toBe('common_tags');
 
     // Environments present
     expect(workspace.environments).toBeDefined();
@@ -324,11 +318,11 @@ describe('Full bundle with terraform — round-trip', () => {
   });
 
   test('toBundle preserves terraform config', () => {
-    const raw = loadFixture('full_bundle_with_terraform.json') as ModuleBundle;
+    const raw = loadFixture('full_bundle_with_terraform.json') as Bundle;
     const { workspace } = fromBundle(raw);
     const bundle = toBundle(workspace);
 
-    const entryKey = makeModuleKey(raw.entry.module_id, raw.entry.version);
+    const entryKey = workspace.entry;
     const entryDef = bundle.modules[entryKey];
 
     // Terraform block round-trips
@@ -339,11 +333,12 @@ describe('Full bundle with terraform — round-trip', () => {
     // Providers round-trip
     expect(entryDef.providers).toHaveLength(2);
 
-    // Locals round-trip (with wires injected)
-    expect(entryDef.graph.locals).toHaveLength(2);
-    // Wires should be derived
-    expect(entryDef.graph.wires).toBeDefined();
-    expect(entryDef.graph.wires!.length).toBeGreaterThan(0);
+    // Locals round-trip
+    expect(entryDef.locals).toHaveLength(2);
+
+    // Children should have out bindings (wires are derived from these)
+    const children = allChildren(entryDef);
+    expect(children.length).toBeGreaterThan(0);
 
     // Environments round-trip
     expect(bundle.environments).toBeDefined();
@@ -356,7 +351,7 @@ describe('Full bundle with terraform — round-trip', () => {
   });
 
   test('graph validation passes on full bundle', () => {
-    const raw = loadFixture('full_bundle_with_terraform.json') as ModuleBundle;
+    const raw = loadFixture('full_bundle_with_terraform.json') as Bundle;
     const { workspace } = fromBundle(raw);
     const errors = validateWorkspace(workspace);
     expect(errors).toHaveLength(0);
@@ -370,28 +365,22 @@ describe('Full bundle with terraform — round-trip', () => {
 describe('Integration: Terraform config actions on iam-stack workspace', () => {
   test('full Terraform configuration flow', () => {
     // Leaf module defs that instances reference
-    const leafModules: Record<string, ModuleDef> = {
+    const leafModules: Record<string, Module> = {
       'aws-iam-role@v2.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'aws-iam-role',
         version: 'v2.0.0',
         interface: { inputs: [], outputs: [] },
         source: { kind: 'git', repo: 'example/terraform-aws-iam-role.git', ref: 'v2.0.0' },
-        graph: { instances: [], exports: { outputs: {} } },
+        exports: { outputs: {} },
       },
       'aws-iam-policy@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'aws-iam-policy',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
         source: { kind: 'git', repo: 'example/terraform-aws-iam-policy.git', ref: 'v1.0.0' },
-        graph: { instances: [], exports: { outputs: {} } },
+        exports: { outputs: {} },
       },
       'aws-iam-role-policy-attachment@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'aws-iam-role-policy-attachment',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
@@ -400,7 +389,7 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
           repo: 'example/terraform-aws-iam-role-policy-attachment.git',
           ref: 'v1.0.0',
         },
-        graph: { instances: [], exports: { outputs: {} } },
+        exports: { outputs: {} },
       },
     };
 
@@ -408,21 +397,16 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
     let state = makeWorkspace(
       [
         {
-          kind: 'module',
           id: 'iam_role',
-          use: { module_id: 'aws-iam-role', version: 'v2.0.0' },
-          inputs: {},
+          module: 'aws-iam-role@v2.0.0',
         },
         {
-          kind: 'module',
           id: 'iam_policy',
-          use: { module_id: 'aws-iam-policy', version: 'v1.0.0' },
-          inputs: {},
+          module: 'aws-iam-policy@v1.0.0',
         },
         {
-          kind: 'module',
           id: 'iam_policy_attachment',
-          use: { module_id: 'aws-iam-role-policy-attachment', version: 'v1.0.0' },
+          module: 'aws-iam-role-policy-attachment@v1.0.0',
           inputs: {
             role_name: { out: { module: 'iam_role', name: 'role_name' } },
             policy_arn: { out: { module: 'iam_policy', name: 'arn' } },
@@ -477,7 +461,7 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
         },
       ],
     });
-    expect(getGraph(state, 'root@v1.0.0').locals).toHaveLength(2);
+    expect(state.modules['root@v1.0.0'].locals).toHaveLength(2);
 
     // 4. Set depends_on
     state = workspaceReducer(state, {
@@ -486,7 +470,7 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
       instance_id: 'iam_policy_attachment',
       depends_on: ['module.iam_role', 'module.iam_policy'],
     });
-    expect(getInst(state, 'iam_policy_attachment').depends_on).toEqual([
+    expect(getChild(state, 'iam_policy_attachment').depends_on).toEqual([
       'module.iam_role',
       'module.iam_policy',
     ]);
@@ -534,14 +518,16 @@ describe('Integration: Terraform config actions on iam-stack workspace', () => {
     expect(bundle.modules['root@v1.0.0'].providers).toHaveLength(2);
     expect(bundle.environments).toBeDefined();
     expect(bundle.environment_backends).toBeDefined();
-    expect(bundle.modules['root@v1.0.0'].graph.locals).toHaveLength(2);
+    expect(bundle.modules['root@v1.0.0'].locals).toHaveLength(2);
     // depends_on preserved
-    const attachment = bundle.modules['root@v1.0.0'].graph.instances.find(
-      (i) => i.id === 'iam_policy_attachment',
+    const attachment = allChildren(bundle.modules['root@v1.0.0']).find(
+      (c) => c.id === 'iam_policy_attachment',
     );
     expect(attachment!.depends_on).toEqual(['module.iam_role', 'module.iam_policy']);
-    // Wires derived
-    expect(bundle.modules['root@v1.0.0'].graph.wires!.length).toBe(2);
+    // out bindings preserved (wires are derived from these)
+    expect((attachment as any).inputs.role_name).toEqual({
+      out: { module: 'iam_role', name: 'role_name' },
+    });
 
     // 8. Graph validation passes
     const errors = validateWorkspace(state);

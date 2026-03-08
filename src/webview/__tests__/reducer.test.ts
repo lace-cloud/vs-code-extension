@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest';
 import { workspaceReducer } from '../state/reducer';
-import type { ModuleDef } from '../types/ir';
-import { loadFixture, makeWorkspace, getInst, getInstances, getExports } from './helpers';
+import type { Module, Bundle } from '../types/ir';
+import { loadFixture, makeWorkspace, getChild, getChildren, getExports } from './helpers';
 
 // ══════════════════════════════════════════════════════════════════════
 // CONNECT
@@ -9,8 +9,8 @@ import { loadFixture, makeWorkspace, getInst, getInstances, getExports } from '.
 
 test('CONNECT sets out binding on target', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-    { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
+    { id: 'b', module: 'y@v1' },
   ]);
   const next = workspaceReducer(state, {
     type: 'CONNECT',
@@ -19,8 +19,8 @@ test('CONNECT sets out binding on target', () => {
     target_instance: 'b',
     mapping: { from: 'arn', to: 'bucket' },
   });
-  const b = getInst(next, 'b');
-  expect(b.inputs.bucket).toEqual({ out: { module: 'a', name: 'arn' } });
+  const b = getChild(next, 'b');
+  expect(b.inputs!.bucket).toEqual({ out: { module: 'a', name: 'arn' } });
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -29,11 +29,10 @@ test('CONNECT sets out binding on target', () => {
 
 test('DISCONNECT removes binding', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'b',
-      use: { module_id: 'y', version: 'v1' },
+      module: 'y@v1',
       inputs: { bucket: { out: { module: 'a', name: 'arn' } } },
     },
   ]);
@@ -43,8 +42,8 @@ test('DISCONNECT removes binding', () => {
     target_instance: 'b',
     input_name: 'bucket',
   });
-  const b = getInst(next, 'b');
-  expect(b.inputs.bucket).toBeUndefined();
+  const b = getChild(next, 'b');
+  expect(b.inputs?.bucket).toBeUndefined();
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -53,11 +52,10 @@ test('DISCONNECT removes binding', () => {
 
 test('RENAME_INSTANCE cascades to sibling out bindings', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'b',
-      use: { module_id: 'y', version: 'v1' },
+      module: 'y@v1',
       inputs: { bucket: { out: { module: 'a', name: 'arn' } } },
     },
   ]);
@@ -67,21 +65,19 @@ test('RENAME_INSTANCE cascades to sibling out bindings', () => {
     old_id: 'a',
     new_id: 'vpc',
   });
-  const b = getInst(next, 'b');
-  expect(b.inputs.bucket).toEqual({ out: { module: 'vpc', name: 'arn' } });
+  const b = getChild(next, 'b');
+  expect(b.inputs!.bucket).toEqual({ out: { module: 'vpc', name: 'arn' } });
   // Original name gone
-  expect(() => getInst(next, 'a')).toThrow();
+  expect(() => getChild(next, 'a')).toThrow();
   // New name exists
-  expect(getInst(next, 'vpc')).toBeDefined();
+  expect(getChild(next, 'vpc')).toBeDefined();
 });
 
 test('RENAME_INSTANCE cascades to exports', () => {
-  const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-  ]);
+  const state = makeWorkspace([{ id: 'a', module: 'x@v1' }]);
   // Manually set exports referencing 'a'
   const def = state.modules['root@v1.0.0'];
-  def.graph.exports.outputs['role_arn'] = {
+  def.exports.outputs['role_arn'] = {
     out: { module: 'a', name: 'arn' },
   };
 
@@ -97,12 +93,10 @@ test('RENAME_INSTANCE cascades to exports', () => {
 
 test('RENAME_INSTANCE cascades to sibling depends_on', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'c',
-      use: { module_id: 'z', version: 'v1' },
-      inputs: {},
+      module: 'z@v1',
       depends_on: ['a'],
     },
   ]);
@@ -112,18 +106,16 @@ test('RENAME_INSTANCE cascades to sibling depends_on', () => {
     old_id: 'a',
     new_id: 'vpc',
   });
-  const c = getInst(next, 'c');
+  const c = getChild(next, 'c');
   expect(c.depends_on).toEqual(['vpc']);
 });
 
 test('RENAME_INSTANCE cascades to sibling depends_on with module. prefix', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'c',
-      use: { module_id: 'z', version: 'v1' },
-      inputs: {},
+      module: 'z@v1',
       depends_on: ['module.a'],
     },
   ]);
@@ -133,13 +125,13 @@ test('RENAME_INSTANCE cascades to sibling depends_on with module. prefix', () =>
     old_id: 'a',
     new_id: 'vpc',
   });
-  const c = getInst(next, 'c');
+  const c = getChild(next, 'c');
   expect(c.depends_on).toEqual(['module.vpc']);
 });
 
 test('RENAME_INSTANCE cascades to layout key', () => {
   const state = makeWorkspace(
-    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
+    [{ id: 'a', module: 'x@v1' }],
     {},
     { 'root@v1.0.0': { nodes: { a: { position: { x: 100, y: 200 } } } } },
   );
@@ -160,7 +152,7 @@ test('RENAME_INSTANCE cascades to layout key', () => {
 
 test('DELETE_INSTANCE removes from graph and layout', () => {
   const state = makeWorkspace(
-    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
+    [{ id: 'a', module: 'x@v1' }],
     {},
     { 'root@v1.0.0': { nodes: { a: { position: { x: 100, y: 200 } } } } },
   );
@@ -169,17 +161,16 @@ test('DELETE_INSTANCE removes from graph and layout', () => {
     module_key: 'root@v1.0.0',
     instance_id: 'a',
   });
-  expect(getInstances(next, 'root@v1.0.0')).toHaveLength(0);
+  expect(getChildren(next, 'root@v1.0.0')).toHaveLength(0);
   expect(next.layouts['root@v1.0.0'].nodes['a']).toBeUndefined();
 });
 
 test('DELETE_INSTANCE cleans up sibling out bindings referencing deleted instance', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'b',
-      use: { module_id: 'y', version: 'v1' },
+      module: 'y@v1',
       inputs: { bucket: { out: { module: 'a', name: 'arn' } } },
     },
   ]);
@@ -188,16 +179,14 @@ test('DELETE_INSTANCE cleans up sibling out bindings referencing deleted instanc
     module_key: 'root@v1.0.0',
     instance_id: 'a',
   });
-  const b = getInst(next, 'b');
-  expect(b.inputs.bucket).toBeUndefined();
+  const b = getChild(next, 'b');
+  expect(b.inputs?.bucket).toBeUndefined();
 });
 
 test('DELETE_INSTANCE cleans up exports referencing deleted instance', () => {
-  const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-  ]);
+  const state = makeWorkspace([{ id: 'a', module: 'x@v1' }]);
   const def = state.modules['root@v1.0.0'];
-  def.graph.exports.outputs['role_arn'] = {
+  def.exports.outputs['role_arn'] = {
     out: { module: 'a', name: 'arn' },
   };
   const next = workspaceReducer(state, {
@@ -211,12 +200,10 @@ test('DELETE_INSTANCE cleans up exports referencing deleted instance', () => {
 
 test('DELETE_INSTANCE cleans up sibling depends_on referencing deleted instance', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'c',
-      use: { module_id: 'z', version: 'v1' },
-      inputs: {},
+      module: 'z@v1',
       depends_on: ['a'],
     },
   ]);
@@ -225,50 +212,44 @@ test('DELETE_INSTANCE cleans up sibling depends_on referencing deleted instance'
     module_key: 'root@v1.0.0',
     instance_id: 'a',
   });
-  const c = getInst(next, 'c');
+  const c = getChild(next, 'c');
   // depends_on should be removed (empty array removed)
   expect(c.depends_on).toBeUndefined();
 });
 
 test('DELETE_INSTANCE cleans up sibling depends_on with module. prefix', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'c',
-      use: { module_id: 'z', version: 'v1' },
-      inputs: {},
+      module: 'z@v1',
       depends_on: ['module.a', 'module.b'],
     },
-    { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+    { id: 'b', module: 'y@v1' },
   ]);
   const next = workspaceReducer(state, {
     type: 'DELETE_INSTANCE',
     module_key: 'root@v1.0.0',
     instance_id: 'a',
   });
-  const c = getInst(next, 'c');
+  const c = getChild(next, 'c');
   // module.a removed, module.b preserved
   expect(c.depends_on).toEqual(['module.b']);
 });
 
 test('DELETE_INSTANCE removes orphaned module defs from state.modules', () => {
-  const leafDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const leafDef: Module = {
     id: 'rds-instance',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'test', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
   const state = makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'my-rds',
-        use: { module_id: 'rds-instance', version: 'v1.0.0' },
-        inputs: {},
+        module: 'rds-instance@v1.0.0',
       },
     ],
     { 'rds-instance@v1.0.0': leafDef },
@@ -282,7 +263,7 @@ test('DELETE_INSTANCE removes orphaned module defs from state.modules', () => {
     instance_id: 'my-rds',
   });
   // Instance removed
-  expect(getInstances(next, 'root@v1.0.0')).toHaveLength(0);
+  expect(getChildren(next, 'root@v1.0.0')).toHaveLength(0);
   // Orphaned module def cleaned up
   expect(next.modules['rds-instance@v1.0.0']).toBeUndefined();
   // Root composite preserved
@@ -290,28 +271,22 @@ test('DELETE_INSTANCE removes orphaned module defs from state.modules', () => {
 });
 
 test('DELETE_INSTANCE preserves module defs still referenced by other instances', () => {
-  const leafDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const leafDef: Module = {
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'test', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
   const state = makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'vpc-1',
-        use: { module_id: 'vpc', version: 'v1.0.0' },
-        inputs: {},
+        module: 'vpc@v1.0.0',
       },
       {
-        kind: 'module',
         id: 'vpc-2',
-        use: { module_id: 'vpc', version: 'v1.0.0' },
-        inputs: {},
+        module: 'vpc@v1.0.0',
       },
     ],
     { 'vpc@v1.0.0': leafDef },
@@ -324,7 +299,7 @@ test('DELETE_INSTANCE preserves module defs still referenced by other instances'
   });
   // vpc-2 still references the module def — must be preserved
   expect(next.modules['vpc@v1.0.0']).toBeDefined();
-  expect(getInstances(next, 'root@v1.0.0')).toHaveLength(1);
+  expect(getChildren(next, 'root@v1.0.0')).toHaveLength(1);
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -340,11 +315,11 @@ test('DROP_BUNDLE merges all non-entry modules and inlines instances', () => {
     deploy_bundle,
     positions: { 'aws-s3-bucket': { x: 100, y: 100 } },
   });
-  // Verify: leaf ModuleDef merged into modules
+  // Verify: leaf Module merged into modules
   expect(next.modules['aws-s3-bucket@v1.2.0']).toBeDefined();
   // Verify: instance inlined
-  const instances = getInstances(next, 'root@v1.0.0');
-  expect(instances.find((i) => i.id === 'aws-s3-bucket')).toBeDefined();
+  const children = getChildren(next, 'root@v1.0.0');
+  expect(children.find((i) => i.id === 'aws-s3-bucket')).toBeDefined();
   // Verify: entry wrapper NOT in modules
   expect(next.modules['deploy-aws-s3-bucket@v1.2.0']).toBeUndefined();
 });
@@ -370,10 +345,8 @@ test('DROP_BUNDLE handles collision with _1 suffix', () => {
   // Pre-populate workspace with instance id 'aws-s3-bucket'
   const state = makeWorkspace([
     {
-      kind: 'module',
       id: 'aws-s3-bucket',
-      use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
-      inputs: {},
+      module: 'aws-s3-bucket@v1.2.0',
     },
   ]);
   const deploy_bundle = loadFixture('leaf_deploy_bundle.json');
@@ -383,21 +356,19 @@ test('DROP_BUNDLE handles collision with _1 suffix', () => {
     deploy_bundle,
     positions: {},
   });
-  const instances = getInstances(next, 'root@v1.0.0');
+  const children = getChildren(next, 'root@v1.0.0');
   // Original should still exist
-  expect(instances.find((i) => i.id === 'aws-s3-bucket')).toBeDefined();
+  expect(children.find((i) => i.id === 'aws-s3-bucket')).toBeDefined();
   // New one should have _1 suffix
-  expect(instances.find((i) => i.id === 'aws-s3-bucket_1')).toBeDefined();
+  expect(children.find((i) => i.id === 'aws-s3-bucket_1')).toBeDefined();
 });
 
 test('DROP_BUNDLE preserves existing node layout positions', () => {
   const state = makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'existing-node',
-        use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
-        inputs: {},
+        module: 'aws-s3-bucket@v1.2.0',
       },
     ],
     {},
@@ -415,7 +386,7 @@ test('DROP_BUNDLE preserves existing node layout positions', () => {
     position: { x: 42, y: 84 },
   });
   // New node has its drop position
-  const newId = getInstances(next, 'root@v1.0.0').find((i) => i.id !== 'existing-node')!.id;
+  const newId = getChildren(next, 'root@v1.0.0').find((i) => i.id !== 'existing-node')!.id;
   expect(next.layouts['root@v1.0.0'].nodes[newId]).toBeDefined();
 });
 
@@ -425,38 +396,32 @@ test('DROP_BUNDLE preserves existing node layout positions', () => {
 
 test('LOAD_WORKSPACE replaces entire state', () => {
   const state = makeWorkspace([]);
-  const newState = makeWorkspace([
-    { kind: 'module', id: 'x', use: { module_id: 'a', version: 'v1' }, inputs: {} },
-  ]);
+  const newState = makeWorkspace([{ id: 'x', module: 'a@v1' }]);
   const next = workspaceReducer(state, { type: 'LOAD_WORKSPACE', workspace: newState });
   // No orphans → GC returns same reference
   expect(next).toBe(newState);
 });
 
 test('LOAD_WORKSPACE removes orphaned module defs not referenced by any instance', () => {
-  const referencedDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const referencedDef: Module = {
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'test', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
-  const orphanDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const orphanDef: Module = {
     id: 'rds-instance',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'test', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
   // Simulate loading a lace.json that has orphaned defs from earlier bugs
-  const dirtyState = makeWorkspace(
-    [{ kind: 'module', id: 'my-vpc', use: { module_id: 'vpc', version: 'v1.0.0' }, inputs: {} }],
-    { 'vpc@v1.0.0': referencedDef, 'rds-instance@v1.0.0': orphanDef },
-  );
+  const dirtyState = makeWorkspace([{ id: 'my-vpc', module: 'vpc@v1.0.0' }], {
+    'vpc@v1.0.0': referencedDef,
+    'rds-instance@v1.0.0': orphanDef,
+  });
 
   const next = workspaceReducer(makeWorkspace([]), {
     type: 'LOAD_WORKSPACE',
@@ -476,9 +441,8 @@ test('LOAD_WORKSPACE removes orphaned module defs not referenced by any instance
 test('UPDATE_INPUTS replaces entire inputs on target instance', () => {
   const state = makeWorkspace([
     {
-      kind: 'module',
       id: 'a',
-      use: { module_id: 'x', version: 'v1' },
+      module: 'x@v1',
       inputs: { old: { lit: 'value' } },
     },
   ]);
@@ -489,9 +453,9 @@ test('UPDATE_INPUTS replaces entire inputs on target instance', () => {
     instance_id: 'a',
     inputs: newInputs,
   });
-  const a = getInst(next, 'a');
+  const a = getChild(next, 'a');
   expect(a.inputs).toEqual(newInputs);
-  expect(a.inputs.old).toBeUndefined();
+  expect(a.inputs!.old).toBeUndefined();
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -501,9 +465,9 @@ test('UPDATE_INPUTS replaces entire inputs on target instance', () => {
 test('SYNC_LAYOUT merges with existing positions (does not clobber siblings)', () => {
   const state = makeWorkspace(
     [
-      { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-      { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
-      { kind: 'module', id: 'c', use: { module_id: 'z', version: 'v1' }, inputs: {} },
+      { id: 'a', module: 'x@v1' },
+      { id: 'b', module: 'y@v1' },
+      { id: 'c', module: 'z@v1' },
     ],
     {},
     {
@@ -529,7 +493,7 @@ test('SYNC_LAYOUT merges with existing positions (does not clobber siblings)', (
 
 test('SYNC_LAYOUT adds positions for nodes not yet in layout', () => {
   const state = makeWorkspace(
-    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
+    [{ id: 'a', module: 'x@v1' }],
     {},
     {}, // empty layout (makeWorkspace creates { nodes: {} } for root)
   );
@@ -577,13 +541,11 @@ test('SET_VARIABLES on non-existent module_key returns state unchanged', () => {
 // SET_EXPORTS
 // ══════════════════════════════════════════════════════════════════════
 
-test('SET_EXPORTS sets both interface.outputs and graph.exports.outputs', () => {
+test('SET_EXPORTS sets both interface.outputs and exports.outputs', () => {
   const state = makeWorkspace([
     {
-      kind: 'module',
       id: 's3_bucket',
-      use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
-      inputs: {},
+      module: 'aws-s3-bucket@v1.2.0',
     },
   ]);
   const output_defs = [
@@ -602,15 +564,13 @@ test('SET_EXPORTS sets both interface.outputs and graph.exports.outputs', () => 
   });
   // interface.outputs updated
   expect(next.modules['root@v1.0.0'].interface.outputs).toEqual(output_defs);
-  // graph.exports.outputs updated
+  // exports.outputs updated
   const def = next.modules['root@v1.0.0'];
-  expect(def.graph.exports.outputs).toEqual(outputs);
+  expect(def.exports.outputs).toEqual(outputs);
 });
 
 test('SET_EXPORTS replaces existing exports', () => {
-  const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-  ]);
+  const state = makeWorkspace([{ id: 'a', module: 'x@v1' }]);
   // Set initial exports
   const first = workspaceReducer(state, {
     type: 'SET_EXPORTS',
@@ -619,7 +579,7 @@ test('SET_EXPORTS replaces existing exports', () => {
     output_defs: [{ name: 'old_out', type: 'string' }],
   });
   const firstDef = first.modules['root@v1.0.0'];
-  expect(firstDef.graph.exports.outputs['old_out']).toBeDefined();
+  expect(firstDef.exports.outputs['old_out']).toBeDefined();
 
   // Replace
   const second = workspaceReducer(first, {
@@ -629,8 +589,8 @@ test('SET_EXPORTS replaces existing exports', () => {
     output_defs: [{ name: 'new_out', type: 'string' }],
   });
   const secondDef = second.modules['root@v1.0.0'];
-  expect(secondDef.graph.exports.outputs['old_out']).toBeUndefined();
-  expect(secondDef.graph.exports.outputs['new_out']).toEqual({
+  expect(secondDef.exports.outputs['old_out']).toBeUndefined();
+  expect(secondDef.exports.outputs['new_out']).toEqual({
     out: { module: 'a', name: 'id' },
   });
   expect(second.modules['root@v1.0.0'].interface.outputs).toEqual([
@@ -641,14 +601,12 @@ test('SET_EXPORTS replaces existing exports', () => {
 test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
   const state = makeWorkspace([]);
   // Add a leaf module
-  const leafDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const leafDef: Module = {
     id: 'leaf',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'test', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
   const stateWithLeaf = {
     ...state,
@@ -670,9 +628,7 @@ test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and root composite', () => {
-  const leafDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const leafDef: Module = {
     id: 'aws-s3-bucket',
     version: 'v1.2.0',
     interface: {
@@ -680,14 +636,13 @@ test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and roo
       outputs: [{ name: 'arn', type: 'string' }],
     },
     source: { kind: 'git', repo: 'old-repo', ref: 'v1.2.0' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
   const state = makeWorkspace(
     [
       {
-        kind: 'module',
         id: 's3',
-        use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
+        module: 'aws-s3-bucket@v1.2.0',
         inputs: { bucket_name: { lit: 'my-bucket' } },
       },
     ],
@@ -695,7 +650,7 @@ test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and roo
   );
 
   // Updated def: fixed git URL
-  const updatedDef: ModuleDef = {
+  const updatedDef: Module = {
     ...leafDef,
     interface: {
       inputs: [
@@ -705,7 +660,6 @@ test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and roo
       outputs: [{ name: 'arn', type: 'string' }],
     },
     source: { kind: 'git', repo: 'fixed-repo', ref: 'v1.2.0' },
-    graph: { instances: [], exports: { outputs: {} } },
   };
 
   const next = workspaceReducer(state, {
@@ -720,17 +674,14 @@ test('REFRESH_MODULE_DEFS merges updated defs, preserves instance inputs and roo
 
   // Root composite preserved
   expect(next.modules['root@v1.0.0']).toBeDefined();
-  expect(next.modules['root@v1.0.0'].graph).toBeDefined();
 
   // Instance inputs preserved
-  const s3 = getInst(next, 's3');
-  expect(s3.inputs.bucket_name).toEqual({ lit: 'my-bucket' });
+  const s3 = getChild(next, 's3');
+  expect(s3.inputs!.bucket_name).toEqual({ lit: 'my-bucket' });
 });
 
 test('REFRESH_MODULE_DEFS with empty map returns same state reference', () => {
-  const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-  ]);
+  const state = makeWorkspace([{ id: 'a', module: 'x@v1' }]);
   const next = workspaceReducer(state, {
     type: 'REFRESH_MODULE_DEFS',
     updated_modules: {},
@@ -739,29 +690,25 @@ test('REFRESH_MODULE_DEFS with empty map returns same state reference', () => {
 });
 
 test('REFRESH_MODULE_DEFS preserves layouts', () => {
-  const leafDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const leafDef: Module = {
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'old', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
   const state = makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'my-vpc',
-        use: { module_id: 'vpc', version: 'v1.0.0' },
-        inputs: {},
+        module: 'vpc@v1.0.0',
       },
     ],
     { 'vpc@v1.0.0': leafDef },
     { 'root@v1.0.0': { nodes: { 'my-vpc': { position: { x: 42, y: 84 } } } } },
   );
 
-  const updatedDef: ModuleDef = {
+  const updatedDef: Module = {
     ...leafDef,
     source: { kind: 'git', repo: 'new', ref: 'v1' },
   };
@@ -777,9 +724,7 @@ test('REFRESH_MODULE_DEFS preserves layouts', () => {
 });
 
 test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', () => {
-  const bucketDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const bucketDef: Module = {
     id: 'aws-s3-bucket',
     version: 'v1.0.0',
     interface: {
@@ -787,11 +732,9 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
       outputs: [{ name: 'id', type: 'string' }],
     },
     source: { kind: 'git', repo: 'old', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
-  const versioningDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const versioningDef: Module = {
     id: 'aws-s3-versioning',
     version: 'v1.0.0',
     interface: {
@@ -799,21 +742,19 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
       outputs: [],
     },
     source: { kind: 'git', repo: 'old', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
 
   const state = makeWorkspace(
     [
       {
-        kind: 'module',
         id: 'bucket',
-        use: { module_id: 'aws-s3-bucket', version: 'v1.0.0' },
+        module: 'aws-s3-bucket@v1.0.0',
         inputs: { name: { lit: 'my-bucket' } },
       },
       {
-        kind: 'module',
         id: 'versioning',
-        use: { module_id: 'aws-s3-versioning', version: 'v1.0.0' },
+        module: 'aws-s3-versioning@v1.0.0',
         inputs: { bucket_id: { out: { module: 'bucket', name: 'id' } } },
       },
     ],
@@ -839,8 +780,8 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
   });
 
   // Wiring preserved
-  const v = getInst(next, 'versioning');
-  expect(v.inputs.bucket_id).toEqual({ out: { module: 'bucket', name: 'id' } });
+  const v = getChild(next, 'versioning');
+  expect(v.inputs!.bucket_id).toEqual({ out: { module: 'bucket', name: 'id' } });
 
   // Defs updated
   expect((next.modules['aws-s3-bucket@v1.0.0'].source as any).repo).toBe('new');
@@ -848,18 +789,14 @@ test('REFRESH_MODULE_DEFS preserves wiring (out bindings) between instances', ()
 });
 
 test('REFRESH_MODULE_DEFS does not guard against entry overwrite (host responsibility)', () => {
-  const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-  ]);
+  const state = makeWorkspace([{ id: 'a', module: 'x@v1' }]);
   // Deliberately overwrite the entry module — reducer does not block this
-  const bogusRoot: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const bogusRoot: Module = {
     id: 'root',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'bad', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
   const next = workspaceReducer(state, {
     type: 'REFRESH_MODULE_DEFS',
@@ -885,9 +822,9 @@ test('s3_stack scenario: variables, var bindings, curated outputs', () => {
     deploy_bundle: compositeBundle,
     positions: {},
   });
-  const instances = getInstances(state, 'root@v1.0.0');
-  expect(instances.find((i) => i.id === 's3_bucket')).toBeDefined();
-  expect(instances.find((i) => i.id === 's3_bucket_versioning')).toBeDefined();
+  const children = getChildren(state, 'root@v1.0.0');
+  expect(children.find((i) => i.id === 's3_bucket')).toBeDefined();
+  expect(children.find((i) => i.id === 's3_bucket_versioning')).toBeDefined();
 
   // 3. Define composite variables
   const variables = [
@@ -920,13 +857,13 @@ test('s3_stack scenario: variables, var bindings, curated outputs', () => {
       acl: { var: 'acl' },
     },
   });
-  const s3Bucket = getInst(state, 's3_bucket');
-  expect(s3Bucket.inputs.bucket_name).toEqual({ var: 'bucket_name' });
-  expect(s3Bucket.inputs.tags).toEqual({ var: 'tags' });
+  const s3Bucket = getChild(state, 's3_bucket');
+  expect(s3Bucket.inputs!.bucket_name).toEqual({ var: 'bucket_name' });
+  expect(s3Bucket.inputs!.tags).toEqual({ var: 'tags' });
 
   // 5. Verify the wire from CONNECT is preserved (s3_bucket.id → s3_bucket_versioning.bucket_id)
-  const versioning = getInst(state, 's3_bucket_versioning');
-  expect(versioning.inputs.bucket_id).toEqual({ out: { module: 's3_bucket', name: 'id' } });
+  const versioning = getChild(state, 's3_bucket_versioning');
+  expect(versioning.inputs!.bucket_id).toEqual({ out: { module: 's3_bucket', name: 'id' } });
 
   // 6. Set curated outputs
   state = workspaceReducer(state, {
@@ -946,7 +883,7 @@ test('s3_stack scenario: variables, var bindings, curated outputs', () => {
   expect(state.modules['root@v1.0.0'].interface.outputs).toHaveLength(2);
   expect(state.modules['root@v1.0.0'].interface.outputs[0].name).toBe('bucket_arn');
 
-  // Verify graph.exports.outputs
+  // Verify exports.outputs
   const exports = getExports(state, 'root@v1.0.0');
   expect(exports['bucket_arn']).toEqual({ out: { module: 's3_bucket', name: 'arn' } });
   expect(exports['bucket_id']).toEqual({ out: { module: 's3_bucket', name: 'id' } });
@@ -958,23 +895,23 @@ test('s3_stack scenario: variables, var bindings, curated outputs', () => {
 
 test('CLEAR_GRAPH clears instances and exports', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-    { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
+    { id: 'b', module: 'y@v1' },
   ]);
   // Set exports
   const def = state.modules['root@v1.0.0'];
-  def.graph.exports.outputs['out1'] = { out: { module: 'a', name: 'arn' } };
+  def.exports.outputs['out1'] = { out: { module: 'a', name: 'arn' } };
   const next = workspaceReducer(state, {
     type: 'CLEAR_GRAPH',
     module_key: 'root@v1.0.0',
   });
-  expect(getInstances(next, 'root@v1.0.0')).toHaveLength(0);
+  expect(getChildren(next, 'root@v1.0.0')).toHaveLength(0);
   expect(getExports(next, 'root@v1.0.0')).toEqual({});
 });
 
 test('CLEAR_GRAPH clears layout', () => {
   const state = makeWorkspace(
-    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
+    [{ id: 'a', module: 'x@v1' }],
     {},
     { 'root@v1.0.0': { nodes: { a: { position: { x: 100, y: 200 } } } } },
   );
@@ -986,19 +923,14 @@ test('CLEAR_GRAPH clears layout', () => {
 });
 
 test('CLEAR_GRAPH GCs orphaned module defs', () => {
-  const leafDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const leafDef: Module = {
     id: 'vpc',
     version: 'v1.0.0',
     interface: { inputs: [], outputs: [] },
     source: { kind: 'git', repo: 'test', ref: 'v1' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
-  const state = makeWorkspace(
-    [{ kind: 'module', id: 'my-vpc', use: { module_id: 'vpc', version: 'v1.0.0' }, inputs: {} }],
-    { 'vpc@v1.0.0': leafDef },
-  );
+  const state = makeWorkspace([{ id: 'my-vpc', module: 'vpc@v1.0.0' }], { 'vpc@v1.0.0': leafDef });
   expect(state.modules['vpc@v1.0.0']).toBeDefined();
   const next = workspaceReducer(state, {
     type: 'CLEAR_GRAPH',
@@ -1009,9 +941,7 @@ test('CLEAR_GRAPH GCs orphaned module defs', () => {
 });
 
 test('CLEAR_GRAPH preserves composite interface (variables/output defs)', () => {
-  const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-  ]);
+  const state = makeWorkspace([{ id: 'a', module: 'x@v1' }]);
   // Set interface
   const withVars = workspaceReducer(state, {
     type: 'SET_VARIABLES',
@@ -1113,7 +1043,7 @@ test('SET_PROVIDERS on non-existent module_key returns state unchanged', () => {
 // SET_LOCALS
 // ══════════════════════════════════════════════════════════════════════
 
-test('SET_LOCALS sets locals on composite graph', () => {
+test('SET_LOCALS sets locals on composite module', () => {
   const state = makeWorkspace([]);
   const locals: import('../types/ir').LocalDef[] = [
     { name: 'prefix', value: { lit: 'prod' } },
@@ -1125,7 +1055,7 @@ test('SET_LOCALS sets locals on composite graph', () => {
     locals,
   });
   const def = next.modules['root@v1.0.0'];
-  expect(def.graph.locals).toEqual(locals);
+  expect(def.locals).toEqual(locals);
 });
 
 test('SET_LOCALS with empty array sets locals to undefined', () => {
@@ -1143,7 +1073,7 @@ test('SET_LOCALS with empty array sets locals to undefined', () => {
     locals: [],
   });
   const def = next.modules['root@v1.0.0'];
-  expect(def.graph.locals).toBeUndefined();
+  expect(def.locals).toBeUndefined();
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1152,8 +1082,8 @@ test('SET_LOCALS with empty array sets locals to undefined', () => {
 
 test('SET_DEPENDS_ON sets depends_on on target instance', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-    { kind: 'module', id: 'b', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
+    { id: 'b', module: 'y@v1' },
   ]);
   const next = workspaceReducer(state, {
     type: 'SET_DEPENDS_ON',
@@ -1161,17 +1091,15 @@ test('SET_DEPENDS_ON sets depends_on on target instance', () => {
     instance_id: 'b',
     depends_on: ['module.a'],
   });
-  expect(getInst(next, 'b').depends_on).toEqual(['module.a']);
+  expect(getChild(next, 'b').depends_on).toEqual(['module.a']);
 });
 
 test('SET_DEPENDS_ON with empty array removes depends_on', () => {
   const state = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'b',
-      use: { module_id: 'y', version: 'v1' },
-      inputs: {},
+      module: 'y@v1',
       depends_on: ['module.a'],
     },
   ]);
@@ -1181,7 +1109,7 @@ test('SET_DEPENDS_ON with empty array removes depends_on', () => {
     instance_id: 'b',
     depends_on: [],
   });
-  expect(getInst(next, 'b').depends_on).toBeUndefined();
+  expect(getChild(next, 'b').depends_on).toBeUndefined();
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1220,19 +1148,17 @@ test('SET_ENVIRONMENT_BACKENDS sets backend configs on workspace', () => {
 
 test('DROP_BUNDLE with leaf-like deploy entry (no instances) preserves existing graph', () => {
   const state = makeWorkspace([]);
-  const deploy_bundle: import('../types/ir').ModuleBundle = {
+  const deploy_bundle: Bundle = {
     schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'leaf-only', version: 'v1.0.0' },
+    kind: 'bundle',
+    entry: 'leaf-only@v1.0.0',
     modules: {
       'leaf-only@v1.0.0': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'leaf-only',
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
         source: { kind: 'registry' },
-        graph: { instances: [], exports: { outputs: {} } },
+        exports: { outputs: {} },
       },
     },
   };
@@ -1243,6 +1169,6 @@ test('DROP_BUNDLE with leaf-like deploy entry (no instances) preserves existing 
     positions: {},
   });
   // No new instances added — graph should still be empty
-  const instances = getInstances(next, 'root@v1.0.0');
-  expect(instances).toHaveLength(0);
+  const children = getChildren(next, 'root@v1.0.0');
+  expect(children).toHaveLength(0);
 });

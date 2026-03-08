@@ -6,36 +6,37 @@
 import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import type { RegistryModule } from '../../types/protocol';
 import type { WorkspaceState } from '../../webview/types/workspace';
-import type { Binding, ModuleBundle } from '../../webview/types/ir';
-import { isModuleInstance } from '../../webview/types/ir';
+import type { Binding, Bundle } from '../../webview/types/ir';
+import { isUse } from '../../webview/types/ir';
 import type { WorkspaceAction } from '../../webview/state/reducer';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { isValidTerraformIdentifier, makeModuleKey } from '../../webview/utils/identifiers';
+import { isValidTerraformIdentifier, parseModuleKey } from '../../webview/utils/identifiers';
+import { allChildren } from '../../webview/utils/children';
 
 export type GraphWriteDeps = {
   getRpcClient: () => JSONRPCClient | null;
   getRegistryModules: () => RegistryModule[];
-  addModuleToActiveCanvas: (deploy_bundle: ModuleBundle, icon_url?: string) => void;
+  addModuleToActiveCanvas: (deploy_bundle: Bundle, icon_url?: string) => void;
   requestGraphState: () => Promise<WorkspaceState>;
   dispatchToCanvas: (action: WorkspaceAction) => Promise<void>;
 };
 
 // ── Helpers ──
 
-/** Get the entry module key and the composite graph from workspace state. */
-function getEntryGraph(state: WorkspaceState) {
-  const entryKey = makeModuleKey(state.entry.module_id, state.entry.version);
+/** Get the entry module key and the entry module from workspace state. */
+function getEntryModule(state: WorkspaceState) {
+  const entryKey = state.entry;
   const entryDef = state.modules[entryKey];
   if (!entryDef) return undefined;
-  return { entryKey, graph: entryDef.graph };
+  return { entryKey, mod: entryDef };
 }
 
-/** Find an instance by ID in the entry graph. */
-function findInstance(state: WorkspaceState, instanceId: string) {
-  const entry = getEntryGraph(state);
+/** Find a child by ID in the entry module. */
+function findChild(state: WorkspaceState, childId: string) {
+  const entry = getEntryModule(state);
   if (!entry) return undefined;
-  return entry.graph.instances.find((i) => i.id === instanceId);
+  return allChildren(entry.mod).find((c) => c.id === childId);
 }
 
 /**
@@ -53,11 +54,13 @@ async function pollForAddedInstance(
     await new Promise((r) => setTimeout(r, delay));
     try {
       const state = await deps.requestGraphState();
-      const entry = getEntryGraph(state);
+      const entry = getEntryModule(state);
       if (!entry) continue;
-      const added = [...entry.graph.instances].reverse().find((inst) => {
-        if (!isModuleInstance(inst)) return false;
-        return inst.use.module_id === moduleId || inst.use.module_id === moduleName;
+      const children = allChildren(entry.mod);
+      const added = [...children].reverse().find((child) => {
+        if (!isUse(child)) return false;
+        const { id } = parseModuleKey(child.module);
+        return id === moduleId || id === moduleName;
       });
       if (added) return added.id;
     } catch {
@@ -170,14 +173,15 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: `Cannot read canvas: ${err.message}`, isError: true };
     }
 
-    const entry = getEntryGraph(state);
+    const entry = getEntryModule(state);
     if (!entry) {
       return { content: 'Canvas has no composite graph.', isError: true };
     }
 
-    const inst = entry.graph.instances.find((i) => i.id === instanceId);
-    if (!inst) {
-      const ids = entry.graph.instances.map((i) => i.id);
+    const children = allChildren(entry.mod);
+    const child = children.find((c) => c.id === instanceId);
+    if (!child) {
+      const ids = children.map((c) => c.id);
       return {
         content: `Instance "${instanceId}" not found. Available instances: ${ids.join(', ')}`,
         isError: true,
@@ -220,14 +224,14 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: `Cannot read canvas: ${err.message}`, isError: true };
     }
 
-    const entry = getEntryGraph(state);
+    const entry = getEntryModule(state);
     if (!entry) {
       return { content: 'Canvas has no composite graph.', isError: true };
     }
 
     // Validate instances exist
-    const source = findInstance(state, sourceInstance);
-    const target = findInstance(state, targetInstance);
+    const source = findChild(state, sourceInstance);
+    const target = findChild(state, targetInstance);
     if (!source) {
       return { content: `Source instance "${sourceInstance}" not found.`, isError: true };
     }
@@ -272,12 +276,12 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: `Cannot read canvas: ${err.message}`, isError: true };
     }
 
-    const entry = getEntryGraph(state);
+    const entry = getEntryModule(state);
     if (!entry) {
       return { content: 'Canvas has no composite graph.', isError: true };
     }
 
-    const target = findInstance(state, targetInstance);
+    const target = findChild(state, targetInstance);
     if (!target) {
       return { content: `Instance "${targetInstance}" not found.`, isError: true };
     }
@@ -339,19 +343,19 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: `Cannot read canvas: ${err.message}`, isError: true };
     }
 
-    const entry = getEntryGraph(state);
+    const entry = getEntryModule(state);
     if (!entry) {
       return { content: 'Canvas has no composite graph.', isError: true };
     }
 
-    const inst = findInstance(state, instanceId);
+    const inst = findChild(state, instanceId);
     if (!inst) {
       return { content: `Instance "${instanceId}" not found.`, isError: true };
     }
 
     // Merge with existing inputs
     const mergedInputs: Record<string, Binding> = {
-      ...inst.inputs,
+      ...(inst.inputs ?? {}),
       [inputName]: binding,
     };
 
@@ -405,18 +409,19 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: `Cannot read canvas: ${err.message}`, isError: true };
     }
 
-    const entry = getEntryGraph(state);
+    const entry = getEntryModule(state);
     if (!entry) {
       return { content: 'Canvas has no composite graph.', isError: true };
     }
 
-    const inst = findInstance(state, oldId);
+    const inst = findChild(state, oldId);
     if (!inst) {
       return { content: `Instance "${oldId}" not found.`, isError: true };
     }
 
     // Check for collision
-    const existing = entry.graph.instances.find((i) => i.id === newId);
+    const children = allChildren(entry.mod);
+    const existing = children.find((c) => c.id === newId);
     if (existing) {
       return { content: `Instance "${newId}" already exists.`, isError: true };
     }

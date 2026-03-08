@@ -1,14 +1,14 @@
 import React, { useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import type { Instance, InputDef, OutputDef } from '../../types/ir';
-import { isOut, isModuleInstance } from '../../types/ir';
-import { isValidTerraformIdentifier, makeModuleKey } from '../../utils/identifiers';
+import type { Use, Resource, InputDef, OutputDef } from '../../types/ir';
+import { isOut, isUse } from '../../types/ir';
+import { isValidTerraformIdentifier, parseModuleKey } from '../../utils/identifiers';
 import { CanvasContext } from '../../state/context';
 
 // ── Node data contract (serializable — no callbacks) ──
 
 export type ModuleNodeData = {
-  instance: Instance;
+  child: Use | Resource;
   schema: { inputs: InputDef[]; outputs: OutputDef[] };
   icon_url?: string;
   hasErrors?: boolean;
@@ -62,12 +62,12 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     }
   }, [editing]);
 
-  const instance = data.instance;
+  const child = data.child;
   const connected = data.connectedHandles ?? [];
 
   // Wired input badges
   const wiredBadges: { inputName: string; source: string }[] = [];
-  for (const [inputName, binding] of Object.entries(instance.inputs)) {
+  for (const [inputName, binding] of Object.entries(child.inputs ?? {})) {
     if (isOut(binding)) {
       wiredBadges.push({
         inputName,
@@ -115,22 +115,22 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      ctx?.openConfig(instance.id);
+      ctx?.openConfig(child.id);
     },
-    [ctx, instance.id],
+    [ctx, child.id],
   );
 
   const onRefreshModule = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!isModuleInstance(instance)) return;
+      if (!isUse(child)) return;
       const refreshFn = (window as any).__canvasRefreshModule;
       if (refreshFn) {
-        const moduleKey = makeModuleKey(instance.use.module_id, instance.use.version);
-        refreshFn(moduleKey, instance.use.module_id, instance.use.version);
+        const { id: modId, version } = parseModuleKey(child.module);
+        refreshFn(child.module, modId, version);
       }
     },
-    [instance],
+    [child],
   );
 
   const onDeleteInstance = useCallback(
@@ -142,11 +142,11 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
         dispatch({
           type: 'DELETE_INSTANCE',
           module_key: moduleKey,
-          instance_id: instance.id,
+          instance_id: child.id,
         });
       }
     },
-    [instance.id],
+    [child.id],
   );
 
   // ── Helpers ──
@@ -168,7 +168,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={data.hasErrors ? data.errorMessages?.join('\n') : instance.id}
+      title={data.hasErrors ? data.errorMessages?.join('\n') : child.id}
     >
       {/* ── Card (invisible unless error) ── */}
       <div
@@ -178,7 +178,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
         {showIcon ? (
           <img
             src={data.icon_url}
-            alt={instance.id}
+            alt={child.id}
             className="rounded object-contain"
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
             onError={() => setImgFailed(true)}
@@ -189,7 +189,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       </div>
 
       {/* ── Hover action buttons ── */}
-      {hovered && isModuleInstance(instance) && (
+      {hovered && isUse(child) && (
         <button
           onClick={onRefreshModule}
           className="absolute rounded-full bg-[#153238] border border-[rgba(206,254,101,0.3)] border-solid text-[#CEFE65] leading-none cursor-pointer flex items-center justify-center z-10"
@@ -261,7 +261,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
             style={{ fontSize: 12, color: 'rgba(206, 254, 101, 0.65)' }}
             onDoubleClick={onDoubleClick}
           >
-            {instance.id}
+            {child.id}
           </span>
         )}
 

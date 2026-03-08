@@ -6,15 +6,16 @@ import type {
   TerraformBlock,
   ProviderConfig,
   LocalDef,
-  CompositeGraph,
-  ModuleBundle,
-  ModuleDef,
-  Instance,
+  Bundle,
+  Module,
+  Use,
+  Resource,
 } from '../types/ir';
-import { isOut, isVar, isOutExport, isModuleInstance } from '../types/ir';
+import { isOut, isVar, isOutExport } from '../types/ir';
 import type { WorkspaceState } from '../types/workspace';
-import { uniqueInstanceId, depBareId, makeModuleKey } from '../utils/identifiers';
-import { computeLayout } from '../utils/bundle';
+import { uniqueInstanceId, depBareId } from '../utils/identifiers';
+import { computeLayout, fromBundle } from '../utils/bundle';
+import { allChildren } from '../utils/children';
 
 // ══════════════════════════════════════════════════════════════════════
 // WorkspaceAction — full type union (all phases)
@@ -25,7 +26,7 @@ export type WorkspaceAction =
   | {
       type: 'DROP_BUNDLE';
       module_key: string;
-      deploy_bundle: ModuleBundle;
+      deploy_bundle: Bundle;
       positions: Record<string, { x: number; y: number }>;
     }
   | {
@@ -68,16 +69,16 @@ export type WorkspaceAction =
   // ── Graph management ──
   | { type: 'CLEAR_GRAPH'; module_key: string }
   // ── Refresh ──
-  | { type: 'REFRESH_MODULE_DEFS'; updated_modules: Record<string, ModuleDef> };
+  | { type: 'REFRESH_MODULE_DEFS'; updated_modules: Record<string, Module> };
 
 // ══════════════════════════════════════════════════════════════════════
-// updateCompositeGraph helper
+// updateModule helper
 // ══════════════════════════════════════════════════════════════════════
 
-function updateCompositeGraph(
+function updateModule(
   state: WorkspaceState,
   module_key: string,
-  fn: (graph: CompositeGraph) => CompositeGraph,
+  fn: (mod: Module) => Module,
 ): WorkspaceState {
   const def = state.modules[module_key];
   if (!def) {
@@ -87,8 +88,25 @@ function updateCompositeGraph(
     ...state,
     modules: {
       ...state.modules,
-      [module_key]: { ...def, graph: fn(def.graph) },
+      [module_key]: fn(def),
     },
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// mapChildById — update a specific child by ID in either modules[] or resources[]
+// ══════════════════════════════════════════════════════════════════════
+
+function mapChildById(
+  mod: Module,
+  id: string,
+  fnUse: (u: Use) => Use,
+  fnResource: (r: Resource) => Resource,
+): Module {
+  return {
+    ...mod,
+    modules: mod.modules?.map((u) => (u.id === id ? fnUse(u) : u)),
+    resources: mod.resources?.map((r) => (r.id === id ? fnResource(r) : r)),
   };
 }
 
@@ -187,106 +205,121 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 // ══════════════════════════════════════════════════════════════════════
 
 /**
- * Recursively flatten a composite's instances to leaf instances.
+ * Recursively flatten a module's children to leaf children.
  *
- * For each instance in a composite graph:
- * - If it references a leaf module → keep it as-is.
+ * For each Use child in a module:
+ * - If it references a leaf module (no sub-children) → keep it as-is.
  * - If it references a composite module → replace it with that composite's
- *   (recursively flattened) instances, resolving bindings through the
+ *   (recursively flattened) children, resolving bindings through the
  *   composite's interface (inputs via instance bindings, outputs via exports).
  */
-function flattenInstances(
-  instances: Instance[],
-  allModules: Record<string, ModuleDef>,
-): Instance[] {
-  const result: Instance[] = [];
+function flattenChildren(
+  mod: Module,
+  allModules: Record<string, Module>,
+): { uses: Use[]; resources: Resource[] } {
+  const uses: Use[] = [];
+  const resources: Resource[] = [];
 
-  for (const inst of instances) {
-    if (inst.kind !== 'module') {
-      // resource / data instances are always leaves
-      result.push(inst);
+  // Process resources (always leaves)
+  for (const r of mod.resources ?? []) {
+    resources.push(r);
+  }
+
+  // Process module uses
+  for (const use of mod.modules ?? []) {
+    const def = allModules[use.module];
+
+    const children = def ? allChildren(def) : [];
+    if (!def || children.length === 0) {
+      // Leaf-like (no sub-children) or unresolved — keep as-is
+      uses.push(use);
       continue;
     }
 
-    const defKey = makeModuleKey(inst.use.module_id, inst.use.version);
-    const def =
-      allModules[defKey] ?? Object.values(allModules).find((m) => m.id === inst.use.module_id);
+    // Has sub-children — unpack recursively
+    const { uses: subUses, resources: subResources } = flattenChildren(def, allModules);
 
-    if (!def || def.graph.instances.length === 0) {
-      // Leaf-like (no sub-instances) or unresolved — keep as-is
-      result.push(inst);
-      continue;
+    for (const subUse of subUses) {
+      const resolvedInputs = resolveChildBindings(subUse.inputs, use.inputs);
+      uses.push({
+        ...subUse,
+        ...(Object.keys(resolvedInputs).length > 0 ? { inputs: resolvedInputs } : {}),
+      });
     }
 
-    // Has sub-instances — unpack its graph's instances recursively
-    const subGraph = def.graph;
-    const subInstances = flattenInstances(subGraph.instances, allModules);
-
-    for (const subInst of subInstances) {
-      // Resolve each sub-instance's bindings through the parent composite instance
-      const resolvedInputs: Record<string, Binding> = {};
-
-      for (const [inputName, binding] of Object.entries(subInst.inputs)) {
-        if (isVar(binding)) {
-          // var binding: look up what the parent composite instance passes for this variable
-          const parentBinding = inst.inputs[binding.var];
-          if (parentBinding) {
-            resolvedInputs[inputName] = parentBinding;
-          } else {
-            // Pass through as-is (the variable might be defined at a higher scope)
-            resolvedInputs[inputName] = binding;
-          }
-        } else if (isOut(binding)) {
-          // out binding referencing a sibling within the sub-composite
-          // The sibling is also being flattened, so the reference stays valid
-          resolvedInputs[inputName] = binding;
-        } else {
-          // lit or expr — keep as-is
-          resolvedInputs[inputName] = binding;
-        }
-      }
-
-      result.push({
-        ...subInst,
-        inputs: resolvedInputs,
-      } as Instance);
+    for (const subRes of subResources) {
+      const resolvedInputs = resolveChildBindings(subRes.inputs, use.inputs);
+      resources.push({
+        ...subRes,
+        ...(Object.keys(resolvedInputs).length > 0 ? { inputs: resolvedInputs } : {}),
+      });
     }
   }
 
-  return result;
+  return { uses, resources };
 }
 
-/** Deduplicate instance IDs against existing ones and cascade renames through bindings. */
+/** Resolve a child's bindings through a parent composite's input map. */
+function resolveChildBindings(
+  childInputs: Record<string, Binding> | undefined,
+  parentInputs: Record<string, Binding> | undefined,
+): Record<string, Binding> {
+  if (!childInputs) return {};
+  const resolved: Record<string, Binding> = {};
+
+  for (const [inputName, binding] of Object.entries(childInputs)) {
+    if (isVar(binding) && parentInputs) {
+      const parentBinding = parentInputs[binding.var];
+      if (parentBinding) {
+        resolved[inputName] = parentBinding;
+      } else {
+        resolved[inputName] = binding;
+      }
+    } else {
+      resolved[inputName] = binding;
+    }
+  }
+
+  return resolved;
+}
+
+/** Deduplicate child IDs against existing ones and cascade renames through bindings. */
 function resolveIdCollisions(
-  instances: Instance[],
+  uses: Use[],
+  resources: Resource[],
   existingIds: Set<string>,
-): { instances: Instance[]; renameMap: Map<string, string> } {
+): { uses: Use[]; resources: Resource[]; renameMap: Map<string, string> } {
   const renameMap = new Map<string, string>();
   const ids = new Set(existingIds);
 
-  for (const inst of instances) {
-    const newId = uniqueInstanceId(inst.id, ids);
-    if (newId !== inst.id) {
-      renameMap.set(inst.id, newId);
-    }
+  // Build rename map
+  for (const u of uses) {
+    const newId = uniqueInstanceId(u.id, ids);
+    if (newId !== u.id) renameMap.set(u.id, newId);
+    ids.add(newId);
+  }
+  for (const r of resources) {
+    const newId = uniqueInstanceId(r.id, ids);
+    if (newId !== r.id) renameMap.set(r.id, newId);
     ids.add(newId);
   }
 
   if (renameMap.size === 0) {
-    return { instances, renameMap };
+    return { uses, resources, renameMap };
   }
 
-  const renamed = instances.map((inst) => {
-    const newId = renameMap.get(inst.id) ?? inst.id;
+  const renameChild = <T extends Use | Resource>(child: T): T => {
+    const newId = renameMap.get(child.id) ?? child.id;
+    const newInputs = child.inputs
+      ? mapBindings(child.inputs, (binding) => {
+          if (isOut(binding) && renameMap.has(binding.out.module)) {
+            return { out: { module: renameMap.get(binding.out.module)!, name: binding.out.name } };
+          }
+          return binding;
+        })
+      : undefined;
 
-    const newInputs = mapBindings(inst.inputs, (binding) => {
-      if (isOut(binding) && renameMap.has(binding.out.module)) {
-        return { out: { module: renameMap.get(binding.out.module)!, name: binding.out.name } };
-      }
-      return binding;
-    });
-
-    const newDependsOn = inst.depends_on?.map((dep) => {
+    const newDependsOn = child.depends_on?.map((dep) => {
       const bare = depBareId(dep);
       const renamed = renameMap.get(bare);
       if (renamed) return dep.startsWith('module.') ? `module.${renamed}` : renamed;
@@ -294,75 +327,87 @@ function resolveIdCollisions(
     });
 
     return {
-      ...inst,
+      ...child,
       id: newId,
-      inputs: newInputs,
+      ...(newInputs ? { inputs: newInputs } : {}),
       ...normalizeDependsOn(newDependsOn),
-    } as Instance;
-  });
+    } as T;
+  };
 
-  return { instances: renamed, renameMap };
+  return {
+    uses: uses.map(renameChild),
+    resources: resources.map(renameChild),
+    renameMap,
+  };
 }
 
 function handleDropBundle(
   state: WorkspaceState,
   action: Extract<WorkspaceAction, { type: 'DROP_BUNDLE' }>,
 ): WorkspaceState {
-  const { module_key, deploy_bundle, positions } = action;
-  const entryKey = makeModuleKey(deploy_bundle.entry.module_id, deploy_bundle.entry.version);
-  const entryDef = deploy_bundle.modules[entryKey];
+  const { module_key, positions } = action;
+  // Normalize deploy bundle (handles legacy entry/graph formats)
+  const { workspace: normalized } = fromBundle(action.deploy_bundle);
+  const entryKey = normalized.entry;
+  const entryDef = normalized.modules[entryKey];
 
   if (!entryDef) {
     return state;
   }
 
-  // 1. Merge all non-entry ModuleDef entries into workspace.modules (leaf defs needed for resolution)
+  // 1. Merge all non-entry Module entries into workspace.modules (leaf defs needed for resolution)
   const mergedModules = { ...state.modules };
-  for (const [key, def] of Object.entries(deploy_bundle.modules)) {
+  for (const [key, def] of Object.entries(normalized.modules)) {
     if (key !== entryKey) {
-      mergedModules[key] = def as ModuleDef;
+      mergedModules[key] = def;
     }
   }
 
-  // 2. Get existing instance IDs in the target composite
+  // 2. Get existing child IDs in the target module
   const targetDef = state.modules[module_key];
   if (!targetDef) {
     return state;
   }
 
-  const existingInstances = [...targetDef.graph.instances];
-  const existingIds = new Set(existingInstances.map((i) => i.id));
+  const existingUses = [...(targetDef.modules ?? [])];
+  const existingResources = [...(targetDef.resources ?? [])];
+  const existingIds = new Set([
+    ...existingUses.map((u) => u.id),
+    ...existingResources.map((r) => r.id),
+  ]);
 
-  // 3. Flatten: recursively unpack composite instances to leaves
-  const allModulesForResolution = { ...mergedModules, ...deploy_bundle.modules };
-  const entryInstances: Instance[] = flattenInstances(
-    entryDef.graph.instances,
+  // 3. Flatten: recursively unpack composite uses to leaves
+  const allModulesForResolution = { ...mergedModules, ...normalized.modules };
+  const { uses: flatUses, resources: flatResources } = flattenChildren(
+    entryDef,
     allModulesForResolution,
   );
 
   // 4. Handle ID collisions and apply renames
-  const { instances: newInstances, renameMap } = resolveIdCollisions(entryInstances, existingIds);
+  const {
+    uses: newUses,
+    resources: newResources,
+    renameMap,
+  } = resolveIdCollisions(flatUses, flatResources, existingIds);
 
   // 5. Add layout entries from positions
   const existingLayout = state.layouts[module_key] || { nodes: {} };
-  // Build position hints: prefer user-supplied positions, map renamed IDs
+  const allNew = [...newUses, ...newResources];
   const positionHints: Record<string, { x: number; y: number }> = {};
-  for (const inst of newInstances) {
-    const originalId = [...renameMap.entries()].find(([, v]) => v === inst.id)?.[0] ?? inst.id;
+  for (const child of allNew) {
+    const originalId = [...renameMap.entries()].find(([, v]) => v === child.id)?.[0] ?? child.id;
     if (positions[originalId]) {
-      positionHints[inst.id] = positions[originalId];
-    } else if (positions[inst.id]) {
-      positionHints[inst.id] = positions[inst.id];
+      positionHints[child.id] = positions[originalId];
+    } else if (positions[child.id]) {
+      positionHints[child.id] = positions[child.id];
     }
   }
-  const dropLayout = computeLayout(newInstances, positionHints);
+  const dropLayout = computeLayout(allNew, positionHints);
   const newLayoutNodes = { ...existingLayout.nodes, ...dropLayout.nodes };
 
   // 6. Build new state
-  const updatedGraph: CompositeGraph = {
-    ...targetDef.graph,
-    instances: [...existingInstances, ...newInstances],
-  };
+  const updatedUses = [...existingUses, ...newUses];
+  const updatedResources = [...existingResources, ...newResources];
 
   return {
     ...state,
@@ -370,7 +415,10 @@ function handleDropBundle(
       ...mergedModules,
       [module_key]: {
         ...targetDef,
-        graph: updatedGraph,
+        ...(updatedUses.length > 0 ? { modules: updatedUses } : { modules: undefined }),
+        ...(updatedResources.length > 0
+          ? { resources: updatedResources }
+          : { resources: undefined }),
       },
     },
     layouts: {
@@ -389,20 +437,18 @@ function handleConnect(
   action: Extract<WorkspaceAction, { type: 'CONNECT' }>,
 ): WorkspaceState {
   const { module_key, source_instance, target_instance, mapping } = action;
-  return updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
-    instances: graph.instances.map((inst) =>
-      inst.id === target_instance
-        ? {
-            ...inst,
-            inputs: {
-              ...inst.inputs,
-              [mapping.to]: { out: { module: source_instance, name: mapping.from } },
-            },
-          }
-        : inst,
-    ),
-  }));
+  const setBinding = <T extends Use | Resource>(child: T): T =>
+    ({
+      ...child,
+      inputs: {
+        ...(child.inputs ?? {}),
+        [mapping.to]: { out: { module: source_instance, name: mapping.from } },
+      },
+    }) as T;
+
+  return updateModule(state, module_key, (mod) =>
+    mapChildById(mod, target_instance, setBinding, setBinding),
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -414,14 +460,15 @@ function handleDisconnect(
   action: Extract<WorkspaceAction, { type: 'DISCONNECT' }>,
 ): WorkspaceState {
   const { module_key, target_instance, input_name } = action;
-  return updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
-    instances: graph.instances.map((inst) => {
-      if (inst.id !== target_instance) return inst;
-      const { [input_name]: _removed, ...restInputs } = inst.inputs;
-      return { ...inst, inputs: restInputs };
-    }),
-  }));
+  const removeBinding = <T extends Use | Resource>(child: T): T => {
+    if (!child.inputs) return child;
+    const { [input_name]: _removed, ...restInputs } = child.inputs;
+    return { ...child, inputs: restInputs } as T;
+  };
+
+  return updateModule(state, module_key, (mod) =>
+    mapChildById(mod, target_instance, removeBinding, removeBinding),
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -433,12 +480,11 @@ function handleUpdateInputs(
   action: Extract<WorkspaceAction, { type: 'UPDATE_INPUTS' }>,
 ): WorkspaceState {
   const { module_key, instance_id, inputs } = action;
-  return updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
-    instances: graph.instances.map((inst) =>
-      inst.id === instance_id ? { ...inst, inputs } : inst,
-    ),
-  }));
+  const setInputs = <T extends Use | Resource>(child: T): T => ({ ...child, inputs }) as T;
+
+  return updateModule(state, module_key, (mod) =>
+    mapChildById(mod, instance_id, setInputs, setInputs),
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -451,38 +497,33 @@ function handleRenameInstance(
 ): WorkspaceState {
   const { module_key, old_id, new_id } = action;
 
-  // Update graph
-  const newState = updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
-    // Update instance ID + cascade to sibling out bindings
-    instances: graph.instances.map((inst) => {
-      // Rename the instance itself
-      const updatedId = inst.id === old_id ? new_id : inst.id;
+  const renameChild = <T extends Use | Resource>(child: T): T => {
+    const updatedId = child.id === old_id ? new_id : child.id;
+    const updatedInputs = child.inputs
+      ? mapBindings(child.inputs, (binding) => {
+          if (isOut(binding) && binding.out.module === old_id) {
+            return { out: { module: new_id, name: binding.out.name } };
+          }
+          return binding;
+        })
+      : undefined;
+    const updatedDependsOn = child.depends_on?.map((dep) => depRenameInstance(dep, old_id, new_id));
+    return {
+      ...child,
+      id: updatedId,
+      ...(updatedInputs !== undefined ? { inputs: updatedInputs } : {}),
+      ...normalizeDependsOn(updatedDependsOn),
+    } as T;
+  };
 
-      // Update out bindings referencing old_id
-      const updatedInputs = mapBindings(inst.inputs, (binding) => {
-        if (isOut(binding) && binding.out.module === old_id) {
-          return { out: { module: new_id, name: binding.out.name } };
-        }
-        return binding;
-      });
-
-      // Update depends_on (entries may be "module.X" format)
-      const updatedDependsOn = inst.depends_on?.map((dep) =>
-        depRenameInstance(dep, old_id, new_id),
-      );
-
-      return {
-        ...inst,
-        id: updatedId,
-        inputs: updatedInputs,
-        ...normalizeDependsOn(updatedDependsOn),
-      } as Instance;
-    }),
-    // Update exports
+  // Update module
+  const newState = updateModule(state, module_key, (mod) => ({
+    ...mod,
+    modules: mod.modules?.map(renameChild),
+    resources: mod.resources?.map(renameChild),
     exports: {
       outputs: Object.fromEntries(
-        Object.entries(graph.exports.outputs).map(([name, exp]) => {
+        Object.entries(mod.exports.outputs).map(([name, exp]) => {
           if (isOutExport(exp) && exp.out.module === old_id) {
             return [name, { out: { module: new_id, name: exp.out.name } }];
           }
@@ -513,7 +554,7 @@ function handleRenameInstance(
 // ══════════════════════════════════════════════════════════════════════
 
 function collectReachableModuleKeys(
-  modules: Record<string, ModuleDef>,
+  modules: Record<string, Module>,
   entryKey: string,
 ): Set<string> {
   const reachable = new Set<string>();
@@ -527,12 +568,9 @@ function collectReachableModuleKeys(
     const def = modules[key];
     if (!def) continue;
 
-    for (const inst of def.graph.instances) {
-      if (isModuleInstance(inst)) {
-        const refKey = makeModuleKey(inst.use.module_id, inst.use.version);
-        if (!reachable.has(refKey)) {
-          queue.push(refKey);
-        }
+    for (const use of def.modules ?? []) {
+      if (!reachable.has(use.module)) {
+        queue.push(use.module);
       }
     }
   }
@@ -542,7 +580,7 @@ function collectReachableModuleKeys(
 
 /** Remove module defs not reachable from the entry module. */
 function gcOrphanedModules(state: WorkspaceState): WorkspaceState {
-  const entryKey = makeModuleKey(state.entry.module_id, state.entry.version);
+  const entryKey = state.entry;
   const reachable = collectReachableModuleKeys(state.modules, entryKey);
 
   const moduleKeys = Object.keys(state.modules);
@@ -550,7 +588,7 @@ function gcOrphanedModules(state: WorkspaceState): WorkspaceState {
     return state; // nothing to collect
   }
 
-  const cleanedModules: Record<string, ModuleDef> = {};
+  const cleanedModules: Record<string, Module> = {};
   for (const [key, def] of Object.entries(state.modules)) {
     if (reachable.has(key)) {
       cleanedModules[key] = def;
@@ -569,44 +607,48 @@ function handleDeleteInstance(
 ): WorkspaceState {
   const { module_key, instance_id } = action;
 
-  const newState = updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
-    // Remove instance, clean up sibling out bindings, clean up depends_on
-    instances: graph.instances
-      .filter((inst) => inst.id !== instance_id)
-      .map((inst) => {
-        // Remove out bindings referencing deleted instance
-        const cleanedInputs = mapBindings(inst.inputs, (binding) => {
+  const cleanChild = <T extends Use | Resource>(child: T): T => {
+    const cleanedInputs = child.inputs
+      ? mapBindings(child.inputs, (binding) => {
           if (isOut(binding) && binding.out.module === instance_id) {
-            return undefined; // Remove the binding
+            return undefined;
           }
           return binding;
-        });
+        })
+      : undefined;
 
-        // Remove from depends_on (entries may be "module.X" format)
-        const cleanedDependsOn = inst.depends_on?.filter(
-          (dep) => !depMatchesInstance(dep, instance_id),
-        );
+    const cleanedDependsOn = child.depends_on?.filter(
+      (dep) => !depMatchesInstance(dep, instance_id),
+    );
 
-        const { depends_on: _deps, ...instWithoutDeps } = inst;
-        return {
-          ...instWithoutDeps,
-          inputs: cleanedInputs,
-          ...normalizeDependsOn(cleanedDependsOn),
-        } as Instance;
-      }),
-    // Clean up exports referencing deleted instance
-    exports: {
-      outputs: Object.fromEntries(
-        Object.entries(graph.exports.outputs).filter(([, exp]) => {
-          if (isOutExport(exp) && exp.out.module === instance_id) {
-            return false;
-          }
-          return true;
-        }),
-      ),
-    },
-  }));
+    const { depends_on: _deps, ...rest } = child;
+    return {
+      ...rest,
+      ...(cleanedInputs !== undefined ? { inputs: cleanedInputs } : {}),
+      ...normalizeDependsOn(cleanedDependsOn),
+    } as T;
+  };
+
+  const newState = updateModule(state, module_key, (mod) => {
+    const newModules = mod.modules?.filter((u) => u.id !== instance_id).map(cleanChild);
+    const newResources = mod.resources?.filter((r) => r.id !== instance_id).map(cleanChild);
+
+    return {
+      ...mod,
+      modules: newModules && newModules.length > 0 ? newModules : undefined,
+      resources: newResources && newResources.length > 0 ? newResources : undefined,
+      exports: {
+        outputs: Object.fromEntries(
+          Object.entries(mod.exports.outputs).filter(([, exp]) => {
+            if (isOutExport(exp) && exp.out.module === instance_id) {
+              return false;
+            }
+            return true;
+          }),
+        ),
+      },
+    };
+  });
 
   // Remove from layout
   const layout = newState.layouts[module_key];
@@ -636,9 +678,10 @@ function handleClearGraph(
   const def = state.modules[module_key];
   if (!def) return state;
 
-  const clearedState = updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
-    instances: [],
+  const clearedState = updateModule(state, module_key, (mod) => ({
+    ...mod,
+    modules: undefined,
+    resources: undefined,
     exports: { outputs: {} },
     locals: undefined,
   }));
@@ -707,19 +750,11 @@ function handleSetExports(
   action: Extract<WorkspaceAction, { type: 'SET_EXPORTS' }>,
 ): WorkspaceState {
   const { module_key, outputs, output_defs } = action;
-  const def = state.modules[module_key];
-  if (!def) return state;
-  // Update interface.outputs with the output definitions
-  const withInterface = {
-    ...def,
-    interface: { ...def.interface, outputs: output_defs },
-  };
-  // Update graph.exports.outputs with the wiring
-  return updateCompositeGraph(
-    { ...state, modules: { ...state.modules, [module_key]: withInterface } },
-    module_key,
-    (graph) => ({ ...graph, exports: { outputs } }),
-  );
+  return updateModule(state, module_key, (mod) => ({
+    ...mod,
+    interface: { ...mod.interface, outputs: output_defs },
+    exports: { outputs },
+  }));
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -765,8 +800,8 @@ function handleSetLocals(
   action: Extract<WorkspaceAction, { type: 'SET_LOCALS' }>,
 ): WorkspaceState {
   const { module_key, locals } = action;
-  return updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
+  return updateModule(state, module_key, (mod) => ({
+    ...mod,
     locals: locals.length > 0 ? locals : undefined,
   }));
 }
@@ -780,14 +815,12 @@ function handleSetDependsOn(
   action: Extract<WorkspaceAction, { type: 'SET_DEPENDS_ON' }>,
 ): WorkspaceState {
   const { module_key, instance_id, depends_on } = action;
-  return updateCompositeGraph(state, module_key, (graph) => ({
-    ...graph,
-    instances: graph.instances.map((inst) => {
-      if (inst.id !== instance_id) return inst;
-      const { depends_on: _old, ...rest } = inst;
-      return { ...rest, ...normalizeDependsOn(depends_on) } as Instance;
-    }),
-  }));
+  const setDeps = <T extends Use | Resource>(child: T): T => {
+    const { depends_on: _old, ...rest } = child;
+    return { ...rest, ...normalizeDependsOn(depends_on) } as T;
+  };
+
+  return updateModule(state, module_key, (mod) => mapChildById(mod, instance_id, setDeps, setDeps));
 }
 
 // ══════════════════════════════════════════════════════════════════════

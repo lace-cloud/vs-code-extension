@@ -58,13 +58,6 @@ export const isOutExport = isOut as (
   e: OutputExport,
 ) => e is { out: { module: string; name: string } };
 
-// ── Module Identity ──
-
-export type ModuleRef = {
-  module_id: string;
-  version: string;
-};
-
 // ── Module Source ──
 
 export type ModuleSource = {
@@ -74,74 +67,59 @@ export type ModuleSource = {
   ref?: string;
 };
 
-// ── Composite Graph ──
+// ── Exports ──
 
-export type CompositeGraph = {
-  instances: Instance[];
-  wires?: Wire[]; // derived in toBundle, absent in workspace
-  exports: { outputs: Record<string, OutputExport> };
-  locals?: LocalDef[];
+export type Exports = {
+  outputs: Record<string, OutputExport>;
 };
 
-// ── Instance (discriminated union) ──
+// ── Use (child module reference) ──
 
-type InstanceBase = {
+export type Use = {
   id: string;
-  inputs: Record<string, Binding>;
+  module: string; // key into Bundle.modules (e.g. "aws-s3-bucket@v1.2.0")
+  inputs?: Record<string, Binding>;
   depends_on?: string[];
 };
 
-export type ModuleInstance = InstanceBase & {
-  kind: 'module';
-  use: ModuleRef;
-};
+// ── Resource (child resource/data reference) ──
 
-export type ResourceInstance = InstanceBase & {
-  kind: 'resource';
+export type Resource = {
+  id: string;
+  kind: 'resource' | 'data';
   type: string;
+  inputs?: Record<string, Binding>;
+  depends_on?: string[];
 };
 
-export type DataInstance = InstanceBase & {
-  kind: 'data';
-  type: string;
-};
+// ── Type guards ──
 
-export type Instance = ModuleInstance | ResourceInstance | DataInstance;
+export const isUse = (child: Use | Resource): child is Use => 'module' in child;
+export const isResource = (child: Use | Resource): child is Resource => 'type' in child;
 
-export const isModuleInstance = (i: Instance): i is ModuleInstance => i.kind === 'module';
-export const isResourceInstance = (i: Instance): i is ResourceInstance => i.kind === 'resource';
-export const isDataInstance = (i: Instance): i is DataInstance => i.kind === 'data';
+// ── Module Definition (1:1 with Go Module) ──
 
-// ── Wire ──
-
-export type Wire = {
-  from: { module: string; port: string };
-  to: { module: string; port: string };
-};
-
-// ── Module Definition ──
-
-export type ModuleDef = {
-  schema_version: '1.0';
-  kind: 'module_def';
+export type Module = {
   id: string;
   version: string;
-  description?: string;
   source?: ModuleSource;
   interface: { inputs: InputDef[]; outputs: OutputDef[] };
-  graph: CompositeGraph;
+  modules?: Use[];
+  resources?: Resource[];
+  locals?: LocalDef[];
+  exports: Exports;
   terraform?: TerraformBlock;
   providers?: ProviderConfig[];
 };
 
-// ── Module Bundle (top-level wire format) ──
+// ── Bundle (top-level wire format, 1:1 with Go Bundle) ──
 
-export type ModuleBundle = {
-  schema_version: '1.0';
-  kind: 'module_bundle';
-  entry: ModuleRef;
-  modules: Record<string, ModuleDef>;
-  environments?: Record<string, Record<string, any>>;
+export type Bundle = {
+  schema_version: string;
+  kind: 'bundle';
+  entry: string; // key into modules, e.g. "iam-stack@v1.0.0"
+  modules: Record<string, Module>;
+  environments?: Record<string, Record<string, unknown>>;
   environment_backends?: Record<string, BackendConfig>;
 };
 

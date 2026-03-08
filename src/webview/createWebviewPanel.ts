@@ -67,7 +67,7 @@ export function triggerGenerateOnActiveCanvas() {
 
 /** Send refreshed module defs to the active canvas. */
 export function refreshModulesOnActiveCanvas(
-  updated_modules: Record<string, import('./types/ir').ModuleDef>,
+  updated_modules: Record<string, import('./types/ir').Module>,
   icon_updates?: Record<string, string>,
 ) {
   if (!canvasPanel) {

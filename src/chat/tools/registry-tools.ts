@@ -6,7 +6,6 @@ import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import type { RegistryModule } from '../../types/protocol';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { makeModuleKey } from '../../webview/utils/identifiers';
 
 export type RegistryToolDeps = {
   getRpcClient: () => JSONRPCClient | null;
@@ -159,8 +158,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
       }
 
       // Extract the entry module's interface from the deploy bundle
-      const entryKey = makeModuleKey(deployBundle.entry.module_id, deployBundle.entry.version);
-      const entryDef = deployBundle.modules?.[entryKey];
+      const entryDef = deployBundle.modules?.[deployBundle.entry];
 
       const lines: string[] = [];
       lines.push(`**${match.name}** (${match.system}, v${match.version})`);

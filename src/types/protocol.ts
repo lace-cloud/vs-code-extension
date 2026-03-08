@@ -1,4 +1,4 @@
-import type { ModuleBundle } from '../webview/types/ir';
+import type { Bundle } from '../webview/types/ir';
 import type { WorkspaceState } from '../webview/types/workspace';
 import type { GraphError } from '../webview/utils/validate';
 
@@ -11,7 +11,7 @@ export type HostToWebview =
   | { command: 'triggerGenerate' }
   | { command: 'generateSuccess'; files?: string[] }
   | { command: 'generateError'; message: string; diagnostics?: Diagnostic[] }
-  | { command: 'dropBundle'; deploy_bundle: ModuleBundle; icon_url?: string }
+  | { command: 'dropBundle'; deploy_bundle: Bundle; icon_url?: string }
   | { command: 'validationErrors'; errors: GraphError[] }
   | { command: 'triggerVariables' }
   | { command: 'triggerOutputs' }
@@ -21,7 +21,7 @@ export type HostToWebview =
   | { command: 'triggerEnvironments' }
   | {
       command: 'refreshModuleDefs';
-      updated_modules: Record<string, import('../webview/types/ir').ModuleDef>;
+      updated_modules: Record<string, import('../webview/types/ir').Module>;
       icon_updates?: Record<string, string>;
     }
   | { command: 'getGraphState'; requestId: string }
@@ -36,7 +36,7 @@ export type HostToWebview =
 export type WebviewToHost =
   | { command: 'webviewReady' }
   | { command: 'saveState'; state: WorkspaceState }
-  | { command: 'generateBundle'; bundle: ModuleBundle }
+  | { command: 'generateBundle'; bundle: Bundle }
   | { command: 'markDirty'; state: WorkspaceState }
   | { command: 'markClean' }
   | {

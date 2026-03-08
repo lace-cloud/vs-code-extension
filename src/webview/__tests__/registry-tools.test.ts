@@ -174,11 +174,11 @@ describe('lace_inspect_module', () => {
     const mockClient = {
       getRegistryVersion: vi.fn().mockResolvedValue({
         deploy_bundle: {
-          entry: { module_id: 'aws/vpc', version: 'v1.0.0' },
+          schema_version: '1.0',
+          kind: 'bundle',
+          entry: 'aws/vpc@v1.0.0',
           modules: {
             'aws/vpc@v1.0.0': {
-              schema_version: '1.0',
-              kind: 'module_def',
               id: 'aws/vpc',
               version: 'v1.0.0',
               interface: {
@@ -189,7 +189,7 @@ describe('lace_inspect_module', () => {
                 outputs: [{ name: 'vpc_id', type: 'string', description: 'The VPC ID' }],
               },
               source: { kind: 'registry' },
-              graph: { instances: [], exports: { outputs: {} } },
+              exports: { outputs: {} },
             },
           },
         },

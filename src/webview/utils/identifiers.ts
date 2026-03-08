@@ -26,6 +26,14 @@ export function makeModuleKey(moduleId: string, version: string): string {
   return `${moduleId}@${version}`;
 }
 
+/** Parse a module key like "my_mod@v1.0.0" into { id, version }. */
+export function parseModuleKey(key: string): { id: string; version: string } {
+  const idx = key.indexOf('@');
+  return idx === -1
+    ? { id: key, version: '' }
+    : { id: key.slice(0, idx), version: key.slice(idx + 1) };
+}
+
 export function uniqueInstanceId(desired: string, existingIds: Set<string>): string {
   if (!existingIds.has(desired)) {
     return desired;

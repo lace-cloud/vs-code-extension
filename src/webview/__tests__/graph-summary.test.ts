@@ -16,9 +16,8 @@ describe('summarizeGraph', () => {
     const ws = makeWorkspace(
       [
         {
-          kind: 'module',
           id: 'vpc',
-          use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+          module: 'aws/vpc@v1.0.0',
           inputs: { cidr_block: { lit: '10.0.0.0/16' } },
         },
       ],
@@ -38,10 +37,8 @@ describe('summarizeGraph', () => {
     const ws = makeWorkspace(
       [
         {
-          kind: 'module',
           id: 'vpc',
-          use: { module_id: 'aws/vpc', version: 'v1.0.0' },
-          inputs: {},
+          module: 'aws/vpc@v1.0.0',
         },
       ],
       { 'aws/vpc@v1.0.0': vpcDef },
@@ -58,15 +55,13 @@ describe('summarizeGraph', () => {
     const ws = makeWorkspace(
       [
         {
-          kind: 'module',
           id: 'vpc',
-          use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+          module: 'aws/vpc@v1.0.0',
           inputs: { cidr_block: { lit: '10.0.0.0/16' } },
         },
         {
-          kind: 'module',
           id: 'subnet',
-          use: { module_id: 'aws/subnet', version: 'v1.0.0' },
+          module: 'aws/subnet@v1.0.0',
           inputs: {
             vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
             cidr_block: { lit: '10.0.1.0/24' },
@@ -91,9 +86,8 @@ describe('summarizeGraph', () => {
     const ws = makeWorkspace(
       [
         {
-          kind: 'module',
           id: 'vpc',
-          use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+          module: 'aws/vpc@v1.0.0',
           inputs: {
             cidr_block: { var: 'vpc_cidr' },
             enable_dns: { expr: { lang: 'hcl', value: 'true' } },
@@ -114,9 +108,8 @@ describe('summarizeGraph', () => {
     const ws = makeWorkspace(
       [
         {
-          kind: 'module',
           id: 'vpc',
-          use: { module_id: 'aws/vpc', version: 'v1.0.0' },
+          module: 'aws/vpc@v1.0.0',
           inputs: { cidr_block: { var: 'vpc_cidr' } },
         },
       ],

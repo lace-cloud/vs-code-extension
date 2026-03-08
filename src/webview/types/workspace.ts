@@ -1,6 +1,6 @@
-import type { ModuleBundle } from './ir';
+import type { Bundle } from './ir';
 
-export type WorkspaceState = ModuleBundle & {
+export type WorkspaceState = Bundle & {
   layouts: Record<string, GraphLayout>; // keyed by module map key
 };
 

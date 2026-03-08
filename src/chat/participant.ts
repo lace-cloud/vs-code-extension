@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import type { JSONRPCClient } from '../utilities/engine/rpc-client';
 import type { RegistryModule } from '../types/protocol';
 import type { WorkspaceState } from '../webview/types/workspace';
-import type { ModuleBundle } from '../webview/types/ir';
+import type { Bundle } from '../webview/types/ir';
 import type { WorkspaceAction } from '../webview/state/reducer';
 
 import { SYSTEM_PROMPT } from './system-prompt';
@@ -31,7 +31,7 @@ import {
 export type ChatParticipantDeps = {
   getRpcClient: () => JSONRPCClient | null;
   getRegistryModules: () => RegistryModule[];
-  addModuleToActiveCanvas: (deploy_bundle: ModuleBundle, icon_url?: string) => void;
+  addModuleToActiveCanvas: (deploy_bundle: Bundle, icon_url?: string) => void;
   requestGraphState: () => Promise<WorkspaceState>;
   dispatchToCanvas: (action: WorkspaceAction) => Promise<void>;
   triggerGenerate: () => void;

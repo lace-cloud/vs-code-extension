@@ -1,6 +1,7 @@
 import type { WorkspaceState } from '../types/workspace';
-import { isOut, isModuleInstance, isOutExport } from '../types/ir';
-import { depBareId, makeModuleKey } from './identifiers';
+import { isOut, isUse, isOutExport } from '../types/ir';
+import { depBareId } from './identifiers';
+import { allChildren, childIds } from './children';
 
 export type GraphError = {
   module_key?: string;
@@ -13,44 +14,45 @@ export function validateWorkspace(workspace: WorkspaceState): GraphError[] {
   const errors: GraphError[] = [];
 
   for (const [key, def] of Object.entries(workspace.modules)) {
-    const graph = def.graph;
-    const instanceIds = new Set(graph.instances.map((i) => i.id));
+    const ids = childIds(def);
+    const children = allChildren(def);
 
-    // Check: duplicate instance IDs within a composite
+    // Check: duplicate instance IDs within a module
     const seenIds = new Set<string>();
-    for (const inst of graph.instances) {
-      if (seenIds.has(inst.id)) {
+    for (const child of children) {
+      if (seenIds.has(child.id)) {
         errors.push({
           module_key: key,
-          instance_id: inst.id,
-          message: `Duplicate instance ID "${inst.id}"`,
+          instance_id: child.id,
+          message: `Duplicate instance ID "${child.id}"`,
         });
       }
-      seenIds.add(inst.id);
+      seenIds.add(child.id);
     }
 
-    for (const inst of graph.instances) {
+    for (const child of children) {
       // Check: out bindings referencing unknown instances
-      for (const [inputName, binding] of Object.entries(inst.inputs)) {
-        if (isOut(binding) && !instanceIds.has(binding.out.module)) {
-          errors.push({
-            module_key: key,
-            instance_id: inst.id,
-            input_name: inputName,
-            message: `Binding references unknown instance "${binding.out.module}"`,
-          });
+      if (child.inputs) {
+        for (const [inputName, binding] of Object.entries(child.inputs)) {
+          if (isOut(binding) && !ids.has(binding.out.module)) {
+            errors.push({
+              module_key: key,
+              instance_id: child.id,
+              input_name: inputName,
+              message: `Binding references unknown instance "${binding.out.module}"`,
+            });
+          }
         }
       }
 
       // Check: depends_on entries referencing unknown instances
-      if (inst.depends_on) {
-        for (const dep of inst.depends_on) {
-          // depends_on may use "module.NAME" format — strip prefix for lookup
+      if (child.depends_on) {
+        for (const dep of child.depends_on) {
           const bareId = depBareId(dep);
-          if (!instanceIds.has(bareId) && !instanceIds.has(dep)) {
+          if (!ids.has(bareId) && !ids.has(dep)) {
             errors.push({
               module_key: key,
-              instance_id: inst.id,
+              instance_id: child.id,
               message: `depends_on references unknown instance "${dep}"`,
             });
           }
@@ -58,25 +60,21 @@ export function validateWorkspace(workspace: WorkspaceState): GraphError[] {
       }
 
       // Check: use references pointing to modules not in workspace
-      if (isModuleInstance(inst)) {
-        const refKey = makeModuleKey(inst.use.module_id, inst.use.version);
-        const found =
-          workspace.modules[refKey] ||
-          Object.values(workspace.modules).some((m) => m.id === inst.use.module_id);
-        if (!found) {
+      if (isUse(child)) {
+        if (!workspace.modules[child.module]) {
           errors.push({
             module_key: key,
-            instance_id: inst.id,
-            message: `use references unknown module "${inst.use.module_id}@${inst.use.version}"`,
+            instance_id: child.id,
+            message: `use references unknown module "${child.module}"`,
           });
         }
       }
     }
 
     // Check: export outputs referencing unknown instances
-    if (graph.exports?.outputs) {
-      for (const [exportName, exp] of Object.entries(graph.exports.outputs)) {
-        if (isOutExport(exp) && !instanceIds.has(exp.out.module)) {
+    if (def.exports?.outputs) {
+      for (const [exportName, exp] of Object.entries(def.exports.outputs)) {
+        if (isOutExport(exp) && !ids.has(exp.out.module)) {
           errors.push({
             module_key: key,
             message: `Export "${exportName}" references unknown instance "${exp.out.module}"`,

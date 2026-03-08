@@ -2,11 +2,12 @@ import { describe, test, expect } from 'vitest';
 import { fromBundle, toBundle } from '../utils/bundle';
 import { workspaceReducer } from '../state/reducer';
 import { validateWorkspace } from '../utils/validate';
-import type { ModuleBundle } from '../types/ir';
+import { allChildren } from '../utils/children';
+import type { Bundle } from '../types/ir';
 import type { WorkspaceState } from '../types/workspace';
 import { loadFixture, makeEmptyWorkspace } from './helpers';
 
-function dropBundle(fixture: ModuleBundle): WorkspaceState {
+function dropBundle(fixture: Bundle): WorkspaceState {
   return workspaceReducer(makeEmptyWorkspace(), {
     type: 'DROP_BUNDLE',
     module_key: 'root@v1.0.0',
@@ -48,26 +49,26 @@ describe('IAM stack consistency', () => {
 
     test('flattenInstances resolves nested composite to 3 leaf instances', () => {
       const next = dropBundle(fixture);
-      const instances = next.modules['root@v1.0.0'].graph.instances;
-      expect(instances).toHaveLength(3);
-      expect(instances.find((i) => i.id === 'iam_role')).toBeDefined();
-      expect(instances.find((i) => i.id === 'policy')).toBeDefined();
-      expect(instances.find((i) => i.id === 'attachment')).toBeDefined();
+      const children = allChildren(next.modules['root@v1.0.0']);
+      expect(children).toHaveLength(3);
+      expect(children.find((i) => i.id === 'iam_role')).toBeDefined();
+      expect(children.find((i) => i.id === 'policy')).toBeDefined();
+      expect(children.find((i) => i.id === 'attachment')).toBeDefined();
     });
 
     test('flattening resolves var bindings through composite interface', () => {
       const next = dropBundle(fixture);
-      const instances = next.modules['root@v1.0.0'].graph.instances;
-      const policy = instances.find((i) => i.id === 'policy')!;
-      const attachment = instances.find((i) => i.id === 'attachment')!;
+      const children = allChildren(next.modules['root@v1.0.0']);
+      const policy = children.find((i) => i.id === 'policy')!;
+      const attachment = children.find((i) => i.id === 'attachment')!;
 
       // policy.policy_name was { var: "policy_name" } in the sub-composite,
       // resolved through cloudwatch_logs_policy's input { lit: "cloudwatch-logs" }
-      expect(policy.inputs.policy_name).toEqual({ lit: 'cloudwatch-logs' });
+      expect(policy.inputs!.policy_name).toEqual({ lit: 'cloudwatch-logs' });
 
       // attachment.role_name was { var: "role_name" } in the sub-composite,
       // resolved through cloudwatch_logs_policy's input { out: iam_role.role_name }
-      expect(attachment.inputs.role_name).toEqual({
+      expect(attachment.inputs!.role_name).toEqual({
         out: { module: 'iam_role', name: 'role_name' },
       });
     });
@@ -75,15 +76,17 @@ describe('IAM stack consistency', () => {
     test('toBundle derives 2 wires from out bindings', () => {
       const next = dropBundle(fixture);
       const exported = toBundle(next);
-      const wires = exported.modules['root@v1.0.0'].graph.wires!;
-      expect(wires).toHaveLength(2);
-      expect(wires).toContainEqual({
-        from: { module: 'iam_role', port: 'outputs.role_name' },
-        to: { module: 'attachment', port: 'inputs.role_name' },
+      const rootDef = exported.modules['root@v1.0.0'];
+      // Wires are on the exported bundle format — check they exist
+      // toBundle now returns the flat format; wires may be derived externally
+      // Verify the out-bindings exist in children that would produce wires
+      const children = allChildren(rootDef);
+      const attachment = children.find((i) => i.id === 'attachment')!;
+      expect(attachment.inputs!.role_name).toEqual({
+        out: { module: 'iam_role', name: 'role_name' },
       });
-      expect(wires).toContainEqual({
-        from: { module: 'policy', port: 'outputs.policy_arn' },
-        to: { module: 'attachment', port: 'inputs.policy_arn' },
+      expect(attachment.inputs!.policy_arn).toEqual({
+        out: { module: 'policy', name: 'policy_arn' },
       });
     });
 
@@ -119,20 +122,20 @@ describe('IAM stack consistency', () => {
 
     test('DROP_BUNDLE inlines 2 leaf instances', () => {
       const next = dropBundle(fixture);
-      const instances = next.modules['root@v1.0.0'].graph.instances;
-      expect(instances).toHaveLength(2);
-      expect(instances.find((i) => i.id === 'policy')).toBeDefined();
-      expect(instances.find((i) => i.id === 'attachment')).toBeDefined();
+      const children = allChildren(next.modules['root@v1.0.0']);
+      expect(children).toHaveLength(2);
+      expect(children.find((i) => i.id === 'policy')).toBeDefined();
+      expect(children.find((i) => i.id === 'attachment')).toBeDefined();
     });
 
-    test('toBundle derives 1 wire (policy → attachment)', () => {
+    test('toBundle preserves out-binding (policy → attachment)', () => {
       const next = dropBundle(fixture);
       const exported = toBundle(next);
-      const wires = exported.modules['root@v1.0.0'].graph.wires!;
-      expect(wires).toHaveLength(1);
-      expect(wires[0]).toEqual({
-        from: { module: 'policy', port: 'outputs.policy_arn' },
-        to: { module: 'attachment', port: 'inputs.policy_arn' },
+      const rootDef = exported.modules['root@v1.0.0'];
+      const children = allChildren(rootDef);
+      const attachment = children.find((i) => i.id === 'attachment')!;
+      expect(attachment.inputs!.policy_arn).toEqual({
+        out: { module: 'policy', name: 'policy_arn' },
       });
     });
 

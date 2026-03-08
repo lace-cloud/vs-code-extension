@@ -1,28 +1,26 @@
 import { test, expect } from 'vitest';
 import { validateWorkspace } from '../utils/validate';
 import { makeWorkspace } from './helpers';
+import type { Module } from '../types/ir';
 
 test('valid workspace produces no errors', () => {
   const ws = makeWorkspace(
     [
-      { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+      { id: 'a', module: 'x@v1' },
       {
-        kind: 'module',
         id: 'b',
-        use: { module_id: 'x', version: 'v1' },
+        module: 'x@v1',
         inputs: { bucket: { out: { module: 'a', name: 'arn' } } },
       },
     ],
     {
       'x@v1': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'x',
         version: 'v1',
         interface: { inputs: [], outputs: [] },
         source: { kind: 'registry', ref: 'x/aws/v1' },
-        graph: { instances: [], exports: { outputs: {} } },
-      },
+        exports: { outputs: {} },
+      } as Module,
     },
     {},
     { my_output: { out: { module: 'a', name: 'arn' } } },
@@ -32,8 +30,8 @@ test('valid workspace produces no errors', () => {
 
 test('catches duplicate instance IDs', () => {
   const ws = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-    { kind: 'module', id: 'a', use: { module_id: 'y', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
+    { id: 'a', module: 'y@v1' },
   ]);
   const errors = validateWorkspace(ws);
   expect(errors.length).toBeGreaterThan(0);
@@ -43,9 +41,8 @@ test('catches duplicate instance IDs', () => {
 test('catches out bindings referencing unknown instances', () => {
   const ws = makeWorkspace([
     {
-      kind: 'module',
       id: 'b',
-      use: { module_id: 'x', version: 'v1' },
+      module: 'x@v1',
       inputs: { bucket: { out: { module: 'nonexistent', name: 'arn' } } },
     },
   ]);
@@ -57,10 +54,8 @@ test('catches out bindings referencing unknown instances', () => {
 test('catches depends_on referencing unknown instances', () => {
   const ws = makeWorkspace([
     {
-      kind: 'module',
       id: 'a',
-      use: { module_id: 'x', version: 'v1' },
-      inputs: {},
+      module: 'x@v1',
       depends_on: ['ghost'],
     },
   ]);
@@ -72,10 +67,8 @@ test('catches depends_on referencing unknown instances', () => {
 test('catches use references pointing to modules not in workspace', () => {
   const ws = makeWorkspace([
     {
-      kind: 'module',
       id: 'a',
-      use: { module_id: 'missing-module', version: 'v9.9.9' },
-      inputs: {},
+      module: 'missing-module@v9.9.9',
     },
   ]);
   const errors = validateWorkspace(ws);
@@ -85,12 +78,10 @@ test('catches use references pointing to modules not in workspace', () => {
 
 test('depends_on with module. prefix referencing valid instance produces no error', () => {
   const ws = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
+    { id: 'a', module: 'x@v1' },
     {
-      kind: 'module',
       id: 'b',
-      use: { module_id: 'x', version: 'v1' },
-      inputs: {},
+      module: 'x@v1',
       depends_on: ['module.a'],
     },
   ]);
@@ -101,10 +92,8 @@ test('depends_on with module. prefix referencing valid instance produces no erro
 test('depends_on with module. prefix referencing unknown instance catches error', () => {
   const ws = makeWorkspace([
     {
-      kind: 'module',
       id: 'a',
-      use: { module_id: 'x', version: 'v1' },
-      inputs: {},
+      module: 'x@v1',
       depends_on: ['module.ghost'],
     },
   ]);
@@ -116,12 +105,11 @@ test('depends_on with module. prefix referencing unknown instance catches error'
 
 test('detects multiple error types simultaneously', () => {
   const ws = makeWorkspace([
-    { kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} },
-    { kind: 'module', id: 'a', use: { module_id: 'y', version: 'v1' }, inputs: {} }, // duplicate
+    { id: 'a', module: 'x@v1' },
+    { id: 'a', module: 'y@v1' }, // duplicate
     {
-      kind: 'module',
       id: 'b',
-      use: { module_id: 'missing-mod', version: 'v1' },
+      module: 'missing-mod@v1',
       inputs: { x: { out: { module: 'nonexistent', name: 'v' } } }, // bad binding
       depends_on: ['ghost'], // bad depends_on
     },
@@ -136,7 +124,7 @@ test('detects multiple error types simultaneously', () => {
 
 test('catches export outputs referencing unknown instances', () => {
   const ws = makeWorkspace(
-    [{ kind: 'module', id: 'a', use: { module_id: 'x', version: 'v1' }, inputs: {} }],
+    [{ id: 'a', module: 'x@v1' }],
     {},
     {},
     { bad_export: { out: { module: 'nonexistent', name: 'arn' } } },

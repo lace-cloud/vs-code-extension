@@ -1,4 +1,4 @@
-import type { Instance, Wire } from '../types/ir';
+import type { Binding } from '../types/ir';
 import { isOut } from '../types/ir';
 
 export type DerivedEdge = {
@@ -7,9 +7,12 @@ export type DerivedEdge = {
   mapping: { from: string; to: string };
 };
 
-export function deriveEdges(instances: Instance[]): DerivedEdge[] {
+export function deriveEdges(
+  children: ReadonlyArray<{ id: string; inputs?: Record<string, Binding> }>,
+): DerivedEdge[] {
   const edges: DerivedEdge[] = [];
-  for (const target of instances) {
+  for (const target of children) {
+    if (!target.inputs) continue;
     for (const [inputName, binding] of Object.entries(target.inputs)) {
       if (isOut(binding)) {
         edges.push({
@@ -21,11 +24,4 @@ export function deriveEdges(instances: Instance[]): DerivedEdge[] {
     }
   }
   return edges;
-}
-
-export function deriveWires(instances: Instance[]): Wire[] {
-  return deriveEdges(instances).map((e) => ({
-    from: { module: e.source_instance, port: `outputs.${e.mapping.from}` },
-    to: { module: e.target_instance, port: `inputs.${e.mapping.to}` },
-  }));
 }

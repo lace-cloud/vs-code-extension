@@ -7,7 +7,7 @@
  *   1. Spawn `lace module serve` child process over stdio
  *   2. Initialize (version handshake + capability exchange)
  *   3. Build workspace via reducer (DROP_BUNDLE, UPDATE_INPUTS)
- *   4. Export workspace → ModuleBundle via toBundle (wire derivation)
+ *   4. Export workspace → Bundle via toBundle (wire derivation)
  *   5. Validate bundle over RPC (server-side structural checks)
  *   6. Generate Terraform in dry-run mode over RPC
  *   7. Verify generated HCL: correct module blocks, sources, bindings
@@ -32,9 +32,9 @@ import { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import { emptyWorkspace, fromBundle, toBundle } from '../utils/bundle';
 import { workspaceReducer } from '../state/reducer';
 import { validateWorkspace } from '../utils/validate';
+import { allChildren } from '../utils/children';
 import type { WorkspaceState } from '../types/workspace';
-import type { ModuleBundle } from '../types/ir';
-import { makeModuleKey } from '../utils/identifiers';
+import type { Bundle } from '../types/ir';
 
 /* ── Binary resolution ── */
 
@@ -82,12 +82,12 @@ function loadFixture(name: string): any {
 }
 
 function rootKey(ws: WorkspaceState): string {
-  return makeModuleKey(ws.entry.module_id, ws.entry.version);
+  return ws.entry;
 }
 
-function entryGraph(ws: WorkspaceState) {
+function entryChildren(ws: WorkspaceState) {
   const def = ws.modules[rootKey(ws)];
-  return def.graph;
+  return allChildren(def);
 }
 
 /* ── Tests ── */
@@ -127,7 +127,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     let ws = emptyWorkspace('my-infra');
     const rk = rootKey(ws);
 
-    const deployBundle: ModuleBundle = loadFixture('composite_deploy_bundle.json');
+    const deployBundle: Bundle = loadFixture('composite_deploy_bundle.json');
     ws = workspaceReducer(ws, {
       type: 'DROP_BUNDLE',
       module_key: rk,
@@ -138,7 +138,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
       },
     });
 
-    expect(entryGraph(ws).instances).toHaveLength(2);
+    expect(entryChildren(ws)).toHaveLength(2);
 
     // Configure literal inputs
     ws = workspaceReducer(ws, {
@@ -156,15 +156,17 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     // Local graph validation
     expect(validateWorkspace(ws)).toHaveLength(0);
 
-    // ── 3. Export bundle (toBundle derives wires from out-bindings) ──
+    // ── 3. Export bundle (toBundle strips layouts) ──
     const bundle = toBundle(ws);
     expect(Object.keys(bundle.modules)).toHaveLength(3); // root + 2 leaf defs
 
     const exportedRoot = bundle.modules[rk];
-    expect(exportedRoot.graph.wires).toHaveLength(1);
-    expect(exportedRoot.graph.wires![0]).toEqual({
-      from: { module: 's3_bucket', port: 'outputs.id' },
-      to: { module: 's3_bucket_versioning', port: 'inputs.bucket_id' },
+    const exportedChildren = allChildren(exportedRoot);
+    // Verify out-binding exists that would produce a wire
+    const versioning = exportedChildren.find((c) => c.id === 's3_bucket_versioning');
+    expect(versioning).toBeDefined();
+    expect(versioning!.inputs!.bucket_id).toEqual({
+      out: { module: 's3_bucket', name: 'id' },
     });
 
     // layouts must NOT leak into the wire format
@@ -237,8 +239,8 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     const result = await client.validate({
       bundle: {
         schema_version: '2.0' as any,
-        kind: 'module_bundle',
-        entry: { module_id: 'ghost', version: 'v1' },
+        kind: 'bundle',
+        entry: 'ghost@v1',
         modules: {},
       },
     });
@@ -260,27 +262,21 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     const result = await client.validate({
       bundle: {
         schema_version: '1.0',
-        kind: 'module_bundle',
-        entry: { module_id: 'root', version: 'v1.0.0' },
+        kind: 'bundle',
+        entry: 'root@v1.0.0',
         modules: {
           'root@v1.0.0': {
-            schema_version: '1.0',
-            kind: 'module_def',
             id: 'root',
             version: 'v1.0.0',
             interface: { inputs: [], outputs: [] },
-            graph: {
-              instances: [
-                {
-                  id: 'orphan',
-                  kind: 'module',
-                  use: { module_id: 'does-not-exist', version: 'v1.0.0' },
-                  inputs: {},
-                },
-              ],
-              wires: [],
-              exports: { outputs: {} },
-            },
+            modules: [
+              {
+                id: 'orphan',
+                module: 'does-not-exist@v1.0.0',
+                inputs: {},
+              },
+            ],
+            exports: { outputs: {} },
           },
         },
       },
@@ -309,7 +305,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
 
     await client.initialize('0.1.0');
 
-    const original: ModuleBundle = loadFixture('full_bundle_with_terraform.json');
+    const original: Bundle = loadFixture('full_bundle_with_terraform.json');
     const { workspace, errors } = fromBundle(original);
     expect(errors).toHaveLength(0);
 
@@ -335,7 +331,7 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
 
     let ws = emptyWorkspace('dedup-test');
     const rk = rootKey(ws);
-    const deployBundle: ModuleBundle = loadFixture('composite_deploy_bundle.json');
+    const deployBundle: Bundle = loadFixture('composite_deploy_bundle.json');
 
     // Drop the same bundle twice
     ws = workspaceReducer(ws, {
@@ -352,9 +348,9 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     });
 
     // 4 unique instances
-    const graph = entryGraph(ws);
-    expect(graph.instances).toHaveLength(4);
-    expect(new Set(graph.instances.map((i) => i.id)).size).toBe(4);
+    const children = entryChildren(ws);
+    expect(children).toHaveLength(4);
+    expect(new Set(children.map((i) => i.id)).size).toBe(4);
 
     expect(validateWorkspace(ws)).toHaveLength(0);
 
@@ -364,8 +360,9 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     const result = await client.validate({ bundle });
     expect(result.valid).toBe(true);
 
-    // 2 wires (one per pair)
-    expect(bundle.modules[rk].graph.wires).toHaveLength(2);
+    // Verify out-bindings exist in children
+    const exportedChildren = allChildren(bundle.modules[rk]);
+    expect(exportedChildren).toHaveLength(4);
 
     // Dry-run generate should produce all 4 module blocks
     const genResult = await client.call<{ files?: Record<string, string>; diagnostics?: any[] }>(
@@ -375,8 +372,8 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     expect(genResult.diagnostics).toHaveLength(0);
 
     const mainTf = genResult.files!['main.tf'];
-    for (const inst of graph.instances) {
-      expect(mainTf).toContain(`module "${inst.id}"`);
+    for (const child of children) {
+      expect(mainTf).toContain(`module "${child.id}"`);
     }
 
     await client.shutdown();

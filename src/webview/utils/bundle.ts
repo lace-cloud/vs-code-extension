@@ -1,18 +1,7 @@
-import type {
-  ModuleBundle,
-  ModuleDef,
-  Binding,
-  OutputExport,
-  Instance,
-  ModuleInstance,
-  ResourceInstance,
-  DataInstance,
-  CompositeGraph,
-} from '../types/ir';
+import type { Bundle, Module, Use, Resource, Binding, OutputExport } from '../types/ir';
 import type { WorkspaceState, GraphLayout } from '../types/workspace';
-import { mapRecord } from './record';
-import { deriveWires } from './derive';
 import { toTerraformIdentifier, makeModuleKey } from './identifiers';
+import { allChildren } from './children';
 
 // ── Layout Hints ──
 
@@ -23,10 +12,6 @@ export type LayoutHints = Record<string, Record<string, { x: number; y: number }
 export type ParseResult = { workspace: WorkspaceState; errors: BoundaryError[] };
 export type BoundaryError = { module_key?: string; instance_id?: string; message: string };
 
-// ── Parsed Entry (internal) ──
-
-type ParsedEntry = { def: ModuleDef; layout?: GraphLayout };
-
 // ── Layout Constants ──
 
 export const SPACING_X = 260;
@@ -36,109 +21,141 @@ export const SPACING_Y = 180;
 // toBundle
 // ══════════════════════════════════════════════════════════════════════
 
-export function toBundle(workspace: WorkspaceState): ModuleBundle {
+export function toBundle(workspace: WorkspaceState): Bundle {
   const { layouts: _layouts, ...bundle } = workspace;
-  return { ...bundle, modules: mapRecord(bundle.modules, injectWires) };
-}
-
-function injectWires(def: ModuleDef): ModuleDef {
-  return {
-    ...def,
-    graph: {
-      ...def.graph,
-      wires: deriveWires(def.graph.instances),
-    },
-  };
+  return bundle;
 }
 
 // ══════════════════════════════════════════════════════════════════════
 // fromBundle
 // ══════════════════════════════════════════════════════════════════════
 
-export function fromBundle(bundle: ModuleBundle, hints?: LayoutHints): ParseResult {
+export function fromBundle(bundle: Bundle, hints?: LayoutHints): ParseResult {
   const errors: BoundaryError[] = [];
-  const parsed = Object.entries(bundle.modules).reduce<{
-    modules: Record<string, ModuleDef>;
-    layouts: Record<string, GraphLayout>;
-  }>(
-    (acc, [key, raw]) => {
-      try {
-        const entry = parseModuleDef(key, raw as any, hints);
-        return {
-          modules: { ...acc.modules, [key]: entry.def },
-          layouts: entry.layout ? { ...acc.layouts, [key]: entry.layout } : acc.layouts,
-        };
-      } catch (err: any) {
-        errors.push({ module_key: key, message: err.message });
-        return acc;
-      }
-    },
-    { modules: {}, layouts: {} },
-  );
+  const modules: Record<string, Module> = {};
+  const layouts: Record<string, GraphLayout> = {};
+
+  // Normalize legacy entry format: { module_id, version } → "module_id@version"
+  const rawEntry = bundle.entry as any;
+  const entry: string =
+    typeof rawEntry === 'string' ? rawEntry : makeModuleKey(rawEntry.module_id, rawEntry.version);
+
+  for (const [key, raw] of Object.entries(bundle.modules)) {
+    try {
+      const mod = normalizeModule(raw as any);
+      modules[key] = mod;
+
+      const children = allChildren(mod);
+      const layout = children.length > 0 ? computeLayout(children, hints?.[key]) : { nodes: {} };
+      layouts[key] = layout;
+    } catch (err: any) {
+      errors.push({ module_key: key, message: err.message });
+    }
+  }
 
   return {
     workspace: {
-      schema_version: '1.0',
-      kind: 'module_bundle',
-      entry: bundle.entry,
-      modules: parsed.modules,
+      schema_version: bundle.schema_version ?? '1.0',
+      kind: 'bundle',
+      entry,
+      modules,
       environments: bundle.environments,
       environment_backends: bundle.environment_backends,
-      layouts: parsed.layouts,
+      layouts,
     },
     errors,
   };
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// parseModuleDef
+// normalizeModule
 // ══════════════════════════════════════════════════════════════════════
 
-function parseModuleDef(key: string, raw: any, hints?: LayoutHints): ParsedEntry {
-  const rawGraph = raw.graph;
+function normalizeModule(raw: any): Module {
+  // Support both new flat format and legacy graph-wrapped format
+  const hasGraph = raw.graph != null;
 
-  // Normalize instances
-  const instances: Instance[] = (rawGraph.instances || []).map((inst: any) =>
-    normalizeInstance(inst),
-  );
+  let uses: Use[] | undefined;
+  let resources: Resource[] | undefined;
+  let exports: { outputs: Record<string, OutputExport> };
+  let locals: Module['locals'];
 
-  // Normalize exports
-  const rawExports = rawGraph.exports?.outputs || {};
-  const normalizedExports: Record<string, OutputExport> = {};
-  for (const [name, exp] of Object.entries(rawExports)) {
-    normalizedExports[name] = normalizeOutputExport(exp);
+  if (hasGraph) {
+    // Legacy format: { graph: { instances, exports, locals } }
+    const rawGraph = raw.graph;
+    if (!Array.isArray(rawGraph.instances) && rawGraph.instances != null) {
+      throw new Error(`instances must be an array, got ${typeof rawGraph.instances}`);
+    }
+    const rawInstances: any[] = rawGraph.instances || [];
+    const parsedUses: Use[] = [];
+    const parsedResources: Resource[] = [];
+
+    for (const inst of rawInstances) {
+      const normalized = normalizeLegacyInstance(inst);
+      if ('module' in normalized) {
+        parsedUses.push(normalized as Use);
+      } else {
+        parsedResources.push(normalized as Resource);
+      }
+    }
+
+    uses = parsedUses.length > 0 ? parsedUses : undefined;
+    resources = parsedResources.length > 0 ? parsedResources : undefined;
+
+    // Normalize exports
+    const rawExports = rawGraph.exports?.outputs || {};
+    const normalizedExports: Record<string, OutputExport> = {};
+    for (const [name, exp] of Object.entries(rawExports)) {
+      normalizedExports[name] = normalizeOutputExport(exp);
+    }
+    exports = { outputs: normalizedExports };
+
+    // Normalize locals
+    locals = rawGraph.locals
+      ? rawGraph.locals.map((l: any) => ({
+          name: l.name,
+          value: normalizeBinding(l.value),
+        }))
+      : undefined;
+  } else {
+    // New flat format: { modules, resources, exports, locals }
+    uses = raw.modules?.map((u: any) => normalizeUse(u));
+    resources = raw.resources?.map((r: any) => normalizeResource(r));
+
+    const rawExports = raw.exports?.outputs || {};
+    const normalizedExports: Record<string, OutputExport> = {};
+    for (const [name, exp] of Object.entries(rawExports)) {
+      normalizedExports[name] = normalizeOutputExport(exp);
+    }
+    exports = { outputs: normalizedExports };
+
+    locals = raw.locals
+      ? raw.locals.map((l: any) => ({
+          name: l.name,
+          value: normalizeBinding(l.value),
+        }))
+      : undefined;
   }
 
-  // Normalize locals
-  const locals = rawGraph.locals
-    ? rawGraph.locals.map((l: any) => ({
-        name: l.name,
-        value: normalizeBinding(l.value),
-      }))
-    : undefined;
-
-  const normalizedGraph: CompositeGraph = {
-    instances,
-    exports: { outputs: normalizedExports },
+  return {
+    id: raw.id,
+    version: raw.version,
+    ...(raw.source ? { source: raw.source } : {}),
+    interface: raw.interface ?? { inputs: [], outputs: [] },
+    ...(uses && uses.length > 0 ? { modules: uses } : {}),
+    ...(resources && resources.length > 0 ? { resources } : {}),
     ...(locals ? { locals } : {}),
+    exports,
+    ...(raw.terraform ? { terraform: raw.terraform } : {}),
+    ...(raw.providers ? { providers: raw.providers } : {}),
   };
-
-  const def: ModuleDef = {
-    ...raw,
-    graph: normalizedGraph,
-  };
-
-  // Compute layout only if there are instances to lay out
-  const layout = instances.length > 0 ? computeLayout(instances, hints?.[key]) : undefined;
-
-  return { def, layout: layout ?? { nodes: {} } };
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// normalizeInstance
+// normalizeLegacyInstance — converts old Instance format to Use or Resource
 // ══════════════════════════════════════════════════════════════════════
 
-function normalizeInstance(raw: any): Instance {
+function normalizeLegacyInstance(raw: any): Use | Resource {
   const kind = raw.kind || 'module';
   const inputs: Record<string, Binding> = {};
   if (raw.inputs) {
@@ -147,21 +164,62 @@ function normalizeInstance(raw: any): Instance {
     }
   }
 
-  const base = {
+  if (kind === 'resource' || kind === 'data') {
+    return {
+      id: raw.id,
+      kind: kind as 'resource' | 'data',
+      type: raw.type,
+      ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
+      ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
+    };
+  }
+
+  // Default: module → Use
+  const moduleKey = raw.use
+    ? makeModuleKey(raw.use.module_id, raw.use.version)
+    : (raw.module ?? '');
+
+  return {
     id: raw.id,
-    inputs,
+    module: moduleKey,
+    ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
     ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
   };
+}
 
-  if (kind === 'resource') {
-    return { ...base, kind: 'resource', type: raw.type } as ResourceInstance;
-  }
-  if (kind === 'data') {
-    return { ...base, kind: 'data', type: raw.type } as DataInstance;
-  }
+// ══════════════════════════════════════════════════════════════════════
+// normalizeUse / normalizeResource — for new flat format
+// ══════════════════════════════════════════════════════════════════════
 
-  // Default: module
-  return { ...base, kind: 'module', use: raw.use } as ModuleInstance;
+function normalizeUse(raw: any): Use {
+  const inputs: Record<string, Binding> = {};
+  if (raw.inputs) {
+    for (const [name, val] of Object.entries(raw.inputs)) {
+      inputs[name] = normalizeBinding(val);
+    }
+  }
+  return {
+    id: raw.id,
+    module: raw.module,
+    ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
+    ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
+  };
+}
+
+function normalizeResource(raw: any): Resource {
+  const inputs: Record<string, Binding> = {};
+  if (raw.inputs) {
+    for (const [name, val] of Object.entries(raw.inputs)) {
+      inputs[name] = normalizeBinding(val);
+    }
+  }
+  return {
+    id: raw.id,
+    kind: raw.kind,
+    type: raw.type,
+    ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
+    ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -201,21 +259,21 @@ function normalizeOutputExport(raw: any): OutputExport {
 // ══════════════════════════════════════════════════════════════════════
 
 export function computeLayout(
-  instances: Instance[],
+  children: ReadonlyArray<{ id: string }>,
   existing?: Record<string, { x: number; y: number }>,
 ): GraphLayout {
   const nodes: Record<string, { position: { x: number; y: number } }> = {};
-  const n = instances.length;
+  const n = children.length;
   const cols = Math.max(2, Math.ceil(Math.sqrt(n)));
 
-  for (let i = 0; i < instances.length; i++) {
-    const inst = instances[i];
-    if (existing && existing[inst.id]) {
-      nodes[inst.id] = { position: existing[inst.id] };
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (existing && existing[child.id]) {
+      nodes[child.id] = { position: existing[child.id] };
     } else {
       const col = i % cols;
       const row = Math.floor(i / cols);
-      nodes[inst.id] = { position: { x: col * SPACING_X, y: row * SPACING_Y } };
+      nodes[child.id] = { position: { x: col * SPACING_X, y: row * SPACING_Y } };
     }
   }
 
@@ -229,16 +287,14 @@ export function emptyWorkspace(name: string): WorkspaceState {
   const root_key = makeModuleKey(root_id, 'v1.0.0');
   return {
     schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: root_id, version: 'v1.0.0' },
+    kind: 'bundle',
+    entry: root_key,
     modules: {
       [root_key]: {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: root_id,
         version: 'v1.0.0',
         interface: { inputs: [], outputs: [] },
-        graph: { instances: [], exports: { outputs: {} } },
+        exports: { outputs: {} },
       },
     },
     layouts: { [root_key]: { nodes: {} } },

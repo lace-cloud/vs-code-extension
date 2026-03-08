@@ -1,11 +1,12 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { WorkspaceState } from '../types/workspace';
-import type { Instance, ModuleDef, ModuleBundle, InputDef } from '../types/ir';
+import type { Bundle, Module, Use, Resource, InputDef } from '../types/ir';
+import { allChildren, findChild } from '../utils/children';
 
 // ── Fixture loading ──
 
-export function loadFixture(name: string): ModuleBundle {
+export function loadFixture(name: string): Bundle {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf-8'));
 }
 
@@ -18,30 +19,31 @@ export function loadFixture(name: string): ModuleBundle {
  * - layouts: layout overrides
  * - exports: root module export outputs
  * - inputs: root module input interface defs
+ * - uses: Use[] children
+ * - resources: Resource[] children
  */
 export function makeWorkspace(
-  instances: Instance[],
-  modules: Record<string, ModuleDef> = {},
+  children: Array<Use | Resource>,
+  modules: Record<string, Module> = {},
   layouts: Record<string, any> = {},
   exports: Record<string, any> = {},
   inputs: InputDef[] = [],
 ): WorkspaceState {
   const moduleKey = 'root@v1.0.0';
-  const rootDef: ModuleDef = {
-    schema_version: '1.0',
-    kind: 'module_def',
+  const uses = children.filter((c): c is Use => 'module' in c);
+  const resources = children.filter((c): c is Resource => 'type' in c);
+  const rootDef: Module = {
     id: 'root',
     version: 'v1.0.0',
     interface: { inputs, outputs: [] },
-    graph: {
-      instances,
-      exports: { outputs: exports },
-    },
+    ...(uses.length > 0 ? { modules: uses } : {}),
+    ...(resources.length > 0 ? { resources } : {}),
+    exports: { outputs: exports },
   };
   return {
     schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'root', version: 'v1.0.0' },
+    kind: 'bundle',
+    entry: moduleKey,
     modules: { [moduleKey]: rootDef, ...modules },
     layouts: {
       [moduleKey]: layouts[moduleKey] || { nodes: {} },
@@ -54,34 +56,34 @@ export function makeEmptyWorkspace(): WorkspaceState {
   return makeWorkspace([]);
 }
 
-// ── Instance accessors ──
+// ── Child accessors ──
 
-export function getGraph(state: WorkspaceState, key = 'root@v1.0.0') {
+export function getChildren(
+  state: WorkspaceState,
+  key = 'root@v1.0.0',
+): ReadonlyArray<Use | Resource> {
   const def = state.modules[key];
   if (!def) throw new Error(`Module "${key}" not found`);
-  return def.graph;
+  return allChildren(def);
 }
 
-export function getInst(state: WorkspaceState, id: string, key = 'root@v1.0.0'): Instance {
-  const graph = getGraph(state, key);
-  const inst = graph.instances.find((i) => i.id === id);
-  if (!inst) throw new Error(`Instance "${id}" not found`);
-  return inst;
-}
-
-export function getInstances(state: WorkspaceState, key = 'root@v1.0.0'): Instance[] {
-  return getGraph(state, key).instances;
+export function getChild(state: WorkspaceState, id: string, key = 'root@v1.0.0'): Use | Resource {
+  const def = state.modules[key];
+  if (!def) throw new Error(`Module "${key}" not found`);
+  const child = findChild(def, id);
+  if (!child) throw new Error(`Child "${id}" not found`);
+  return child;
 }
 
 export function getExports(state: WorkspaceState, key = 'root@v1.0.0') {
-  return getGraph(state, key).exports.outputs;
+  const def = state.modules[key];
+  if (!def) throw new Error(`Module "${key}" not found`);
+  return def.exports.outputs;
 }
 
 // ── Common module definitions ──
 
-export const vpcDef: ModuleDef = {
-  schema_version: '1.0',
-  kind: 'module_def',
+export const vpcDef: Module = {
   id: 'aws/vpc',
   version: 'v1.0.0',
   interface: {
@@ -92,12 +94,10 @@ export const vpcDef: ModuleDef = {
     outputs: [{ name: 'vpc_id', type: 'string' }],
   },
   source: { kind: 'registry' },
-  graph: { instances: [], exports: { outputs: {} } },
+  exports: { outputs: {} },
 };
 
-export const subnetDef: ModuleDef = {
-  schema_version: '1.0',
-  kind: 'module_def',
+export const subnetDef: Module = {
   id: 'aws/subnet',
   version: 'v1.0.0',
   interface: {
@@ -108,5 +108,5 @@ export const subnetDef: ModuleDef = {
     outputs: [{ name: 'subnet_id', type: 'string' }],
   },
   source: { kind: 'registry' },
-  graph: { instances: [], exports: { outputs: {} } },
+  exports: { outputs: {} },
 };

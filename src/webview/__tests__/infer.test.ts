@@ -5,7 +5,7 @@ import {
   inferOutputDefs,
   inferRequiredProviders,
 } from '../utils/infer';
-import type { Instance, ModuleDef, OutputExport } from '../types/ir';
+import type { Use, Resource, Module, OutputExport } from '../types/ir';
 import type { ResolvedSchema } from '../utils/resolve';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -14,21 +14,19 @@ import type { ResolvedSchema } from '../utils/resolve';
 
 describe('inferVariables', () => {
   test('collects unique var bindings from instances', () => {
-    const instances: Instance[] = [
+    const children: Array<Use | Resource> = [
       {
-        kind: 'module',
         id: 'a',
-        use: { module_id: 'mod-a', version: 'v1' },
+        module: 'mod-a@v1',
         inputs: { region: { var: 'region' } },
       },
       {
-        kind: 'module',
         id: 'b',
-        use: { module_id: 'mod-b', version: 'v1' },
+        module: 'mod-b@v1',
         inputs: { env: { var: 'env' } },
       },
     ];
-    const result = inferVariables(instances);
+    const result = inferVariables(children);
     expect(result).toEqual([
       { name: 'region', type: 'string', required: true },
       { name: 'env', type: 'string', required: true },
@@ -36,31 +34,28 @@ describe('inferVariables', () => {
   });
 
   test('deduplicates same var name across instances', () => {
-    const instances: Instance[] = [
+    const children: Array<Use | Resource> = [
       {
-        kind: 'module',
         id: 'a',
-        use: { module_id: 'mod-a', version: 'v1' },
+        module: 'mod-a@v1',
         inputs: { region: { var: 'region' } },
       },
       {
-        kind: 'module',
         id: 'b',
-        use: { module_id: 'mod-b', version: 'v1' },
+        module: 'mod-b@v1',
         inputs: { region: { var: 'region' } },
       },
     ];
-    const result = inferVariables(instances);
+    const result = inferVariables(children);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('region');
   });
 
   test('only var bindings produce variables (lit and out ignored)', () => {
-    const instances: Instance[] = [
+    const children: Array<Use | Resource> = [
       {
-        kind: 'module',
         id: 'a',
-        use: { module_id: 'mod-a', version: 'v1' },
+        module: 'mod-a@v1',
         inputs: {
           region: { var: 'region' },
           bucket: { lit: 'my-bucket' },
@@ -68,7 +63,7 @@ describe('inferVariables', () => {
         },
       },
     ];
-    const result = inferVariables(instances);
+    const result = inferVariables(children);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('region');
   });
@@ -80,11 +75,10 @@ describe('inferVariables', () => {
 
 describe('inferOutputExports', () => {
   test('creates exports from all instance schema outputs', () => {
-    const instances: Instance[] = [
+    const children: Array<Use | Resource> = [
       {
-        kind: 'module',
         id: 'my_bucket',
-        use: { module_id: 'aws-s3', version: 'v1' },
+        module: 'aws-s3@v1',
         inputs: {},
       },
     ];
@@ -95,7 +89,7 @@ describe('inferOutputExports', () => {
         { name: 'id', type: 'string' },
       ],
     });
-    const result = inferOutputExports(instances, resolveSchema);
+    const result = inferOutputExports(children, resolveSchema);
     expect(result).toEqual({
       my_bucket_arn: { out: { module: 'my_bucket', name: 'arn' } },
       my_bucket_id: { out: { module: 'my_bucket', name: 'id' } },
@@ -103,46 +97,43 @@ describe('inferOutputExports', () => {
   });
 
   test('returns empty for instances with no resolvable outputs', () => {
-    const instances: Instance[] = [
+    const children: Array<Use | Resource> = [
       {
-        kind: 'resource',
         id: 'my_resource',
+        kind: 'resource',
         type: 'aws_instance',
-        inputs: {},
       },
     ];
     const resolveSchema = (): ResolvedSchema => ({
       inputs: [],
       outputs: [],
     });
-    expect(inferOutputExports(instances, resolveSchema)).toEqual({});
+    expect(inferOutputExports(children, resolveSchema)).toEqual({});
   });
 
   test('handles multiple instances', () => {
-    const instances: Instance[] = [
+    const children: Array<Use | Resource> = [
       {
-        kind: 'module',
         id: 'bucket',
-        use: { module_id: 'aws-s3', version: 'v1' },
+        module: 'aws-s3@v1',
         inputs: {},
       },
       {
-        kind: 'module',
         id: 'vpc',
-        use: { module_id: 'aws-vpc', version: 'v1' },
+        module: 'aws-vpc@v1',
         inputs: {},
       },
     ];
-    const resolveSchema = (inst: Instance): ResolvedSchema => {
-      if (inst.id === 'bucket') {
+    const resolveSchema = (child: Use | Resource): ResolvedSchema => {
+      if (child.id === 'bucket') {
         return { inputs: [], outputs: [{ name: 'arn', type: 'string' }] };
       }
-      if (inst.id === 'vpc') {
+      if (child.id === 'vpc') {
         return { inputs: [], outputs: [{ name: 'id', type: 'string' }] };
       }
       return { inputs: [], outputs: [] };
     };
-    const result = inferOutputExports(instances, resolveSchema);
+    const result = inferOutputExports(children, resolveSchema);
     expect(result).toEqual({
       bucket_arn: { out: { module: 'bucket', name: 'arn' } },
       vpc_id: { out: { module: 'vpc', name: 'id' } },
@@ -155,17 +146,16 @@ describe('inferOutputExports', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe('inferOutputDefs', () => {
-  const instances: Instance[] = [
+  const children: Array<Use | Resource> = [
     {
-      kind: 'module',
       id: 'my_bucket',
-      use: { module_id: 'aws-s3', version: 'v1' },
+      module: 'aws-s3@v1',
       inputs: {},
     },
   ];
 
-  const resolveSchema = (inst: Instance): ResolvedSchema => {
-    if (inst.id === 'my_bucket') {
+  const resolveSchema = (child: Use | Resource): ResolvedSchema => {
+    if (child.id === 'my_bucket') {
       return {
         inputs: [],
         outputs: [
@@ -181,7 +171,7 @@ describe('inferOutputDefs', () => {
     const exports: Record<string, OutputExport> = {
       bucket_arn: { out: { module: 'my_bucket', name: 'arn' } },
     };
-    const result = inferOutputDefs(exports, instances, resolveSchema);
+    const result = inferOutputDefs(exports, children, resolveSchema);
     expect(result).toEqual([{ name: 'bucket_arn', type: 'string' }]);
   });
 
@@ -189,12 +179,12 @@ describe('inferOutputDefs', () => {
     const exports: Record<string, OutputExport> = {
       mystery: { out: { module: 'nonexistent', name: 'value' } },
     };
-    const result = inferOutputDefs(exports, instances, resolveSchema);
+    const result = inferOutputDefs(exports, children, resolveSchema);
     expect(result).toEqual([{ name: 'mystery', type: 'string' }]);
   });
 
   test('returns empty array for empty exports', () => {
-    expect(inferOutputDefs({}, instances, resolveSchema)).toEqual([]);
+    expect(inferOutputDefs({}, children, resolveSchema)).toEqual([]);
   });
 
   test('skips non-out exports', () => {
@@ -202,14 +192,14 @@ describe('inferOutputDefs', () => {
       static_val: { lit: 'hello' },
       bucket_arn: { out: { module: 'my_bucket', name: 'arn' } },
     };
-    const result = inferOutputDefs(exports, instances, resolveSchema);
+    const result = inferOutputDefs(exports, children, resolveSchema);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('bucket_arn');
   });
 
   test('inferOutputExports → inferOutputDefs pipeline produces typed output defs', () => {
-    const inferred = inferOutputExports(instances, resolveSchema);
-    const defs = inferOutputDefs(inferred, instances, resolveSchema);
+    const inferred = inferOutputExports(children, resolveSchema);
+    const defs = inferOutputDefs(inferred, children, resolveSchema);
     expect(defs).toEqual([
       { name: 'my_bucket_arn', type: 'string' },
       { name: 'my_bucket_id', type: 'string' },
@@ -222,23 +212,21 @@ describe('inferOutputDefs', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe('generate-time output enrichment', () => {
-  const instances: Instance[] = [
+  const children: Array<Use | Resource> = [
     {
-      kind: 'module',
       id: 'bucket',
-      use: { module_id: 'aws-s3', version: 'v1' },
+      module: 'aws-s3@v1',
       inputs: { name: { var: 'bucket_name' } },
     },
     {
-      kind: 'module',
       id: 'vpc',
-      use: { module_id: 'aws-vpc', version: 'v1' },
+      module: 'aws-vpc@v1',
       inputs: {},
     },
   ];
 
-  const resolve = (inst: Instance): ResolvedSchema => {
-    if (inst.id === 'bucket') {
+  const resolve = (child: Use | Resource): ResolvedSchema => {
+    if (child.id === 'bucket') {
       return {
         inputs: [{ name: 'name', type: 'string', required: true }],
         outputs: [
@@ -247,7 +235,7 @@ describe('generate-time output enrichment', () => {
         ],
       };
     }
-    if (inst.id === 'vpc') {
+    if (child.id === 'vpc') {
       return {
         inputs: [],
         outputs: [{ name: 'vpc_id', type: 'string' }],
@@ -262,7 +250,7 @@ describe('generate-time output enrichment', () => {
       bucket_arn: { out: { module: 'vpc', name: 'vpc_id' } },
     };
 
-    const inferredExports = inferOutputExports(instances, resolve);
+    const inferredExports = inferOutputExports(children, resolve);
     const mergedExports = { ...inferredExports, ...manualExports };
 
     // Manual export wins for 'bucket_arn'
@@ -272,12 +260,12 @@ describe('generate-time output enrichment', () => {
     expect(mergedExports['vpc_vpc_id']).toEqual({ out: { module: 'vpc', name: 'vpc_id' } });
   });
 
-  test('enriched bundle contains both graph.exports wiring and interface.outputs metadata', () => {
+  test('enriched bundle contains both exports wiring and interface.outputs metadata', () => {
     const existingExports: Record<string, OutputExport> = {};
 
-    const inferredExports = inferOutputExports(instances, resolve);
+    const inferredExports = inferOutputExports(children, resolve);
     const mergedExports = { ...inferredExports, ...existingExports };
-    const outputDefs = inferOutputDefs(mergedExports, instances, resolve);
+    const outputDefs = inferOutputDefs(mergedExports, children, resolve);
 
     // Wiring: every instance output has an export entry
     expect(Object.keys(mergedExports)).toHaveLength(3);
@@ -293,10 +281,10 @@ describe('generate-time output enrichment', () => {
   });
 
   test('empty graph produces no exports and no output defs', () => {
-    const emptyInstances: Instance[] = [];
-    const inferredExports = inferOutputExports(emptyInstances, resolve);
+    const emptyChildren: Array<Use | Resource> = [];
+    const inferredExports = inferOutputExports(emptyChildren, resolve);
     const mergedExports = { ...inferredExports };
-    const outputDefs = inferOutputDefs(mergedExports, emptyInstances, resolve);
+    const outputDefs = inferOutputDefs(mergedExports, emptyChildren, resolve);
 
     expect(mergedExports).toEqual({});
     expect(outputDefs).toEqual([]);
@@ -308,21 +296,19 @@ describe('generate-time output enrichment', () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe('inferRequiredProviders', () => {
-  function makeLeafDef(id: string, version: string, terraform?: ModuleDef['terraform']): ModuleDef {
+  function makeLeafDef(id: string, version: string, terraform?: Module['terraform']): Module {
     return {
-      schema_version: '1.0',
-      kind: 'module_def',
       id,
       version,
       interface: { inputs: [], outputs: [] },
       source: { kind: 'registry' },
-      graph: { instances: [], exports: { outputs: {} } },
+      exports: { outputs: {} },
       ...(terraform ? { terraform } : {}),
     };
   }
 
   test('merges required_providers from non-entry modules', () => {
-    const modules: Record<string, ModuleDef> = {
+    const modules: Record<string, Module> = {
       'entry@v1': makeLeafDef('entry', 'v1', {
         required_providers: { aws: { source: 'hashicorp/aws', version: '~> 4.0' } },
       }),
@@ -341,7 +327,7 @@ describe('inferRequiredProviders', () => {
   });
 
   test('returns empty object when no modules have required_providers', () => {
-    const modules: Record<string, ModuleDef> = {
+    const modules: Record<string, Module> = {
       'entry@v1': makeLeafDef('entry', 'v1'),
       'mod-a@v1': makeLeafDef('mod-a', 'v1'),
     };
@@ -349,7 +335,7 @@ describe('inferRequiredProviders', () => {
   });
 
   test('skips entry module', () => {
-    const modules: Record<string, ModuleDef> = {
+    const modules: Record<string, Module> = {
       'entry@v1': makeLeafDef('entry', 'v1', {
         required_providers: { aws: { source: 'hashicorp/aws', version: '~> 4.0' } },
       }),

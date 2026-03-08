@@ -23,7 +23,7 @@ import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
 import ActionBar from './components/ActionBar';
 
 import type { WorkspaceState, GraphLayout } from './types/workspace';
-import type { ModuleBundle, CompositeGraph, Instance } from './types/ir';
+import type { Bundle, Module, Use, Resource } from './types/ir';
 import { isOut } from './types/ir';
 import type { WebviewToHost } from '../types/protocol';
 
@@ -32,7 +32,7 @@ import { CanvasContext, type CanvasCallbacks } from './state/context';
 import { deriveEdges } from './utils/derive';
 import { resolveSchema, resolveIconUrl } from './utils/resolve';
 import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
-import { makeModuleKey } from './utils/identifiers';
+import { allChildren, findChild, childIds } from './utils/children';
 import {
   inferVariables,
   inferOutputExports,
@@ -69,7 +69,7 @@ const TOAST_SLOW = 5000;
 // ══════════════════════════════════════════════════════════════════════
 
 type CompositeEditorProps = {
-  graph: CompositeGraph;
+  mod: Module;
   layout: GraphLayout | undefined;
   workspace: WorkspaceState;
   module_key: string;
@@ -89,7 +89,7 @@ type CompositeEditorProps = {
 };
 
 function CompositeEditor({
-  graph,
+  mod,
   layout,
   workspace,
   module_key,
@@ -116,9 +116,11 @@ function CompositeEditor({
   }, [fitViewTrigger, fitView]);
 
   // ── Derive ReactFlow edges (no labels — wired badges under nodes show mappings) ──
+  const children = useMemo(() => allChildren(mod), [mod]);
+
   const rfEdgesFromWorkspace: Edge[] = useMemo(
     () =>
-      deriveEdges(graph.instances).map((e) => ({
+      deriveEdges(children).map((e) => ({
         id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
         source: e.source_instance,
         sourceHandle: 'out-right',
@@ -126,7 +128,7 @@ function CompositeEditor({
         targetHandle: 'in-left',
         data: { mapping: e.mapping },
       })),
-    [graph.instances],
+    [children],
   );
 
   // ── Local edge state (for selection support) ──
@@ -161,43 +163,35 @@ function CompositeEditor({
   // written to workspace when the user drags (onDragStop → SYNC_LAYOUT).
   const rfNodesFromWorkspace: Node[] = useMemo(() => {
     // Auto-layout for nodes without saved positions
-    const cols = Math.max(2, Math.ceil(Math.sqrt(graph.instances.length)));
+    const cols = Math.max(2, Math.ceil(Math.sqrt(children.length)));
     const SPACING_X = 120;
     const SPACING_Y = 100;
     const BASE = { x: 80, y: 80 };
 
-    return graph.instances.map((inst, i) => {
-      const saved = layout?.nodes[inst.id]?.position;
+    return children.map((child, i) => {
+      const saved = layout?.nodes[child.id]?.position;
       const auto = {
         x: BASE.x + (i % cols) * SPACING_X,
         y: BASE.y + Math.floor(i / cols) * SPACING_Y,
       };
       const nodeErrors = validationErrors.filter(
-        (e) => e.instance_id === inst.id && e.module_key === module_key,
+        (e) => e.instance_id === child.id && e.module_key === module_key,
       );
       return {
-        id: inst.id,
+        id: child.id,
         type: 'moduleNode',
         position: saved ?? auto,
         data: {
-          instance: inst,
-          schema: resolveSchema(workspace, inst),
-          icon_url: resolveIconUrl(inst, iconMap),
+          child,
+          schema: resolveSchema(workspace, child),
+          icon_url: resolveIconUrl(child, iconMap),
           hasErrors: nodeErrors.length > 0,
           errorMessages: nodeErrors.map((e) => e.message),
-          connectedHandles: connectedHandlesMap[inst.id] ?? [],
+          connectedHandles: connectedHandlesMap[child.id] ?? [],
         },
       };
     });
-  }, [
-    graph.instances,
-    layout,
-    workspace,
-    validationErrors,
-    module_key,
-    iconMap,
-    connectedHandlesMap,
-  ]);
+  }, [children, layout, workspace, validationErrors, module_key, iconMap, connectedHandlesMap]);
 
   // ── Local ReactFlow node state ──
   // ReactFlow in controlled mode needs ALL changes (position, dimensions,
@@ -329,7 +323,7 @@ export default function Canvas() {
   const [iconMap, setIconMap] = useState<Record<string, string>>({});
 
   // ── Active module key (entry composite) ──
-  const module_key = makeModuleKey(workspace.entry.module_id, workspace.entry.version);
+  const module_key = workspace.entry;
   const rootDef = workspace.modules[module_key];
 
   // Stable ref for workspace (used in message handler to avoid stale closure)
@@ -390,10 +384,9 @@ export default function Canvas() {
   // ── Refresh action (re-fetch module defs from registry) ──
   const onRefresh = useCallback(() => {
     const ws = workspaceRef.current;
-    const entryKey = makeModuleKey(ws.entry.module_id, ws.entry.version);
     const module_keys: Record<string, { id: string; version: string }> = {};
     for (const [key, def] of Object.entries(ws.modules)) {
-      if (key !== entryKey) {
+      if (key !== ws.entry) {
         module_keys[key] = { id: def.id, version: def.version };
       }
     }
@@ -460,17 +453,16 @@ export default function Canvas() {
       const def = ws.modules[mk];
       if (!def) return;
 
-      const instances = def.graph.instances;
-      const sourceInst = instances.find((i) => i.id === conn.source);
-      const targetInst = instances.find((i) => i.id === conn.target);
-      if (!sourceInst || !targetInst) return;
+      const sourceChild = findChild(def, conn.source!);
+      const targetChild = findChild(def, conn.target!);
+      if (!sourceChild || !targetChild) return;
 
-      const sourceSchema = resolveSchema(ws, sourceInst);
-      const targetSchema = resolveSchema(ws, targetInst);
+      const sourceSchema = resolveSchema(ws, sourceChild);
+      const targetSchema = resolveSchema(ws, targetChild);
 
       // Find unbound target inputs
       const unboundInputs = targetSchema.inputs.filter((inp) => {
-        const binding = targetInst.inputs[inp.name];
+        const binding = targetChild.inputs?.[inp.name];
         return !binding || !isOut(binding);
       });
 
@@ -546,13 +538,13 @@ export default function Canvas() {
     const entryDef = bundle.modules[mk];
 
     if (entryDef) {
-      const graph = entryDef.graph;
-      const resolve = (inst: Instance) => resolveSchema(ws, inst);
+      const children = allChildren(entryDef);
+      const resolve = (child: Use | Resource) => resolveSchema(ws, child);
 
-      const inferredVars = inferVariables(graph.instances);
-      const inferredExports = inferOutputExports(graph.instances, resolve);
-      const mergedExports = { ...inferredExports, ...graph.exports.outputs };
-      const inferredOutputs = inferOutputDefs(mergedExports, graph.instances, resolve);
+      const inferredVars = inferVariables(children);
+      const inferredExports = inferOutputExports(children, resolve);
+      const mergedExports = { ...inferredExports, ...entryDef.exports.outputs };
+      const inferredOutputs = inferOutputDefs(mergedExports, children, resolve);
       const inferredProviders = inferRequiredProviders(bundle.modules, mk);
 
       bundle.modules[mk] = {
@@ -561,7 +553,7 @@ export default function Canvas() {
           inputs: inferredVars,
           outputs: inferredOutputs,
         },
-        graph: { ...graph, exports: { outputs: mergedExports } },
+        exports: { outputs: mergedExports },
         terraform: {
           ...entryDef.terraform,
           required_providers: {
@@ -629,14 +621,13 @@ export default function Canvas() {
         }
 
         case 'dropBundle': {
-          const deployBundle: ModuleBundle = msg.deploy_bundle;
+          const deployBundle: Bundle = msg.deploy_bundle;
           if (!deployBundle) break;
 
           // Store icon_url for this module (from registry metadata)
           const dropIconUrl: string | undefined = msg.icon_url;
           if (dropIconUrl) {
-            const iconKey = makeModuleKey(deployBundle.entry.module_id, deployBundle.entry.version);
-            setIconMap((prev) => ({ ...prev, [iconKey]: dropIconUrl }));
+            setIconMap((prev) => ({ ...prev, [deployBundle.entry]: dropIconUrl }));
           }
 
           // Parse through fromBundle to normalize bindings
@@ -646,35 +637,34 @@ export default function Canvas() {
           }
 
           // Build positions map for entry composite's instances
-          const entryKey = makeModuleKey(deployBundle.entry.module_id, deployBundle.entry.version);
-          const entryDef = parsed.modules[entryKey];
+          const entryDef = parsed.modules[deployBundle.entry];
           const positions: Record<string, { x: number; y: number }> = {};
 
           // Count existing instances to offset new drops
           const currentDef = workspaceRef.current.modules[moduleKeyRef.current];
-          const existingCount = currentDef?.graph.instances.length ?? 0;
+          const existingCount = currentDef ? allChildren(currentDef).length : 0;
 
           if (entryDef) {
-            const instances = entryDef.graph.instances;
-            const cols = Math.max(2, Math.ceil(Math.sqrt(instances.length)));
+            const entryChildren = allChildren(entryDef);
+            const cols = Math.max(2, Math.ceil(Math.sqrt(entryChildren.length)));
 
             // Offset each successive drop: arrange in a grid with spacing
             const offsetCol = existingCount % 4;
             const offsetRow = Math.floor(existingCount / 4);
             const basePos = { x: 100 + offsetCol * 120, y: 100 + offsetRow * 100 };
 
-            for (let i = 0; i < instances.length; i++) {
+            for (let i = 0; i < entryChildren.length; i++) {
               const col = i % cols;
               const row = Math.floor(i / cols);
-              positions[instances[i].id] = {
+              positions[entryChildren[i].id] = {
                 x: basePos.x + col * 260,
                 y: basePos.y + row * 180,
               };
             }
           }
 
-          // Reconstruct as ModuleBundle (without layouts) for DROP_BUNDLE
-          const bundleForDrop: ModuleBundle = {
+          // Reconstruct as Bundle (without layouts) for DROP_BUNDLE
+          const bundleForDrop: Bundle = {
             schema_version: parsed.schema_version,
             kind: parsed.kind,
             entry: parsed.entry,
@@ -770,22 +760,15 @@ export default function Canvas() {
     return <ErrorState message={`Root module "${module_key}" not found.`} />;
   }
 
-  const graph = rootDef.graph;
   const layout = workspace.layouts[module_key];
 
   // ── Config panel target data ──
-  const configInstance = configTarget
-    ? graph.instances.find((i) => i.id === configTarget)
-    : undefined;
-  const configSchema = configInstance ? resolveSchema(workspace, configInstance) : undefined;
+  const configChild = configTarget ? findChild(rootDef, configTarget) : undefined;
+  const configSchema = configChild ? resolveSchema(workspace, configChild) : undefined;
 
   // ── Edge config panel data ──
-  const edgeSourceInst = edgeConfigState
-    ? graph.instances.find((i) => i.id === edgeConfigState.source)
-    : undefined;
-  const edgeTargetInst = edgeConfigState
-    ? graph.instances.find((i) => i.id === edgeConfigState.target)
-    : undefined;
+  const edgeSourceChild = edgeConfigState ? findChild(rootDef, edgeConfigState.source) : undefined;
+  const edgeTargetChild = edgeConfigState ? findChild(rootDef, edgeConfigState.target) : undefined;
 
   // ── Render ──
   return (
@@ -800,7 +783,7 @@ export default function Canvas() {
         <div className="flex-1 relative min-h-0">
           <CompositeEditor
             key={`${module_key}:${loadGeneration}`}
-            graph={graph}
+            mod={rootDef}
             layout={layout}
             workspace={workspace}
             module_key={module_key}
@@ -820,15 +803,15 @@ export default function Canvas() {
           />
 
           {/* Module config panel */}
-          <SlidePanel open={!!(configTarget && configInstance && configSchema)}>
-            {configTarget && configInstance && configSchema && (
+          <SlidePanel open={!!(configTarget && configChild && configSchema)}>
+            {configTarget && configChild && configSchema && (
               <ModuleConfigPanel
                 instance_id={configTarget}
                 schema={configSchema}
-                inputs={configInstance.inputs}
+                inputs={configChild.inputs ?? {}}
                 composite_variables={rootDef.interface.inputs}
-                sibling_ids={graph.instances.map((i) => i.id).filter((id) => id !== configTarget)}
-                depends_on={configInstance.depends_on}
+                sibling_ids={[...childIds(rootDef)].filter((id) => id !== configTarget)}
+                depends_on={configChild.depends_on}
                 onSave={(inputs) => {
                   semanticDispatch({
                     type: 'UPDATE_INPUTS',
@@ -861,14 +844,14 @@ export default function Canvas() {
           </SlidePanel>
 
           {/* Edge config panel */}
-          <SlidePanel open={!!(edgeConfigState && edgeSourceInst && edgeTargetInst)} zIndex={40}>
-            {edgeConfigState && edgeSourceInst && edgeTargetInst && (
+          <SlidePanel open={!!(edgeConfigState && edgeSourceChild && edgeTargetChild)} zIndex={40}>
+            {edgeConfigState && edgeSourceChild && edgeTargetChild && (
               <EdgeConfigPanel
                 source_instance={edgeConfigState.source}
                 target_instance={edgeConfigState.target}
-                source_schema={resolveSchema(workspace, edgeSourceInst)}
-                target_schema={resolveSchema(workspace, edgeTargetInst)}
-                target_inputs={edgeTargetInst.inputs}
+                source_schema={resolveSchema(workspace, edgeSourceChild)}
+                target_schema={resolveSchema(workspace, edgeTargetChild)}
+                target_inputs={edgeTargetChild.inputs ?? {}}
                 onConnect={(mapping) => {
                   semanticDispatch({
                     type: 'CONNECT',
@@ -890,7 +873,7 @@ export default function Canvas() {
               <UnifiedSettingsPanel
                 terraform={rootDef.terraform}
                 providers={rootDef.providers}
-                locals={graph.locals}
+                locals={rootDef.locals}
                 environments={workspace.environments}
                 environment_backends={workspace.environment_backends}
                 onSaveTerraform={(terraform) => {

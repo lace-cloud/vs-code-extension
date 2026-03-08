@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest';
 import { fromBundle, toBundle } from '../utils/bundle';
-import type { ModuleBundle } from '../types/ir';
-import { makeModuleKey } from '../utils/identifiers';
+import type { Bundle } from '../types/ir';
+import { allChildren } from '../utils/children';
 import { loadFixture } from './helpers';
 
 test('round-trip: leaf deploy_bundle', () => {
@@ -41,15 +41,13 @@ test('fromBundle collects errors for malformed modules without crashing', () => 
   expect(Object.keys(workspace.modules).length).toBeGreaterThan(0);
 });
 
-test('fromBundle normalizes instance kind: empty → module', () => {
-  const bundle: ModuleBundle = {
+test('fromBundle normalizes legacy instance kind: empty → module Use', () => {
+  const bundle: Bundle = {
     schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'test', version: 'v1' },
+    kind: 'bundle',
+    entry: 'test@v1',
     modules: {
       'test@v1': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'test',
         version: 'v1',
         interface: { inputs: [], outputs: [] },
@@ -57,70 +55,67 @@ test('fromBundle normalizes instance kind: empty → module', () => {
           instances: [
             {
               id: 'a',
-              // kind intentionally missing
+              // kind intentionally missing — legacy format
               use: { module_id: 'x', version: 'v1' },
               inputs: {},
-            } as any,
+            },
           ],
           wires: [],
           exports: { outputs: {} },
         },
-      },
+      } as any,
     },
   };
   const { workspace } = fromBundle(bundle);
   const def = workspace.modules['test@v1'];
-  expect(def.graph.instances[0].kind).toBe('module');
+  // Legacy instance with use.module_id should become a Use with module key
+  const children = allChildren(def);
+  expect(children).toHaveLength(1);
+  expect('module' in children[0]).toBe(true);
+  expect((children[0] as any).module).toBe('x@v1');
 });
 
 test('fromBundle strips wires from graph', () => {
   const original = loadFixture('composite_deploy_bundle.json');
   const { workspace } = fromBundle(original);
-  const entryKey = makeModuleKey(original.entry.module_id, original.entry.version);
+  const entryKey = workspace.entry;
   const def = workspace.modules[entryKey];
-  expect(def.graph.wires).toBeUndefined();
+  // New format has no graph/wires — modules and resources are top-level
+  expect((def as any).graph).toBeUndefined();
 });
 
 test('toBundle injects wires from out bindings', () => {
-  const bundle: ModuleBundle = {
+  const bundle: Bundle = {
     schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: 'test', version: 'v1' },
+    kind: 'bundle',
+    entry: 'test@v1',
     modules: {
       'test@v1': {
-        schema_version: '1.0',
-        kind: 'module_def',
         id: 'test',
         version: 'v1',
         interface: { inputs: [], outputs: [] },
-        graph: {
-          instances: [
-            {
-              kind: 'module' as const,
-              id: 'a',
-              use: { module_id: 'x', version: 'v1' },
-              inputs: {},
+        modules: [
+          {
+            id: 'a',
+            module: 'x@v1',
+          },
+          {
+            id: 'b',
+            module: 'y@v1',
+            inputs: {
+              bucket: { out: { module: 'a', name: 'arn' } },
             },
-            {
-              kind: 'module' as const,
-              id: 'b',
-              use: { module_id: 'y', version: 'v1' },
-              inputs: {
-                bucket: { out: { module: 'a', name: 'arn' } },
-              },
-            },
-          ],
-          exports: { outputs: {} },
-        },
+          },
+        ],
+        exports: { outputs: {} },
       },
     },
   };
   const { workspace } = fromBundle(bundle);
   const exported = toBundle(workspace);
   const def = exported.modules['test@v1'];
-  expect(def.graph.wires).toHaveLength(1);
-  expect(def.graph.wires![0]).toEqual({
-    from: { module: 'a', port: 'outputs.arn' },
-    to: { module: 'b', port: 'inputs.bucket' },
-  });
+  // toBundle should produce the wire-format Module — check modules array has the binding
+  const bChild = def.modules?.find((u) => u.id === 'b');
+  expect(bChild).toBeDefined();
+  expect(bChild!.inputs!.bucket).toEqual({ out: { module: 'a', name: 'arn' } });
 });

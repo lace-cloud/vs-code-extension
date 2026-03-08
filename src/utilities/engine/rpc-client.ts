@@ -1,7 +1,7 @@
 import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as readline from 'readline';
-import type { ModuleBundle } from '../../webview/types/ir';
+import type { Bundle } from '../../webview/types/ir';
 import type { Diagnostic, RegistryModule } from '../../types/protocol';
 
 interface RPCRequest {
@@ -38,7 +38,7 @@ type RegistryVersionResult = {
   name: string;
   system: string;
   version: string;
-  deploy_bundle?: ModuleBundle;
+  deploy_bundle?: Bundle;
 };
 
 type RegistryModuleResult = {
@@ -189,7 +189,7 @@ export class JSONRPCClient extends EventEmitter {
   }
 
   generate(params: {
-    bundle: ModuleBundle;
+    bundle: Bundle;
     outputDir: string;
     options?: {
       dryRun?: boolean;
@@ -201,7 +201,7 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<GenerateResult>('generate', params);
   }
 
-  validate(params: { bundle: ModuleBundle }) {
+  validate(params: { bundle: Bundle }) {
     return this.call<ValidateResult>('validate', params);
   }
 

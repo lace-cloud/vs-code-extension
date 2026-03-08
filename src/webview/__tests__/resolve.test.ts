@@ -1,16 +1,14 @@
 import { test, expect, describe } from 'vitest';
 import { resolveSchema, resolveModuleDef, resolveIconUrl } from '../utils/resolve';
 import type { WorkspaceState } from '../types/workspace';
-import type { ModuleDef, ModuleInstance, ResourceInstance } from '../types/ir';
+import type { Module, Use, Resource } from '../types/ir';
 
 // ══════════════════════════════════════════════════════════════════════
 // Helpers
 // ══════════════════════════════════════════════════════════════════════
 
-function makeLeafDef(id: string, version: string): ModuleDef {
+function makeLeafDef(id: string, version: string): Module {
   return {
-    schema_version: '1.0',
-    kind: 'module_def',
     id,
     version,
     interface: {
@@ -18,37 +16,34 @@ function makeLeafDef(id: string, version: string): ModuleDef {
       outputs: [{ name: 'arn', type: 'string' }],
     },
     source: { kind: 'registry' },
-    graph: { instances: [], exports: { outputs: {} } },
+    exports: { outputs: {} },
   };
 }
 
-function makeWorkspace(modules: Record<string, ModuleDef>): WorkspaceState {
+function makeWorkspace(modules: Record<string, Module>): WorkspaceState {
   const firstKey = Object.keys(modules)[0] ?? 'root@v1.0.0';
-  const [id, version] = firstKey.split('@');
   return {
     schema_version: '1.0',
-    kind: 'module_bundle',
-    entry: { module_id: id, version },
+    kind: 'bundle',
+    entry: firstKey,
     modules,
     layouts: {},
   };
 }
 
-const leafInst: ModuleInstance = {
-  kind: 'module',
+const leafInst: Use = {
   id: 'my_bucket',
-  use: { module_id: 'aws-s3-bucket', version: 'v1.2.0' },
+  module: 'aws-s3-bucket@v1.2.0',
   inputs: {},
 };
 
-const compositeInst: ModuleInstance = {
-  kind: 'module',
+const compositeInst: Use = {
   id: 'my_stack',
-  use: { module_id: 'iam-stack', version: 'v1.0.0' },
+  module: 'iam-stack@v1.0.0',
   inputs: {},
 };
 
-const resourceInst: ResourceInstance = {
+const resourceInst: Resource = {
   kind: 'resource',
   id: 'my_resource',
   type: 'aws_s3_bucket',
@@ -66,11 +61,11 @@ describe('resolveModuleDef', () => {
     expect(resolveModuleDef(ws, leafInst)).toBe(def);
   });
 
-  test('falls back to id match when exact key missing', () => {
+  test('returns undefined when exact key missing', () => {
     const def = makeLeafDef('aws-s3-bucket', 'v1.0.0');
     const ws = makeWorkspace({ 'aws-s3-bucket@v1.0.0': def });
-    // Instance references v1.2.0 but only v1.0.0 exists
-    expect(resolveModuleDef(ws, leafInst)).toBe(def);
+    // Instance references v1.2.0 but only v1.0.0 exists — no fallback
+    expect(resolveModuleDef(ws, leafInst)).toBeUndefined();
   });
 
   test('returns undefined for non-module instances', () => {
@@ -135,10 +130,9 @@ describe('resolveIconUrl', () => {
   });
 
   test('returns undefined for module instance without matching entry', () => {
-    const unknownInst: ModuleInstance = {
-      kind: 'module',
+    const unknownInst: Use = {
       id: 'my_db',
-      use: { module_id: 'rds-instance', version: 'v1.0.0' },
+      module: 'rds-instance@v1.0.0',
       inputs: {},
     };
     expect(resolveIconUrl(unknownInst, iconMap)).toBeUndefined();
@@ -148,13 +142,11 @@ describe('resolveIconUrl', () => {
     expect(resolveIconUrl(resourceInst, iconMap)).toBeUndefined();
   });
 
-  test('matches exact module_id and version', () => {
+  test('matches exact module key', () => {
     // Same module_id, different version — should NOT match
-    const wrongVersionInst: ModuleInstance = {
-      kind: 'module',
+    const wrongVersionInst: Use = {
       id: 'my_bucket',
-      use: { module_id: 'aws-s3-bucket', version: 'v2.0.0' },
-      inputs: {},
+      module: 'aws-s3-bucket@v2.0.0',
     };
     expect(resolveIconUrl(wrongVersionInst, iconMap)).toBeUndefined();
   });
