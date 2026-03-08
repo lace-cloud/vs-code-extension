@@ -1,7 +1,6 @@
 import { test, expect } from 'vitest';
 import { fromBundle, toBundle } from '../utils/bundle';
 import type { Bundle } from '../types/ir';
-import { allChildren } from '../utils/children';
 import { loadFixture } from './helpers';
 
 test('round-trip: leaf deploy_bundle', () => {
@@ -41,50 +40,7 @@ test('fromBundle collects errors for malformed modules without crashing', () => 
   expect(Object.keys(workspace.modules).length).toBeGreaterThan(0);
 });
 
-test('fromBundle normalizes legacy instance kind: empty → module Use', () => {
-  const bundle: Bundle = {
-    schema_version: '1.0',
-    kind: 'bundle',
-    entry: 'test@v1',
-    modules: {
-      'test@v1': {
-        id: 'test',
-        version: 'v1',
-        interface: { inputs: [], outputs: [] },
-        graph: {
-          instances: [
-            {
-              id: 'a',
-              // kind intentionally missing — legacy format
-              use: { module_id: 'x', version: 'v1' },
-              inputs: {},
-            },
-          ],
-          wires: [],
-          exports: { outputs: {} },
-        },
-      } as any,
-    },
-  };
-  const { workspace } = fromBundle(bundle);
-  const def = workspace.modules['test@v1'];
-  // Legacy instance with use.module_id should become a Use with module key
-  const children = allChildren(def);
-  expect(children).toHaveLength(1);
-  expect('module' in children[0]).toBe(true);
-  expect((children[0] as any).module).toBe('x@v1');
-});
-
-test('fromBundle strips wires from graph', () => {
-  const original = loadFixture('composite_deploy_bundle.json');
-  const { workspace } = fromBundle(original);
-  const entryKey = workspace.entry;
-  const def = workspace.modules[entryKey];
-  // New format has no graph/wires — modules and resources are top-level
-  expect((def as any).graph).toBeUndefined();
-});
-
-test('toBundle injects wires from out bindings', () => {
+test('toBundle preserves out bindings', () => {
   const bundle: Bundle = {
     schema_version: '1.0',
     kind: 'bundle',

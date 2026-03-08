@@ -35,11 +35,6 @@ export function fromBundle(bundle: Bundle, hints?: LayoutHints): ParseResult {
   const modules: Record<string, Module> = {};
   const layouts: Record<string, GraphLayout> = {};
 
-  // Normalize legacy entry format: { module_id, version } → "module_id@version"
-  const rawEntry = bundle.entry as any;
-  const entry: string =
-    typeof rawEntry === 'string' ? rawEntry : makeModuleKey(rawEntry.module_id, rawEntry.version);
-
   for (const [key, raw] of Object.entries(bundle.modules)) {
     try {
       const mod = normalizeModule(raw as any);
@@ -57,7 +52,7 @@ export function fromBundle(bundle: Bundle, hints?: LayoutHints): ParseResult {
     workspace: {
       schema_version: bundle.schema_version ?? '1.0',
       kind: 'bundle',
-      entry,
+      entry: bundle.entry,
       modules,
       environments: bundle.environments,
       environment_backends: bundle.environment_backends,
@@ -72,70 +67,21 @@ export function fromBundle(bundle: Bundle, hints?: LayoutHints): ParseResult {
 // ══════════════════════════════════════════════════════════════════════
 
 function normalizeModule(raw: any): Module {
-  // Support both new flat format and legacy graph-wrapped format
-  const hasGraph = raw.graph != null;
+  const uses = raw.modules?.map((u: any) => normalizeUse(u));
+  const resources = raw.resources?.map((r: any) => normalizeResource(r));
 
-  let uses: Use[] | undefined;
-  let resources: Resource[] | undefined;
-  let exports: { outputs: Record<string, OutputExport> };
-  let locals: Module['locals'];
-
-  if (hasGraph) {
-    // Legacy format: { graph: { instances, exports, locals } }
-    const rawGraph = raw.graph;
-    if (!Array.isArray(rawGraph.instances) && rawGraph.instances != null) {
-      throw new Error(`instances must be an array, got ${typeof rawGraph.instances}`);
-    }
-    const rawInstances: any[] = rawGraph.instances || [];
-    const parsedUses: Use[] = [];
-    const parsedResources: Resource[] = [];
-
-    for (const inst of rawInstances) {
-      const normalized = normalizeLegacyInstance(inst);
-      if ('module' in normalized) {
-        parsedUses.push(normalized as Use);
-      } else {
-        parsedResources.push(normalized as Resource);
-      }
-    }
-
-    uses = parsedUses.length > 0 ? parsedUses : undefined;
-    resources = parsedResources.length > 0 ? parsedResources : undefined;
-
-    // Normalize exports
-    const rawExports = rawGraph.exports?.outputs || {};
-    const normalizedExports: Record<string, OutputExport> = {};
-    for (const [name, exp] of Object.entries(rawExports)) {
-      normalizedExports[name] = normalizeOutputExport(exp);
-    }
-    exports = { outputs: normalizedExports };
-
-    // Normalize locals
-    locals = rawGraph.locals
-      ? rawGraph.locals.map((l: any) => ({
-          name: l.name,
-          value: normalizeBinding(l.value),
-        }))
-      : undefined;
-  } else {
-    // New flat format: { modules, resources, exports, locals }
-    uses = raw.modules?.map((u: any) => normalizeUse(u));
-    resources = raw.resources?.map((r: any) => normalizeResource(r));
-
-    const rawExports = raw.exports?.outputs || {};
-    const normalizedExports: Record<string, OutputExport> = {};
-    for (const [name, exp] of Object.entries(rawExports)) {
-      normalizedExports[name] = normalizeOutputExport(exp);
-    }
-    exports = { outputs: normalizedExports };
-
-    locals = raw.locals
-      ? raw.locals.map((l: any) => ({
-          name: l.name,
-          value: normalizeBinding(l.value),
-        }))
-      : undefined;
+  const rawExports = raw.exports?.outputs || {};
+  const normalizedExports: Record<string, OutputExport> = {};
+  for (const [name, exp] of Object.entries(rawExports)) {
+    normalizedExports[name] = normalizeOutputExport(exp);
   }
+
+  const locals = raw.locals
+    ? raw.locals.map((l: any) => ({
+        name: l.name,
+        value: normalizeBinding(l.value),
+      }))
+    : undefined;
 
   return {
     id: raw.id,
@@ -145,51 +91,11 @@ function normalizeModule(raw: any): Module {
     ...(uses && uses.length > 0 ? { modules: uses } : {}),
     ...(resources && resources.length > 0 ? { resources } : {}),
     ...(locals ? { locals } : {}),
-    exports,
+    exports: { outputs: normalizedExports },
     ...(raw.terraform ? { terraform: raw.terraform } : {}),
     ...(raw.providers ? { providers: raw.providers } : {}),
   };
 }
-
-// ══════════════════════════════════════════════════════════════════════
-// normalizeLegacyInstance — converts old Instance format to Use or Resource
-// ══════════════════════════════════════════════════════════════════════
-
-function normalizeLegacyInstance(raw: any): Use | Resource {
-  const kind = raw.kind || 'module';
-  const inputs: Record<string, Binding> = {};
-  if (raw.inputs) {
-    for (const [name, val] of Object.entries(raw.inputs)) {
-      inputs[name] = normalizeBinding(val);
-    }
-  }
-
-  if (kind === 'resource' || kind === 'data') {
-    return {
-      id: raw.id,
-      kind: kind as 'resource' | 'data',
-      type: raw.type,
-      ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
-      ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
-    };
-  }
-
-  // Default: module → Use
-  const moduleKey = raw.use
-    ? makeModuleKey(raw.use.module_id, raw.use.version)
-    : (raw.module ?? '');
-
-  return {
-    id: raw.id,
-    module: moduleKey,
-    ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
-    ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
-  };
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// normalizeUse / normalizeResource — for new flat format
-// ══════════════════════════════════════════════════════════════════════
 
 function normalizeUse(raw: any): Use {
   const inputs: Record<string, Binding> = {};

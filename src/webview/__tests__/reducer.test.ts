@@ -618,8 +618,7 @@ test('SET_EXPORTS on non-composite module_key returns state unchanged', () => {
     outputs: { x: { out: { module: 'a', name: 'b' } } },
     output_defs: [{ name: 'x', type: 'string' }],
   });
-  // interface.outputs updated (SET_EXPORTS updates interface first, then tries graph)
-  // But since it's a leaf, updateCompositeGraph is a no-op — graph won't change
+  // interface.outputs updated; leaf modules have no child modules to affect
   expect(next.modules['leaf@v1.0.0'].interface.outputs).toEqual([{ name: 'x', type: 'string' }]);
 });
 
