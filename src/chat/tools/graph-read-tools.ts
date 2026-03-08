@@ -7,6 +7,7 @@ import type { ToolResult } from '../types';
 import { summarizeGraph } from '../graph-summary';
 import { validateWorkspace } from '../../webview/utils/validate';
 import { registerTool } from '../tool-registry';
+import { loadGraphState } from './helpers';
 
 export type GraphReadDeps = {
   requestGraphState: () => Promise<WorkspaceState>;
@@ -14,12 +15,9 @@ export type GraphReadDeps = {
 
 export function registerGraphReadTools(deps: GraphReadDeps): void {
   registerTool('lace_describe_graph', async (): Promise<ToolResult> => {
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
     const summary = summarizeGraph(state);
 
@@ -92,12 +90,9 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
   // lace_validate_graph
   // ─────────────────────────────────────────────
   registerTool('lace_validate_graph', async (): Promise<ToolResult> => {
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
     const errors = validateWorkspace(state);
 

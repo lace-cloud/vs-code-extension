@@ -727,18 +727,10 @@ function handleSetVariables(
   action: Extract<WorkspaceAction, { type: 'SET_VARIABLES' }>,
 ): WorkspaceState {
   const { module_key, variables } = action;
-  const def = state.modules[module_key];
-  if (!def) return state;
-  return {
-    ...state,
-    modules: {
-      ...state.modules,
-      [module_key]: {
-        ...def,
-        interface: { ...def.interface, inputs: variables },
-      },
-    },
-  };
+  return updateModule(state, module_key, (mod) => ({
+    ...mod,
+    interface: { ...mod.interface, inputs: variables },
+  }));
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -766,12 +758,7 @@ function handleSetTerraform(
   action: Extract<WorkspaceAction, { type: 'SET_TERRAFORM' }>,
 ): WorkspaceState {
   const { module_key, terraform } = action;
-  const def = state.modules[module_key];
-  if (!def) return state;
-  return {
-    ...state,
-    modules: { ...state.modules, [module_key]: { ...def, terraform } },
-  };
+  return updateModule(state, module_key, (mod) => ({ ...mod, terraform }));
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -783,12 +770,7 @@ function handleSetProviders(
   action: Extract<WorkspaceAction, { type: 'SET_PROVIDERS' }>,
 ): WorkspaceState {
   const { module_key, providers } = action;
-  const def = state.modules[module_key];
-  if (!def) return state;
-  return {
-    ...state,
-    modules: { ...state.modules, [module_key]: { ...def, providers } },
-  };
+  return updateModule(state, module_key, (mod) => ({ ...mod, providers }));
 }
 
 // ══════════════════════════════════════════════════════════════════════

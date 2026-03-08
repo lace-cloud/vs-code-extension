@@ -405,19 +405,13 @@ export default function Canvas() {
     setTimeout(() => setStatusMessage(null), TOAST_SLOW);
   }, []);
 
-  // ── Expose dispatch globally for ModuleNode rename/delete/refresh/undo ──
+  // ── Expose undo globally for HTML-level Cmd+Z listener ──
   useEffect(() => {
-    (window as any).__canvasDispatch = semanticDispatch;
-    (window as any).__activeModuleKey = module_key;
-    (window as any).__canvasRefreshModule = refreshSingleModule;
     (window as any).__canvasUndo = onUndo;
     return () => {
-      delete (window as any).__canvasDispatch;
-      delete (window as any).__activeModuleKey;
-      delete (window as any).__canvasRefreshModule;
       delete (window as any).__canvasUndo;
     };
-  }, [semanticDispatch, module_key, refreshSingleModule, onUndo]);
+  }, [onUndo]);
 
   // ── Context callbacks for nodes ──
   const callbacks: CanvasCallbacks = useMemo(
@@ -427,8 +421,12 @@ export default function Canvas() {
         setIsDirty(true);
         postToHost({ command: 'markDirty', state: workspaceRef.current });
       },
+      dispatch: semanticDispatch,
+      moduleKey: module_key,
+      refreshModule: refreshSingleModule,
+      undo: onUndo,
     }),
-    [],
+    [semanticDispatch, module_key, refreshSingleModule, onUndo],
   );
 
   // ── Event: drag stop → sync layout to workspace (marks dirty) ──

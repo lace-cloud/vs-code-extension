@@ -9,6 +9,7 @@ import { registerTool } from '../tool-registry';
 import { resolveSchema } from '../../webview/utils/resolve';
 import { findAutoConnections } from '../auto-connect';
 import { findChild } from '../../webview/utils/children';
+import { loadGraphState, requireEntry } from './helpers';
 
 export type GenerateToolDeps = {
   requestGraphState: () => Promise<WorkspaceState>;
@@ -31,21 +32,16 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
       };
     }
 
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
-    const entryKey = state.entry;
-    const entryDef = state.modules[entryKey];
-    if (!entryDef) {
-      return { content: 'Canvas has no composite graph.', isError: true };
-    }
+    const entryResult = requireEntry(state);
+    if ('error' in entryResult) return entryResult.error;
+    const { entry } = entryResult;
 
-    const source = findChild(entryDef, sourceInstance);
-    const target = findChild(entryDef, targetInstance);
+    const source = findChild(entry.mod, sourceInstance);
+    const target = findChild(entry.mod, targetInstance);
 
     if (!source) {
       return { content: `Source instance "${sourceInstance}" not found.`, isError: true };
@@ -76,7 +72,7 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
       try {
         await deps.dispatchToCanvas({
           type: 'CONNECT',
-          module_key: entryKey,
+          module_key: entry.entryKey,
           source_instance: sourceInstance,
           target_instance: targetInstance,
           mapping: { from: match.from, to: match.to },

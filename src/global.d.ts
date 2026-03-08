@@ -3,8 +3,7 @@ declare global {
     vscode: {
       postMessage: (message: any) => void;
     };
-    __canvasDispatch?: (action: any) => void;
-    __activeModuleKey?: string;
+    __canvasUndo?: () => void;
   }
 }
 

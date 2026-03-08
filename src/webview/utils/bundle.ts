@@ -97,7 +97,10 @@ function normalizeModule(raw: any): Module {
   };
 }
 
-function normalizeUse(raw: any): Use {
+function normalizeChildFields(raw: any): {
+  inputs?: Record<string, Binding>;
+  depends_on?: string[];
+} {
   const inputs: Record<string, Binding> = {};
   if (raw.inputs) {
     for (const [name, val] of Object.entries(raw.inputs)) {
@@ -105,27 +108,17 @@ function normalizeUse(raw: any): Use {
     }
   }
   return {
-    id: raw.id,
-    module: raw.module,
     ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
     ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
   };
 }
 
+function normalizeUse(raw: any): Use {
+  return { id: raw.id, module: raw.module, ...normalizeChildFields(raw) };
+}
+
 function normalizeResource(raw: any): Resource {
-  const inputs: Record<string, Binding> = {};
-  if (raw.inputs) {
-    for (const [name, val] of Object.entries(raw.inputs)) {
-      inputs[name] = normalizeBinding(val);
-    }
-  }
-  return {
-    id: raw.id,
-    kind: raw.kind,
-    type: raw.type,
-    ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
-    ...(raw.depends_on ? { depends_on: raw.depends_on } : {}),
-  };
+  return { id: raw.id, kind: raw.kind, type: raw.type, ...normalizeChildFields(raw) };
 }
 
 // ══════════════════════════════════════════════════════════════════════

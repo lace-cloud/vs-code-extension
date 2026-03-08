@@ -90,19 +90,15 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const commitRename = useCallback(() => {
     setEditing(false);
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed)) {
-      const dispatch = (window as any).__canvasDispatch;
-      const moduleKey = (window as any).__activeModuleKey;
-      if (dispatch && moduleKey) {
-        dispatch({
-          type: 'RENAME_INSTANCE',
-          module_key: moduleKey,
-          old_id: id,
-          new_id: trimmed,
-        });
-      }
+    if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed) && ctx) {
+      ctx.dispatch({
+        type: 'RENAME_INSTANCE',
+        module_key: ctx.moduleKey,
+        old_id: id,
+        new_id: trimmed,
+      });
     }
-  }, [editValue, id]);
+  }, [editValue, id, ctx]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -123,30 +119,24 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onRefreshModule = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!isUse(child)) return;
-      const refreshFn = (window as any).__canvasRefreshModule;
-      if (refreshFn) {
-        const { id: modId, version } = parseModuleKey(child.module);
-        refreshFn(child.module, modId, version);
-      }
+      if (!isUse(child) || !ctx) return;
+      const { id: modId, version } = parseModuleKey(child.module);
+      ctx.refreshModule(child.module, modId, version);
     },
-    [child],
+    [child, ctx],
   );
 
   const onDeleteInstance = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      const dispatch = (window as any).__canvasDispatch;
-      const moduleKey = (window as any).__activeModuleKey;
-      if (dispatch && moduleKey) {
-        dispatch({
-          type: 'DELETE_INSTANCE',
-          module_key: moduleKey,
-          instance_id: child.id,
-        });
-      }
+      if (!ctx) return;
+      ctx.dispatch({
+        type: 'DELETE_INSTANCE',
+        module_key: ctx.moduleKey,
+        instance_id: child.id,
+      });
     },
-    [child.id],
+    [child.id, ctx],
   );
 
   // ── Helpers ──

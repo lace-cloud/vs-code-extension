@@ -13,6 +13,7 @@ import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { isValidTerraformIdentifier, parseModuleKey } from '../../webview/utils/identifiers';
 import { allChildren } from '../../webview/utils/children';
+import { getEntryModule, findChildInEntry, loadGraphState, requireEntry } from './helpers';
 
 export type GraphWriteDeps = {
   getRpcClient: () => JSONRPCClient | null;
@@ -21,23 +22,6 @@ export type GraphWriteDeps = {
   requestGraphState: () => Promise<WorkspaceState>;
   dispatchToCanvas: (action: WorkspaceAction) => Promise<void>;
 };
-
-// ── Helpers ──
-
-/** Get the entry module key and the entry module from workspace state. */
-function getEntryModule(state: WorkspaceState) {
-  const entryKey = state.entry;
-  const entryDef = state.modules[entryKey];
-  if (!entryDef) return undefined;
-  return { entryKey, mod: entryDef };
-}
-
-/** Find a child by ID in the entry module. */
-function findChild(state: WorkspaceState, childId: string) {
-  const entry = getEntryModule(state);
-  if (!entry) return undefined;
-  return allChildren(entry.mod).find((c) => c.id === childId);
-}
 
 /**
  * Poll the canvas state to find a newly added instance by module ID.
@@ -166,17 +150,13 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: 'Missing required parameter: instance_id', isError: true };
     }
 
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
-    const entry = getEntryModule(state);
-    if (!entry) {
-      return { content: 'Canvas has no composite graph.', isError: true };
-    }
+    const entryResult = requireEntry(state);
+    if ('error' in entryResult) return entryResult.error;
+    const { entry } = entryResult;
 
     const children = allChildren(entry.mod);
     const child = children.find((c) => c.id === instanceId);
@@ -217,21 +197,17 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
-    const entry = getEntryModule(state);
-    if (!entry) {
-      return { content: 'Canvas has no composite graph.', isError: true };
-    }
+    const entryResult = requireEntry(state);
+    if ('error' in entryResult) return entryResult.error;
+    const { entry } = entryResult;
 
     // Validate instances exist
-    const source = findChild(state, sourceInstance);
-    const target = findChild(state, targetInstance);
+    const source = findChildInEntry(state, sourceInstance);
+    const target = findChildInEntry(state, targetInstance);
     if (!source) {
       return { content: `Source instance "${sourceInstance}" not found.`, isError: true };
     }
@@ -269,19 +245,15 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
-    const entry = getEntryModule(state);
-    if (!entry) {
-      return { content: 'Canvas has no composite graph.', isError: true };
-    }
+    const entryResult = requireEntry(state);
+    if ('error' in entryResult) return entryResult.error;
+    const { entry } = entryResult;
 
-    const target = findChild(state, targetInstance);
+    const target = findChildInEntry(state, targetInstance);
     if (!target) {
       return { content: `Instance "${targetInstance}" not found.`, isError: true };
     }
@@ -336,19 +308,15 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       binding = { expr: { lang: 'hcl', value: params.expression as string } };
     }
 
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
-    const entry = getEntryModule(state);
-    if (!entry) {
-      return { content: 'Canvas has no composite graph.', isError: true };
-    }
+    const entryResult = requireEntry(state);
+    if ('error' in entryResult) return entryResult.error;
+    const { entry } = entryResult;
 
-    const inst = findChild(state, instanceId);
+    const inst = findChildInEntry(state, instanceId);
     if (!inst) {
       return { content: `Instance "${instanceId}" not found.`, isError: true };
     }
@@ -402,19 +370,15 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    let state: WorkspaceState;
-    try {
-      state = await deps.requestGraphState();
-    } catch (err: any) {
-      return { content: `Cannot read canvas: ${err.message}`, isError: true };
-    }
+    const result = await loadGraphState(deps.requestGraphState);
+    if ('error' in result) return result.error;
+    const { state } = result;
 
-    const entry = getEntryModule(state);
-    if (!entry) {
-      return { content: 'Canvas has no composite graph.', isError: true };
-    }
+    const entryResult = requireEntry(state);
+    if ('error' in entryResult) return entryResult.error;
+    const { entry } = entryResult;
 
-    const inst = findChild(state, oldId);
+    const inst = findChildInEntry(state, oldId);
     if (!inst) {
       return { content: `Instance "${oldId}" not found.`, isError: true };
     }
