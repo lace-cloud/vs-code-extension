@@ -25,7 +25,7 @@
 import { describe, test, expect, beforeAll, afterEach } from 'vitest';
 import { spawn, execSync, type ChildProcess } from 'child_process';
 import { join } from 'path';
-import { readFileSync, mkdtempSync, rmSync, readdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, readdirSync } from 'fs';
 import { tmpdir } from 'os';
 
 import { JSONRPCClient } from '../../utilities/engine/rpc-client';
@@ -35,6 +35,7 @@ import { validateWorkspace } from '../utils/validate';
 import { allChildren } from '../utils/children';
 import type { WorkspaceState } from '../types/workspace';
 import type { Bundle } from '../types/ir';
+import { encodeCanvasState } from '../canvas-encoding';
 
 /* ── Binary resolution ── */
 
@@ -377,5 +378,58 @@ describe('E2E: extension ↔ lace CLI over JSON-RPC', () => {
     }
 
     await client.shutdown();
+  });
+
+  test('binary format: lace module generate --input reads .lace binary file', () => {
+    // Build a workspace with real modules, encode to binary format
+    let ws = emptyWorkspace('binary-test');
+    const rk = rootKey(ws);
+    const deployBundle: Bundle = loadFixture('composite_deploy_bundle.json');
+
+    ws = workspaceReducer(ws, {
+      type: 'DROP_BUNDLE',
+      module_key: rk,
+      deploy_bundle: deployBundle,
+      positions: {
+        s3_bucket: { x: 100, y: 100 },
+        s3_bucket_versioning: { x: 400, y: 100 },
+      },
+    });
+
+    // Encode to binary using the same encoder the extension uses
+    const binaryData = encodeCanvasState(ws);
+
+    // Verify header
+    expect(binaryData[0]).toBe(0x4c); // L
+    expect(binaryData[1]).toBe(0x41); // A
+    expect(binaryData[2]).toBe(0x43); // C
+    expect(binaryData[3]).toBe(0x45); // E
+    expect(binaryData[4]).toBe(0x01); // version
+
+    const tmpDir = mkdtempSync(join(tmpdir(), 'lace-binary-e2e-'));
+    const binaryFile = join(tmpDir, 'state.lace');
+
+    try {
+      writeFileSync(binaryFile, binaryData);
+
+      // Run lace module generate --input with the binary file (dry-run + json output)
+      const output = execSync(
+        `${binary} module generate --input ${binaryFile} --dry-run --output json`,
+        { encoding: 'utf-8', timeout: 30_000 },
+      );
+
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.files).toBeDefined();
+      expect(result.files['main.tf']).toBeDefined();
+
+      // Verify the generated HCL contains the expected module blocks
+      const mainTf = result.files['main.tf'];
+      expect(mainTf).toContain('module "s3_bucket"');
+      expect(mainTf).toContain('module "s3_bucket_versioning"');
+      expect(mainTf).toContain('git::https://github.com/example/terraform-aws-s3-bucket.git');
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
