@@ -1,41 +1,26 @@
 {
   "schema_version": "1.0",
-  "kind": "module_bundle",
-  "entry": {
-    "module_id": "test-stack",
-    "version": "v1.0.0"
-  },
+  "kind": "bundle",
+  "entry": "test-stack@v1.0.0",
   "modules": {
     "test-stack@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "test-stack",
       "version": "v1.0.0",
-      "description": "Valid module",
       "interface": {
         "inputs": [],
         "outputs": []
       },
-      "graph": {
-        "instances": [],
-        "wires": [],
-        "exports": { "outputs": {} }
-      }
+      "exports": { "outputs": {} }
     },
     "bad-module@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "bad-module",
       "version": "v1.0.0",
-      "description": "Module with invalid instances field",
       "interface": {
         "inputs": [],
         "outputs": []
       },
-      "graph": {
-        "instances": "NOT_AN_ARRAY",
-        "exports": { "outputs": {} }
-      }
+      "modules": "NOT_AN_ARRAY",
+      "exports": { "outputs": {} }
     }
   }
 }

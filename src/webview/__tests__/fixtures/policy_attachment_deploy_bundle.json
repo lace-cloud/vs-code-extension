@@ -1,17 +1,11 @@
 {
   "schema_version": "1.0",
-  "kind": "module_bundle",
-  "entry": {
-    "module_id": "cloudwatch-logs-policy",
-    "version": "v1.0.0"
-  },
+  "kind": "bundle",
+  "entry": "cloudwatch-logs-policy@v1.0.0",
   "modules": {
     "cloudwatch-logs-policy@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "cloudwatch-logs-policy",
       "version": "v1.0.0",
-      "description": "CloudWatch Logs IAM policy with role attachment",
       "interface": {
         "inputs": [
           {
@@ -43,51 +37,38 @@
           { "name": "policy_arn", "type": "string", "description": "ARN of the policy created" }
         ]
       },
-      "graph": {
-        "instances": [
-          {
-            "id": "policy",
-            "kind": "module",
-            "use": { "module_id": "aws-iam-policy", "version": "v1.0.0" },
-            "inputs": {
-              "policy_name": { "var": "policy_name" },
-              "policy_document": {
-                "expr": {
-                  "lang": "hcl",
-                  "value": "jsonencode({Version = \"2012-10-17\", Statement = [{Effect = \"Allow\", Action = var.actions, Resource = var.resources}]})"
-                }
+      "modules": [
+        {
+          "id": "policy",
+          "module": "aws-iam-policy@v1.0.0",
+          "inputs": {
+            "policy_name": { "var": "policy_name" },
+            "policy_document": {
+              "expr": {
+                "lang": "hcl",
+                "value": "jsonencode({Version = \"2012-10-17\", Statement = [{Effect = \"Allow\", Action = var.actions, Resource = var.resources}]})"
               }
             }
-          },
-          {
-            "id": "attachment",
-            "kind": "module",
-            "use": { "module_id": "aws-iam-policy-attachment", "version": "v1.0.0" },
-            "inputs": {
-              "role_name": { "var": "role_name" },
-              "policy_arn": { "out": { "module": "policy", "name": "policy_arn" } }
-            }
           }
-        ],
-        "wires": [
-          {
-            "from": { "module": "policy", "port": "outputs.policy_arn" },
-            "to": { "module": "attachment", "port": "inputs.policy_arn" }
-          }
-        ],
-        "exports": {
-          "outputs": {
+        },
+        {
+          "id": "attachment",
+          "module": "aws-iam-policy-attachment@v1.0.0",
+          "inputs": {
+            "role_name": { "var": "role_name" },
             "policy_arn": { "out": { "module": "policy", "name": "policy_arn" } }
           }
+        }
+      ],
+      "exports": {
+        "outputs": {
+          "policy_arn": { "out": { "module": "policy", "name": "policy_arn" } }
         }
       }
     },
     "aws-iam-policy@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "aws-iam-policy",
       "version": "v1.0.0",
-      "description": "Creates an IAM policy",
       "interface": {
         "inputs": [
           {
@@ -114,17 +95,11 @@
         "subdir": "aws/iam/policy",
         "ref": "v1.0.0"
       },
-      "graph": {
-        "instances": [],
-        "exports": { "outputs": {} }
-      }
+      "exports": { "outputs": {} }
     },
     "aws-iam-policy-attachment@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "aws-iam-policy-attachment",
       "version": "v1.0.0",
-      "description": "Attaches an IAM policy to a role",
       "interface": {
         "inputs": [
           {
@@ -150,10 +125,7 @@
         "subdir": "aws/iam/policy_attachment",
         "ref": "v1.0.0"
       },
-      "graph": {
-        "instances": [],
-        "exports": { "outputs": {} }
-      }
+      "exports": { "outputs": {} }
     }
   }
 }

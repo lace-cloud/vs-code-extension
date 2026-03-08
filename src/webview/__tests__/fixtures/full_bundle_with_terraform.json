@@ -1,17 +1,11 @@
 {
   "schema_version": "1.0",
-  "kind": "module_bundle",
-  "entry": {
-    "module_id": "iam-stack",
-    "version": "v1.0.0"
-  },
+  "kind": "bundle",
+  "entry": "iam-stack@v1.0.0",
   "modules": {
     "iam-stack@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "iam-stack",
       "version": "v1.0.0",
-      "description": "IAM role with policies for application access",
       "interface": {
         "inputs": [
           {
@@ -87,86 +81,71 @@
           }
         }
       ],
-      "graph": {
-        "instances": [
-          {
-            "id": "iam_role",
-            "use": { "module_id": "aws-iam-role", "version": "v2.0.0" },
-            "inputs": {
-              "role_name": { "var": "role_name" },
-              "assume_role_policy": {
-                "expr": {
-                  "lang": "hcl",
-                  "value": "jsonencode({Version = \"2012-10-17\", Statement = [{Effect = \"Allow\", Principal = {Service = \"lambda.amazonaws.com\"}, Action = \"sts:AssumeRole\"}]})"
-                }
-              },
-              "max_session_duration": { "var": "max_session_duration" },
-              "tags": { "expr": { "lang": "hcl", "value": "merge(var.tags, local.common_tags)" } }
-            }
-          },
-          {
-            "id": "iam_policy",
-            "use": { "module_id": "aws-iam-policy", "version": "v1.0.0" },
-            "inputs": {
-              "policy_name": {
-                "expr": { "lang": "hcl", "value": "\"${var.role_name}-policy\"" }
-              },
-              "policy_document": {
-                "expr": {
-                  "lang": "hcl",
-                  "value": "jsonencode({Version = \"2012-10-17\", Statement = [{Effect = \"Allow\", Action = [\"logs:CreateLogGroup\", \"logs:CreateLogStream\", \"logs:PutLogEvents\"], Resource = \"arn:aws:logs:*:*:*\"}]})"
-                }
-              },
-              "tags": { "var": "tags" }
-            }
-          },
-          {
-            "id": "iam_policy_attachment",
-            "use": { "module_id": "aws-iam-role-policy-attachment", "version": "v1.0.0" },
-            "inputs": {
-              "role_name": { "out": { "module": "iam_role", "name": "role_name" } },
-              "policy_arn": { "out": { "module": "iam_policy", "name": "arn" } }
+      "modules": [
+        {
+          "id": "iam_role",
+          "module": "aws-iam-role@v2.0.0",
+          "inputs": {
+            "role_name": { "var": "role_name" },
+            "assume_role_policy": {
+              "expr": {
+                "lang": "hcl",
+                "value": "jsonencode({Version = \"2012-10-17\", Statement = [{Effect = \"Allow\", Principal = {Service = \"lambda.amazonaws.com\"}, Action = \"sts:AssumeRole\"}]})"
+              }
             },
-            "depends_on": ["module.iam_role", "module.iam_policy"]
-          }
-        ],
-        "wires": [
-          {
-            "from": { "module": "iam_role", "port": "outputs.role_name" },
-            "to": { "module": "iam_policy_attachment", "port": "inputs.role_name" }
-          },
-          {
-            "from": { "module": "iam_policy", "port": "outputs.arn" },
-            "to": { "module": "iam_policy_attachment", "port": "inputs.policy_arn" }
-          }
-        ],
-        "exports": {
-          "outputs": {
-            "role_arn": { "out": { "module": "iam_role", "name": "arn" } },
-            "role_name": { "out": { "module": "iam_role", "name": "role_name" } },
-            "policy_arn": { "out": { "module": "iam_policy", "name": "arn" } }
+            "max_session_duration": { "var": "max_session_duration" },
+            "tags": { "expr": { "lang": "hcl", "value": "merge(var.tags, local.common_tags)" } }
           }
         },
-        "locals": [
-          {
-            "name": "common_tags",
-            "value": { "lit": { "ManagedBy": "lace", "Stack": "iam-stack" } }
-          },
-          {
-            "name": "full_role_name",
-            "value": {
-              "expr": { "lang": "hcl", "value": "\"${var.environment}-${var.role_name}\"" }
-            }
+        {
+          "id": "iam_policy",
+          "module": "aws-iam-policy@v1.0.0",
+          "inputs": {
+            "policy_name": {
+              "expr": { "lang": "hcl", "value": "\"${var.role_name}-policy\"" }
+            },
+            "policy_document": {
+              "expr": {
+                "lang": "hcl",
+                "value": "jsonencode({Version = \"2012-10-17\", Statement = [{Effect = \"Allow\", Action = [\"logs:CreateLogGroup\", \"logs:CreateLogStream\", \"logs:PutLogEvents\"], Resource = \"arn:aws:logs:*:*:*\"}]})"
+              }
+            },
+            "tags": { "var": "tags" }
           }
-        ]
+        },
+        {
+          "id": "iam_policy_attachment",
+          "module": "aws-iam-role-policy-attachment@v1.0.0",
+          "inputs": {
+            "role_name": { "out": { "module": "iam_role", "name": "role_name" } },
+            "policy_arn": { "out": { "module": "iam_policy", "name": "arn" } }
+          },
+          "depends_on": ["module.iam_role", "module.iam_policy"]
+        }
+      ],
+      "locals": [
+        {
+          "name": "common_tags",
+          "value": { "lit": { "ManagedBy": "lace", "Stack": "iam-stack" } }
+        },
+        {
+          "name": "full_role_name",
+          "value": {
+            "expr": { "lang": "hcl", "value": "\"${var.environment}-${var.role_name}\"" }
+          }
+        }
+      ],
+      "exports": {
+        "outputs": {
+          "role_arn": { "out": { "module": "iam_role", "name": "arn" } },
+          "role_name": { "out": { "module": "iam_role", "name": "role_name" } },
+          "policy_arn": { "out": { "module": "iam_policy", "name": "arn" } }
+        }
       }
     },
     "aws-iam-role@v2.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "aws-iam-role",
       "version": "v2.0.0",
-      "description": "Creates an IAM role",
       "interface": {
         "inputs": [
           { "name": "role_name", "type": "string", "required": true },
@@ -185,17 +164,11 @@
         "repo": "https://github.com/example/terraform-aws-iam-role.git",
         "ref": "v2.0.0"
       },
-      "graph": {
-        "instances": [],
-        "exports": { "outputs": {} }
-      }
+      "exports": { "outputs": {} }
     },
     "aws-iam-policy@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "aws-iam-policy",
       "version": "v1.0.0",
-      "description": "Creates an IAM policy",
       "interface": {
         "inputs": [
           { "name": "policy_name", "type": "string", "required": true },
@@ -212,17 +185,11 @@
         "repo": "https://github.com/example/terraform-aws-iam-policy.git",
         "ref": "v1.0.0"
       },
-      "graph": {
-        "instances": [],
-        "exports": { "outputs": {} }
-      }
+      "exports": { "outputs": {} }
     },
     "aws-iam-role-policy-attachment@v1.0.0": {
-      "schema_version": "1.0",
-      "kind": "module_def",
       "id": "aws-iam-role-policy-attachment",
       "version": "v1.0.0",
-      "description": "Attaches an IAM policy to an IAM role",
       "interface": {
         "inputs": [
           { "name": "role_name", "type": "string", "required": true },
@@ -235,10 +202,7 @@
         "repo": "https://github.com/example/terraform-aws-iam-role-policy-attachment.git",
         "ref": "v1.0.0"
       },
-      "graph": {
-        "instances": [],
-        "exports": { "outputs": {} }
-      }
+      "exports": { "outputs": {} }
     }
   },
   "environments": {
