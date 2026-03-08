@@ -10,14 +10,14 @@ A VS Code extension for visually composing Terraform modules. Users browse modul
 
 ```bash
 npm test                    # Run all tests: unit + E2E (Vitest)
-npm run test:unit           # Unit tests only (238 tests, no binary needed)
+npm run test:unit           # Unit tests only (222 tests, no binary needed)
 npm run test:e2e            # E2E tests only (6 tests, requires lace + terraform)
 npm run test:watch          # Watch mode (unit tests)
 npm run build               # Rspack build (both host + webview)
 npx tsc --noEmit            # Type-check only (must be zero errors)
 ```
 
-Always run `npm run test:unit` after any change. All 238 unit tests must pass. TypeScript must compile with zero errors.
+Always run `npm run test:unit` after any change. All 222 unit tests must pass. TypeScript must compile with zero errors.
 
 E2E tests require the `lace` binary and `terraform` to be installed. They spawn a real `lace module serve` process and talk JSON-RPC. If the binary is missing, the tests fail with install instructions. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
 
@@ -27,8 +27,8 @@ E2E tests require the `lace` binary and `terraform` to be installed. They spawn 
 
 `src/webview/utils/bundle.ts` — These two functions are the boundary between workspace state and wire format. Changes require careful consideration of wire protocol compatibility with the Go CLI.
 
-- `toBundle(workspace)`: Strips `layouts`, injects derived `wires` into graphs.
-- `fromBundle(bundle, hints?)`: Normalizes bindings, computes layouts, strips wires. Collects errors without throwing.
+- `toBundle(workspace)`: Strips `layouts`. Returns a `Bundle` ready for the CLI.
+- `fromBundle(bundle, hints?)`: Normalizes bindings in `mod.modules[]` and `mod.resources[]`, computes layouts from `allChildren(mod)`. Collects errors without throwing.
 
 ### 2. Wire format matches Go JSON tags exactly
 
@@ -38,7 +38,7 @@ The word `interface` is a legal TypeScript property name (only reserved in decla
 
 ### 3. Wires are derived, never stored
 
-Wires exist only in the bundle (for the CLI). They are derived from `out` bindings by `deriveWires()` in `toBundle()` and stripped by `fromBundle()`. The workspace state never contains wires. If you're storing wires, you're wrong.
+Wires (edges) are derived from `out` bindings by `deriveEdges()` for ReactFlow rendering. They are never persisted in workspace state or sent to the CLI. The CLI reads `out` bindings directly from modules/resources.
 
 ### 4. Pure reducer, no side effects
 
@@ -46,7 +46,7 @@ Wires exist only in the bundle (for the CLI). They are derived from `out` bindin
 
 ### 5. Validate at the boundary, trust downstream
 
-`fromBundle` normalizes all incoming data into canonical discriminated unions via `normalizeBinding()` and `normalizeInstance()`. Once past the boundary, use type guards (`isOut`, `isVar`, `isModuleInstance`, etc.) — never `as` casts or `!` assertions.
+`fromBundle` normalizes all incoming data into canonical discriminated unions via `normalizeBinding()`. Once past the boundary, use type guards (`isOut`, `isVar`, `isUse`, `isResource`, etc.) — never `as` casts or `!` assertions.
 
 ### 6. `.lace/` is the persistence model
 
@@ -58,11 +58,13 @@ The webview never fetches registry data. The extension host owns all registry da
 
 ### 8. Node data is serializable
 
-`ModuleNodeData` contains no callbacks. Communication from nodes to canvas goes through `CanvasContext` (React context with `openConfig`, `markDirty`). For dispatch and module key, nodes read from `(window as any).__canvasDispatch` and `(window as any).__activeModuleKey` — this is intentional (ReactFlow node rendering doesn't support prop drilling).
+`ModuleNodeData` contains no callbacks. All communication from nodes to canvas goes through `CanvasContext` (React context with `openConfig`, `markDirty`, `dispatch`, `moduleKey`, `refreshModule`, `undo`). The only window global is `__canvasUndo` (needed by the HTML-level Cmd+Z keyboard listener).
 
 ## Type System
 
 ### Key types in `src/webview/types/ir.ts`
+
+Types are a 1:1 translation of the Go CLI's `bundle.go` structs:
 
 ```typescript
 type Binding =
@@ -70,40 +72,46 @@ type Binding =
   | { var: string }
   | { out: { module: string; name: string } }
   | { expr: { lang: 'hcl'; value: string } };
-type Instance = ModuleInstance | ResourceInstance | DataInstance; // discriminated on `kind`
-type ModuleDef = {
-  schema_version;
-  kind;
-  id;
-  version;
-  description?;
-  source?; // present for leaf modules (registry/git/local)
-  interface;
-  graph; // always present — every module has a graph
-  terraform?;
-  providers?;
-};
-type ModuleBundle = {
-  schema_version;
-  kind;
-  entry: ModuleRef;
-  modules: Record<string, ModuleDef>;
+
+type Bundle = {
+  schema_version: string;
+  kind: 'bundle';
+  entry: string; // key into modules, e.g. "iam-stack@v1.0.0"
+  modules: Record<string, Module>;
   environments?;
   environment_backends?;
 };
+
+type Module = {
+  id;
+  version;
+  source?; // present for leaf modules
+  interface: { inputs: InputDef[]; outputs: OutputDef[] };
+  modules?: Use[]; // child module instances
+  resources?: Resource[]; // child resource/data instances
+  locals?: LocalDef[];
+  exports: { outputs: Record<string, OutputExport> };
+  terraform?;
+  providers?;
+};
+
+type Use = { id; module: string; inputs?; depends_on? }; // module ref key
+type Resource = { id; kind: 'resource' | 'data'; type; inputs?; depends_on? };
 ```
+
+Type guards: `isUse(child)` / `isResource(child)`. Child iteration: `allChildren(mod)` from `utils/children.ts`.
 
 ### Workspace state in `src/webview/types/workspace.ts`
 
 ```typescript
-type WorkspaceState = ModuleBundle & { layouts: Record<string, GraphLayout> };
+type WorkspaceState = Bundle & { layouts: Record<string, GraphLayout> };
 ```
 
 This is a structural identity: workspace IS a bundle plus layouts. `toBundle` strips layouts. `fromBundle` adds them.
 
 ### Module keys
 
-Modules are keyed as `"${id}@${version}"` in the flat `modules` record. Example: `"iam-stack@v1.0.0"`. Use `makeModuleKey(id, version)` from `utils/identifiers.ts` to construct keys — never inline the template literal. The `entry` field references the root composite by `{ module_id, version }`.
+Modules are keyed as `"${id}@${version}"` in the flat `modules` record. Example: `"iam-stack@v1.0.0"`. Use `makeModuleKey(id, version)` from `utils/identifiers.ts` to construct keys — never inline the template literal. The `entry` field is a string key (e.g. `"iam-stack@v1.0.0"`), not an object. Use `parseModuleKey(key)` to extract `{ id, version }`.
 
 ### Protocol types in `src/types/protocol.ts`
 
@@ -135,19 +143,19 @@ The full union is in `reducer.ts`. Every action carries `module_key` (except wor
 4. Add tests in `__tests__/` — use `makeWorkspace()` and other helpers from `__tests__/helpers.ts`.
 5. Run `npm test` — all tests must pass.
 
-### The `updateCompositeGraph` helper
+### The `updateModule` helper
 
-Most actions that modify a composite's graph use this helper:
+Most actions that modify a module use this helper:
 
 ```typescript
-function updateCompositeGraph(
+function updateModule(
   state: WorkspaceState,
   module_key: string,
-  fn: (graph: CompositeGraph) => CompositeGraph,
+  fn: (mod: Module) => Module,
 ): WorkspaceState;
 ```
 
-It handles the nested spread `state → modules → module → graph` and is a no-op if the module doesn't exist.
+It handles the nested spread `state → modules → module` and is a no-op if the module doesn't exist. Use `mapChildById` to update a specific child (Use or Resource) within a module.
 
 ## File Organization Conventions
 
@@ -156,7 +164,7 @@ It handles the nested spread `state → modules → module → graph` and is a n
 | IR types          | `webview/types/ir.ts`                           | Wire format types only. Must match Go.                    |
 | Workspace types   | `webview/types/workspace.ts`                    | `WorkspaceState`, `GraphLayout`                           |
 | Protocol types    | `types/protocol.ts`                             | Message unions, shared types (RegistryModule, Diagnostic) |
-| Pure logic        | `webview/utils/`                                | bundle, derive, validate, resolve, identifiers, record    |
+| Pure logic        | `webview/utils/`                                | bundle, children, derive, validate, resolve, identifiers  |
 | State management  | `webview/state/`                                | reducer (pure), context (React context)                   |
 | UI components     | `webview/components/`                           | nodes, panels                                             |
 | Chat participant  | `chat/`                                         | `@lace` chat participant, tool registry, LM tools         |
@@ -207,7 +215,7 @@ E2E tests (`__tests__/e2e-rpc-integration.test.ts`) spawn the real `lace module 
 | `bundle.test.ts`              | `toBundle`/`fromBundle` boundary                    |
 | `validate.test.ts`            | `validateWorkspace` checks                          |
 | `scaffold.test.ts`            | `emptyWorkspace` factory + round-trip fidelity      |
-| `chat-tools.test.ts`          | Chat participant graph-write and graph-read tools   |
+| `chat-tools.test.ts`          | Chat participant graph-write, graph-read, generate  |
 | `registry-tools.test.ts`      | Chat participant registry search and inspect tools  |
 | `graph-summary.test.ts`       | `summarizeGraph` for chat descriptions              |
 | `auto-connect.test.ts`        | Auto-connect name/type matching logic               |
@@ -245,7 +253,7 @@ The `@lace` chat participant lets users compose infrastructure via natural langu
 
 - **`chat/participant.ts`** — Registration + agentic tool loop. Runs up to 15 tool rounds per request.
 - **`chat/tool-registry.ts`** — Simple `Map<string, ToolHandler>`. Each tool returns `{ content: string, isError?: boolean }`.
-- **`chat/tools/`** — Five tool groups: `registry-tools` (search, inspect), `graph-read-tools` (describe, validate), `graph-write-tools` (add, remove, connect, disconnect, set-input, rename, auto-connect), `workspace-tools` (read project files), `generate-tools` (fire-and-forget generate).
+- **`chat/tools/`** — Five tool groups + shared helpers: `registry-tools` (search, inspect), `graph-read-tools` (describe, validate), `graph-write-tools` (add, remove, connect, disconnect, set-input, rename), `workspace-tools` (read project files), `generate-tools` (auto-connect, generate), `helpers.ts` (shared `getEntryModule`, `loadGraphState`, `requireEntry`, `findChildInEntry`).
 - **`chat/system-prompt.ts`** — System prompt injected into every chat request.
 - **`chat/graph-summary.ts`** — Summarizes workspace state into natural-language descriptions for the LM.
 - **`chat/auto-connect.ts`** — Name/type matching logic for best-effort wiring between instances.
@@ -259,9 +267,9 @@ The `@lace` chat participant lets users compose infrastructure via natural langu
 
 ## Common Gotchas
 
-1. **`interface` is a valid property name.** Don't try to rename `ModuleDef.interface` to `iface` or `schema`. It matches the Go wire format. Destructure as `const { interface: iface } = def;` when needed.
+1. **`interface` is a valid property name.** Don't try to rename `Module.interface` to `iface` or `schema`. It matches the Go wire format. Destructure as `const { interface: iface } = mod;` when needed.
 
-2. **Instance `kind` normalization.** Go omits `kind` for module instances (`omitempty`). `fromBundle` normalizes empty/missing `kind` to `'module'`. The Go generator handles this.
+2. **Children are split across two arrays.** Module instances live in `mod.modules[]` (type `Use`), resources in `mod.resources[]` (type `Resource`). Use `allChildren(mod)` from `utils/children.ts` to iterate both, `findChild(mod, id)` to find by ID.
 
 3. **`depends_on` entries use `module.` prefix.** The wire format is `["module.iam_role", "module.iam_policy"]`. Helper functions handle prefix-aware comparisons: `depBareId` in `utils/identifiers.ts`, `depMatchesInstance` and `depRenameInstance` in `state/reducer.ts`.
 
@@ -279,7 +287,7 @@ The `@lace` chat participant lets users compose infrastructure via natural langu
 
 - TypeScript strict mode. No `any` except at boundaries (`fromBundle`, RPC responses).
 - Explicit spreads for all state updates. No `Object.assign`, no mutation.
-- Type guards (`isOut`, `isModuleInstance`) for narrowing, not `as` casts.
+- Type guards (`isOut`, `isUse`, `isResource`) for narrowing, not `as` casts.
 - Tailwind CSS for all styling. No separate CSS files for components.
 - Function components with hooks. No class components.
 - Descriptive test names that state the behavior, not the implementation.
