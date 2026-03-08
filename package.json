@@ -382,6 +382,10 @@
         "title": "Lace: Terraform Docs"
       },
       {
+        "command": "lace.login",
+        "title": "Lace: Login with GitHub"
+      },
+      {
         "command": "lace.openLogs",
         "title": "Lace: Open Logs"
       }

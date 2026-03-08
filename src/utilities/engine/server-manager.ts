@@ -2,7 +2,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as vscode from 'vscode';
-import { JSONRPCClient } from './rpc-client';
+import { JSONRPCClient, type AuthStatusResult, type AuthLoginResult } from './rpc-client';
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'error';
 
@@ -73,6 +73,14 @@ export class ServerManager extends EventEmitter {
       this.restartCount = 0;
       this.log('Engine initialized successfully');
       this.setState('running');
+
+      // Check auth status after initialization
+      try {
+        const authStatus = await this.client.authStatus();
+        this.emit('auth', authStatus);
+      } catch (err: unknown) {
+        this.log(`Auth status check failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     } catch (err: unknown) {
       this.log(`Start failed: ${err instanceof Error ? err.message : String(err)}`);
       this.outputChannel?.show(true);
@@ -97,6 +105,26 @@ export class ServerManager extends EventEmitter {
   async restart(): Promise<void> {
     await this.stop();
     await this.start();
+  }
+
+  async login(token: string): Promise<AuthLoginResult> {
+    if (!this.client) throw new Error('Engine not running');
+    const result = await this.client.authLogin({ token });
+    if (result.success) {
+      this.emit('auth', { authenticated: true, user: result.user });
+    }
+    return result;
+  }
+
+  async checkAuth(): Promise<AuthStatusResult | null> {
+    if (!this.client) return null;
+    try {
+      const status = await this.client.authStatus();
+      this.emit('auth', status);
+      return status;
+    } catch {
+      return null;
+    }
   }
 
   dispose(): void {

@@ -109,6 +109,13 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showErrorMessage(`Lace Engine Error: ${err.message}`),
   );
 
+  server.on('auth', (status: { authenticated: boolean; user?: { name?: string } }) => {
+    if (status.authenticated) {
+      registryProvider?.setRpcClient(server?.rpcClient ?? null);
+      registryProvider?.refresh();
+    }
+  });
+
   if (vscode.workspace.getConfiguration('lace').get<boolean>('autoStart', true)) {
     server.start().catch((err) => {
       vscode.window.showErrorMessage(`Failed to start Lace engine: ${err.message}`);
@@ -122,6 +129,28 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.startEngine', () => server?.start()),
     vscode.commands.registerCommand('lace.stopEngine', () => server?.stop()),
     vscode.commands.registerCommand('lace.restartEngine', () => server?.restart()),
+
+    vscode.commands.registerCommand('lace.login', async () => {
+      const token = await vscode.window.showInputBox({
+        prompt: 'GitHub Personal Access Token',
+        password: true,
+        placeHolder: 'ghp_...',
+        ignoreFocusOut: true,
+      });
+      if (!token || !server) return;
+      try {
+        const result = await server.login(token);
+        if (result.success) {
+          vscode.window.showInformationMessage(`Logged in as ${result.user?.name ?? 'unknown'}`);
+        } else {
+          vscode.window.showErrorMessage(`Login failed: ${result.error ?? 'Unknown error'}`);
+        }
+      } catch (err: unknown) {
+        vscode.window.showErrorMessage(
+          `Login failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }),
 
     // ── Logs ──
     vscode.commands.registerCommand('lace.openLogs', () => outputChannel.show()),

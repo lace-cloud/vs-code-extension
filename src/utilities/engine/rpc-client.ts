@@ -53,6 +53,20 @@ type RegistryModuleResult = {
   versions: Array<{ version: string; description?: string }>;
 };
 
+// ── Auth result envelopes ──
+
+export type AuthStatusResult = {
+  authenticated: boolean;
+  user?: { id: string; email: string; name: string };
+  base_url?: string;
+};
+
+export type AuthLoginResult = {
+  success: boolean;
+  user?: { id: string; email: string; name: string };
+  error?: string;
+};
+
 export class JSONRPCClient extends EventEmitter {
   private nextId = 1;
   private pending = new Map<number, PendingRequest>();
@@ -157,6 +171,20 @@ export class JSONRPCClient extends EventEmitter {
 
   shutdown() {
     return this.call<{ status: string }>('shutdown');
+  }
+
+  // ── Auth methods ──
+
+  authStatus() {
+    return this.call<AuthStatusResult>('auth/status');
+  }
+
+  authLogin(params: { token: string }) {
+    return this.call<AuthLoginResult>('auth/login', params);
+  }
+
+  authLogout() {
+    return this.call<{ success: boolean }>('auth/logout');
   }
 
   // ── Registry methods ──

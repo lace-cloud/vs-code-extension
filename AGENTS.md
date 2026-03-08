@@ -26,9 +26,9 @@ E2E tests spawn a real `lace module serve` process and exercise the full JSON-RP
 
 ### Host side (Node.js, VS Code API)
 
-- **`extension.ts`** -- activation, command registration, server lifecycle
+- **`extension.ts`** -- activation, command registration, server lifecycle, `lace.login` command (GitHub PAT input → auth/login RPC)
 - **`createWebviewPanel.ts`** -- manages canvas panel lifecycle, routes PostMessage between webview and CLI RPC, handles auto-save (debounced ~2s after last edit), dirty tracking, module drops from sidebar
-- **`server-manager.ts`** -- manages the CLI engine server process (`lace module serve`), spawns/restarts the child process, exposes `rpcClient` for JSON-RPC calls
+- **`server-manager.ts`** -- manages the CLI engine server process (`lace module serve`), spawns/restarts the child process, exposes `rpcClient` for JSON-RPC calls, checks auth status after init (emits `'auth'` event), exposes `login(token)` and `checkAuth()` methods
 - **`rpc-client.ts`** -- JSON-RPC client over stdin/stdout to the CLI process
 - **`RegistrySidebarProvider.ts`** -- WebviewViewProvider for the registry sidebar, fetches module data, posts `addToCanvas` messages to canvas
 - **`ModuleDetailPanel.ts`** -- detail tab for inspecting registry modules
@@ -79,6 +79,8 @@ Defined in `src/types/protocol.ts`. Messages are discriminated unions on `comman
 **Action methods (void):** `syncLayout`, `setTerraform`, `setProviders`, `setDependsOn`, `setEnvironments`
 
 **Query methods:** `queryNodeConfig`, `queryEdgeConfig`, `querySettings`, `queryGraphSummary`, `queryValidate`
+
+**Auth methods (always available, no API client required):** `authStatus`, `authLogin`, `authLogout`
 
 ## Type System
 
@@ -165,6 +167,8 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 9. **Two Rspack entries.** `out/extension.js` (Node.js, CommonJS) and `out/webview.js` (browser). Don't import VS Code APIs in webview code or DOM APIs in host code.
 
 10. **Registry browsing is host-side.** The webview never fetches registry data. Module drops arrive as `loadState` messages from the host after the host calls `action/drop_module` via RPC.
+
+11. **Auth is runtime-swappable.** The server checks `auth/status` after initialization and emits an `'auth'` event. If credentials are missing, registry is unavailable but the extension still works. Users can run `lace.login` to authenticate from VS Code — the server hot-swaps its API client without restarting.
 
 ## Common Gotchas
 

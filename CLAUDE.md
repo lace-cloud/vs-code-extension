@@ -21,6 +21,7 @@ npm run build            # Rspack build (host + webview)
 3. File I/O (canvas persistence, protobuf encoding) is handled by the CLI via `session/open`, `session/save`, `session/close`.
 4. Two Rspack entries — do not import VS Code APIs in webview code or DOM APIs in host code.
 5. The `CanvasEngine` interface (`webview/engine.ts`) is the contract between webview and CLI — all operations are async RPC calls.
+6. Auth is runtime-swappable via `auth/status`, `auth/login`, `auth/logout` RPC methods. The `lace.login` command lets users authenticate from VS Code. `ServerManager` emits `'auth'` events after init and login.
 
 ## Architecture
 

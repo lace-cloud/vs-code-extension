@@ -143,6 +143,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         case 'refresh':
           vscode.commands.executeCommand('lace.refreshRegistry');
           break;
+        case 'login':
+          vscode.commands.executeCommand('lace.login');
+          break;
         case 'toggleFavorite': {
           const id = msg.moduleId as string;
           const idx = this.favoriteModuleIds.indexOf(id);
@@ -632,7 +635,10 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       }
 
       if (allModules.length === 0) {
-        content.innerHTML = '<div class="empty-state">No modules available.<br/>Is the Lace engine running?</div>';
+        content.innerHTML = '<div class="empty-state">No modules available.<br/>Is the Lace engine running?<br/><button class="retry-btn" id="loginBtn">Login with GitHub</button></div>';
+        document.getElementById('loginBtn').addEventListener('click', () => {
+          vscode.postMessage({ command: 'login' });
+        });
         return;
       }
 
