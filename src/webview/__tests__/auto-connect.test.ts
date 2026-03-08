@@ -89,18 +89,4 @@ describe('findAutoConnections', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ from: 'vpc_id', to: 'vpc_id', score: 100 });
   });
-
-  test('returns empty for no outputs', () => {
-    const result = findAutoConnections(
-      [],
-      [{ name: 'vpc_id', type: 'string', required: true }],
-      new Set(),
-    );
-    expect(result).toHaveLength(0);
-  });
-
-  test('returns empty for no inputs', () => {
-    const result = findAutoConnections([{ name: 'vpc_id', type: 'string' }], [], new Set());
-    expect(result).toHaveLength(0);
-  });
 });

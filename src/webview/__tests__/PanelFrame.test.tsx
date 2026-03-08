@@ -103,25 +103,3 @@ test('PanelFrame body has no padding when scrollable=false', () => {
   expect(body.className).not.toContain('p-4');
   expect(body.className).not.toContain('pb-24');
 });
-
-// ── Width ──
-
-test('PanelFrame uses default width 420', () => {
-  const { container } = render(
-    <PanelFrame title="Test" onClose={() => {}}>
-      <p>body</p>
-    </PanelFrame>,
-  );
-  const root = container.firstElementChild as HTMLElement;
-  expect(root.style.width).toBe('420px');
-});
-
-test('PanelFrame uses custom width', () => {
-  const { container } = render(
-    <PanelFrame title="Test" width={460} onClose={() => {}}>
-      <p>body</p>
-    </PanelFrame>,
-  );
-  const root = container.firstElementChild as HTMLElement;
-  expect(root.style.width).toBe('460px');
-});

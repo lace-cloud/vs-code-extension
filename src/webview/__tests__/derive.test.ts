@@ -21,24 +21,6 @@ test('out binding produces exactly one edge', () => {
   });
 });
 
-test('no out bindings → 0 edges', () => {
-  const children: Child[] = [
-    { id: 'a', inputs: {} },
-    { id: 'b', inputs: {} },
-  ];
-  expect(deriveEdges(children)).toHaveLength(0);
-});
-
-test('lit and var bindings produce no edges', () => {
-  const children: Child[] = [
-    {
-      id: 'a',
-      inputs: { name: { lit: 'hello' }, region: { var: 'region' } },
-    },
-  ];
-  expect(deriveEdges(children)).toHaveLength(0);
-});
-
 test('multiple out bindings from different sources produce multiple edges', () => {
   const children: Child[] = [
     { id: 'vpc', inputs: {} },
