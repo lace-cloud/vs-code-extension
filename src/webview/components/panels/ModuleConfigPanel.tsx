@@ -1,7 +1,7 @@
 // src/webview/components/panels/ModuleConfigPanel.tsx
-import React, { useMemo, useState, useCallback } from 'react';
-import type { InputDef, OutputDef, Binding } from '../../types/ir';
-import { isLit, isOut, isVar, isExpr } from '../../types/ir';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import type { RenderInput, RenderOutput, NodeConfig } from '../../types/render';
+import type { CanvasEngine, InputUpdate } from '../../engine';
 import AccordionSection from '../AccordionSection';
 import PanelFrame from '../PanelFrame';
 import {
@@ -14,155 +14,161 @@ import {
 
 // ── Binding mode type ──
 
-type BindingMode = 'literal' | 'variable' | 'expression' | 'wired';
-
-function detectMode(binding: Binding | undefined): BindingMode {
-  if (!binding) return 'literal';
-  if (isOut(binding)) return 'wired';
-  if (isVar(binding)) return 'variable';
-  if (isExpr(binding)) return 'expression';
-  return 'literal';
-}
-
-/**
- * Returns true when a literal value is an untouched placeholder default.
- * These should be omitted for optional inputs so Terraform uses the
- * module's own defaults instead of emitting `= {}` or `= null`.
- */
-function isEmptyLit(value: unknown): boolean {
-  if (value === null || value === undefined) return true;
-  if (
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    Object.keys(value as Record<string, unknown>).length === 0
-  ) {
-    return true;
-  }
-  return false;
-}
+type BindingMode = 'empty' | 'literal' | 'variable' | 'expression' | 'wired';
 
 // ── Props ──
 
 type Props = {
   instance_id: string;
-  schema: { inputs: InputDef[]; outputs: OutputDef[] };
-  inputs: Record<string, Binding>;
-  /** Composite's interface.inputs — for the Variable mode dropdown */
-  composite_variables: InputDef[];
-  /** IDs of sibling instances in the same composite (for depends_on) */
-  sibling_ids: string[];
-  /** Current depends_on value */
-  depends_on: string[] | undefined;
-  onSave: (inputs: Record<string, Binding>) => void;
-  onSaveDependsOn: (depends_on: string[]) => void;
-  onDisconnect: (input_name: string) => void;
+  engine: CanvasEngine;
   onClose: () => void;
 };
 
 // ── Component ──
 
-export default function ModuleConfigPanel({
-  instance_id,
-  schema,
-  inputs,
-  composite_variables,
-  sibling_ids,
-  depends_on,
-  onSave,
-  onSaveDependsOn,
-  onDisconnect,
-  onClose,
-}: Props) {
-  // Local state: tracks the current binding per input name
-  const [localBindings, setLocalBindings] = useState<Record<string, Binding>>(() => ({
-    ...inputs,
-  }));
+export default function ModuleConfigPanel({ instance_id, engine, onClose }: Props) {
+  const [config, setConfig] = useState<NodeConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Local state: tracks changes per input name
+  const [localModes, setLocalModes] = useState<Record<string, BindingMode>>({});
+  const [localValues, setLocalValues] = useState<Record<string, unknown>>({});
+  const [localVariables, setLocalVariables] = useState<Record<string, string>>({});
+  const [localExpressions, setLocalExpressions] = useState<Record<string, string>>({});
 
   // depends_on local state
-  const [localDependsOn, setLocalDependsOn] = useState<Set<string>>(
-    () => new Set(depends_on ?? []),
-  );
+  const [localDependsOn, setLocalDependsOn] = useState<Set<string>>(new Set());
 
-  // Track modes explicitly so switching modes can create appropriate defaults
-  const [modes, setModes] = useState<Record<string, BindingMode>>(() => {
-    const m: Record<string, BindingMode> = {};
-    for (const def of schema.inputs ?? []) {
-      m[def.name] = detectMode(inputs[def.name]);
-    }
-    return m;
-  });
+  // Fetch config from engine
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    engine.queryNodeConfig(instance_id).then((result) => {
+      if (cancelled) return;
+      setConfig(result);
+      setLoading(false);
 
-  const updateBinding = useCallback((name: string, binding: Binding) => {
-    setLocalBindings((prev) => ({ ...prev, [name]: binding }));
-  }, []);
+      // Initialize local state from fetched config
+      const modes: Record<string, BindingMode> = {};
+      const values: Record<string, unknown> = {};
+      const variables: Record<string, string> = {};
+      const expressions: Record<string, string> = {};
+
+      for (const input of result.inputs) {
+        modes[input.name] = input.mode;
+        if (input.value !== undefined) values[input.name] = input.value;
+        if (input.variable) variables[input.name] = input.variable;
+        if (input.expression) expressions[input.name] = input.expression;
+      }
+
+      setLocalModes(modes);
+      setLocalValues(values);
+      setLocalVariables(variables);
+      setLocalExpressions(expressions);
+      setLocalDependsOn(new Set(result.depends_on));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance_id, engine]);
 
   const switchMode = useCallback(
-    (name: string, mode: BindingMode, def: InputDef) => {
-      setModes((prev) => ({ ...prev, [name]: mode }));
-      // Create appropriate default binding for the new mode
+    (name: string, mode: BindingMode, input: RenderInput) => {
+      setLocalModes((prev) => ({ ...prev, [name]: mode }));
       switch (mode) {
         case 'literal':
-          setLocalBindings((prev) => ({ ...prev, [name]: { lit: def.default ?? null } }));
+          setLocalValues((prev) => ({ ...prev, [name]: input.default_value ?? null }));
           break;
         case 'variable':
-          setLocalBindings((prev) => ({
-            ...prev,
-            [name]: { var: composite_variables[0]?.name ?? '' },
-          }));
+          if (config?.available_variables?.[0]) {
+            setLocalVariables((prev) => ({ ...prev, [name]: config.available_variables[0].name }));
+          }
           break;
         case 'expression':
-          setLocalBindings((prev) => ({
-            ...prev,
-            [name]: { expr: { lang: 'hcl', value: '' } },
-          }));
+          setLocalExpressions((prev) => ({ ...prev, [name]: '' }));
+          break;
+        case 'empty':
+          setLocalValues((prev) => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+          });
           break;
         case 'wired':
-          // Cannot switch to wired manually — it's set by CONNECT action
+          // Cannot switch to wired manually
           break;
       }
     },
-    [composite_variables],
+    [config],
   );
 
   // ── Split inputs ──
 
   const { requiredInputs, optionalInputs } = useMemo(
     () => ({
-      requiredInputs: (schema.inputs ?? []).filter((i) => i.required),
-      optionalInputs: (schema.inputs ?? []).filter((i) => !i.required),
+      requiredInputs: (config?.inputs ?? []).filter((i) => i.required),
+      optionalInputs: (config?.inputs ?? []).filter((i) => !i.required),
     }),
-    [schema.inputs],
+    [config?.inputs],
   );
 
   // ── Save handler ──
 
-  const handleSave = () => {
-    // Filter out optional inputs whose literal value is an untouched placeholder
-    // (null or empty object). Omitting them lets Terraform use the module's own
-    // defaults instead of emitting invalid `= {}` in HCL.
-    const optionalNames = new Set(optionalInputs.map((i) => i.name));
-    const filtered: Record<string, Binding> = {};
-    for (const [name, binding] of Object.entries(localBindings)) {
-      if (optionalNames.has(name) && isLit(binding) && isEmptyLit(binding.lit)) {
-        continue;
-      }
-      filtered[name] = binding;
+  const handleSave = async () => {
+    if (!config) return;
+
+    const inputs: InputUpdate[] = config.inputs
+      .filter((input) => {
+        const mode = localModes[input.name] ?? input.mode;
+        // Skip wired inputs — managed by connect/disconnect
+        return mode !== 'wired';
+      })
+      .map((input) => {
+        const mode = localModes[input.name] ?? input.mode;
+        const update: InputUpdate = {
+          name: input.name,
+          mode: mode === 'wired' ? 'empty' : mode,
+        };
+        if (mode === 'literal') update.value = localValues[input.name];
+        if (mode === 'variable') update.variable = localVariables[input.name];
+        if (mode === 'expression') update.expression = localExpressions[input.name];
+        return update;
+      });
+
+    await engine.updateAllInputs(instance_id, inputs);
+    await engine.setDependsOn(instance_id, [...localDependsOn]);
+    onClose();
+  };
+
+  // ── Disconnect handler ──
+
+  const handleDisconnect = async (inputName: string) => {
+    await engine.disconnect(instance_id, inputName);
+    // Refresh config after disconnect
+    const updated = await engine.queryNodeConfig(instance_id);
+    setConfig(updated);
+    // Reset mode for that input
+    const input = updated.inputs.find((i) => i.name === inputName);
+    if (input) {
+      setLocalModes((prev) => ({ ...prev, [inputName]: input.mode }));
     }
-    onSave(filtered);
-    onSaveDependsOn([...localDependsOn]);
   };
 
   // ── Mode selector ──
 
-  function renderModeSelector(def: InputDef): React.ReactNode {
-    const currentMode = modes[def.name] ?? 'literal';
+  function renderModeSelector(input: RenderInput): React.ReactNode {
+    const currentMode = localModes[input.name] ?? input.mode;
     const isWired = currentMode === 'wired';
 
     const buttons: { mode: BindingMode; label: string; disabled?: boolean }[] = [
       { mode: 'literal', label: 'Lit', disabled: isWired },
-      { mode: 'variable', label: 'Var', disabled: isWired || composite_variables.length === 0 },
+      {
+        mode: 'variable',
+        label: 'Var',
+        disabled: isWired || (config?.available_variables ?? []).length === 0,
+      },
       { mode: 'expression', label: 'Expr', disabled: isWired },
-      { mode: 'wired', label: 'Wired', disabled: true }, // Always disabled — set by CONNECT
+      { mode: 'wired', label: 'Wired', disabled: true },
     ];
 
     return (
@@ -172,7 +178,7 @@ export default function ModuleConfigPanel({
             key={btn.mode}
             className={`${modeButtonBase} ${currentMode === btn.mode ? modeButtonActive : modeButtonInactive} ${btn.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
             onClick={() => {
-              if (!btn.disabled) switchMode(def.name, btn.mode, def);
+              if (!btn.disabled) switchMode(input.name, btn.mode, input);
             }}
             disabled={btn.disabled}
           >
@@ -185,36 +191,34 @@ export default function ModuleConfigPanel({
 
   // ── Render a single input field based on mode ──
 
-  function renderInputField(def: InputDef): React.ReactNode {
-    const currentMode = modes[def.name] ?? 'literal';
-    const binding = localBindings[def.name];
+  function renderInputField(input: RenderInput): React.ReactNode {
+    const currentMode = localModes[input.name] ?? input.mode;
 
     return (
-      <div key={def.name} className="mb-4 flex flex-col gap-1.5">
+      <div key={input.name} className="mb-4 flex flex-col gap-1.5">
         <label className="text-xs font-semibold opacity-90">
-          {def.name}
-          {def.required && <span className="text-[#e5484d] ml-1">*</span>}
+          {input.name}
+          {input.required && <span className="text-[#e5484d] ml-1">*</span>}
         </label>
 
         {/* Mode selector */}
-        {renderModeSelector(def)}
+        {renderModeSelector(input)}
 
         {/* Mode-specific editor */}
-        {currentMode === 'wired' && renderWiredEditor(def.name, binding)}
-        {currentMode === 'variable' && renderVariableEditor(def, binding)}
-        {currentMode === 'expression' && renderExpressionEditor(def, binding)}
-        {currentMode === 'literal' && renderLiteralEditor(def, binding)}
+        {currentMode === 'wired' && renderWiredEditor(input)}
+        {currentMode === 'variable' && renderVariableEditor(input)}
+        {currentMode === 'expression' && renderExpressionEditor(input)}
+        {currentMode === 'literal' && renderLiteralEditor(input)}
 
-        {def.description && <div className="text-[11px] opacity-60">{def.description}</div>}
+        {input.description && <div className="text-[11px] opacity-60">{input.description}</div>}
       </div>
     );
   }
 
   // ── Wired mode (read-only with disconnect button) ──
 
-  function renderWiredEditor(inputName: string, binding: Binding | undefined): React.ReactNode {
-    const label =
-      binding && isOut(binding) ? `${binding.out.module}.${binding.out.name}` : 'Not wired';
+  function renderWiredEditor(input: RenderInput): React.ReactNode {
+    const label = input.wired_source ?? 'Not wired';
     return (
       <div className="flex gap-2 items-center">
         <input value={label} readOnly className={`${inputClasses} font-mono opacity-95`} />
@@ -222,7 +226,7 @@ export default function ModuleConfigPanel({
           Wired
         </span>
         <button
-          onClick={() => onDisconnect(inputName)}
+          onClick={() => handleDisconnect(input.name)}
           className="text-[11px] px-2 py-1.5 rounded-full border border-[#e5484d] bg-transparent text-[#e5484d] cursor-pointer hover:bg-[#e5484d] hover:text-white transition-colors duration-100 font-bold whitespace-nowrap"
           title="Disconnect this input"
         >
@@ -234,19 +238,20 @@ export default function ModuleConfigPanel({
 
   // ── Variable mode ──
 
-  function renderVariableEditor(def: InputDef, binding: Binding | undefined): React.ReactNode {
-    const currentVar = binding && isVar(binding) ? binding.var : '';
+  function renderVariableEditor(input: RenderInput): React.ReactNode {
+    const currentVar = localVariables[input.name] ?? input.variable ?? '';
+    const availableVars = config?.available_variables ?? [];
 
     return (
       <select
         value={currentVar}
-        onChange={(e) => updateBinding(def.name, { var: e.target.value })}
+        onChange={(e) => setLocalVariables((prev) => ({ ...prev, [input.name]: e.target.value }))}
         className={inputClasses}
       >
         <option value="" disabled>
-          Select variable…
+          Select variable...
         </option>
-        {composite_variables.map((v) => (
+        {availableVars.map((v) => (
           <option key={v.name} value={v.name}>
             var.{v.name} ({v.type})
           </option>
@@ -257,13 +262,13 @@ export default function ModuleConfigPanel({
 
   // ── Expression mode ──
 
-  function renderExpressionEditor(def: InputDef, binding: Binding | undefined): React.ReactNode {
-    const currentExpr = binding && isExpr(binding) ? binding.expr.value : '';
+  function renderExpressionEditor(input: RenderInput): React.ReactNode {
+    const currentExpr = localExpressions[input.name] ?? input.expression ?? '';
 
     return (
       <textarea
         value={currentExpr}
-        onChange={(e) => updateBinding(def.name, { expr: { lang: 'hcl', value: e.target.value } })}
+        onChange={(e) => setLocalExpressions((prev) => ({ ...prev, [input.name]: e.target.value }))}
         rows={3}
         placeholder={'e.g. join("-", [var.prefix, var.name])'}
         className={`${inputClasses} font-mono resize-y`}
@@ -273,15 +278,19 @@ export default function ModuleConfigPanel({
 
   // ── Literal mode ──
 
-  function renderLiteralEditor(def: InputDef, binding: Binding | undefined): React.ReactNode {
-    const value = binding && isLit(binding) ? binding.lit : (def.default ?? null);
-    const type = def.type || 'string';
+  function renderLiteralEditor(input: RenderInput): React.ReactNode {
+    const value = localValues[input.name] ?? input.value ?? input.default_value ?? null;
+    const type = input.type || 'string';
+
+    const updateValue = (val: unknown) => {
+      setLocalValues((prev) => ({ ...prev, [input.name]: val }));
+    };
 
     if (type === 'bool') {
       return (
         <select
           value={String(value ?? false)}
-          onChange={(e) => updateBinding(def.name, { lit: e.target.value === 'true' })}
+          onChange={(e) => updateValue(e.target.value === 'true')}
           className={inputClasses}
         >
           <option value="true">True</option>
@@ -294,12 +303,8 @@ export default function ModuleConfigPanel({
       return (
         <input
           type="number"
-          value={value ?? ''}
-          onChange={(e) =>
-            updateBinding(def.name, {
-              lit: e.target.value === '' ? '' : Number(e.target.value),
-            })
-          }
+          value={String(value ?? '')}
+          onChange={(e) => updateValue(e.target.value === '' ? '' : Number(e.target.value))}
           className={inputClasses}
         />
       );
@@ -318,9 +323,9 @@ export default function ModuleConfigPanel({
           value={jsonStr}
           onChange={(e) => {
             try {
-              updateBinding(def.name, { lit: JSON.parse(e.target.value) });
+              updateValue(JSON.parse(e.target.value));
             } catch {
-              updateBinding(def.name, { lit: e.target.value });
+              updateValue(e.target.value);
             }
           }}
           rows={4}
@@ -332,22 +337,28 @@ export default function ModuleConfigPanel({
     // Default: string
     return (
       <input
-        value={value ?? ''}
+        value={String(value ?? '')}
         onChange={(e) => {
           let v = e.target.value;
           // Strip wrapping quotes — the CLI handles HCL quoting automatically.
-          // Without this, typing "" stores the two-character string "" which the
-          // CLI then quotes again, producing the invalid HCL literal "\"\"".
           if (
             v.length >= 2 &&
             ((v[0] === '"' && v[v.length - 1] === '"') || (v[0] === "'" && v[v.length - 1] === "'"))
           ) {
             v = v.slice(1, -1);
           }
-          updateBinding(def.name, { lit: v });
+          updateValue(v);
         }}
         className={inputClasses}
       />
+    );
+  }
+
+  if (loading || !config) {
+    return (
+      <PanelFrame title="Loading..." onClose={onClose}>
+        <div className="text-xs opacity-60">Loading configuration...</div>
+      </PanelFrame>
     );
   }
 
@@ -384,7 +395,7 @@ export default function ModuleConfigPanel({
       )}
 
       {/* Depends On */}
-      {sibling_ids.length > 0 && (
+      {config.sibling_ids.length > 0 && (
         <AccordionSection
           title="Depends On"
           badge={dependsOnCount > 0 ? `(${dependsOnCount})` : undefined}
@@ -392,7 +403,7 @@ export default function ModuleConfigPanel({
           <div className="text-[11px] opacity-60 mb-2">
             Select sibling instances this module depends on.
           </div>
-          {sibling_ids.map((sibId) => {
+          {config.sibling_ids.map((sibId) => {
             const depKey = `module.${sibId}`;
             return (
               <label key={sibId} className="flex items-center gap-2 mb-1.5 text-xs cursor-pointer">
@@ -417,9 +428,9 @@ export default function ModuleConfigPanel({
       )}
 
       {/* Outputs */}
-      {schema.outputs.length > 0 && (
-        <AccordionSection title="Outputs" badge={`(${schema.outputs.length})`}>
-          {schema.outputs.map((o) => (
+      {config.outputs.length > 0 && (
+        <AccordionSection title="Outputs" badge={`(${config.outputs.length})`}>
+          {config.outputs.map((o: RenderOutput) => (
             <div
               key={o.name}
               className="mb-2.5 text-xs opacity-85 bg-[#0f0f0f] border border-[#333] rounded-[10px] px-2.5 py-2.5"
@@ -432,7 +443,7 @@ export default function ModuleConfigPanel({
                 <div className="mt-1.5 text-[11px] opacity-70">{o.description}</div>
               )}
               {o.sensitive && (
-                <div className="mt-1 text-[10px] text-yellow-400 opacity-80">⚠ sensitive</div>
+                <div className="mt-1 text-[10px] text-yellow-400 opacity-80">sensitive</div>
               )}
             </div>
           ))}

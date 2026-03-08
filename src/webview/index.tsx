@@ -3,17 +3,12 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
 
-// Acquire VS Code API ONCE
-// @ts-ignore
 const vscode = acquireVsCodeApi();
 
-console.log('✅ Webview JS loaded');
-
-// Expose globally
-(window as any).vscode = vscode;
+console.log('Webview JS loaded');
 
 const root = document.getElementById('root');
 
 if (root) {
-  createRoot(root).render(<App />);
+  createRoot(root).render(<App vscode={vscode} />);
 }

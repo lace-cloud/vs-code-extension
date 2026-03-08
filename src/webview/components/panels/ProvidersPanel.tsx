@@ -1,6 +1,6 @@
 // src/webview/components/panels/ProvidersPanel.tsx
 import React, { useState, useCallback } from 'react';
-import type { ProviderConfig } from '../../types/ir';
+import type { SettingsConfig } from '../../types/render';
 import {
   inputClasses,
   saveButtonClasses,
@@ -12,6 +12,10 @@ import {
 } from '../../styles/panel';
 import PanelFrame from '../PanelFrame';
 
+// ── Types derived from SettingsConfig ──
+
+type ProviderEntry = SettingsConfig['providers'][number];
+
 // ── Local editing state ──
 
 type ProviderRow = {
@@ -20,7 +24,7 @@ type ProviderRow = {
   configEntries: Array<{ key: string; value: string }>;
 };
 
-function toRows(providers: ProviderConfig[] | undefined): ProviderRow[] {
+function toRows(providers: ProviderEntry[] | undefined): ProviderRow[] {
   if (!providers || providers.length === 0) return [];
   return providers.map((p) => ({
     name: p.name,
@@ -32,11 +36,11 @@ function toRows(providers: ProviderConfig[] | undefined): ProviderRow[] {
   }));
 }
 
-function fromRows(rows: ProviderRow[]): ProviderConfig[] {
+function fromRows(rows: ProviderRow[]): ProviderEntry[] {
   return rows
     .filter((r) => r.name.trim())
     .map((r) => {
-      const config: Record<string, any> = {};
+      const config: Record<string, unknown> = {};
       for (const c of r.configEntries) {
         if (c.key.trim()) {
           config[c.key.trim()] = c.value;
@@ -44,7 +48,7 @@ function fromRows(rows: ProviderRow[]): ProviderConfig[] {
       }
       return {
         name: r.name.trim(),
-        ...(r.alias.trim() ? { alias: r.alias.trim() } : {}),
+        alias: r.alias.trim() || '',
         config,
       };
     });
@@ -53,8 +57,8 @@ function fromRows(rows: ProviderRow[]): ProviderConfig[] {
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
 type ContentProps = {
-  providers: ProviderConfig[] | undefined;
-  onSave: (providers: ProviderConfig[]) => void;
+  providers: ProviderEntry[] | undefined;
+  onSave: (providers: ProviderEntry[]) => void;
 };
 
 export function ProvidersContent({ providers, onSave }: ContentProps) {
@@ -177,8 +181,8 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
 // ── Full panel (backwards compat — original default export) ──
 
 type Props = {
-  providers: ProviderConfig[] | undefined;
-  onSave: (providers: ProviderConfig[]) => void;
+  providers: ProviderEntry[] | undefined;
+  onSave: (providers: ProviderEntry[]) => void;
   onClose: () => void;
 };
 

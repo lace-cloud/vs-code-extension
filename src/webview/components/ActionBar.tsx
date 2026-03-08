@@ -5,8 +5,8 @@ import { Panel } from '@xyflow/react';
 
 type ActionBarProps = {
   onSave: () => void;
-  onRefresh: () => void;
   onUndo: () => void;
+  onRedo: () => void;
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: () => void;
@@ -16,8 +16,8 @@ type ActionBarProps = {
 
 export default function ActionBar({
   onSave,
-  onRefresh,
   onUndo,
+  onRedo,
   onClearGraph,
   onGenerate,
   onOpenSettings,
@@ -34,17 +34,6 @@ export default function ActionBar({
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
             <path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z" />
-          </svg>
-        </button>
-
-        <button
-          onClick={onRefresh}
-          title="Refresh modules from registry"
-          aria-label="Refresh modules"
-          className="w-8 h-8 flex items-center justify-center bg-transparent border-none text-[#999] hover:text-white cursor-pointer"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-            <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
           </svg>
         </button>
 
@@ -67,6 +56,17 @@ export default function ActionBar({
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
             <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" />
+          </svg>
+        </button>
+
+        <button
+          onClick={onRedo}
+          title="Redo (Cmd+Shift+Z)"
+          aria-label="Redo"
+          className="w-8 h-8 flex items-center justify-center bg-transparent border-none text-[#999] hover:text-white cursor-pointer"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z" />
           </svg>
         </button>
 

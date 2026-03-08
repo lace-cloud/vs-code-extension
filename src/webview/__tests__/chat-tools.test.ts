@@ -1,95 +1,71 @@
 import { test, expect, describe, beforeEach, vi } from 'vitest';
-import type { WorkspaceState } from '../types/workspace';
-import type { WorkspaceAction } from '../state/reducer';
 import { getToolHandler } from '../../chat/tool-registry';
 import { registerGraphWriteTools, type GraphWriteDeps } from '../../chat/tools/graph-write-tools';
 import { registerGraphReadTools } from '../../chat/tools/graph-read-tools';
 import { registerGenerateTools, type GenerateToolDeps } from '../../chat/tools/generate-tools';
-import { makeWorkspace, makeEmptyWorkspace, vpcDef, subnetDef } from './helpers';
+import { makeCanvasView, makeNode, makeEdge } from './helpers';
+import type { RenderError } from '../types/render';
 
-// ── Pre-built workspace variants ──
+// ── Mock RPC client ──
 
-const vpcSubnetModules = { 'aws/vpc@v1.0.0': vpcDef, 'aws/subnet@v1.0.0': subnetDef };
-
-function makeWorkspaceWithInstances(): WorkspaceState {
-  return makeWorkspace(
-    [
-      {
-        id: 'vpc',
-        module: 'aws/vpc@v1.0.0',
-        inputs: { cidr_block: { lit: '10.0.0.0/16' } },
-      },
-      {
-        id: 'subnet',
-        module: 'aws/subnet@v1.0.0',
-        inputs: {
-          vpc_id: { out: { module: 'vpc', name: 'vpc_id' } },
-          cidr_block: { lit: '10.0.1.0/24' },
-        },
-      },
-    ],
-    vpcSubnetModules,
-  );
-}
-
-function makeWorkspaceWithUnboundSubnet(): WorkspaceState {
-  return makeWorkspace(
-    [
-      {
-        id: 'vpc',
-        module: 'aws/vpc@v1.0.0',
-        inputs: { cidr_block: { lit: '10.0.0.0/16' } },
-      },
-      {
-        id: 'subnet',
-        module: 'aws/subnet@v1.0.0',
-        inputs: { cidr_block: { lit: '10.0.1.0/24' } },
-      },
-    ],
-    vpcSubnetModules,
-  );
-}
-
-function makeWorkspaceWithDanglingRef(): WorkspaceState {
-  return makeWorkspace(
-    [
-      {
-        id: 'subnet',
-        module: 'aws/subnet@v1.0.0',
-        inputs: {
-          vpc_id: { out: { module: 'ghost', name: 'vpc_id' } },
-          cidr_block: { lit: '10.0.1.0/24' },
-        },
-      },
-    ],
-    { 'aws/subnet@v1.0.0': subnetDef },
-  );
+function makeMockClient(overrides: Record<string, unknown> = {}) {
+  return {
+    actionDropModule: vi
+      .fn()
+      .mockResolvedValue(makeCanvasView([makeNode('vpc', 'module', 'aws/vpc@v1.0.0')])),
+    actionDeleteInstance: vi.fn().mockResolvedValue(makeCanvasView()),
+    actionConnect: vi
+      .fn()
+      .mockResolvedValue(
+        makeCanvasView(
+          [makeNode('vpc'), makeNode('subnet')],
+          [makeEdge('vpc', 'subnet', 'vpc_id', 'vpc_id')],
+        ),
+      ),
+    actionDisconnect: vi
+      .fn()
+      .mockResolvedValue(makeCanvasView([makeNode('vpc'), makeNode('subnet')])),
+    actionUpdateInput: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
+    actionRenameInstance: vi.fn().mockResolvedValue(makeCanvasView([makeNode('main_vpc')])),
+    actionAutoConnect: vi
+      .fn()
+      .mockResolvedValue(
+        makeCanvasView(
+          [makeNode('vpc'), makeNode('subnet')],
+          [makeEdge('vpc', 'subnet', 'vpc_id', 'vpc_id')],
+        ),
+      ),
+    queryGraphSummary: vi.fn().mockResolvedValue({ text: '**Canvas: root** (2 instance(s))' }),
+    queryValidate: vi.fn().mockResolvedValue({ errors: [] as RenderError[] }),
+    sessionGenerate: vi.fn().mockResolvedValue({
+      files_written: ['main.tf'],
+      diagnostics: [],
+    }),
+    ...overrides,
+  };
 }
 
 // ── Test setup ──
 
-let mockState: WorkspaceState;
-let dispatched: WorkspaceAction[];
+let mockClient: ReturnType<typeof makeMockClient>;
 
-function makeDeps(): GraphWriteDeps {
-  dispatched = [];
+function makeWriteDeps(): GraphWriteDeps {
+  mockClient = makeMockClient();
   return {
-    getRpcClient: () => null,
+    getRpcClient: () =>
+      mockClient as unknown as import('../../utilities/engine/rpc-client').JSONRPCClient,
     getRegistryModules: () => [],
-    addModuleToActiveCanvas: vi.fn(),
-    requestGraphState: async () => mockState,
-    dispatchToCanvas: async (action) => {
-      dispatched.push(action);
-    },
   };
 }
 
 describe('write tools', () => {
   beforeEach(() => {
-    mockState = makeWorkspaceWithInstances();
-    const deps = makeDeps();
+    const deps = makeWriteDeps();
     registerGraphWriteTools(deps);
-    registerGraphReadTools({ requestGraphState: async () => mockState });
+    registerGraphReadTools({
+      getRpcClient: () =>
+        mockClient as unknown as import('../../utilities/engine/rpc-client').JSONRPCClient,
+    });
   });
 
   describe('lace_remove_module', () => {
@@ -99,21 +75,7 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Removed instance "vpc"');
-      expect(dispatched).toHaveLength(1);
-      expect(dispatched[0]).toMatchObject({
-        type: 'DELETE_INSTANCE',
-        instance_id: 'vpc',
-      });
-    });
-
-    test('returns error for missing instance', async () => {
-      const handler = getToolHandler('lace_remove_module')!;
-      const result = await handler({ instance_id: 'nonexistent' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('not found');
-      expect(result.content).toContain('vpc');
-      expect(dispatched).toHaveLength(0);
+      expect(mockClient.actionDeleteInstance).toHaveBeenCalledWith({ instance_id: 'vpc' });
     });
 
     test('returns error for missing parameter', async () => {
@@ -122,6 +84,17 @@ describe('write tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('Missing required parameter');
+    });
+
+    test('returns error when RPC fails', async () => {
+      mockClient.actionDeleteInstance.mockRejectedValue(
+        new Error('Instance "nonexistent" not found'),
+      );
+      const handler = getToolHandler('lace_remove_module')!;
+      const result = await handler({ instance_id: 'nonexistent' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('not found');
     });
   });
 
@@ -137,25 +110,12 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Connected vpc.vpc_id → subnet.vpc_id');
-      expect(dispatched[0]).toMatchObject({
-        type: 'CONNECT',
-        source_instance: 'vpc',
-        target_instance: 'subnet',
-        mapping: { from: 'vpc_id', to: 'vpc_id' },
-      });
-    });
-
-    test('returns error for missing source instance', async () => {
-      const handler = getToolHandler('lace_connect')!;
-      const result = await handler({
-        source_instance: 'nonexistent',
-        target_instance: 'subnet',
+      expect(mockClient.actionConnect).toHaveBeenCalledWith({
+        source: 'vpc',
+        target: 'subnet',
         source_output: 'vpc_id',
         target_input: 'vpc_id',
       });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('Source instance "nonexistent" not found');
     });
 
     test('returns error for missing parameters', async () => {
@@ -177,22 +137,10 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Disconnected input "vpc_id"');
-      expect(dispatched[0]).toMatchObject({
-        type: 'DISCONNECT',
-        target_instance: 'subnet',
+      expect(mockClient.actionDisconnect).toHaveBeenCalledWith({
+        target: 'subnet',
         input_name: 'vpc_id',
       });
-    });
-
-    test('returns error for nonexistent instance', async () => {
-      const handler = getToolHandler('lace_disconnect')!;
-      const result = await handler({
-        target_instance: 'nonexistent',
-        input_name: 'vpc_id',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('not found');
     });
   });
 
@@ -207,14 +155,14 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('literal true');
-      expect(dispatched[0]).toMatchObject({
-        type: 'UPDATE_INPUTS',
+      expect(mockClient.actionUpdateInput).toHaveBeenCalledWith({
         instance_id: 'vpc',
+        input_name: 'enable_dns',
+        mode: 'literal',
+        value: true,
+        variable: undefined,
+        expression: undefined,
       });
-      const action = dispatched[0] as Extract<WorkspaceAction, { type: 'UPDATE_INPUTS' }>;
-      expect(action.inputs.enable_dns).toEqual({ lit: true });
-      // Existing inputs are preserved (merged)
-      expect(action.inputs.cidr_block).toEqual({ lit: '10.0.0.0/16' });
     });
 
     test('sets variable reference', async () => {
@@ -227,8 +175,14 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('variable "vpc_cidr"');
-      const action = dispatched[0] as Extract<WorkspaceAction, { type: 'UPDATE_INPUTS' }>;
-      expect(action.inputs.cidr_block).toEqual({ var: 'vpc_cidr' });
+      expect(mockClient.actionUpdateInput).toHaveBeenCalledWith({
+        instance_id: 'vpc',
+        input_name: 'cidr_block',
+        mode: 'variable',
+        value: undefined,
+        variable: 'vpc_cidr',
+        expression: undefined,
+      });
     });
 
     test('sets HCL expression', async () => {
@@ -241,12 +195,13 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('expression');
-      const action = dispatched[0] as Extract<WorkspaceAction, { type: 'UPDATE_INPUTS' }>;
-      expect(action.inputs.cidr_block).toEqual({
-        expr: {
-          lang: 'hcl',
-          value: 'var.env == "prod" ? "10.0.0.0/16" : "10.1.0.0/16"',
-        },
+      expect(mockClient.actionUpdateInput).toHaveBeenCalledWith({
+        instance_id: 'vpc',
+        input_name: 'cidr_block',
+        mode: 'expression',
+        value: undefined,
+        variable: undefined,
+        expression: 'var.env == "prod" ? "10.0.0.0/16" : "10.1.0.0/16"',
       });
     });
 
@@ -272,7 +227,6 @@ describe('write tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('Must provide exactly one of');
-      expect(dispatched).toHaveLength(0);
     });
 
     test('rejects all three binding types at once', async () => {
@@ -287,19 +241,6 @@ describe('write tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('Must provide exactly one of');
-      expect(dispatched).toHaveLength(0);
-    });
-
-    test('returns error for nonexistent instance', async () => {
-      const handler = getToolHandler('lace_set_input')!;
-      const result = await handler({
-        instance_id: 'nonexistent',
-        input_name: 'cidr_block',
-        value: '10.0.0.0/16',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('not found');
     });
   });
 
@@ -310,8 +251,7 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Renamed instance "vpc" to "main_vpc"');
-      expect(dispatched[0]).toMatchObject({
-        type: 'RENAME_INSTANCE',
+      expect(mockClient.actionRenameInstance).toHaveBeenCalledWith({
         old_id: 'vpc',
         new_id: 'main_vpc',
       });
@@ -324,42 +264,16 @@ describe('write tools', () => {
       expect(result.isError).toBe(true);
       expect(result.content).toContain('not a valid Terraform identifier');
     });
-
-    test('rejects rename to existing instance ID', async () => {
-      const handler = getToolHandler('lace_rename_instance')!;
-      const result = await handler({ old_id: 'vpc', new_id: 'subnet' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('already exists');
-    });
-
-    test('rejects nonexistent source instance', async () => {
-      const handler = getToolHandler('lace_rename_instance')!;
-      const result = await handler({ old_id: 'nonexistent', new_id: 'new_name' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('not found');
-    });
   });
 
   describe('lace_describe_graph', () => {
-    test('describes populated graph', async () => {
+    test('returns graph summary from CLI', async () => {
       const handler = getToolHandler('lace_describe_graph')!;
       const result = await handler({});
 
       expect(result.isError).toBeFalsy();
-      expect(result.content).toContain('vpc');
-      expect(result.content).toContain('subnet');
       expect(result.content).toContain('2 instance(s)');
-    });
-
-    test('describes empty graph', async () => {
-      mockState = makeEmptyWorkspace();
-      const handler = getToolHandler('lace_describe_graph')!;
-      const result = await handler({});
-
-      expect(result.isError).toBeFalsy();
-      expect(result.content).toContain('empty');
+      expect(mockClient.queryGraphSummary).toHaveBeenCalled();
     });
   });
 
@@ -372,47 +286,35 @@ describe('write tools', () => {
       expect(result.content).toContain('Validation passed');
     });
 
-    test('reports dangling reference errors', async () => {
-      mockState = makeWorkspaceWithDanglingRef();
+    test('reports errors from CLI', async () => {
+      mockClient.queryValidate.mockResolvedValue({
+        errors: [
+          { instance_id: 'subnet', input_name: 'vpc_id', message: 'Dangling reference to "ghost"' },
+        ],
+      });
       const handler = getToolHandler('lace_validate_graph')!;
       const result = await handler({});
 
       expect(result.isError).toBeFalsy();
-      expect(result.content).toContain('error(s) found');
+      expect(result.content).toContain('1 error(s) found');
       expect(result.content).toContain('ghost');
-    });
-
-    test('passes empty graph', async () => {
-      mockState = makeEmptyWorkspace();
-      const handler = getToolHandler('lace_validate_graph')!;
-      const result = await handler({});
-
-      expect(result.isError).toBeFalsy();
-      expect(result.content).toContain('Validation passed');
     });
   });
 });
 
 describe('generate tools', () => {
-  let triggerGenerate: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
-    mockState = makeWorkspaceWithInstances();
-    dispatched = [];
-    triggerGenerate = vi.fn();
+    mockClient = makeMockClient();
     const deps: GenerateToolDeps = {
-      requestGraphState: async () => mockState,
-      dispatchToCanvas: async (action) => {
-        dispatched.push(action);
-      },
-      triggerGenerate,
+      getRpcClient: () =>
+        mockClient as unknown as import('../../utilities/engine/rpc-client').JSONRPCClient,
+      getLaceDir: () => '/tmp/test-workspace/.lace',
     };
     registerGenerateTools(deps);
   });
 
   describe('lace_auto_connect', () => {
     test('auto-connects matching outputs to unbound inputs', async () => {
-      mockState = makeWorkspaceWithUnboundSubnet();
       const handler = getToolHandler('lace_auto_connect')!;
       const result = await handler({
         source_instance: 'vpc',
@@ -422,27 +324,23 @@ describe('generate tools', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Auto-connected 1 wire(s)');
       expect(result.content).toContain('vpc.vpc_id');
-      expect(dispatched).toHaveLength(1);
-      expect(dispatched[0]).toMatchObject({
-        type: 'CONNECT',
-        source_instance: 'vpc',
-        target_instance: 'subnet',
-        mapping: { from: 'vpc_id', to: 'vpc_id' },
+      expect(mockClient.actionAutoConnect).toHaveBeenCalledWith({
+        source: 'vpc',
+        target: 'subnet',
       });
     });
 
-    test('skips inputs that already have any binding', async () => {
-      // subnet has both vpc_id (out binding) and cidr_block (lit binding)
-      mockState = makeWorkspaceWithInstances();
+    test('reports no match when no edges returned', async () => {
+      mockClient.actionAutoConnect.mockResolvedValue(
+        makeCanvasView([makeNode('vpc'), makeNode('subnet')]),
+      );
       const handler = getToolHandler('lace_auto_connect')!;
       const result = await handler({
         source_instance: 'vpc',
         target_instance: 'subnet',
       });
 
-      // Both inputs are bound, so no auto-connections should be made
       expect(result.content).toContain('No compatible connections found');
-      expect(dispatched).toHaveLength(0);
     });
 
     test('returns error for missing parameters', async () => {
@@ -453,33 +351,13 @@ describe('generate tools', () => {
       expect(result.content).toContain('Missing required parameters');
     });
 
-    test('returns error for nonexistent source', async () => {
+    test('returns error when RPC fails', async () => {
+      mockClient.actionAutoConnect.mockRejectedValue(
+        new Error('Source instance "nonexistent" not found'),
+      );
       const handler = getToolHandler('lace_auto_connect')!;
       const result = await handler({
         source_instance: 'nonexistent',
-        target_instance: 'subnet',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('Source instance "nonexistent" not found');
-    });
-
-    test('returns error for nonexistent target', async () => {
-      const handler = getToolHandler('lace_auto_connect')!;
-      const result = await handler({
-        source_instance: 'vpc',
-        target_instance: 'nonexistent',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('Target instance "nonexistent" not found');
-    });
-
-    test('returns no-match message on empty canvas', async () => {
-      mockState = makeEmptyWorkspace();
-      const handler = getToolHandler('lace_auto_connect')!;
-      const result = await handler({
-        source_instance: 'vpc',
         target_instance: 'subnet',
       });
 
@@ -489,33 +367,58 @@ describe('generate tools', () => {
   });
 
   describe('lace_generate', () => {
-    test('triggers generation', async () => {
+    test('generates terraform via RPC', async () => {
       const handler = getToolHandler('lace_generate')!;
       const result = await handler({});
 
       expect(result.isError).toBeFalsy();
-      expect(result.content).toContain('Terraform generation triggered');
-      expect(triggerGenerate).toHaveBeenCalledOnce();
+      expect(result.content).toContain('Terraform generated successfully');
+      expect(result.content).toContain('1 file(s) written');
+      expect(mockClient.sessionGenerate).toHaveBeenCalledWith({
+        output_dir: '/tmp/test-workspace/.lace',
+        options: {
+          dry_run: false,
+          format: true,
+          validate: true,
+          overwrite: true,
+        },
+      });
     });
 
-    test('reports error when trigger throws', async () => {
-      triggerGenerate.mockImplementation(() => {
-        throw new Error('No canvas open');
+    test('reports errors from CLI', async () => {
+      mockClient.sessionGenerate.mockResolvedValue({
+        diagnostics: [{ severity: 'error', message: 'Missing required input' }],
       });
-      // Re-register with the throwing mock
-      registerGenerateTools({
-        requestGraphState: async () => mockState,
-        dispatchToCanvas: async (action) => {
-          dispatched.push(action);
-        },
-        triggerGenerate,
-      });
+      const handler = getToolHandler('lace_generate')!;
+      const result = await handler({});
 
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Generation failed');
+      expect(result.content).toContain('Missing required input');
+    });
+
+    test('reports error when RPC fails', async () => {
+      mockClient.sessionGenerate.mockRejectedValue(new Error('No canvas open'));
       const handler = getToolHandler('lace_generate')!;
       const result = await handler({});
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('No canvas open');
+    });
+
+    test('returns error when no workspace folder', async () => {
+      const deps: GenerateToolDeps = {
+        getRpcClient: () =>
+          mockClient as unknown as import('../../utilities/engine/rpc-client').JSONRPCClient,
+        getLaceDir: () => undefined,
+      };
+      registerGenerateTools(deps);
+
+      const handler = getToolHandler('lace_generate')!;
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('No workspace folder');
     });
   });
 });

@@ -1,8 +1,11 @@
 declare global {
+  function acquireVsCodeApi(): {
+    postMessage(msg: unknown): void;
+    getState(): unknown;
+    setState(state: unknown): void;
+  };
+
   interface Window {
-    vscode: {
-      postMessage: (message: any) => void;
-    };
     __canvasUndo?: () => void;
   }
 }

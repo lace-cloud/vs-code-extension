@@ -1,113 +1,56 @@
 // src/chat/tools/graph-read-tools.ts
 //
 // Tools: lace_describe_graph, lace_validate_graph
+// All operations go through RPC to the CLI.
 
-import type { WorkspaceState } from '../../webview/types/workspace';
+import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import type { ToolResult } from '../types';
-import { summarizeGraph } from '../graph-summary';
-import { validateWorkspace } from '../../webview/utils/validate';
 import { registerTool } from '../tool-registry';
-import { loadGraphState } from './helpers';
+import { requireEngine, errorMessage } from './helpers';
 
 export type GraphReadDeps = {
-  requestGraphState: () => Promise<WorkspaceState>;
+  getRpcClient: () => JSONRPCClient | null;
 };
 
 export function registerGraphReadTools(deps: GraphReadDeps): void {
   registerTool('lace_describe_graph', async (): Promise<ToolResult> => {
-    const result = await loadGraphState(deps.requestGraphState);
-    if ('error' in result) return result.error;
-    const { state } = result;
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
-    const summary = summarizeGraph(state);
-
-    if (summary.instance_count === 0) {
-      return { content: 'The canvas is empty. No modules have been added yet.' };
+    try {
+      const result = await engineResult.client.queryGraphSummary();
+      return { content: result.text };
+    } catch (err: unknown) {
+      return { content: `Failed to describe graph: ${errorMessage(err)}`, isError: true };
     }
-
-    const lines: string[] = [];
-    lines.push(`**Canvas: ${summary.module_name}** (${summary.instance_count} instance(s))`);
-    lines.push('');
-
-    // Instances
-    lines.push('### Instances');
-    for (const inst of summary.instances) {
-      const version = inst.version ? ` v${inst.version}` : '';
-      lines.push(`- **${inst.id}** (${inst.module_id}${version}, ${inst.kind})`);
-
-      // Show bound inputs
-      for (const [name, desc] of Object.entries(inst.inputs)) {
-        lines.push(`  - ${name}: ${desc}`);
-      }
-
-      // Show unbound required inputs
-      if (inst.unbound_required_inputs.length > 0) {
-        lines.push(`  - ⚠ unbound required: ${inst.unbound_required_inputs.join(', ')}`);
-      }
-
-      // Show outputs
-      if (inst.outputs.length > 0) {
-        lines.push(`  - outputs: ${inst.outputs.join(', ')}`);
-      }
-    }
-
-    // Connections
-    if (summary.connections.length > 0) {
-      lines.push('');
-      lines.push('### Connections');
-      for (const conn of summary.connections) {
-        lines.push(
-          `- ${conn.from_instance}.${conn.from_output} → ${conn.to_instance}.${conn.to_input}`,
-        );
-      }
-    }
-
-    // Variables
-    if (summary.variables.length > 0) {
-      lines.push('');
-      lines.push(`### Variables: ${summary.variables.join(', ')}`);
-    }
-
-    // Exports
-    if (summary.exports.length > 0) {
-      lines.push('');
-      lines.push(`### Exports: ${summary.exports.join(', ')}`);
-    }
-
-    // Global unbound
-    if (summary.unbound_required_inputs.length > 0) {
-      lines.push('');
-      lines.push('### Unbound Required Inputs');
-      for (const u of summary.unbound_required_inputs) {
-        lines.push(`- ${u.instance_id}.${u.input_name} (${u.type})`);
-      }
-    }
-
-    return { content: lines.join('\n') };
   });
 
   // ─────────────────────────────────────────────
   // lace_validate_graph
   // ─────────────────────────────────────────────
   registerTool('lace_validate_graph', async (): Promise<ToolResult> => {
-    const result = await loadGraphState(deps.requestGraphState);
-    if ('error' in result) return result.error;
-    const { state } = result;
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
-    const errors = validateWorkspace(state);
+    try {
+      const result = await engineResult.client.queryValidate();
+      const errors = result.errors;
 
-    if (errors.length === 0) {
-      return { content: 'Validation passed. No errors found.' };
+      if (errors.length === 0) {
+        return { content: 'Validation passed. No errors found.' };
+      }
+
+      const lines: string[] = [];
+      lines.push(`**Validation: ${errors.length} error(s) found**`);
+      lines.push('');
+      for (const err of errors) {
+        const loc = [err.instance_id, err.input_name].filter(Boolean).join('.');
+        lines.push(`- ${loc ? `[${loc}] ` : ''}${err.message}`);
+      }
+
+      return { content: lines.join('\n') };
+    } catch (err: unknown) {
+      return { content: `Failed to validate graph: ${errorMessage(err)}`, isError: true };
     }
-
-    const lines: string[] = [];
-    lines.push(`**Validation: ${errors.length} error(s) found**`);
-    lines.push('');
-    for (const err of errors) {
-      const loc = [err.module_key, err.instance_id, err.input_name].filter(Boolean).join('.');
-      lines.push(`- ${loc ? `[${loc}] ` : ''}${err.message}`);
-    }
-
-    return { content: lines.join('\n') };
   });
 }

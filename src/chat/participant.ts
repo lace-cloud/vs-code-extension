@@ -7,9 +7,6 @@ import * as vscode from 'vscode';
 
 import type { JSONRPCClient } from '../utilities/engine/rpc-client';
 import type { RegistryModule } from '../types/protocol';
-import type { WorkspaceState } from '../webview/types/workspace';
-import type { Bundle } from '../webview/types/ir';
-import type { WorkspaceAction } from '../webview/state/reducer';
 
 import { SYSTEM_PROMPT } from './system-prompt';
 import { getToolHandler } from './tool-registry';
@@ -31,10 +28,7 @@ import {
 export type ChatParticipantDeps = {
   getRpcClient: () => JSONRPCClient | null;
   getRegistryModules: () => RegistryModule[];
-  addModuleToActiveCanvas: (deploy_bundle: Bundle, icon_url?: string) => void;
-  requestGraphState: () => Promise<WorkspaceState>;
-  dispatchToCanvas: (action: WorkspaceAction) => Promise<void>;
-  triggerGenerate: () => void;
+  getLaceDir: () => string | undefined;
 };
 
 // ── Max iterations for the agentic loop ──
@@ -170,9 +164,10 @@ async function handleChatRequest(
               new vscode.LanguageModelTextPart(result.content),
             ]),
           );
-        } catch (err: any) {
+        } catch (err: unknown) {
           const durationMs = Date.now() - start;
-          const result = { content: `Tool error: ${err.message}`, isError: true };
+          const message = err instanceof Error ? err.message : String(err);
+          const result = { content: `Tool error: ${message}`, isError: true };
           logToolInvocation(session, tc.name, tc.input, result, durationMs);
           toolResultParts.push(
             new vscode.LanguageModelToolResultPart(tc.callId, [

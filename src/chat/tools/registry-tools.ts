@@ -6,6 +6,7 @@ import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import type { RegistryModule } from '../../types/protocol';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
+import { requireEngine, errorMessage } from './helpers';
 
 export type RegistryToolDeps = {
   getRpcClient: () => JSONRPCClient | null;
@@ -50,7 +51,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
         const lines = modules.map(formatModuleLine);
 
         return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
-      } catch (err: any) {
+      } catch {
         // Fall through to local search
       }
     }
@@ -135,13 +136,14 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     }
 
     // Fetch full module details via RPC
-    const client = deps.getRpcClient();
-    if (!client) {
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) {
       // Return basic info from local cache
       return {
         content: `**${match.name}** (${match.system}, v${match.version})\n${match.description ?? 'No description.'}\n\n_Lace engine not running — cannot fetch full interface schema._`,
       };
     }
+    const client = engineResult.client;
 
     try {
       const versionResponse = await client.getRegistryVersion({
@@ -157,8 +159,26 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
         };
       }
 
-      // Extract the entry module's interface from the deploy bundle
-      const entryDef = deployBundle.modules?.[deployBundle.entry];
+      // Extract the entry module's interface from the deploy bundle (opaque type)
+      const bundle = deployBundle as {
+        entry?: string;
+        modules?: Record<
+          string,
+          {
+            interface?: {
+              inputs?: Array<{
+                name: string;
+                type: string;
+                required?: boolean;
+                default?: unknown;
+                description?: string;
+              }>;
+              outputs?: Array<{ name: string; type: string; description?: string }>;
+            };
+          }
+        >;
+      };
+      const entryDef = bundle.modules?.[bundle.entry ?? ''];
 
       const lines: string[] = [];
       lines.push(`**${match.name}** (${match.system}, v${match.version})`);
@@ -196,9 +216,9 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
       }
 
       return { content: lines.join('\n') };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
-        content: `Failed to inspect module: ${err.message}`,
+        content: `Failed to inspect module: ${errorMessage(err)}`,
         isError: true,
       };
     }

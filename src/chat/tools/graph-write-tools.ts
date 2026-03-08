@@ -2,57 +2,19 @@
 //
 // Write tools: lace_add_module, lace_remove_module, lace_connect,
 // lace_disconnect, lace_set_input, lace_rename_instance.
+// All operations go through RPC to the CLI.
 
 import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import type { RegistryModule } from '../../types/protocol';
-import type { WorkspaceState } from '../../webview/types/workspace';
-import type { Binding, Bundle } from '../../webview/types/ir';
-import { isUse } from '../../webview/types/ir';
-import type { WorkspaceAction } from '../../webview/state/reducer';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { isValidTerraformIdentifier, parseModuleKey } from '../../webview/utils/identifiers';
-import { allChildren } from '../../webview/utils/children';
-import { getEntryModule, findChildInEntry, loadGraphState, requireEntry } from './helpers';
+import { isValidTerraformIdentifier } from '../../webview/utils/identifiers';
+import { requireEngine, errorMessage } from './helpers';
 
 export type GraphWriteDeps = {
   getRpcClient: () => JSONRPCClient | null;
   getRegistryModules: () => RegistryModule[];
-  addModuleToActiveCanvas: (deploy_bundle: Bundle, icon_url?: string) => void;
-  requestGraphState: () => Promise<WorkspaceState>;
-  dispatchToCanvas: (action: WorkspaceAction) => Promise<void>;
 };
-
-/**
- * Poll the canvas state to find a newly added instance by module ID.
- * Retries up to 4 times with increasing delays (200, 400, 600, 800ms = ~2s total).
- * Returns the instance ID if found, undefined otherwise.
- */
-async function pollForAddedInstance(
-  deps: Pick<GraphWriteDeps, 'requestGraphState'>,
-  moduleId: string,
-  moduleName: string,
-): Promise<string | undefined> {
-  const delays = [200, 400, 600, 800];
-  for (const delay of delays) {
-    await new Promise((r) => setTimeout(r, delay));
-    try {
-      const state = await deps.requestGraphState();
-      const entry = getEntryModule(state);
-      if (!entry) continue;
-      const children = allChildren(entry.mod);
-      const added = [...children].reverse().find((child) => {
-        if (!isUse(child)) return false;
-        const { id } = parseModuleKey(child.module);
-        return id === moduleId || id === moduleName;
-      });
-      if (added) return added.id;
-    } catch {
-      // State read failed, retry
-    }
-  }
-  return undefined;
-}
 
 // ── Tool Registration ──
 
@@ -102,27 +64,18 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    const client = deps.getRpcClient();
-    if (!client) {
-      return { content: 'Lace engine is not running. Start it first.', isError: true };
-    }
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
     try {
-      const response = await client.getRegistryVersion({
-        name: match.name,
-        system: match.system,
-        version: match.version,
-      });
+      const registryKey = `${match.id}@${match.version}`;
+      const canvasView = await engineResult.client.actionDropModule({ registry_key: registryKey });
 
-      const deploy_bundle = response?.deploy_bundle;
-      if (!deploy_bundle) {
-        return { content: 'Registry returned no deploy bundle for this module.', isError: true };
-      }
-
-      deps.addModuleToActiveCanvas(deploy_bundle, match.icon_url);
-
-      // Poll for the newly added instance (canvas processes the drop async)
-      const instanceId = await pollForAddedInstance(deps, match.id, match.name);
+      // Find the newly added node from the returned canvas view
+      const addedNode = canvasView.nodes.find(
+        (n) => n.module_key && n.module_key.includes(match!.id),
+      );
+      const instanceId = addedNode?.id;
 
       if (instanceId) {
         return {
@@ -133,9 +86,9 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return {
         content: `Added **${match.name}** (${match.system}, v${match.version}) to the canvas. Use lace_describe_graph to find the instance ID.`,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
-        content: `Failed to fetch module from registry: ${err.message}`,
+        content: `Failed to add module: ${errorMessage(err)}`,
         isError: true,
       };
     }
@@ -150,33 +103,14 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: 'Missing required parameter: instance_id', isError: true };
     }
 
-    const result = await loadGraphState(deps.requestGraphState);
-    if ('error' in result) return result.error;
-    const { state } = result;
-
-    const entryResult = requireEntry(state);
-    if ('error' in entryResult) return entryResult.error;
-    const { entry } = entryResult;
-
-    const children = allChildren(entry.mod);
-    const child = children.find((c) => c.id === instanceId);
-    if (!child) {
-      const ids = children.map((c) => c.id);
-      return {
-        content: `Instance "${instanceId}" not found. Available instances: ${ids.join(', ')}`,
-        isError: true,
-      };
-    }
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
     try {
-      await deps.dispatchToCanvas({
-        type: 'DELETE_INSTANCE',
-        module_key: entry.entryKey,
-        instance_id: instanceId,
-      });
+      await engineResult.client.actionDeleteInstance({ instance_id: instanceId });
       return { content: `Removed instance "${instanceId}" from the canvas.` };
-    } catch (err: any) {
-      return { content: `Failed to remove instance: ${err.message}`, isError: true };
+    } catch (err: unknown) {
+      return { content: `Failed to remove instance: ${errorMessage(err)}`, isError: true };
     }
   });
 
@@ -197,37 +131,21 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    const result = await loadGraphState(deps.requestGraphState);
-    if ('error' in result) return result.error;
-    const { state } = result;
-
-    const entryResult = requireEntry(state);
-    if ('error' in entryResult) return entryResult.error;
-    const { entry } = entryResult;
-
-    // Validate instances exist
-    const source = findChildInEntry(state, sourceInstance);
-    const target = findChildInEntry(state, targetInstance);
-    if (!source) {
-      return { content: `Source instance "${sourceInstance}" not found.`, isError: true };
-    }
-    if (!target) {
-      return { content: `Target instance "${targetInstance}" not found.`, isError: true };
-    }
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
     try {
-      await deps.dispatchToCanvas({
-        type: 'CONNECT',
-        module_key: entry.entryKey,
-        source_instance: sourceInstance,
-        target_instance: targetInstance,
-        mapping: { from: sourceOutput, to: targetInput },
+      await engineResult.client.actionConnect({
+        source: sourceInstance,
+        target: targetInstance,
+        source_output: sourceOutput,
+        target_input: targetInput,
       });
       return {
         content: `Connected ${sourceInstance}.${sourceOutput} → ${targetInstance}.${targetInput}`,
       };
-    } catch (err: any) {
-      return { content: `Failed to connect: ${err.message}`, isError: true };
+    } catch (err: unknown) {
+      return { content: `Failed to connect: ${errorMessage(err)}`, isError: true };
     }
   });
 
@@ -245,29 +163,17 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    const result = await loadGraphState(deps.requestGraphState);
-    if ('error' in result) return result.error;
-    const { state } = result;
-
-    const entryResult = requireEntry(state);
-    if ('error' in entryResult) return entryResult.error;
-    const { entry } = entryResult;
-
-    const target = findChildInEntry(state, targetInstance);
-    if (!target) {
-      return { content: `Instance "${targetInstance}" not found.`, isError: true };
-    }
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
     try {
-      await deps.dispatchToCanvas({
-        type: 'DISCONNECT',
-        module_key: entry.entryKey,
-        target_instance: targetInstance,
+      await engineResult.client.actionDisconnect({
+        target: targetInstance,
         input_name: inputName,
       });
       return { content: `Disconnected input "${inputName}" on instance "${targetInstance}".` };
-    } catch (err: any) {
-      return { content: `Failed to disconnect: ${err.message}`, isError: true };
+    } catch (err: unknown) {
+      return { content: `Failed to disconnect: ${errorMessage(err)}`, isError: true };
     }
   });
 
@@ -299,53 +205,46 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    let binding: Binding;
+    let mode: string;
+    let value: unknown;
+    let variable: string | undefined;
+    let expression: string | undefined;
+
     if (hasValue) {
-      binding = { lit: params.value };
+      mode = 'literal';
+      value = params.value;
     } else if (hasVariable) {
-      binding = { var: params.variable as string };
+      mode = 'variable';
+      variable = params.variable as string;
     } else {
-      binding = { expr: { lang: 'hcl', value: params.expression as string } };
+      mode = 'expression';
+      expression = params.expression as string;
     }
 
-    const result = await loadGraphState(deps.requestGraphState);
-    if ('error' in result) return result.error;
-    const { state } = result;
-
-    const entryResult = requireEntry(state);
-    if ('error' in entryResult) return entryResult.error;
-    const { entry } = entryResult;
-
-    const inst = findChildInEntry(state, instanceId);
-    if (!inst) {
-      return { content: `Instance "${instanceId}" not found.`, isError: true };
-    }
-
-    // Merge with existing inputs
-    const mergedInputs: Record<string, Binding> = {
-      ...(inst.inputs ?? {}),
-      [inputName]: binding,
-    };
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
     try {
-      await deps.dispatchToCanvas({
-        type: 'UPDATE_INPUTS',
-        module_key: entry.entryKey,
+      await engineResult.client.actionUpdateInput({
         instance_id: instanceId,
-        inputs: mergedInputs,
+        input_name: inputName,
+        mode,
+        value,
+        variable,
+        expression,
       });
 
       const desc =
-        'lit' in binding
-          ? `literal ${JSON.stringify(binding.lit)}`
-          : 'var' in binding
-            ? `variable "${binding.var}"`
-            : `expression "${binding.expr.value}"`;
+        mode === 'literal'
+          ? `literal ${JSON.stringify(value)}`
+          : mode === 'variable'
+            ? `variable "${variable}"`
+            : `expression "${expression}"`;
       return {
         content: `Set ${instanceId}.${inputName} to ${desc}.`,
       };
-    } catch (err: any) {
-      return { content: `Failed to set input: ${err.message}`, isError: true };
+    } catch (err: unknown) {
+      return { content: `Failed to set input: ${errorMessage(err)}`, isError: true };
     }
   });
 
@@ -370,36 +269,14 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    const result = await loadGraphState(deps.requestGraphState);
-    if ('error' in result) return result.error;
-    const { state } = result;
-
-    const entryResult = requireEntry(state);
-    if ('error' in entryResult) return entryResult.error;
-    const { entry } = entryResult;
-
-    const inst = findChildInEntry(state, oldId);
-    if (!inst) {
-      return { content: `Instance "${oldId}" not found.`, isError: true };
-    }
-
-    // Check for collision
-    const children = allChildren(entry.mod);
-    const existing = children.find((c) => c.id === newId);
-    if (existing) {
-      return { content: `Instance "${newId}" already exists.`, isError: true };
-    }
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
 
     try {
-      await deps.dispatchToCanvas({
-        type: 'RENAME_INSTANCE',
-        module_key: entry.entryKey,
-        old_id: oldId,
-        new_id: newId,
-      });
+      await engineResult.client.actionRenameInstance({ old_id: oldId, new_id: newId });
       return { content: `Renamed instance "${oldId}" to "${newId}".` };
-    } catch (err: any) {
-      return { content: `Failed to rename instance: ${err.message}`, isError: true };
+    } catch (err: unknown) {
+      return { content: `Failed to rename instance: ${errorMessage(err)}`, isError: true };
     }
   });
 }

@@ -56,7 +56,7 @@ export function getWebviewContent(
     document.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        window.postMessage({ command: 'triggerSave' }, '*');
+        window.dispatchEvent(new CustomEvent('canvasSave'));
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();

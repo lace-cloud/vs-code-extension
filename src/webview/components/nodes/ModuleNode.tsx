@@ -1,18 +1,12 @@
-import React, { useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import type { Use, Resource, InputDef, OutputDef } from '../../types/ir';
-import { isOut, isUse } from '../../types/ir';
-import { isValidTerraformIdentifier, parseModuleKey } from '../../utils/identifiers';
-import { CanvasContext } from '../../state/context';
+import type { RenderNode } from '../../types/render';
+import { isValidTerraformIdentifier } from '../../utils/identifiers';
+import { useEngine } from '../../state/engine-context';
 
 // ── Node data contract (serializable — no callbacks) ──
 
-export type ModuleNodeData = {
-  child: Use | Resource;
-  schema: { inputs: InputDef[]; outputs: OutputDef[] };
-  icon_url?: string;
-  hasErrors?: boolean;
-  errorMessages?: string[];
+export type ModuleNodeData = RenderNode & {
   connectedHandles?: string[];
 };
 
@@ -48,7 +42,7 @@ function BrokenIcon() {
 // ── Component ──
 
 const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
-  const ctx = useContext(CanvasContext);
+  const engine = useEngine();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(id);
   const [hovered, setHovered] = useState(false);
@@ -62,19 +56,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     }
   }, [editing]);
 
-  const child = data.child;
   const connected = data.connectedHandles ?? [];
-
-  // Wired input badges
-  const wiredBadges: { inputName: string; source: string }[] = [];
-  for (const [inputName, binding] of Object.entries(child.inputs ?? {})) {
-    if (isOut(binding)) {
-      wiredBadges.push({
-        inputName,
-        source: `${binding.out.module}.${binding.out.name}`,
-      });
-    }
-  }
 
   // ── Callbacks ──
 
@@ -87,18 +69,13 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [id],
   );
 
-  const commitRename = useCallback(() => {
+  const commitRename = useCallback(async () => {
     setEditing(false);
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed) && ctx) {
-      ctx.dispatch({
-        type: 'RENAME_INSTANCE',
-        module_key: ctx.moduleKey,
-        old_id: id,
-        new_id: trimmed,
-      });
+    if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed)) {
+      await engine.renameInstance(id, trimmed);
     }
-  }, [editValue, id, ctx]);
+  }, [editValue, id, engine]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -111,32 +88,19 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      ctx?.openConfig(child.id);
+      // Opening config panel is handled by Canvas via node selection
+      // Post a custom event that Canvas listens to
+      window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }));
     },
-    [ctx, child.id],
-  );
-
-  const onRefreshModule = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!isUse(child) || !ctx) return;
-      const { id: modId, version } = parseModuleKey(child.module);
-      ctx.refreshModule(child.module, modId, version);
-    },
-    [child, ctx],
+    [data.id],
   );
 
   const onDeleteInstance = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!ctx) return;
-      ctx.dispatch({
-        type: 'DELETE_INSTANCE',
-        module_key: ctx.moduleKey,
-        instance_id: child.id,
-      });
+      await engine.deleteInstance(data.id);
     },
-    [child.id, ctx],
+    [data.id, engine],
   );
 
   // ── Helpers ──
@@ -147,9 +111,9 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     return connected.includes(handleId) ? 'lace-handle lace-handle--connected' : 'lace-handle';
   }
 
-  const errorBorder = data.hasErrors ? '1.5px solid #e5484d' : '1px solid transparent';
+  const errorBorder = data.has_errors ? '1.5px solid #e5484d' : '1px solid transparent';
 
-  const errorShadow = data.hasErrors ? '0 0 8px rgba(229, 72, 77, 0.3)' : 'none';
+  const errorShadow = data.has_errors ? '0 0 8px rgba(229, 72, 77, 0.3)' : 'none';
 
   return (
     <div
@@ -158,7 +122,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={data.hasErrors ? data.errorMessages?.join('\n') : child.id}
+      title={data.has_errors ? data.error_messages?.join('\n') : data.id}
     >
       {/* ── Card (invisible unless error) ── */}
       <div
@@ -168,7 +132,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
         {showIcon ? (
           <img
             src={data.icon_url}
-            alt={child.id}
+            alt={data.id}
             className="rounded object-contain"
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
             onError={() => setImgFailed(true)}
@@ -179,9 +143,9 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       </div>
 
       {/* ── Hover action buttons ── */}
-      {hovered && isUse(child) && (
+      {hovered && data.kind === 'module' && (
         <button
-          onClick={onRefreshModule}
+          onClick={(e) => e.stopPropagation()}
           className="absolute rounded-full bg-[#153238] border border-[rgba(206,254,101,0.3)] border-solid text-[#CEFE65] leading-none cursor-pointer flex items-center justify-center z-10"
           style={{ top: -4, left: -4, width: 8, height: 8, padding: 0 }}
           title="Refresh from registry"
@@ -251,25 +215,14 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
             style={{ fontSize: 12, color: 'rgba(206, 254, 101, 0.65)' }}
             onDoubleClick={onDoubleClick}
           >
-            {child.id}
+            {data.label}
           </span>
         )}
 
-        {/* Wired input badges */}
-        {wiredBadges.map((badge) => (
-          <span
-            key={badge.inputName}
-            className="mt-px bg-[#161616] border border-[rgba(206,254,101,0.1)] px-1 rounded text-[#CEFE65] opacity-60 whitespace-nowrap"
-            style={{ fontSize: 7 }}
-          >
-            {badge.source} → {badge.inputName}
-          </span>
-        ))}
-
         {/* Validation error */}
-        {data.hasErrors && (
+        {data.has_errors && (
           <span className="mt-px text-[#e5484d] whitespace-nowrap" style={{ fontSize: 7 }}>
-            ⚠ {data.errorMessages?.[0] ?? 'Error'}
+            {data.error_messages?.[0] ?? 'Error'}
           </span>
         )}
       </div>

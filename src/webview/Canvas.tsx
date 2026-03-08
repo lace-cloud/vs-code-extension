@@ -1,5 +1,5 @@
 // src/webview/Canvas.tsx
-import React, { useEffect, useState, useReducer, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -22,23 +22,8 @@ import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
 import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
 import ActionBar from './components/ActionBar';
 
-import type { WorkspaceState, GraphLayout } from './types/workspace';
-import type { Bundle, Module, Use, Resource } from './types/ir';
-import { isOut } from './types/ir';
-import type { WebviewToHost } from '../types/protocol';
-
-import { workspaceReducer, type WorkspaceAction } from './state/reducer';
-import { CanvasContext, type CanvasCallbacks } from './state/context';
-import { deriveEdges } from './utils/derive';
-import { resolveSchema, resolveIconUrl } from './utils/resolve';
-import { toBundle, fromBundle, emptyWorkspace } from './utils/bundle';
-import { allChildren, findChild, childIds } from './utils/children';
-import {
-  inferVariables,
-  inferOutputExports,
-  inferOutputDefs,
-  inferRequiredProviders,
-} from './utils/infer';
+import type { CanvasView, RenderNode, RenderEdge } from './types/render';
+import { useCanvas } from './state/engine-context';
 
 // ── Node types registration ──
 
@@ -46,63 +31,46 @@ const nodeTypes = {
   moduleNode: ModuleNode,
 };
 
-// ── Helper: post typed message to host ──
-
-function postToHost(msg: WebviewToHost) {
-  window.vscode.postMessage(msg);
-}
-
 // ── Toast duration constants ──
 
 const TOAST_BRIEF = 1500;
 const TOAST_INFO = 3000;
-const TOAST_SLOW = 5000;
 
 // ══════════════════════════════════════════════════════════════════════
 // CompositeEditor — renders the ReactFlow viewport for a valid graph.
 //
 // Separated from Canvas so that its hooks (useMemo for rfNodes/rfEdges)
-// only mount when a valid composite graph exists. This avoids React's
+// only mount when a valid CanvasView exists. This avoids React's
 // "rendered fewer hooks" error (#300) — Canvas can safely early-return
 // <ErrorState> without skipping any hooks, because the graph-dependent
 // hooks live here and are never mounted in the error path.
 // ══════════════════════════════════════════════════════════════════════
 
 type CompositeEditorProps = {
-  mod: Module;
-  layout: GraphLayout | undefined;
-  workspace: WorkspaceState;
-  module_key: string;
-  validationErrors: Array<{ module_key?: string; instance_id?: string; message: string }>;
+  view: CanvasView;
   fitViewTrigger: number;
-  iconMap: Record<string, string>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
   onNodesDelete: (nodes: Node[]) => void;
   onSave: () => void;
-  onRefresh: () => void;
   onUndo: () => void;
+  onRedo: () => void;
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: () => void;
 };
 
 function CompositeEditor({
-  mod,
-  layout,
-  workspace,
-  module_key,
-  validationErrors,
+  view,
   fitViewTrigger,
-  iconMap,
   onDragStop,
   onConnect,
   onEdgesDelete,
   onNodesDelete,
   onSave,
-  onRefresh,
   onUndo,
+  onRedo,
   onClearGraph,
   onGenerate,
   onOpenSettings,
@@ -115,27 +83,25 @@ function CompositeEditor({
     return () => clearTimeout(timer);
   }, [fitViewTrigger, fitView]);
 
-  // ── Derive ReactFlow edges (no labels — wired badges under nodes show mappings) ──
-  const children = useMemo(() => allChildren(mod), [mod]);
-
-  const rfEdgesFromWorkspace: Edge[] = useMemo(
+  // ── Derive ReactFlow edges from CanvasView ──
+  const rfEdgesFromView: Edge[] = useMemo(
     () =>
-      deriveEdges(children).map((e) => ({
-        id: `${e.source_instance}:${e.mapping.from}-${e.target_instance}:${e.mapping.to}`,
-        source: e.source_instance,
+      view.edges.map((e: RenderEdge) => ({
+        id: e.id,
+        source: e.source,
         sourceHandle: 'out-right',
-        target: e.target_instance,
+        target: e.target,
         targetHandle: 'in-left',
-        data: { mapping: e.mapping },
+        data: { source_output: e.source_output, target_input: e.target_input },
       })),
-    [children],
+    [view.edges],
   );
 
   // ── Local edge state (for selection support) ──
-  const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromWorkspace);
+  const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromView);
   useEffect(() => {
-    setRfEdges(rfEdgesFromWorkspace);
-  }, [rfEdgesFromWorkspace]);
+    setRfEdges(rfEdgesFromView);
+  }, [rfEdgesFromView]);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     setRfEdges((eds) => applyEdgeChanges(changes, eds));
@@ -144,7 +110,7 @@ function CompositeEditor({
   // ── Derive connected handles per node (for handle visibility) ──
   const connectedHandlesMap: Record<string, string[]> = useMemo(() => {
     const map: Record<string, Set<string>> = {};
-    for (const edge of rfEdgesFromWorkspace) {
+    for (const edge of rfEdgesFromView) {
       if (!map[edge.source]) map[edge.source] = new Set();
       if (!map[edge.target]) map[edge.target] = new Set();
       map[edge.source].add(edge.sourceHandle ?? 'out-right');
@@ -155,80 +121,50 @@ function CompositeEditor({
       result[id] = [...set];
     }
     return result;
-  }, [rfEdgesFromWorkspace]);
+  }, [rfEdgesFromView]);
 
-  // ── Derive ReactFlow nodes from workspace state ──
-  // Position resolution: saved layout → auto-grid fallback → origin.
-  // Auto-grid is a pure computation — never persisted. Positions are only
-  // written to workspace when the user drags (onDragStop → SYNC_LAYOUT).
-  const rfNodesFromWorkspace: Node[] = useMemo(() => {
-    // Auto-layout for nodes without saved positions
-    const cols = Math.max(2, Math.ceil(Math.sqrt(children.length)));
-    const SPACING_X = 120;
-    const SPACING_Y = 100;
-    const BASE = { x: 80, y: 80 };
-
-    return children.map((child, i) => {
-      const saved = layout?.nodes[child.id]?.position;
-      const auto = {
-        x: BASE.x + (i % cols) * SPACING_X,
-        y: BASE.y + Math.floor(i / cols) * SPACING_Y,
-      };
-      const nodeErrors = validationErrors.filter(
-        (e) => e.instance_id === child.id && e.module_key === module_key,
-      );
-      return {
-        id: child.id,
+  // ── Derive ReactFlow nodes from CanvasView ──
+  const rfNodesFromView: Node[] = useMemo(
+    () =>
+      view.nodes.map((node: RenderNode) => ({
+        id: node.id,
         type: 'moduleNode',
-        position: saved ?? auto,
+        position: node.position,
         data: {
-          child,
-          schema: resolveSchema(workspace, child),
-          icon_url: resolveIconUrl(child, iconMap),
-          hasErrors: nodeErrors.length > 0,
-          errorMessages: nodeErrors.map((e) => e.message),
-          connectedHandles: connectedHandlesMap[child.id] ?? [],
+          ...node,
+          connectedHandles: connectedHandlesMap[node.id] ?? [],
         },
-      };
-    });
-  }, [children, layout, workspace, validationErrors, module_key, iconMap, connectedHandlesMap]);
+      })),
+    [view.nodes, connectedHandlesMap],
+  );
 
   // ── Local ReactFlow node state ──
-  // ReactFlow in controlled mode needs ALL changes (position, dimensions,
-  // selection) applied via applyNodeChanges. This state is the single owner
-  // of node data that ReactFlow renders.
-  const [rfNodes, setRfNodes] = useState<Node[]>(rfNodesFromWorkspace);
+  const [rfNodes, setRfNodes] = useState<Node[]>(rfNodesFromView);
 
-  // Re-sync when workspace changes (new drops, renames, deletes).
-  // Preserves ReactFlow-managed fields (measured, width, height, selected)
-  // and drag positions on existing nodes while updating type/data and
-  // adding/removing nodes to match the workspace.
+  // Re-sync when view changes (new drops, renames, deletes).
   useEffect(() => {
     setRfNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
-      return rfNodesFromWorkspace.map((wn) => {
+      return rfNodesFromView.map((wn) => {
         const existing = prevById.get(wn.id);
         if (existing) {
           return {
             ...existing,
             type: wn.type,
             data: wn.data,
-            // Existing nodes keep their ReactFlow-managed position (drag state).
-            // New position from workspace (e.g. a layout sync) would require
-            // remount, which we handle via key={module_key} on the parent.
           };
         }
-        return wn; // New node — use workspace position
+        return wn;
       });
     });
-  }, [rfNodesFromWorkspace]);
+  }, [rfNodesFromView]);
 
   // ── Handle ALL ReactFlow node changes (position, dimensions, select) ──
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setRfNodes((nds) => applyNodeChanges(changes, nds));
   }, []);
 
-  // ── Sync positions back to workspace on drag stop ──
+  // ── Sync positions back to engine on drag stop ──
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, _node: Node, nodes: Node[]) => {
       const positions: Record<string, { x: number; y: number }> = {};
@@ -240,7 +176,7 @@ function CompositeEditor({
     [onDragStop],
   );
 
-  // Fixed grid background (CSS — does not zoom/pan with the graph)
+  // Fixed grid background
   const gridStyle = {
     background: '#161616',
     backgroundImage: [
@@ -279,8 +215,8 @@ function CompositeEditor({
       <Controls position="bottom-right" showInteractive={false} />
       <ActionBar
         onSave={onSave}
-        onRefresh={onRefresh}
         onUndo={onUndo}
+        onRedo={onRedo}
         onClearGraph={onClearGraph}
         onGenerate={onGenerate}
         onOpenSettings={onOpenSettings}
@@ -290,16 +226,13 @@ function CompositeEditor({
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// Canvas — top-level component owning all workspace state.
-//
-// All hooks run unconditionally before the composite guard. The guard
-// is a clean early return that renders <ErrorState> if the active
-// module is not a composite. When the guard passes, <CompositeEditor>
-// renders the ReactFlow viewport with its own memoized hooks.
+// Canvas — top-level component that renders the CanvasView from the
+// engine context. All IR logic is in the CLI — we only render.
 // ══════════════════════════════════════════════════════════════════════
 
 export default function Canvas() {
-  const [workspace, dispatch] = useReducer(workspaceReducer, emptyWorkspace('untitled'));
+  const { state, engine, updateView } = useCanvas();
+
   const [configTarget, setConfigTarget] = useState<string | null>(null);
   const [edgeConfigState, setEdgeConfigState] = useState<{
     source: string;
@@ -307,263 +240,128 @@ export default function Canvas() {
   } | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Array<{ module_key?: string; instance_id?: string; message: string }>
-  >([]);
-  const [_isDirty, setIsDirty] = useState(false);
 
-  // Generation counter: incremented on LOAD_WORKSPACE to force CompositeEditor
-  // remount (via key) even when the module_key doesn't change.
-  const [loadGeneration, setLoadGeneration] = useState(0);
-
-  // Trigger counter for imperative fitView calls (incremented on load/drop/navigate)
-  const [fitViewTrigger, setFitViewTrigger] = useState(0);
-
-  // Icon URL mappings: module_key → icon_url (populated from registry metadata on drop)
-  const [iconMap, setIconMap] = useState<Record<string, string>>({});
-
-  // ── Active module key (entry composite) ──
-  const module_key = workspace.entry;
-  const rootDef = workspace.modules[module_key];
-
-  // Stable ref for workspace (used in message handler to avoid stale closure)
-  const workspaceRef = useRef(workspace);
-  workspaceRef.current = workspace;
-  const moduleKeyRef = useRef(module_key);
-  moduleKeyRef.current = module_key;
-
-  // ── Undo stack (pre-dispatch snapshots, outside reducer to keep it pure) ──
-  type UndoEntry = { workspace: WorkspaceState; isDirty: boolean };
-  const undoStack = useRef<UndoEntry[]>([]);
-  const isDirtyRef = useRef(false);
-  const UNDO_LIMIT = 50;
-
-  const NON_UNDOABLE: WorkspaceAction['type'][] = [
-    'LOAD_WORKSPACE',
-    'SYNC_LAYOUT',
-    'REFRESH_MODULE_DEFS',
-  ];
-
-  // ── Semantic dispatch wrapper ──
-  const semanticDispatch = useCallback((action: WorkspaceAction) => {
-    // Push snapshot before dispatch (skip non-undoable actions)
-    if (!NON_UNDOABLE.includes(action.type)) {
-      undoStack.current = [
-        ...undoStack.current.slice(-(UNDO_LIMIT - 1)),
-        { workspace: workspaceRef.current, isDirty: isDirtyRef.current },
-      ];
-    }
-    dispatch(action);
-    if (action.type !== 'LOAD_WORKSPACE') {
-      setIsDirty(true);
-      isDirtyRef.current = true;
-      postToHost({ command: 'markDirty', state: workspaceRef.current });
-    }
-  }, []);
-
-  // ── Undo: pop last snapshot and restore state + dirty flag ──
-  const onUndo = useCallback(() => {
-    const entry = undoStack.current.pop();
-    if (entry) {
-      dispatch({ type: 'LOAD_WORKSPACE', workspace: entry.workspace });
-      setIsDirty(entry.isDirty);
-      isDirtyRef.current = entry.isDirty;
-      if (entry.isDirty) {
-        postToHost({ command: 'markDirty', state: workspaceRef.current });
-      } else {
-        postToHost({ command: 'markClean' });
+  // ── Listen for openNodeConfig events from ModuleNode ──
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.instanceId) {
+        setConfigTarget(detail.instanceId);
       }
-    }
+    };
+    window.addEventListener('openNodeConfig', handler);
+    return () => window.removeEventListener('openNodeConfig', handler);
   }, []);
 
-  // ── Save action (used by ActionBar save button + Cmd+S) ──
-  const onSave = useCallback(() => {
-    postToHost({ command: 'saveState', state: workspaceRef.current });
-  }, []);
+  // ── Undo/Redo via engine ──
+  const onUndo = useCallback(async () => {
+    if (!engine || !state.view?.can_undo) return;
+    const result = await engine.undo();
+    updateView(result);
+  }, [engine, state.view?.can_undo, updateView]);
 
-  // ── Refresh action (re-fetch module defs from registry) ──
-  const onRefresh = useCallback(() => {
-    const ws = workspaceRef.current;
-    const module_keys: Record<string, { id: string; version: string }> = {};
-    for (const [key, def] of Object.entries(ws.modules)) {
-      if (key !== ws.entry) {
-        module_keys[key] = { id: def.id, version: def.version };
-      }
-    }
-    postToHost({ command: 'refreshModules', module_keys });
-    setStatusMessage('Refreshing...');
-    setTimeout(() => setStatusMessage(null), TOAST_SLOW);
-  }, []);
+  const onRedo = useCallback(async () => {
+    if (!engine || !state.view?.can_redo) return;
+    const result = await engine.redo();
+    updateView(result);
+  }, [engine, state.view?.can_redo, updateView]);
 
-  // ── Single-module refresh (called from ModuleNode hover button) ──
-  const refreshSingleModule = useCallback((moduleKey: string, id: string, version: string) => {
-    postToHost({
-      command: 'refreshModules',
-      module_keys: { [moduleKey]: { id, version } },
+  // ── Save via engine ──
+  const onSave = useCallback(async () => {
+    if (!engine) return;
+    await engine.sessionSave();
+    setStatusMessage('Saved');
+    setTimeout(() => setStatusMessage(null), TOAST_BRIEF);
+  }, [engine]);
+
+  // ── Generate via engine ──
+  const onGenerate = useCallback(async () => {
+    if (!engine) return;
+    const result = await engine.sessionGenerate('.', {
+      format: true,
+      validate: true,
     });
-    setStatusMessage('Refreshing...');
-    setTimeout(() => setStatusMessage(null), TOAST_SLOW);
-  }, []);
+    if (result.diagnostics.length > 0) {
+      setStatusMessage(`Generate: ${result.diagnostics.length} diagnostic(s)`);
+    } else {
+      setStatusMessage('Successfully generated');
+    }
+    setTimeout(() => setStatusMessage(null), TOAST_INFO);
+  }, [engine]);
 
   // ── Expose undo globally for HTML-level Cmd+Z listener ──
   useEffect(() => {
-    (window as any).__canvasUndo = onUndo;
+    (window as unknown as Record<string, unknown>).__canvasUndo = onUndo;
     return () => {
-      delete (window as any).__canvasUndo;
+      delete (window as unknown as Record<string, unknown>).__canvasUndo;
     };
   }, [onUndo]);
 
-  // ── Context callbacks for nodes ──
-  const callbacks: CanvasCallbacks = useMemo(
-    () => ({
-      openConfig: (id) => setConfigTarget(id),
-      markDirty: () => {
-        setIsDirty(true);
-        postToHost({ command: 'markDirty', state: workspaceRef.current });
-      },
-      dispatch: semanticDispatch,
-      moduleKey: module_key,
-      refreshModule: refreshSingleModule,
-      undo: onUndo,
-    }),
-    [semanticDispatch, module_key, refreshSingleModule, onUndo],
-  );
-
-  // ── Event: drag stop → sync layout to workspace (marks dirty) ──
+  // ── Event: drag stop → sync layout to engine ──
   const onDragStop = useCallback(
-    (positions: Record<string, { x: number; y: number }>) => {
-      semanticDispatch({
-        type: 'SYNC_LAYOUT',
-        module_key: moduleKeyRef.current,
-        positions,
-      });
+    async (positions: Record<string, { x: number; y: number }>) => {
+      if (!engine) return;
+      await engine.syncLayout(positions);
     },
-    [semanticDispatch],
+    [engine],
   );
 
   // ── Event: new connection ──
   const onConnect = useCallback(
-    (conn: Connection) => {
-      if (!conn.source || !conn.target) return;
+    async (conn: Connection) => {
+      if (!conn.source || !conn.target || !engine) return;
 
-      const ws = workspaceRef.current;
-      const mk = moduleKeyRef.current;
-      const def = ws.modules[mk];
-      if (!def) return;
-
-      const sourceChild = findChild(def, conn.source!);
-      const targetChild = findChild(def, conn.target!);
-      if (!sourceChild || !targetChild) return;
-
-      const sourceSchema = resolveSchema(ws, sourceChild);
-      const targetSchema = resolveSchema(ws, targetChild);
-
-      // Find unbound target inputs
-      const unboundInputs = targetSchema.inputs.filter((inp) => {
-        const binding = targetChild.inputs?.[inp.name];
-        return !binding || !isOut(binding);
-      });
-
-      // Auto-connect if exactly one output and one unbound input
-      if (sourceSchema.outputs.length === 1 && unboundInputs.length === 1) {
-        semanticDispatch({
-          type: 'CONNECT',
-          module_key: mk,
-          source_instance: conn.source,
-          target_instance: conn.target,
-          mapping: {
-            from: sourceSchema.outputs[0].name,
-            to: unboundInputs[0].name,
-          },
-        });
-      } else {
+      // Try auto-connect first
+      try {
+        const result = await engine.autoConnect(conn.source, conn.target);
+        updateView(result);
+      } catch {
+        // Auto-connect failed (ambiguous) — open edge config panel
         setEdgeConfigState({
           source: conn.source,
           target: conn.target,
         });
       }
     },
-    [semanticDispatch],
+    [engine, updateView],
   );
 
   // ── Event: edge delete (select edge + Delete/Backspace) ──
   const onEdgesDelete = useCallback(
-    (edges: Edge[]) => {
-      const mk = moduleKeyRef.current;
+    async (edges: Edge[]) => {
+      if (!engine) return;
       for (const edge of edges) {
-        const mapping = edge.data?.mapping as { from: string; to: string } | undefined;
-        if (mapping) {
-          semanticDispatch({
-            type: 'DISCONNECT',
-            module_key: mk,
-            target_instance: edge.target,
-            input_name: mapping.to,
-          });
+        const targetInput = edge.data?.target_input as string | undefined;
+        if (targetInput) {
+          const result = await engine.disconnect(edge.target, targetInput);
+          updateView(result);
         }
       }
     },
-    [semanticDispatch],
+    [engine, updateView],
   );
 
   // ── Event: node delete (select node + Delete/Backspace) ──
   const onNodesDelete = useCallback(
-    (nodes: Node[]) => {
-      const mk = moduleKeyRef.current;
+    async (nodes: Node[]) => {
+      if (!engine) return;
       for (const node of nodes) {
-        semanticDispatch({
-          type: 'DELETE_INSTANCE',
-          module_key: mk,
-          instance_id: node.id,
-        });
+        const result = await engine.deleteInstance(node.id);
+        updateView(result);
       }
     },
-    [semanticDispatch],
+    [engine, updateView],
   );
 
   // ── Event: clear all modules from graph ──
-  const onClearGraph = useCallback(() => {
-    semanticDispatch({
-      type: 'CLEAR_GRAPH',
-      module_key: moduleKeyRef.current,
-    });
-  }, [semanticDispatch]);
-
-  // ── Generate: enrich bundle with inference then post to host ──
-  const enrichAndGenerate = useCallback(() => {
-    const ws = workspaceRef.current;
-    const mk = moduleKeyRef.current;
-    const bundle = toBundle(ws);
-    const entryDef = bundle.modules[mk];
-
-    if (entryDef) {
-      const children = allChildren(entryDef);
-      const resolve = (child: Use | Resource) => resolveSchema(ws, child);
-
-      const inferredVars = inferVariables(children);
-      const inferredExports = inferOutputExports(children, resolve);
-      const mergedExports = { ...inferredExports, ...entryDef.exports.outputs };
-      const inferredOutputs = inferOutputDefs(mergedExports, children, resolve);
-      const inferredProviders = inferRequiredProviders(bundle.modules, mk);
-
-      bundle.modules[mk] = {
-        ...entryDef,
-        interface: {
-          inputs: inferredVars,
-          outputs: inferredOutputs,
-        },
-        exports: { outputs: mergedExports },
-        terraform: {
-          ...entryDef.terraform,
-          required_providers: {
-            ...inferredProviders,
-            ...entryDef.terraform?.required_providers,
-          },
-        },
-      };
+  const onClearGraph = useCallback(async () => {
+    if (!engine || !state.view) return;
+    // Delete all nodes
+    for (const node of state.view.nodes) {
+      const result = await engine.deleteInstance(node.id);
+      updateView(result);
     }
-
-    postToHost({ command: 'generateBundle', bundle });
-  }, []);
+  }, [engine, state.view, updateView]);
 
   // ── Open settings panel ──
   const onOpenSettings = useCallback(() => {
@@ -571,328 +369,113 @@ export default function Canvas() {
     setConfigTarget(null);
   }, []);
 
-  // ── Message handler: host → webview ──
+  // ── Handle edge config connect ──
+  const handleEdgeConnect = useCallback(
+    async (source: string, target: string, outputName: string, inputName: string) => {
+      if (!engine) return;
+      const result = await engine.connect(source, target, outputName, inputName);
+      updateView(result);
+      setEdgeConfigState(null);
+    },
+    [engine, updateView],
+  );
+
   useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      const msg = e.data;
-
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail;
       switch (msg.command) {
-        case 'loadState': {
-          dispatch({ type: 'LOAD_WORKSPACE', workspace: msg.state });
-          undoStack.current = [];
-          setIsDirty(false);
-          isDirtyRef.current = false;
-          setLoadGeneration((n) => n + 1);
-          setFitViewTrigger((n) => n + 1);
-          break;
-        }
-
-        case 'triggerSave': {
-          // User-initiated save (Cmd+S or save button)
-          postToHost({ command: 'saveState', state: workspaceRef.current });
-          break;
-        }
-
-        case 'saveConfirmed': {
-          setIsDirty(false);
-          isDirtyRef.current = false;
-          setStatusMessage('Saved');
-          setTimeout(() => setStatusMessage(null), TOAST_BRIEF);
-          break;
-        }
-
-        case 'triggerGenerate': {
-          enrichAndGenerate();
-          break;
-        }
-
         case 'generateSuccess': {
           setStatusMessage('Successfully generated');
           setTimeout(() => setStatusMessage(null), TOAST_INFO);
           break;
         }
-
         case 'generateError': {
           setStatusMessage(`Generate error: ${msg.message}`);
-          setTimeout(() => setStatusMessage(null), TOAST_SLOW);
-          break;
-        }
-
-        case 'dropBundle': {
-          const deployBundle: Bundle = msg.deploy_bundle;
-          if (!deployBundle) break;
-
-          // Store icon_url for this module (from registry metadata)
-          const dropIconUrl: string | undefined = msg.icon_url;
-          if (dropIconUrl) {
-            setIconMap((prev) => ({ ...prev, [deployBundle.entry]: dropIconUrl }));
-          }
-
-          // Parse through fromBundle to normalize bindings
-          const { workspace: parsed, errors } = fromBundle(deployBundle);
-          if (errors.length > 0) {
-            console.warn('Deploy bundle parse errors:', errors);
-          }
-
-          // Build positions map for entry composite's instances
-          const entryDef = parsed.modules[deployBundle.entry];
-          const positions: Record<string, { x: number; y: number }> = {};
-
-          // Count existing instances to offset new drops
-          const currentDef = workspaceRef.current.modules[moduleKeyRef.current];
-          const existingCount = currentDef ? allChildren(currentDef).length : 0;
-
-          if (entryDef) {
-            const entryChildren = allChildren(entryDef);
-            const cols = Math.max(2, Math.ceil(Math.sqrt(entryChildren.length)));
-
-            // Offset each successive drop: arrange in a grid with spacing
-            const offsetCol = existingCount % 4;
-            const offsetRow = Math.floor(existingCount / 4);
-            const basePos = { x: 100 + offsetCol * 120, y: 100 + offsetRow * 100 };
-
-            for (let i = 0; i < entryChildren.length; i++) {
-              const col = i % cols;
-              const row = Math.floor(i / cols);
-              positions[entryChildren[i].id] = {
-                x: basePos.x + col * 260,
-                y: basePos.y + row * 180,
-              };
-            }
-          }
-
-          // Reconstruct as Bundle (without layouts) for DROP_BUNDLE
-          const bundleForDrop: Bundle = {
-            schema_version: parsed.schema_version,
-            kind: parsed.kind,
-            entry: parsed.entry,
-            modules: parsed.modules,
-          };
-
-          semanticDispatch({
-            type: 'DROP_BUNDLE',
-            module_key: moduleKeyRef.current,
-            deploy_bundle: bundleForDrop,
-            positions,
-          });
-          setFitViewTrigger((n) => n + 1);
-          break;
-        }
-
-        case 'refreshModuleDefs': {
-          const updatedModules = msg.updated_modules;
-          if (updatedModules && Object.keys(updatedModules).length > 0) {
-            semanticDispatch({
-              type: 'REFRESH_MODULE_DEFS',
-              updated_modules: updatedModules,
-            });
-            // Update icon map if provided
-            const iconUpdates: Record<string, string> | undefined = msg.icon_updates;
-            if (iconUpdates) {
-              setIconMap((prev) => ({ ...prev, ...iconUpdates }));
-            }
-            const count = Object.keys(updatedModules).length;
-            setStatusMessage(`Refreshed ${count} module(s)`);
-          } else {
-            setStatusMessage('All modules up to date');
-          }
-          // Host sends triggerSave after this to persist the reconciled state.
           setTimeout(() => setStatusMessage(null), TOAST_INFO);
-          break;
-        }
-
-        case 'validationErrors': {
-          setValidationErrors(msg.errors ?? []);
-          if (msg.errors?.length > 0) {
-            setStatusMessage(`Validation: ${msg.errors.length} error(s) found`);
-            setTimeout(() => setStatusMessage(null), TOAST_SLOW);
-          }
-          break;
-        }
-
-        // ── getGraphState: respond with current workspace state ──
-        case 'getGraphState': {
-          postToHost({
-            command: 'graphStateResponse',
-            requestId: msg.requestId,
-            state: workspaceRef.current,
-          });
-          break;
-        }
-
-        // ── dispatchAction: apply a reducer action from the host ──
-        case 'dispatchAction': {
-          try {
-            semanticDispatch(msg.action);
-            postToHost({
-              command: 'dispatchActionResponse',
-              requestId: msg.requestId,
-              success: true,
-            });
-          } catch (err: any) {
-            postToHost({
-              command: 'dispatchActionResponse',
-              requestId: msg.requestId,
-              success: false,
-              error: err.message ?? 'Unknown dispatch error',
-            });
-          }
           break;
         }
       }
     };
 
-    window.addEventListener('message', handler);
-    postToHost({ command: 'webviewReady' });
+    window.addEventListener('hostMessage', handler);
+    return () => window.removeEventListener('hostMessage', handler);
+  }, []);
 
-    return () => {
-      window.removeEventListener('message', handler);
-    };
-  }, [semanticDispatch]);
-
-  // ── Guard: active module must be composite ──
-  // Clean early return — every hook above runs unconditionally.
-  // Graph-dependent hooks live in CompositeEditor, which only
-  // mounts when this guard passes.
-  if (!rootDef) {
-    return <ErrorState message={`Root module "${module_key}" not found.`} />;
+  // ── Guard: need a view to render ──
+  if (state.loading || !state.view) {
+    if (state.error) {
+      return <ErrorState message={state.error} />;
+    }
+    return (
+      <div className="h-screen flex items-center justify-center text-[#999] text-sm">
+        Loading canvas...
+      </div>
+    );
   }
 
-  const layout = workspace.layouts[module_key];
+  if (!engine) {
+    return <ErrorState message="Engine not available." />;
+  }
 
-  // ── Config panel target data ──
-  const configChild = configTarget ? findChild(rootDef, configTarget) : undefined;
-  const configSchema = configChild ? resolveSchema(workspace, configChild) : undefined;
-
-  // ── Edge config panel data ──
-  const edgeSourceChild = edgeConfigState ? findChild(rootDef, edgeConfigState.source) : undefined;
-  const edgeTargetChild = edgeConfigState ? findChild(rootDef, edgeConfigState.target) : undefined;
+  const view = state.view;
 
   // ── Render ──
   return (
-    <CanvasContext.Provider value={callbacks}>
-      <div className="h-screen flex flex-col relative">
-        {statusMessage && (
-          <div className="absolute top-4 left-4 z-20 bg-[#153238] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
-            {statusMessage}
-          </div>
-        )}
-
-        <div className="flex-1 relative min-h-0">
-          <CompositeEditor
-            key={`${module_key}:${loadGeneration}`}
-            mod={rootDef}
-            layout={layout}
-            workspace={workspace}
-            module_key={module_key}
-            validationErrors={validationErrors}
-            fitViewTrigger={fitViewTrigger}
-            iconMap={iconMap}
-            onDragStop={onDragStop}
-            onConnect={onConnect}
-            onEdgesDelete={onEdgesDelete}
-            onNodesDelete={onNodesDelete}
-            onSave={onSave}
-            onRefresh={onRefresh}
-            onUndo={onUndo}
-            onClearGraph={onClearGraph}
-            onGenerate={enrichAndGenerate}
-            onOpenSettings={onOpenSettings}
-          />
-
-          {/* Module config panel */}
-          <SlidePanel open={!!(configTarget && configChild && configSchema)}>
-            {configTarget && configChild && configSchema && (
-              <ModuleConfigPanel
-                instance_id={configTarget}
-                schema={configSchema}
-                inputs={configChild.inputs ?? {}}
-                composite_variables={rootDef.interface.inputs}
-                sibling_ids={[...childIds(rootDef)].filter((id) => id !== configTarget)}
-                depends_on={configChild.depends_on}
-                onSave={(inputs) => {
-                  semanticDispatch({
-                    type: 'UPDATE_INPUTS',
-                    module_key,
-                    instance_id: configTarget,
-                    inputs,
-                  });
-                  setConfigTarget(null);
-                }}
-                onSaveDependsOn={(depends_on) => {
-                  semanticDispatch({
-                    type: 'SET_DEPENDS_ON',
-                    module_key,
-                    instance_id: configTarget,
-                    depends_on,
-                  });
-                }}
-                onDisconnect={(input_name) => {
-                  semanticDispatch({
-                    type: 'DISCONNECT',
-                    module_key,
-                    target_instance: configTarget,
-                    input_name,
-                  });
-                  setConfigTarget(null);
-                }}
-                onClose={() => setConfigTarget(null)}
-              />
-            )}
-          </SlidePanel>
-
-          {/* Edge config panel */}
-          <SlidePanel open={!!(edgeConfigState && edgeSourceChild && edgeTargetChild)} zIndex={40}>
-            {edgeConfigState && edgeSourceChild && edgeTargetChild && (
-              <EdgeConfigPanel
-                source_instance={edgeConfigState.source}
-                target_instance={edgeConfigState.target}
-                source_schema={resolveSchema(workspace, edgeSourceChild)}
-                target_schema={resolveSchema(workspace, edgeTargetChild)}
-                target_inputs={edgeTargetChild.inputs ?? {}}
-                onConnect={(mapping) => {
-                  semanticDispatch({
-                    type: 'CONNECT',
-                    module_key,
-                    source_instance: edgeConfigState.source,
-                    target_instance: edgeConfigState.target,
-                    mapping,
-                  });
-                  setEdgeConfigState(null);
-                }}
-                onClose={() => setEdgeConfigState(null)}
-              />
-            )}
-          </SlidePanel>
-
-          {/* Unified settings panel */}
-          <SlidePanel open={settingsOpen}>
-            {settingsOpen && (
-              <UnifiedSettingsPanel
-                terraform={rootDef.terraform}
-                providers={rootDef.providers}
-                locals={rootDef.locals}
-                environments={workspace.environments}
-                environment_backends={workspace.environment_backends}
-                onSaveTerraform={(terraform) => {
-                  semanticDispatch({ type: 'SET_TERRAFORM', module_key, terraform });
-                }}
-                onSaveProviders={(providers) => {
-                  semanticDispatch({ type: 'SET_PROVIDERS', module_key, providers });
-                }}
-                onSaveLocals={(locals) => {
-                  semanticDispatch({ type: 'SET_LOCALS', module_key, locals });
-                }}
-                onSaveEnvironments={(environments, backends) => {
-                  semanticDispatch({ type: 'SET_ENVIRONMENTS', environments });
-                  semanticDispatch({ type: 'SET_ENVIRONMENT_BACKENDS', backends });
-                }}
-                onClose={() => setSettingsOpen(false)}
-              />
-            )}
-          </SlidePanel>
+    <div className="h-screen flex flex-col relative">
+      {statusMessage && (
+        <div className="absolute top-4 left-4 z-20 bg-[#153238] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
+          {statusMessage}
         </div>
+      )}
+
+      <div className="flex-1 relative min-h-0">
+        <CompositeEditor
+          key={`canvas:${state.generation}`}
+          view={view}
+          fitViewTrigger={state.generation}
+          onDragStop={onDragStop}
+          onConnect={onConnect}
+          onEdgesDelete={onEdgesDelete}
+          onNodesDelete={onNodesDelete}
+          onSave={onSave}
+          onUndo={onUndo}
+          onRedo={onRedo}
+          onClearGraph={onClearGraph}
+          onGenerate={onGenerate}
+          onOpenSettings={onOpenSettings}
+        />
+
+        {/* Module config panel */}
+        <SlidePanel open={!!configTarget}>
+          {configTarget && (
+            <ModuleConfigPanel
+              instance_id={configTarget}
+              engine={engine}
+              onClose={() => setConfigTarget(null)}
+            />
+          )}
+        </SlidePanel>
+
+        {/* Edge config panel */}
+        <SlidePanel open={!!edgeConfigState} zIndex={40}>
+          {edgeConfigState && (
+            <EdgeConfigPanel
+              source_instance={edgeConfigState.source}
+              target_instance={edgeConfigState.target}
+              engine={engine}
+              onConnect={handleEdgeConnect}
+              onClose={() => setEdgeConfigState(null)}
+            />
+          )}
+        </SlidePanel>
+
+        {/* Unified settings panel */}
+        <SlidePanel open={settingsOpen}>
+          {settingsOpen && (
+            <UnifiedSettingsPanel engine={engine} onClose={() => setSettingsOpen(false)} />
+          )}
+        </SlidePanel>
       </div>
-    </CanvasContext.Provider>
+    </div>
   );
 }

@@ -1,41 +1,19 @@
 // src/webview/createWebviewPanel.ts
 import * as vscode from 'vscode';
 import path from 'path';
-import fs from 'fs';
-
-import { randomUUID } from 'crypto';
 
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
-import { fromBundle, emptyWorkspace, type LayoutHints } from './utils/bundle';
-import { validateWorkspace } from './utils/validate';
-import type { WorkspaceState } from './types/workspace';
 import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
-import { encodeCanvasState, decodeCanvasState } from './canvas-encoding';
 
 /* ── Constants ── */
 
 const LACE_DIR = '.lace';
-const CANVAS_DIR = '.canvas';
-const CANVAS_FILE = 'state.lace';
-const LEGACY_FILE = 'lace.json';
 
 /* ── State ── */
 
 let canvasPanel: vscode.WebviewPanel | undefined;
-
-/* ── Pending request map (UUID-keyed, mirrors RPC client pattern) ── */
-
-type PendingWebviewRequest = {
-  resolve: (value: any) => void;
-  reject: (error: Error) => void;
-  timeout: ReturnType<typeof setTimeout>;
-};
-
-const pendingRequests = new Map<string, PendingWebviewRequest>();
-
-const WEBVIEW_REQUEST_TIMEOUT_MS = 5_000;
 
 /* ── Public API ── */
 
@@ -46,44 +24,67 @@ export function getLaceDir(): string | undefined {
   return path.join(workspaceFolder.uri.fsPath, LACE_DIR);
 }
 
-/** Drop a module into the active canvas. Called from sidebar/command palette. */
-export function addModuleToActiveCanvas(deploy_bundle: any, icon_url?: string) {
+/** Drop a module into the active canvas via RPC. */
+export async function addModuleToActiveCanvas(server: ServerManager, registryKey: string) {
   if (!canvasPanel) {
     vscode.window.showWarningMessage('No canvas open. Run "Lace: Open Canvas" first.');
     return;
   }
-  postToWebview(canvasPanel, {
-    command: 'dropBundle',
-    deploy_bundle,
-    icon_url,
-  });
+  try {
+    const client = requireClient(server.rpcClient, 'drop module');
+    const canvasView = await client.actionDropModule({ registry_key: registryKey });
+    postToWebview(canvasPanel, { command: 'loadState', state: canvasView });
+  } catch (err: unknown) {
+    handleRpcError(err, 'action/drop_module', 'add module to canvas');
+  }
 }
 
-/** Trigger generate on the active canvas. */
-export function triggerGenerateOnActiveCanvas() {
+/** Trigger generate on the active canvas via RPC directly. */
+export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
   if (!canvasPanel) {
     vscode.window.showWarningMessage('No canvas open.');
     return;
   }
-  postToWebview(canvasPanel, { command: 'triggerGenerate' });
-}
+  const laceDir = getLaceDir();
+  if (!laceDir) return;
 
-/** Send refreshed module defs to the active canvas. */
-export function refreshModulesOnActiveCanvas(
-  updated_modules: Record<string, import('./types/ir').Module>,
-  icon_updates?: Record<string, string>,
-) {
-  if (!canvasPanel) {
-    vscode.window.showWarningMessage('No canvas open.');
-    return;
+  try {
+    const client = requireClient(server.rpcClient, 'session/generate');
+    const result = await client.sessionGenerate({
+      output_dir: laceDir,
+      options: {
+        dry_run: false,
+        format: true,
+        validate: true,
+        overwrite: true,
+      },
+    });
+
+    const diagnosticErrors = (result?.diagnostics ?? []).filter((d) => d.severity === 'error');
+    if (diagnosticErrors.length > 0) {
+      postToWebview(canvasPanel, {
+        command: 'generateError',
+        message: `Generation failed: ${diagnosticErrors.length} error(s)`,
+        diagnostics: diagnosticErrors as Diagnostic[],
+      });
+      return;
+    }
+
+    postToWebview(canvasPanel, {
+      command: 'generateSuccess',
+      files: result?.files_written,
+    });
+
+    vscode.window.showInformationMessage(`Terraform generated in ${LACE_DIR}/`);
+  } catch (err: unknown) {
+    const classified = handleRpcError(err, 'session/generate', 'generate Terraform');
+    if (canvasPanel) {
+      postToWebview(canvasPanel, {
+        command: 'generateError',
+        message: classified.message,
+      });
+    }
   }
-  postToWebview(canvasPanel, { command: 'refreshModuleDefs', updated_modules, icon_updates });
-}
-
-/** Trigger save on the active canvas (webview sends back its current state). */
-export function triggerSaveOnActiveCanvas() {
-  if (!canvasPanel) return;
-  postToWebview(canvasPanel, { command: 'triggerSave' });
 }
 
 /** Whether a canvas is currently open. */
@@ -91,106 +92,10 @@ export function isCanvasOpen(): boolean {
   return canvasPanel !== undefined;
 }
 
-/** Send a request to the webview and wait for a response (UUID-correlated, 5s timeout). */
-function makeWebviewRequest<T>(label: string, msg: Omit<HostToWebview, 'requestId'>): Promise<T> {
-  if (!canvasPanel) {
-    return Promise.reject(new Error('No canvas open'));
-  }
-  const requestId = randomUUID();
-  return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      pendingRequests.delete(requestId);
-      reject(new Error(`${label} timed out`));
-    }, WEBVIEW_REQUEST_TIMEOUT_MS);
-
-    pendingRequests.set(requestId, { resolve, reject, timeout });
-    postToWebview(canvasPanel!, { ...msg, requestId } as HostToWebview);
-  });
-}
-
-/** Request the current graph state from the webview (async, 5s timeout). */
-export function requestGraphState(): Promise<WorkspaceState> {
-  return makeWebviewRequest<WorkspaceState>('requestGraphState', {
-    command: 'getGraphState',
-  } as any);
-}
-
-/** Dispatch a reducer action to the canvas webview (async, 5s timeout). */
-export function dispatchToCanvas(action: import('./state/reducer').WorkspaceAction): Promise<void> {
-  return makeWebviewRequest<void>('dispatchToCanvas', {
-    command: 'dispatchAction',
-    action,
-  } as any);
-}
-
 /* ── Typed message helpers ── */
 
 function postToWebview(panel: vscode.WebviewPanel, msg: HostToWebview) {
   panel.webview.postMessage(msg);
-}
-
-/* ── .lace/ file helpers ── */
-
-function ensureLaceDir(laceDir: string): void {
-  if (!fs.existsSync(laceDir)) {
-    fs.mkdirSync(laceDir, { recursive: true });
-  }
-}
-
-function readCanvasState(laceDir: string): WorkspaceState | undefined {
-  // Try binary format first
-  const binaryPath = path.join(laceDir, CANVAS_DIR, CANVAS_FILE);
-  try {
-    if (fs.existsSync(binaryPath)) {
-      const buf = fs.readFileSync(binaryPath);
-      return decodeCanvasState(buf);
-    }
-  } catch (err) {
-    console.warn('Failed to read binary canvas state:', err);
-  }
-
-  // Fallback: legacy JSON
-  const legacyPath = path.join(laceDir, LEGACY_FILE);
-  try {
-    if (fs.existsSync(legacyPath)) {
-      return JSON.parse(fs.readFileSync(legacyPath, 'utf-8'));
-    }
-  } catch (err) {
-    console.warn('Failed to read legacy lace.json:', err);
-  }
-
-  return undefined;
-}
-
-function writeCanvasState(laceDir: string, state: WorkspaceState): void {
-  const canvasDir = path.join(laceDir, CANVAS_DIR);
-  ensureLaceDir(canvasDir);
-  const filePath = path.join(canvasDir, CANVAS_FILE);
-  const tmpPath = filePath + '.tmp';
-  const bakPath = filePath + '.bak';
-
-  fs.writeFileSync(tmpPath, encodeCanvasState(state));
-
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.renameSync(filePath, bakPath);
-    }
-  } catch {
-    // .bak rotation is best-effort
-  }
-
-  fs.renameSync(tmpPath, filePath);
-}
-
-function migrateLegacyFile(laceDir: string): void {
-  const legacyPath = path.join(laceDir, LEGACY_FILE);
-  const legacyBakPath = legacyPath + '.bak';
-  try {
-    if (fs.existsSync(legacyPath)) fs.unlinkSync(legacyPath);
-    if (fs.existsSync(legacyBakPath)) fs.unlinkSync(legacyBakPath);
-  } catch {
-    // Best-effort cleanup
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -236,154 +141,66 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
   // ── Host-side dirty tracking + auto-save ──
 
   let isDirtyHostSide = false;
-  let lastKnownState: WorkspaceState | undefined;
   let autoSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
   function scheduleAutoSave() {
     const autoSave = vscode.workspace.getConfiguration('lace').get<boolean>('autoSave', true);
     if (!autoSave) return;
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(() => {
-      postToWebview(panel, { command: 'triggerSave' });
+    autoSaveTimer = setTimeout(async () => {
+      try {
+        const client = requireClient(server.rpcClient, 'auto-save');
+        await client.sessionSave();
+        isDirtyHostSide = false;
+        panel.title = `Lace · ${folderName}`;
+      } catch {
+        // Auto-save is best-effort
+      }
     }, 2000);
   }
 
   // ── Message handler ──
 
   panel.webview.onDidReceiveMessage(
-    async (msg: WebviewToHost | { command: string; [key: string]: any }) => {
+    async (msg: WebviewToHost | { command: string; [key: string]: unknown }) => {
       switch (msg.command) {
-        // ── webviewReady: load canvas state or create empty workspace ──
+        // ── webviewReady: open session via RPC, load canvas state ──
         case 'webviewReady': {
-          const saved = readCanvasState(laceDir);
-          if (saved) {
-            // Parse through fromBundle for validation + normalization.
-            // Preserve saved layout positions as hints.
-            const hints: LayoutHints = {};
-            if (saved.layouts) {
-              for (const [key, layout] of Object.entries(saved.layouts as Record<string, any>)) {
-                hints[key] = {};
-                for (const [id, node] of Object.entries(layout.nodes as Record<string, any>)) {
-                  hints[key][id] = (node as any).position;
-                }
-              }
-            }
-            const { workspace, errors } = fromBundle(saved, hints);
-            if (errors.length > 0) {
-              console.warn('Bundle parse errors:', errors);
-            }
-            postToWebview(panel, { command: 'loadState', state: workspace });
-
-            // Migrate legacy lace.json → binary format
-            if (!fs.existsSync(path.join(laceDir, CANVAS_DIR, CANVAS_FILE))) {
-              writeCanvasState(laceDir, workspace);
-              migrateLegacyFile(laceDir);
-            }
-          } else {
-            const workspace = emptyWorkspace(folderName);
-            writeCanvasState(laceDir, workspace);
-            postToWebview(panel, { command: 'loadState', state: workspace });
-          }
-          break;
-        }
-
-        // ── saveState: write to .lace/.canvas/state.lace ──
-        case 'saveState': {
-          const state = (msg as any).state as WorkspaceState;
-          writeCanvasState(laceDir, state);
-          isDirtyHostSide = false;
-          lastKnownState = undefined;
-          panel.title = `Lace · ${folderName}`;
-          postToWebview(panel, { command: 'saveConfirmed' });
-          break;
-        }
-
-        // ── generateBundle: validate → generate into .lace/ ──
-        case 'generateBundle': {
-          const m = msg as Extract<WebviewToHost, { command: 'generateBundle' }>;
-
-          // Step 1: Graph validation (local, instant)
-          const { workspace: parsedWs } = fromBundle(m.bundle);
-          const graphErrors = validateWorkspace(parsedWs);
-          if (graphErrors.length > 0) {
-            postToWebview(panel, { command: 'validationErrors', errors: graphErrors });
-            postToWebview(panel, {
-              command: 'generateError',
-              message: `Graph validation failed: ${graphErrors.length} error(s)`,
-            });
-            return;
-          }
-
-          // Step 2: Terraform validation (RPC)
           try {
-            const client = requireClient(server.rpcClient, 'validate');
-            const validateResult = await client.validate({
-              bundle: m.bundle,
+            const client = requireClient(server.rpcClient, 'session/open');
+            const canvasView = await client.sessionOpen({
+              file_path: laceDir,
+              workspace_name: folderName,
             });
-
-            const diagnosticErrors = (validateResult?.diagnostics ?? []).filter(
-              (d: any) => d.severity === 'error',
-            );
-            if (diagnosticErrors.length > 0) {
-              postToWebview(panel, {
-                command: 'generateError',
-                message: `Terraform validation failed: ${diagnosticErrors.length} error(s)`,
-                diagnostics: diagnosticErrors as Diagnostic[],
-              });
-              return;
-            }
-          } catch (err: any) {
-            // Validation is a degraded-operation case: warn and proceed
-            vscode.window.showWarningMessage(
-              'Terraform validation was skipped (engine unavailable). Proceeding with generate.',
-            );
+            postToWebview(panel, { command: 'loadState', state: canvasView });
+          } catch (err: unknown) {
+            const classified = handleRpcError(err, 'session/open', 'open canvas session');
+            vscode.window.showErrorMessage(classified.message);
           }
+          break;
+        }
 
-          postToWebview(panel, { command: 'validationErrors', errors: [] });
-
-          // Step 3: Generate into .lace/
-          ensureLaceDir(laceDir);
-
+        // ── engineCall: forward RPC call from webview, send back result ──
+        case 'engineCall': {
+          const { requestId, method, params } = msg as {
+            requestId: string;
+            method: string;
+            params?: unknown;
+          };
           try {
-            const client = requireClient(server.rpcClient, 'generate');
-            const result = await client.generate({
-              bundle: m.bundle,
-              outputDir: laceDir,
-              options: {
-                dryRun: false,
-                format: true,
-                validate: true,
-                overwrite: true,
-              },
-            });
-
-            postToWebview(panel, {
-              command: 'generateSuccess',
-              files: result?.filesWritten,
-            });
-
-            vscode.window.showInformationMessage(`Terraform generated in ${LACE_DIR}/`);
-          } catch (err: any) {
-            const classified = handleRpcError(err, 'generate', 'generate Terraform');
-            postToWebview(panel, {
-              command: 'generateError',
-              message: classified.message,
-            });
+            const client = requireClient(server.rpcClient, method);
+            const result = await client.call(method, params);
+            postToWebview(panel, { command: 'engineResult', requestId, result });
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            postToWebview(panel, { command: 'engineResult', requestId, error: message });
           }
           break;
         }
 
-        // ── refreshModules: relay to command with module keys from webview state ──
-        case 'refreshModules': {
-          const rm = msg as Extract<WebviewToHost, { command: 'refreshModules' }>;
-          vscode.commands.executeCommand('lace.refreshCanvasModules', rm.module_keys);
-          break;
-        }
-
-        // ── markDirty: update title + mirror state host-side ──
+        // ── markDirty: update title ──
         case 'markDirty': {
           isDirtyHostSide = true;
-          lastKnownState = (msg as Extract<WebviewToHost, { command: 'markDirty' }>).state;
           panel.title = `Lace · ${folderName} ●`;
           scheduleAutoSave();
           break;
@@ -395,37 +212,6 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           panel.title = `Lace · ${folderName}`;
           break;
         }
-
-        // ── graphStateResponse: resolve pending requestGraphState() ──
-        case 'graphStateResponse': {
-          const { requestId, state } = msg as Extract<
-            WebviewToHost,
-            { command: 'graphStateResponse' }
-          >;
-          const pending = pendingRequests.get(requestId);
-          if (pending) {
-            clearTimeout(pending.timeout);
-            pendingRequests.delete(requestId);
-            pending.resolve(state);
-          }
-          break;
-        }
-
-        // ── dispatchActionResponse: resolve pending dispatchToCanvas() ──
-        case 'dispatchActionResponse': {
-          const resp = msg as Extract<WebviewToHost, { command: 'dispatchActionResponse' }>;
-          const pending = pendingRequests.get(resp.requestId);
-          if (pending) {
-            clearTimeout(pending.timeout);
-            pendingRequests.delete(resp.requestId);
-            if (resp.success) {
-              pending.resolve(undefined);
-            } else {
-              pending.reject(new Error(resp.error ?? 'dispatchAction failed'));
-            }
-          }
-          break;
-        }
       }
     },
   );
@@ -433,16 +219,26 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
   panel.onDidDispose(async () => {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
 
-    // Reject any in-flight requestGraphState / dispatchToCanvas calls
-    for (const [id, pending] of pendingRequests) {
-      clearTimeout(pending.timeout);
-      pending.reject(new Error('Canvas panel was closed'));
-      pendingRequests.delete(id);
+    if (isDirtyHostSide) {
+      try {
+        const client = server.rpcClient;
+        if (client) {
+          await client.sessionSave();
+        }
+      } catch {
+        // Best-effort save on close
+      }
     }
 
-    if (isDirtyHostSide && lastKnownState) {
-      writeCanvasState(laceDir, lastKnownState);
+    try {
+      const client = server.rpcClient;
+      if (client) {
+        await client.sessionClose();
+      }
+    } catch {
+      // Best-effort close
     }
+
     canvasPanel = undefined;
   });
 }

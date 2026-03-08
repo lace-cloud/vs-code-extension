@@ -1,7 +1,13 @@
 import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as readline from 'readline';
-import type { Bundle } from '../../webview/types/ir';
+import type {
+  CanvasView,
+  NodeConfig,
+  EdgeConfig,
+  SettingsConfig,
+  RenderError,
+} from '../../webview/types/render';
 import type { Diagnostic, RegistryModule } from '../../types/protocol';
 
 interface RPCRequest {
@@ -38,23 +44,13 @@ type RegistryVersionResult = {
   name: string;
   system: string;
   version: string;
-  deploy_bundle?: Bundle;
+  deploy_bundle?: unknown; // opaque — the CLI handles this internally now
 };
 
 type RegistryModuleResult = {
   name: string;
   system: string;
   versions: Array<{ version: string; description?: string }>;
-};
-
-type GenerateResult = {
-  filesWritten?: string[];
-  diagnostics?: Diagnostic[];
-};
-
-type ValidateResult = {
-  valid?: boolean;
-  diagnostics?: Diagnostic[];
 };
 
 export class JSONRPCClient extends EventEmitter {
@@ -163,6 +159,8 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<{ status: string }>('shutdown');
   }
 
+  // ── Registry methods ──
+
   listRegistryModules(params?: {
     system?: string;
     search?: string;
@@ -188,21 +186,174 @@ export class JSONRPCClient extends EventEmitter {
     return this.call<RegistryModuleResult>('registry/get', params);
   }
 
-  generate(params: {
-    bundle: Bundle;
-    outputDir: string;
-    options?: {
-      dryRun?: boolean;
-      format?: boolean;
-      validate?: boolean;
-      overwrite?: boolean;
-    };
-  }) {
-    return this.call<GenerateResult>('generate', params);
+  // ── Session methods ──
+
+  sessionOpen(params: { file_path: string; workspace_name: string }) {
+    return this.call<CanvasView>('session/open', params);
   }
 
-  validate(params: { bundle: Bundle }) {
-    return this.call<ValidateResult>('validate', params);
+  sessionSave() {
+    return this.call<{ saved: boolean }>('session/save');
+  }
+
+  sessionClose() {
+    return this.call<{ status: string }>('session/close');
+  }
+
+  sessionGenerate(params: {
+    output_dir: string;
+    options?: { dry_run?: boolean; format?: boolean; validate?: boolean; overwrite?: boolean };
+  }) {
+    return this.call<{
+      files_written?: string[];
+      files?: Record<string, string>;
+      diagnostics: Diagnostic[];
+    }>('session/generate', params);
+  }
+
+  // ── Action methods ──
+
+  actionDropModule(params: { registry_key: string; position?: { x: number; y: number } }) {
+    return this.call<CanvasView>('action/drop_module', params);
+  }
+
+  actionConnect(params: {
+    source: string;
+    target: string;
+    source_output: string;
+    target_input: string;
+  }) {
+    return this.call<CanvasView>('action/connect', params);
+  }
+
+  actionAutoConnect(params: { source: string; target: string }) {
+    return this.call<CanvasView>('action/auto_connect', params);
+  }
+
+  actionDisconnect(params: { target: string; input_name: string }) {
+    return this.call<CanvasView>('action/disconnect', params);
+  }
+
+  actionUpdateInput(params: {
+    instance_id: string;
+    input_name: string;
+    mode: string;
+    value?: unknown;
+    variable?: string;
+    expression?: string;
+  }) {
+    return this.call<CanvasView>('action/update_input', params);
+  }
+
+  actionUpdateAllInputs(params: {
+    instance_id: string;
+    inputs: Array<{
+      name: string;
+      mode: string;
+      value?: unknown;
+      variable?: string;
+      expression?: string;
+    }>;
+  }) {
+    return this.call<CanvasView>('action/update_all_inputs', params);
+  }
+
+  actionRenameInstance(params: { old_id: string; new_id: string }) {
+    return this.call<CanvasView>('action/rename_instance', params);
+  }
+
+  actionDeleteInstance(params: { instance_id: string }) {
+    return this.call<CanvasView>('action/delete_instance', params);
+  }
+
+  actionSyncLayout(params: { positions: Record<string, { x: number; y: number }> }) {
+    return this.call<Record<string, never>>('action/sync_layout', params);
+  }
+
+  actionSetVariables(params: {
+    variables: Array<{
+      name: string;
+      type: string;
+      required: boolean;
+      description?: string;
+      default?: unknown;
+    }>;
+  }) {
+    return this.call<CanvasView>('action/set_variables', params);
+  }
+
+  actionSetExports(params: {
+    outputs: Array<{ name: string; source_instance: string; source_output: string }>;
+    output_defs: Array<{ name: string; type: string; description?: string; sensitive?: boolean }>;
+  }) {
+    return this.call<CanvasView>('action/set_exports', params);
+  }
+
+  actionSetTerraform(params: {
+    required_version?: string;
+    required_providers?: Array<{ name: string; source: string; version: string }>;
+    backend?: { type: string; config: Record<string, unknown> };
+  }) {
+    return this.call<Record<string, never>>('action/set_terraform', params);
+  }
+
+  actionSetProviders(params: {
+    providers: Array<{ name: string; alias?: string; config: Record<string, unknown> }>;
+  }) {
+    return this.call<Record<string, never>>('action/set_providers', params);
+  }
+
+  actionSetLocals(params: {
+    locals: Array<{
+      name: string;
+      mode: string;
+      value?: unknown;
+      variable?: string;
+      expression?: string;
+    }>;
+  }) {
+    return this.call<CanvasView>('action/set_locals', params);
+  }
+
+  actionSetDependsOn(params: { instance_id: string; depends_on: string[] }) {
+    return this.call<Record<string, never>>('action/set_depends_on', params);
+  }
+
+  actionSetEnvironments(params: {
+    environments: Record<string, Record<string, unknown>>;
+    environment_backends: Record<string, { type: string; config: Record<string, unknown> }>;
+  }) {
+    return this.call<Record<string, never>>('action/set_environments', params);
+  }
+
+  actionUndo() {
+    return this.call<CanvasView>('action/undo');
+  }
+
+  actionRedo() {
+    return this.call<CanvasView>('action/redo');
+  }
+
+  // ── Query methods ──
+
+  queryNodeConfig(params: { instance_id: string }) {
+    return this.call<NodeConfig>('query/node_config', params);
+  }
+
+  queryEdgeConfig(params: { source: string; target: string }) {
+    return this.call<EdgeConfig>('query/edge_config', params);
+  }
+
+  querySettings() {
+    return this.call<SettingsConfig>('query/settings');
+  }
+
+  queryGraphSummary() {
+    return this.call<{ text: string }>('query/graph_summary');
+  }
+
+  queryValidate() {
+    return this.call<{ errors: RenderError[] }>('query/validate');
   }
 
   dispose(): void {

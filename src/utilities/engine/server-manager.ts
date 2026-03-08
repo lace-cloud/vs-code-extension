@@ -13,6 +13,7 @@ export class ServerManager extends EventEmitter {
   private restartCount = 0;
   private readonly maxRestarts = 3;
   private outputChannel: vscode.OutputChannel | null = null;
+  private restartScheduled = false;
 
   constructor(outputChannel?: vscode.OutputChannel) {
     super();
@@ -72,8 +73,8 @@ export class ServerManager extends EventEmitter {
       this.restartCount = 0;
       this.log('Engine initialized successfully');
       this.setState('running');
-    } catch (err: any) {
-      this.log(`Start failed: ${err.message}`);
+    } catch (err: unknown) {
+      this.log(`Start failed: ${err instanceof Error ? err.message : String(err)}`);
       this.outputChannel?.show(true);
       this.setState('error');
       throw err;
@@ -115,15 +116,23 @@ export class ServerManager extends EventEmitter {
       return;
     }
 
+    if (this.restartScheduled) {
+      return;
+    }
+
     const autoRestart = vscode.workspace.getConfiguration('lace').get<boolean>('autoRestart', true);
 
     if (!autoRestart) {
       return;
     }
 
+    this.restartScheduled = true;
     this.restartCount++;
     const delayMs = 1000 * this.restartCount;
     this.log(`Scheduling restart ${this.restartCount}/${this.maxRestarts} in ${delayMs}ms`);
-    setTimeout(() => this.start(), delayMs);
+    setTimeout(() => {
+      this.restartScheduled = false;
+      this.start();
+    }, delayMs);
   }
 }

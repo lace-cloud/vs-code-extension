@@ -1,50 +1,20 @@
-import type { Bundle } from '../webview/types/ir';
-import type { WorkspaceState } from '../webview/types/workspace';
-import type { GraphError } from '../webview/utils/validate';
+import type { CanvasView } from '../webview/types/render';
 
 // ── Host → Webview ──
 
 export type HostToWebview =
-  | { command: 'loadState'; state: WorkspaceState }
-  | { command: 'saveConfirmed' }
-  | { command: 'triggerSave' }
-  | { command: 'triggerGenerate' }
+  | { command: 'loadState'; state: CanvasView }
   | { command: 'generateSuccess'; files?: string[] }
   | { command: 'generateError'; message: string; diagnostics?: Diagnostic[] }
-  | { command: 'dropBundle'; deploy_bundle: Bundle; icon_url?: string }
-  | { command: 'validationErrors'; errors: GraphError[] }
-  | { command: 'triggerVariables' }
-  | { command: 'triggerOutputs' }
-  | { command: 'triggerTerraformConfig' }
-  | { command: 'triggerProviders' }
-  | { command: 'triggerLocals' }
-  | { command: 'triggerEnvironments' }
-  | {
-      command: 'refreshModuleDefs';
-      updated_modules: Record<string, import('../webview/types/ir').Module>;
-      icon_updates?: Record<string, string>;
-    }
-  | { command: 'getGraphState'; requestId: string }
-  | {
-      command: 'dispatchAction';
-      requestId: string;
-      action: import('../webview/state/reducer').WorkspaceAction;
-    };
+  | { command: 'engineResult'; requestId: string; result?: unknown; error?: string };
 
 // ── Webview → Host ──
 
 export type WebviewToHost =
   | { command: 'webviewReady' }
-  | { command: 'saveState'; state: WorkspaceState }
-  | { command: 'generateBundle'; bundle: Bundle }
-  | { command: 'markDirty'; state: WorkspaceState }
-  | { command: 'markClean' }
-  | {
-      command: 'refreshModules';
-      module_keys: Record<string, { id: string; version: string }>;
-    }
-  | { command: 'graphStateResponse'; requestId: string; state: WorkspaceState }
-  | { command: 'dispatchActionResponse'; requestId: string; success: boolean; error?: string };
+  | { command: 'engineCall'; requestId: string; method: string; params?: unknown }
+  | { command: 'markDirty' }
+  | { command: 'markClean' };
 
 // ── RPC diagnostic (matches Go's server.Diagnostic) ──
 

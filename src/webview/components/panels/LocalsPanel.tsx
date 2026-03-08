@@ -1,7 +1,6 @@
 // src/webview/components/panels/LocalsPanel.tsx
 import React, { useState, useCallback } from 'react';
-import type { LocalDef, Binding } from '../../types/ir';
-import { isLit, isExpr } from '../../types/ir';
+import type { SettingsConfig } from '../../types/render';
 import { isValidTerraformIdentifier } from '../../utils/identifiers';
 import {
   inputClasses,
@@ -15,6 +14,10 @@ import {
 } from '../../styles/panel';
 import PanelFrame from '../PanelFrame';
 
+// ── Types derived from SettingsConfig ──
+
+type LocalEntry = SettingsConfig['locals'][number];
+
 // ── Local editing state ──
 
 type BindingMode = 'literal' | 'expression';
@@ -26,49 +29,31 @@ type LocalRow = {
   exprValue: string;
 };
 
-function detectMode(binding: Binding): BindingMode {
-  if (isExpr(binding)) return 'expression';
-  return 'literal';
-}
-
-function toRows(locals: LocalDef[] | undefined): LocalRow[] {
+function toRows(locals: LocalEntry[] | undefined): LocalRow[] {
   if (!locals) return [];
   return locals.map((l) => ({
     name: l.name,
-    mode: detectMode(l.value),
-    litValue: isLit(l.value)
-      ? typeof l.value.lit === 'string'
-        ? l.value.lit
-        : JSON.stringify(l.value.lit, null, 2)
-      : '',
-    exprValue: isExpr(l.value) ? l.value.expr.value : '',
+    mode: l.mode === 'expression' ? 'expression' : 'literal',
+    litValue: l.mode !== 'expression' ? l.value_display : '',
+    exprValue: l.mode === 'expression' ? l.value_display : '',
   }));
 }
 
-function fromRows(rows: LocalRow[]): LocalDef[] {
+function fromRows(rows: LocalRow[]): LocalEntry[] {
   return rows
     .filter((r) => r.name.trim())
-    .map((r) => {
-      let value: Binding;
-      if (r.mode === 'expression') {
-        value = { expr: { lang: 'hcl', value: r.exprValue } };
-      } else {
-        // Try parsing as JSON for structured literals
-        try {
-          value = { lit: JSON.parse(r.litValue) };
-        } catch {
-          value = { lit: r.litValue };
-        }
-      }
-      return { name: r.name.trim(), value };
-    });
+    .map((r) => ({
+      name: r.name.trim(),
+      mode: r.mode,
+      value_display: r.mode === 'expression' ? r.exprValue : r.litValue,
+    }));
 }
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
 type ContentProps = {
-  locals: LocalDef[] | undefined;
-  onSave: (locals: LocalDef[]) => void;
+  locals: LocalEntry[] | undefined;
+  onSave: (locals: LocalEntry[]) => void;
 };
 
 export function LocalsContent({ locals, onSave }: ContentProps) {
@@ -181,8 +166,8 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
 // ── Full panel (backwards compat — original default export) ──
 
 type Props = {
-  locals: LocalDef[] | undefined;
-  onSave: (locals: LocalDef[]) => void;
+  locals: LocalEntry[] | undefined;
+  onSave: (locals: LocalEntry[]) => void;
   onClose: () => void;
 };
 

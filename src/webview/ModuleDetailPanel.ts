@@ -8,7 +8,7 @@ const activePanels = new Map<string, vscode.WebviewPanel>();
 export async function showModuleDetail(
   mod: RegistryModule,
   rpcClient: JSONRPCClient | null,
-  onAddToCanvas: (deploy_bundle: any, icon_url?: string) => void,
+  onAddToCanvas: (registryKey: string, icon_url?: string) => void,
 ) {
   const panelKey = `${mod.system}/${mod.name}`;
 
@@ -32,9 +32,9 @@ export async function showModuleDetail(
   panel.webview.html = buildHtml(mod, null, null, true);
 
   // Fetch detailed data
-  let versions: any[] = [];
-  let moduleInterface: { inputs: any[]; outputs: any[] } | null = null;
-  let deployBundle: any = null;
+  let versions: VersionEntry[] = [];
+  let moduleInterface: { inputs: InterfaceField[]; outputs: InterfaceField[] } | null = null;
+  let hasDeployBundle = false;
   let description = mod.description ?? '';
   let fetchError: string | null = null;
 
@@ -48,13 +48,14 @@ export async function showModuleDetail(
       versions = getResult?.versions ?? [];
 
       const versionMeta = versions.find(
-        (v: any) => v.version === mod.version || v.version === `v${mod.version}`,
+        (v) => v.version === mod.version || v.version === `v${mod.version}`,
       );
       if (versionMeta?.description) {
         description = versionMeta.description;
       }
-    } catch (err: any) {
-      console.warn('Failed to fetch module versions:', err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('Failed to fetch module versions:', message);
     }
 
     // Fetch deploy bundle (independent)
@@ -65,20 +66,36 @@ export async function showModuleDetail(
         version: mod.version,
       });
 
-      deployBundle = versionResult?.deploy_bundle;
+      const deployBundle = versionResult?.deploy_bundle as
+        | {
+            modules?: Record<
+              string,
+              {
+                source?: string;
+                description?: string;
+                interface?: { inputs?: InterfaceField[]; outputs?: InterfaceField[] };
+              }
+            >;
+          }
+        | undefined;
+      hasDeployBundle = !!deployBundle;
 
       if (deployBundle?.modules) {
-        const moduleDefs = Object.values(deployBundle.modules) as any[];
-        const leafDef = moduleDefs.find((d: any) => d.source != null) ?? moduleDefs[0];
+        const moduleDefs = Object.values(deployBundle.modules);
+        const leafDef = moduleDefs.find((d) => d.source != null) ?? moduleDefs[0];
         if (leafDef?.interface) {
-          moduleInterface = leafDef.interface;
+          moduleInterface = {
+            inputs: leafDef.interface.inputs ?? [],
+            outputs: leafDef.interface.outputs ?? [],
+          };
         }
         if (leafDef?.description) {
           description = leafDef.description;
         }
       }
-    } catch (err: any) {
-      console.warn('Failed to fetch deploy bundle:', err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('Failed to fetch deploy bundle:', message);
       fetchError = 'Could not load deploy bundle. Some details may be unavailable.';
     }
   }
@@ -88,18 +105,22 @@ export async function showModuleDetail(
 
   // Handle messages from the webview
   panel.webview.onDidReceiveMessage((msg) => {
-    if (msg.command === 'addToCanvas' && deployBundle) {
-      onAddToCanvas(deployBundle, mod.icon_url);
+    if (msg.command === 'addToCanvas' && hasDeployBundle) {
+      const registryKey = `${mod.id}@${mod.version}`;
+      onAddToCanvas(registryKey, mod.icon_url);
     }
   });
 }
 
 // ── HTML Builder ──
 
+type InterfaceField = { name: string; type?: string; required?: boolean; description?: string };
+type VersionEntry = { version: string; description?: string };
+
 function buildHtml(
   mod: RegistryModule,
-  iface: { inputs: any[]; outputs: any[] } | null,
-  versions: any[] | null,
+  iface: { inputs: InterfaceField[]; outputs: InterfaceField[] } | null,
+  versions: VersionEntry[] | null,
   loading: boolean,
   description?: string,
   fetchError?: string | null,
@@ -110,7 +131,7 @@ function buildHtml(
   const inputsHtml = iface?.inputs?.length
     ? iface.inputs
         .map(
-          (inp: any) => `
+          (inp) => `
           <tr>
             <td class="prop-name">${esc(inp.name)}</td>
             <td class="prop-type">${esc(inp.type ?? 'string')}</td>
@@ -124,7 +145,7 @@ function buildHtml(
   const outputsHtml = iface?.outputs?.length
     ? iface.outputs
         .map(
-          (out: any) => `
+          (out) => `
           <tr>
             <td class="prop-name">${esc(out.name)}</td>
             <td class="prop-type">${esc(out.type ?? 'string')}</td>
@@ -137,7 +158,7 @@ function buildHtml(
   const versionsHtml = versions?.length
     ? versions
         .map(
-          (v: any) =>
+          (v) =>
             `<span class="version-tag${v.version === mod.version ? ' active' : ''}">${esc(v.version ?? 'unknown')}</span>`,
         )
         .join(' ')
@@ -510,7 +531,7 @@ function buildHtml(
 
 function buildUsageExample(
   mod: RegistryModule,
-  iface: { inputs: any[]; outputs: any[] } | null,
+  iface: { inputs: InterfaceField[]; outputs: InterfaceField[] } | null,
 ): string {
   const lines: string[] = [];
   lines.push(`# ${mod.name} (${mod.system})`);

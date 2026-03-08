@@ -1,6 +1,6 @@
 // src/webview/components/panels/TerraformConfigPanel.tsx
 import React, { useState, useCallback } from 'react';
-import type { TerraformBlock, ProviderRequirement } from '../../types/ir';
+import type { SettingsConfig } from '../../types/render';
 import {
   inputClasses,
   BACKEND_TYPES,
@@ -11,21 +11,25 @@ import {
 import { parseConfigValue } from '../../utils/parseValue';
 import PanelFrame from '../PanelFrame';
 
+// ── Types derived from SettingsConfig ──
+
+type TerraformConfig = SettingsConfig['terraform'];
+
+type ProviderRequirementRow = { name: string; source: string; version: string };
+
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
 type ContentProps = {
-  terraform: TerraformBlock | undefined;
-  onSave: (terraform: TerraformBlock) => void;
+  terraform: TerraformConfig | undefined;
+  onSave: (terraform: TerraformConfig) => void;
 };
 
 export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
   const [requiredVersion, setRequiredVersion] = useState(terraform?.required_version ?? '');
-  const [providers, setProviders] = useState<
-    Array<{ name: string; source: string; version: string }>
-  >(() => {
+  const [providers, setProviders] = useState<ProviderRequirementRow[]>(() => {
     if (!terraform?.required_providers) return [];
-    return Object.entries(terraform.required_providers).map(([name, req]) => ({
-      name,
+    return terraform.required_providers.map((req) => ({
+      name: req.name,
       source: req.source ?? '',
       version: req.version ?? '',
     }));
@@ -74,29 +78,19 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
   // ── Save ──
 
   const handleSave = () => {
-    const block: TerraformBlock = {};
-
-    if (requiredVersion.trim()) {
-      block.required_version = requiredVersion.trim();
-    }
-
-    if (providers.length > 0) {
-      const reqProviders: Record<string, ProviderRequirement> = {};
-      for (const p of providers) {
-        if (p.name.trim()) {
-          reqProviders[p.name.trim()] = {
-            ...(p.source.trim() ? { source: p.source.trim() } : {}),
-            ...(p.version.trim() ? { version: p.version.trim() } : {}),
-          };
-        }
-      }
-      if (Object.keys(reqProviders).length > 0) {
-        block.required_providers = reqProviders;
-      }
-    }
+    const block: TerraformConfig = {
+      required_version: requiredVersion.trim() || '',
+      required_providers: providers
+        .filter((p) => p.name.trim())
+        .map((p) => ({
+          name: p.name.trim(),
+          source: p.source.trim(),
+          version: p.version.trim(),
+        })),
+    };
 
     if (backendConfig.length > 0) {
-      const config: Record<string, any> = {};
+      const config: Record<string, unknown> = {};
       for (const c of backendConfig) {
         if (c.key.trim()) {
           config[c.key.trim()] = parseConfigValue(c.value);
@@ -200,8 +194,8 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
 // ── Full panel (backwards compat — original default export) ──
 
 type Props = {
-  terraform: TerraformBlock | undefined;
-  onSave: (terraform: TerraformBlock) => void;
+  terraform: TerraformConfig | undefined;
+  onSave: (terraform: TerraformConfig) => void;
   onClose: () => void;
 };
 

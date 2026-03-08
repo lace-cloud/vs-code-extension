@@ -1,6 +1,5 @@
 // src/webview/components/panels/EnvironmentsPanel.tsx
 import React, { useState, useCallback } from 'react';
-import type { BackendConfig } from '../../types/ir';
 import {
   inputClasses,
   BACKEND_TYPES,
@@ -13,6 +12,10 @@ import {
 } from '../../styles/panel';
 import { parseConfigValue } from '../../utils/parseValue';
 import PanelFrame from '../PanelFrame';
+
+// ── Types derived from SettingsConfig ──
+
+type BackendConfigEntry = { type: string; config: Record<string, unknown> };
 
 // ── Shared styles ──
 
@@ -29,7 +32,7 @@ type BackendRow = {
   config: Array<{ key: string; value: string }>;
 };
 
-function toEnvRows(envs: Record<string, Record<string, any>> | undefined): EnvRow[] {
+function toEnvRows(envs: Record<string, Record<string, unknown>> | undefined): EnvRow[] {
   if (!envs) return [];
   return Object.entries(envs).map(([name, vars]) => ({
     name,
@@ -40,7 +43,7 @@ function toEnvRows(envs: Record<string, Record<string, any>> | undefined): EnvRo
   }));
 }
 
-function toBackendRows(backends: Record<string, BackendConfig> | undefined): BackendRow[] {
+function toBackendRows(backends: Record<string, BackendConfigEntry> | undefined): BackendRow[] {
   if (!backends) return [];
   return Object.entries(backends).map(([envName, backend]) => ({
     envName,
@@ -52,18 +55,16 @@ function toBackendRows(backends: Record<string, BackendConfig> | undefined): Bac
   }));
 }
 
-function fromEnvRows(rows: EnvRow[]): Record<string, Record<string, any>> {
-  const result: Record<string, Record<string, any>> = {};
+function fromEnvRows(rows: EnvRow[]): Record<string, Record<string, unknown>> {
+  const result: Record<string, Record<string, unknown>> = {};
   for (const row of rows) {
     if (!row.name.trim()) continue;
-    const vars: Record<string, any> = {};
+    const vars: Record<string, unknown> = {};
     for (const v of row.vars) {
       if (!v.key.trim()) continue;
-      // Try parsing JSON for complex values
       try {
         vars[v.key.trim()] = JSON.parse(v.value);
       } catch {
-        // Try number
         if (/^\d+$/.test(v.value)) vars[v.key.trim()] = Number(v.value);
         else vars[v.key.trim()] = v.value;
       }
@@ -73,11 +74,11 @@ function fromEnvRows(rows: EnvRow[]): Record<string, Record<string, any>> {
   return result;
 }
 
-function fromBackendRows(rows: BackendRow[]): Record<string, BackendConfig> {
-  const result: Record<string, BackendConfig> = {};
+function fromBackendRows(rows: BackendRow[]): Record<string, BackendConfigEntry> {
+  const result: Record<string, BackendConfigEntry> = {};
   for (const row of rows) {
     if (!row.envName.trim()) continue;
-    const config: Record<string, any> = {};
+    const config: Record<string, unknown> = {};
     for (const c of row.config) {
       if (!c.key.trim()) continue;
       config[c.key.trim()] = parseConfigValue(c.value);
@@ -90,11 +91,11 @@ function fromBackendRows(rows: BackendRow[]): Record<string, BackendConfig> {
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
 type ContentProps = {
-  environments: Record<string, Record<string, any>> | undefined;
-  environment_backends: Record<string, BackendConfig> | undefined;
+  environments: Record<string, Record<string, unknown>> | undefined;
+  environment_backends: Record<string, BackendConfigEntry> | undefined;
   onSave: (
-    environments: Record<string, Record<string, any>>,
-    backends: Record<string, BackendConfig>,
+    environments: Record<string, Record<string, unknown>>,
+    backends: Record<string, BackendConfigEntry>,
   ) => void;
 };
 
@@ -349,11 +350,11 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
 // ── Full panel (backwards compat — original default export) ──
 
 type Props = {
-  environments: Record<string, Record<string, any>> | undefined;
-  environment_backends: Record<string, BackendConfig> | undefined;
+  environments: Record<string, Record<string, unknown>> | undefined;
+  environment_backends: Record<string, BackendConfigEntry> | undefined;
   onSave: (
-    environments: Record<string, Record<string, any>>,
-    backends: Record<string, BackendConfig>,
+    environments: Record<string, Record<string, unknown>>,
+    backends: Record<string, BackendConfigEntry>,
   ) => void;
   onClose: () => void;
 };

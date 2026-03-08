@@ -10,21 +10,13 @@ import {
   openCanvas,
   addModuleToActiveCanvas,
   triggerGenerateOnActiveCanvas,
-  refreshModulesOnActiveCanvas,
-  triggerSaveOnActiveCanvas,
   getLaceDir,
   isCanvasOpen,
-  requestGraphState,
-  dispatchToCanvas,
 } from './webview/createWebviewPanel';
 
 import { registerChatParticipant } from './chat/participant';
 
-import { fromBundle } from './webview/utils/bundle';
-import type { Module } from './webview/types/ir';
-
 import { ServerManager } from './utilities/engine/server-manager';
-import { requireClient, handleRpcError } from './utilities/engine/rpc-errors';
 
 /* ---------------------------------- */
 /* State                              */
@@ -151,23 +143,34 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // ── Registry: click module in sidebar → detail panel ──
     vscode.commands.registerCommand('lace.showModuleDetail', (mod: RegistryModule) => {
-      showModuleDetail(mod, server?.rpcClient ?? null, addModuleToActiveCanvas);
+      showModuleDetail(mod, server?.rpcClient ?? null, (registryKey) => {
+        if (server) {
+          addModuleToActiveCanvas(server, registryKey);
+        }
+      });
     }),
 
     // ── Registry: inline "+" button → add to canvas ──
-    vscode.commands.registerCommand('lace.addModuleToCanvas', async (node: any) => {
-      if (!node?.module) return;
+    vscode.commands.registerCommand(
+      'lace.addModuleToCanvas',
+      async (node: { module?: RegistryModule }) => {
+        if (!node?.module) return;
 
-      // Open canvas first if not already open
-      if (!isCanvasOpen() && server) {
-        await openCanvas(context, server);
-        // Small delay for webview to initialize
-        await new Promise((r) => setTimeout(r, 500));
-      }
+        // Open canvas first if not already open
+        if (!isCanvasOpen() && server) {
+          await openCanvas(context, server);
+          // Small delay for webview to initialize
+          await new Promise((r) => setTimeout(r, 500));
+        }
 
-      dropModuleToCanvas(node.module);
-      registryProvider?.trackRecentlyUsed(node.module.id);
-    }),
+        if (server) {
+          const mod = node.module;
+          const registryKey = `${mod.id}@${mod.version}`;
+          addModuleToActiveCanvas(server, registryKey);
+        }
+        registryProvider?.trackRecentlyUsed(node.module.id);
+      },
+    ),
 
     // ── Command Palette: Add Module ──
     vscode.commands.registerCommand('lace.addModule', async () => {
@@ -196,14 +199,18 @@ export async function activate(context: vscode.ExtensionContext) {
           await openCanvas(context, server);
           await new Promise((r) => setTimeout(r, 500));
         }
-        dropModuleToCanvas(pick.module);
+        if (server) {
+          const mod = pick.module;
+          const registryKey = `${mod.id}@${mod.version}`;
+          addModuleToActiveCanvas(server, registryKey);
+        }
         registryProvider?.trackRecentlyUsed(pick.module.id);
       }
     }),
 
     // ── Command Palette: Generate Terraform ──
     vscode.commands.registerCommand('lace.generate', () => {
-      triggerGenerateOnActiveCanvas();
+      if (server) triggerGenerateOnActiveCanvas(server);
     }),
 
     // ── Terraform commands (shell out to CLI) ──
@@ -222,114 +229,6 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.terraformDocs', () => {
       runTerraformCommand('docs');
     }),
-
-    // ── Refresh canvas modules from registry ──
-    // module_keys comes from the webview's current workspace state (not disk).
-    vscode.commands.registerCommand(
-      'lace.refreshCanvasModules',
-      async (moduleKeys?: Record<string, { id: string; version: string }>) => {
-        if (!moduleKeys || Object.keys(moduleKeys).length === 0) {
-          vscode.window.showInformationMessage('No modules to refresh.');
-          return;
-        }
-
-        const registryModules = registryProvider?.getModules() ?? [];
-        const keys = Object.keys(moduleKeys);
-
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: 'Refreshing modules from registry...',
-            cancellable: false,
-          },
-          async (progress) => {
-            const updatedModules: Record<string, Module> = {};
-            const iconUpdates: Record<string, string> = {};
-            let errorCount = 0;
-            let skipCount = 0;
-            let fetchCount = 0;
-
-            for (let idx = 0; idx < keys.length; idx++) {
-              const key = keys[idx];
-              const { id, version } = moduleKeys[key];
-
-              progress.report({
-                message: `${idx + 1}/${keys.length}: ${id}`,
-                increment: 100 / keys.length,
-              });
-
-              // Find matching registry module
-              const regMod = registryModules.find(
-                (m) => (m.id === id || m.name === id) && m.version === version,
-              );
-              if (!regMod) {
-                console.warn(
-                  `[Refresh] ${key}: not found in registry (id=${id}, version=${version})`,
-                );
-                skipCount++;
-                continue;
-              }
-
-              try {
-                const client = requireClient(server?.rpcClient, 'refresh module');
-                const response = await client.getRegistryVersion({
-                  name: regMod.name,
-                  system: regMod.system,
-                  version: regMod.version,
-                });
-
-                const deployBundle = response?.deploy_bundle;
-                if (!deployBundle) {
-                  console.warn(`[Refresh] ${key}: no deploy_bundle in response`);
-                  skipCount++;
-                  continue;
-                }
-
-                const { workspace: parsed } = fromBundle(deployBundle);
-
-                // Collect non-entry module defs
-                for (const [defKey, def] of Object.entries(parsed.modules)) {
-                  if (defKey !== deployBundle.entry) {
-                    updatedModules[defKey] = def;
-                  }
-                }
-
-                // Collect icon URL
-                if (regMod.icon_url) {
-                  iconUpdates[key] = regMod.icon_url;
-                }
-
-                fetchCount++;
-              } catch (err: any) {
-                console.error(`[Refresh] Failed to refresh ${key}:`, err);
-                errorCount++;
-              }
-            }
-
-            refreshModulesOnActiveCanvas(updatedModules, iconUpdates);
-
-            // Auto-save: the webview processes refreshModuleDefs, then
-            // triggerSave asks it to post back its current state for disk write.
-            triggerSaveOnActiveCanvas();
-
-            // Summary notification
-            const parts: string[] = [];
-            if (fetchCount > 0) parts.push(`${fetchCount} refreshed`);
-            if (skipCount > 0) parts.push(`${skipCount} skipped`);
-            if (errorCount > 0) parts.push(`${errorCount} failed`);
-            const summary = parts.join(', ');
-
-            if (errorCount > 0) {
-              vscode.window.showWarningMessage(`Refresh: ${summary}. Check Output for details.`);
-            } else if (fetchCount > 0) {
-              vscode.window.showInformationMessage(`Refresh: ${summary}.`);
-            } else {
-              vscode.window.showWarningMessage(`Refresh: ${summary}. No modules could be updated.`);
-            }
-          },
-        );
-      },
-    ),
   );
 
   /* ---------- Chat Participant (@lace) ---------- */
@@ -338,36 +237,9 @@ export async function activate(context: vscode.ExtensionContext) {
     registerChatParticipant(context, {
       getRpcClient: () => server?.rpcClient ?? null,
       getRegistryModules: () => registryProvider?.getModules() ?? [],
-      addModuleToActiveCanvas,
-      requestGraphState,
-      dispatchToCanvas,
-      triggerGenerate: triggerGenerateOnActiveCanvas,
+      getLaceDir,
     }),
   );
-}
-
-/* ---------------------------------- */
-/* Helper: drop module to canvas      */
-/* ---------------------------------- */
-
-async function dropModuleToCanvas(mod: RegistryModule) {
-  try {
-    const client = requireClient(server?.rpcClient, 'fetch module');
-    const response = await client.getRegistryVersion({
-      name: mod.name,
-      system: mod.system,
-      version: mod.version,
-    });
-
-    const deploy_bundle = response?.deploy_bundle;
-    if (!deploy_bundle) {
-      throw new Error('No deploy_bundle in registry response');
-    }
-
-    addModuleToActiveCanvas(deploy_bundle, mod.icon_url);
-  } catch (err: any) {
-    handleRpcError(err, 'registry/version', 'fetch module');
-  }
 }
 
 /* ---------------------------------- */

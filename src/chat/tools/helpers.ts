@@ -1,38 +1,29 @@
-import type { WorkspaceState } from '../../webview/types/workspace';
-import type { Module } from '../../webview/types/ir';
+// src/chat/tools/helpers.ts
+//
+// Shared helpers for chat tool implementations.
+
+import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
 import type { ToolResult } from '../types';
-import { allChildren } from '../../webview/utils/children';
 
-export type EntryModule = { entryKey: string; mod: Module };
+const ENGINE_NOT_RUNNING: ToolResult = {
+  content: 'Lace engine is not running. Start it first.',
+  isError: true,
+};
 
-export function getEntryModule(state: WorkspaceState): EntryModule | undefined {
-  const entryKey = state.entry;
-  const mod = state.modules[entryKey];
-  return mod ? { entryKey, mod } : undefined;
-}
-
-export function findChildInEntry(state: WorkspaceState, childId: string) {
-  const entry = getEntryModule(state);
-  if (!entry) return undefined;
-  return allChildren(entry.mod).find((c) => c.id === childId);
-}
-
-export async function loadGraphState(
-  requestGraphState: () => Promise<WorkspaceState>,
-): Promise<{ state: WorkspaceState } | { error: ToolResult }> {
-  try {
-    return { state: await requestGraphState() };
-  } catch (err: any) {
-    return { error: { content: `Cannot read canvas: ${err.message}`, isError: true } };
+/**
+ * Guard: require a running engine. Returns the client or an error ToolResult.
+ */
+export function requireEngine(
+  getRpcClient: () => JSONRPCClient | null,
+): { client: JSONRPCClient } | { error: ToolResult } {
+  const client = getRpcClient();
+  if (!client) {
+    return { error: ENGINE_NOT_RUNNING };
   }
+  return { client };
 }
 
-export function requireEntry(
-  state: WorkspaceState,
-): { entry: EntryModule } | { error: ToolResult } {
-  const entry = getEntryModule(state);
-  if (!entry) {
-    return { error: { content: 'Canvas has no composite graph.', isError: true } };
-  }
-  return { entry };
+/** Extract error message from unknown error. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
