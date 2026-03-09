@@ -1,0 +1,576 @@
+syntax = "proto3";
+package lace.engine;
+option go_package = "lace-cli/internal/module/server/pb";
+
+import "google/protobuf/struct.proto";
+
+// ============================================================================
+// Service
+// ============================================================================
+
+service LaceEngine {
+  // Lifecycle
+  rpc Initialize(InitializeRequest) returns (InitializeResponse);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+
+  // Auth
+  rpc AuthStatus(AuthStatusRequest) returns (AuthStatusResponse);
+  rpc AuthLogin(AuthLoginRequest) returns (AuthLoginResponse);
+  rpc AuthLogout(AuthLogoutRequest) returns (AuthLogoutResponse);
+
+  // Registry
+  rpc RegistryList(RegistryListRequest) returns (RegistryListResponse);
+  rpc RegistryGet(RegistryGetRequest) returns (RegistryGetResponse);
+  rpc RegistryVersion(RegistryVersionRequest) returns (RegistryVersionResponse);
+
+  // Session
+  rpc SessionOpen(SessionOpenRequest) returns (CanvasView);
+  rpc SessionSave(SessionSaveRequest) returns (SessionSaveResponse);
+  rpc SessionClose(SessionCloseRequest) returns (SessionCloseResponse);
+  rpc SessionGenerate(SessionGenerateRequest) returns (GenerateResponse);
+
+  // Actions (mutate workspace, return new canvas view)
+  rpc ActionDropBundle(ActionDropBundleRequest) returns (CanvasView);
+  rpc ActionConnect(ActionConnectRequest) returns (CanvasView);
+  rpc ActionDisconnect(ActionDisconnectRequest) returns (CanvasView);
+  rpc ActionUpdateInput(ActionUpdateInputRequest) returns (CanvasView);
+  rpc ActionUpdateAllInputs(ActionUpdateAllInputsRequest) returns (CanvasView);
+  rpc ActionRenameInstance(ActionRenameInstanceRequest) returns (CanvasView);
+  rpc ActionDeleteInstance(ActionDeleteInstanceRequest) returns (CanvasView);
+  rpc ActionSyncLayout(ActionSyncLayoutRequest) returns (CanvasView);
+  rpc ActionSetVariables(ActionSetVariablesRequest) returns (CanvasView);
+  rpc ActionSetExports(ActionSetExportsRequest) returns (CanvasView);
+  rpc ActionSetTerraform(ActionSetTerraformRequest) returns (CanvasView);
+  rpc ActionSetProviders(ActionSetProvidersRequest) returns (CanvasView);
+  rpc ActionSetLocals(ActionSetLocalsRequest) returns (CanvasView);
+  rpc ActionSetDependsOn(ActionSetDependsOnRequest) returns (CanvasView);
+  rpc ActionSetEnvironments(ActionSetEnvironmentsRequest) returns (CanvasView);
+  rpc ActionAutoConnect(ActionAutoConnectRequest) returns (CanvasView);
+  rpc ActionUndo(ActionUndoRequest) returns (CanvasView);
+  rpc ActionRedo(ActionRedoRequest) returns (CanvasView);
+
+  // Queries (read-only projections)
+  rpc QueryNodeConfig(QueryNodeConfigRequest) returns (NodeConfig);
+  rpc QueryEdgeConfig(QueryEdgeConfigRequest) returns (EdgeConfig);
+  rpc QuerySettings(QuerySettingsRequest) returns (SettingsConfig);
+  rpc QueryGraphSummary(QueryGraphSummaryRequest) returns (GraphSummaryResponse);
+  rpc QueryValidate(QueryValidateRequest) returns (ValidateResponse);
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum NodeKind {
+  NODE_KIND_UNSPECIFIED = 0;
+  NODE_KIND_MODULE = 1;
+  NODE_KIND_RESOURCE = 2;
+  NODE_KIND_DATA = 3;
+}
+
+enum InputMode {
+  INPUT_MODE_UNSPECIFIED = 0;
+  INPUT_MODE_EMPTY = 1;
+  INPUT_MODE_LITERAL = 2;
+  INPUT_MODE_VARIABLE = 3;
+  INPUT_MODE_EXPRESSION = 4;
+  INPUT_MODE_WIRED = 5;
+}
+
+enum DiagnosticSeverity {
+  DIAGNOSTIC_SEVERITY_UNSPECIFIED = 0;
+  DIAGNOSTIC_SEVERITY_ERROR = 1;
+  DIAGNOSTIC_SEVERITY_WARNING = 2;
+  DIAGNOSTIC_SEVERITY_INFO = 3;
+}
+
+// ============================================================================
+// Lifecycle
+// ============================================================================
+
+message InitializeRequest {
+  string client_version = 1;
+  string protocol_version = 2;
+}
+
+message InitializeResponse {
+  string server_version = 1;
+  repeated string capabilities = 2;
+  string protocol_version = 3;
+  repeated string supported_protocols = 4;
+}
+
+message ShutdownRequest {}
+message ShutdownResponse {
+  string status = 1;
+}
+
+// ============================================================================
+// Auth
+// ============================================================================
+
+message AuthStatusRequest {}
+message AuthStatusResponse {
+  bool authenticated = 1;
+  UserRecord user = 2;
+  string base_url = 3;
+}
+
+message UserRecord {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+}
+
+message AuthLoginRequest {
+  string token = 1;
+}
+
+message AuthLoginResponse {
+  bool success = 1;
+  UserRecord user = 2;
+  string error = 3;
+}
+
+message AuthLogoutRequest {}
+message AuthLogoutResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Registry
+// ============================================================================
+
+message RegistryListRequest {
+  string system = 1;
+  string search = 2;
+  string category = 3;
+  int32 page = 4;
+  int32 limit = 5;
+  string organization = 6;
+}
+
+message RegistryListResponse {
+  repeated RegistryModule modules = 1;
+  Pagination pagination = 2;
+}
+
+message RegistryModule {
+  string id = 1;
+  string name = 2;
+  string system = 3;
+  string version = 4;
+  string description = 5;
+  string icon_url = 6;
+  repeated string categories = 7;
+}
+
+message Pagination {
+  int32 page = 1;
+  int32 limit = 2;
+  int32 total = 3;
+}
+
+message RegistryGetRequest {
+  string name = 1;
+  string system = 2;
+  string organization = 3;
+}
+
+message RegistryGetResponse {
+  string name = 1;
+  string system = 2;
+  repeated RegistryVersionSummary versions = 3;
+}
+
+message RegistryVersionSummary {
+  string version = 1;
+  string description = 2;
+}
+
+message RegistryVersionRequest {
+  string name = 1;
+  string system = 2;
+  string version = 3;
+  string organization = 4;
+}
+
+message RegistryVersionResponse {
+  string name = 1;
+  string system = 2;
+  string version = 3;
+  bytes deploy_bundle = 4;
+  ModuleInterface module_interface = 5;
+  string description = 6;
+  string git_url = 7;
+}
+
+// ModuleInterface exposes the entry module's inputs/outputs without
+// requiring the client to decode the opaque deploy_bundle bytes.
+message ModuleInterface {
+  repeated InterfaceField inputs = 1;
+  repeated InterfaceField outputs = 2;
+}
+
+message InterfaceField {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  string description = 4;
+  google.protobuf.Value default_value = 5;
+  bool sensitive = 6;
+}
+
+// ============================================================================
+// Session
+// ============================================================================
+
+message SessionOpenRequest {
+  string file_path = 1;
+  string workspace_name = 2;
+}
+
+message SessionSaveRequest {}
+message SessionSaveResponse {
+  bool saved = 1;
+}
+
+message SessionCloseRequest {}
+message SessionCloseResponse {
+  string status = 1;
+}
+
+message SessionGenerateRequest {
+  string output_dir = 1;
+  GenerateOptions options = 2;
+}
+
+message GenerateOptions {
+  bool dry_run = 1;
+  bool format = 2;
+  bool validate = 3;
+  bool overwrite = 4;
+}
+
+message GenerateResponse {
+  repeated string files_written = 1;
+  map<string, string> files = 2;
+  repeated Diagnostic diagnostics = 3;
+}
+
+message Diagnostic {
+  DiagnosticSeverity severity = 1;
+  string message = 2;
+  string file = 3;
+  int32 line = 4;
+  int32 column = 5;
+}
+
+// ============================================================================
+// Actions
+// ============================================================================
+
+message ActionDropBundleRequest {
+  bytes deploy_bundle = 1;
+  Position position = 2;
+}
+
+message ActionConnectRequest {
+  string source = 1;
+  string target = 2;
+  string source_output = 3;
+  string target_input = 4;
+}
+
+message ActionDisconnectRequest {
+  string target = 1;
+  string input_name = 2;
+}
+
+message ActionUpdateInputRequest {
+  string instance_id = 1;
+  string input_name = 2;
+  Binding binding = 3;
+}
+
+message ActionUpdateAllInputsRequest {
+  string instance_id = 1;
+  map<string, Binding> inputs = 2;
+}
+
+message ActionRenameInstanceRequest {
+  string old_id = 1;
+  string new_id = 2;
+}
+
+message ActionDeleteInstanceRequest {
+  string instance_id = 1;
+}
+
+message ActionSyncLayoutRequest {
+  map<string, Position> positions = 1;
+}
+
+message ActionSetVariablesRequest {
+  repeated InputDef variables = 1;
+}
+
+message ActionSetExportsRequest {
+  map<string, OutputExport> outputs = 1;
+  repeated OutputDef output_defs = 2;
+}
+
+message ActionSetTerraformRequest {
+  TerraformBlock terraform = 1;
+}
+
+message ActionSetProvidersRequest {
+  repeated ProviderConfig providers = 1;
+}
+
+message ActionSetLocalsRequest {
+  repeated LocalDef locals = 1;
+}
+
+message ActionSetDependsOnRequest {
+  string instance_id = 1;
+  repeated string depends_on = 2;
+}
+
+message ActionSetEnvironmentsRequest {
+  map<string, google.protobuf.Struct> environments = 1;
+  map<string, BackendConfig> environment_backends = 2;
+}
+
+message ActionAutoConnectRequest {
+  string source = 1;
+  string target = 2;
+}
+
+message ActionUndoRequest {}
+message ActionRedoRequest {}
+
+// ============================================================================
+// Queries
+// ============================================================================
+
+message QueryNodeConfigRequest {
+  string instance_id = 1;
+}
+
+message QueryEdgeConfigRequest {
+  string source = 1;
+  string target = 2;
+}
+
+message QuerySettingsRequest {}
+
+message QueryGraphSummaryRequest {}
+message GraphSummaryResponse {
+  string text = 1;
+}
+
+message QueryValidateRequest {}
+message ValidateResponse {
+  repeated RenderError errors = 1;
+}
+
+// ============================================================================
+// Render Model (UI projections)
+// ============================================================================
+
+message CanvasView {
+  string module_name = 1;
+  repeated RenderNode nodes = 2;
+  repeated RenderEdge edges = 3;
+  repeated RenderError errors = 4;
+  bool can_undo = 5;
+  bool can_redo = 6;
+  bool is_dirty = 7;
+}
+
+message RenderNode {
+  string id = 1;
+  string label = 2;
+  NodeKind kind = 3;
+  string module_key = 4;
+  Position position = 5;
+  bool has_errors = 6;
+  repeated string error_messages = 7;
+}
+
+message RenderEdge {
+  string id = 1;
+  string source = 2;
+  string target = 3;
+  string source_output = 4;
+  string target_input = 5;
+}
+
+message RenderInput {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  string description = 4;
+  google.protobuf.Value default_value = 5;
+  ValidationBlock validation = 6;
+  InputMode mode = 7;
+  google.protobuf.Value value = 8;
+  string variable = 9;
+  string expression = 10;
+  string wired_source = 11;
+}
+
+message RenderOutput {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+  bool sensitive = 4;
+}
+
+message NodeConfig {
+  string instance_id = 1;
+  repeated RenderInput inputs = 2;
+  repeated RenderOutput outputs = 3;
+  repeated string sibling_ids = 4;
+  repeated string depends_on = 5;
+  repeated VariableRef available_variables = 6;
+}
+
+message VariableRef {
+  string name = 1;
+  string type = 2;
+}
+
+message EdgeConfig {
+  string source_instance = 1;
+  string target_instance = 2;
+  repeated RenderOutput source_outputs = 3;
+  repeated RenderInput target_unbound_inputs = 4;
+}
+
+message SettingsConfig {
+  TerraformSettings terraform = 1;
+  repeated ProviderView providers = 2;
+  repeated LocalView locals = 3;
+  map<string, google.protobuf.Struct> environments = 4;
+  map<string, BackendView> environment_backends = 5;
+}
+
+message TerraformSettings {
+  string required_version = 1;
+  repeated ProviderReqView required_providers = 2;
+  BackendView backend = 3;
+}
+
+message ProviderReqView {
+  string name = 1;
+  string source = 2;
+  string version = 3;
+}
+
+message BackendView {
+  string type = 1;
+  map<string, google.protobuf.Value> config = 2;
+}
+
+message ProviderView {
+  string name = 1;
+  string alias = 2;
+  map<string, google.protobuf.Value> config = 3;
+}
+
+message LocalView {
+  string name = 1;
+  string mode = 2;
+  string value_display = 3;
+}
+
+message RenderError {
+  string instance_id = 1;
+  string input_name = 2;
+  string message = 3;
+}
+
+// ============================================================================
+// Shared IR types (used in action requests)
+// ============================================================================
+
+message Position {
+  double x = 1;
+  double y = 2;
+}
+
+message Binding {
+  oneof value {
+    google.protobuf.Value lit = 1;
+    string var = 2;
+    OutputRef out = 3;
+    Expression expr = 4;
+  }
+}
+
+message OutputRef {
+  string module = 1;
+  string name = 2;
+}
+
+message Expression {
+  string lang = 1;
+  string value = 2;
+}
+
+message InputDef {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  string description = 4;
+  google.protobuf.Value default_value = 5;
+  ValidationBlock validation = 6;
+}
+
+message ValidationBlock {
+  string condition = 1;
+  string error_message = 2;
+}
+
+message OutputDef {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+  bool sensitive = 4;
+}
+
+message OutputExport {
+  OutputRef out = 1;
+  google.protobuf.Value lit = 2;
+  string var = 3;
+  Expression expr = 4;
+}
+
+message LocalDef {
+  string name = 1;
+  Binding value = 2;
+}
+
+message TerraformBlock {
+  string required_version = 1;
+  map<string, ProviderRequirement> required_providers = 2;
+  BackendConfig backend = 3;
+}
+
+message ProviderRequirement {
+  string source = 1;
+  string version = 2;
+}
+
+message BackendConfig {
+  string type = 1;
+  map<string, google.protobuf.Value> config = 2;
+}
+
+message ProviderConfig {
+  string name = 1;
+  string alias = 2;
+  map<string, google.protobuf.Value> config = 3;
+}

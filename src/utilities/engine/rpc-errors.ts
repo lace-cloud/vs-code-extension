@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { status as GrpcStatus, type ServiceError } from '@grpc/grpc-js';
 
 // ── Error categories ──
 
@@ -20,7 +21,30 @@ export class RpcError extends Error {
 
 // ── Classification ──
 
+function isGrpcServiceError(err: unknown): err is ServiceError {
+  return (
+    err instanceof Error &&
+    typeof (err as ServiceError).code === 'number' &&
+    typeof (err as ServiceError).details === 'string'
+  );
+}
+
 export function classifyRpcError(err: unknown, method: string): RpcError {
+  // gRPC ServiceError classification
+  if (isGrpcServiceError(err)) {
+    const msg = err.details || err.message;
+    switch (err.code) {
+      case GrpcStatus.UNAVAILABLE:
+      case GrpcStatus.CANCELLED:
+        return new RpcError(msg, 'engine_unavailable', method, err);
+      case GrpcStatus.DEADLINE_EXCEEDED:
+        return new RpcError(msg, 'timeout', method, err);
+      default:
+        return new RpcError(msg, 'server_error', method, err);
+    }
+  }
+
+  // Fallback: string-based classification for non-gRPC errors
   const msg = err instanceof Error ? err.message : String(err);
 
   if (/timeout/i.test(msg)) {

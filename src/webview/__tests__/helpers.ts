@@ -17,10 +17,6 @@ export function makeCanvasView(nodes: RenderNode[] = [], edges: RenderEdge[] = [
   };
 }
 
-export function makeEmptyCanvasView(): CanvasView {
-  return makeCanvasView();
-}
-
 // ── Common node builders ──
 
 export function makeNode(

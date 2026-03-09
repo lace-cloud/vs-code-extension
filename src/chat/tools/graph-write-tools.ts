@@ -4,7 +4,7 @@
 // lace_disconnect, lace_set_input, lace_rename_instance.
 // All operations go through RPC to the CLI.
 
-import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
+import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { RegistryModule } from '../../types/protocol';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
@@ -12,7 +12,7 @@ import { isValidTerraformIdentifier } from '../../webview/utils/identifiers';
 import { requireEngine, errorMessage } from './helpers';
 
 export type GraphWriteDeps = {
-  getRpcClient: () => JSONRPCClient | null;
+  getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
 };
 

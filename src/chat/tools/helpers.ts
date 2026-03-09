@@ -2,7 +2,7 @@
 //
 // Shared helpers for chat tool implementations.
 
-import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
+import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { ToolResult } from '../types';
 
 const ENGINE_NOT_RUNNING: ToolResult = {
@@ -14,8 +14,8 @@ const ENGINE_NOT_RUNNING: ToolResult = {
  * Guard: require a running engine. Returns the client or an error ToolResult.
  */
 export function requireEngine(
-  getRpcClient: () => JSONRPCClient | null,
-): { client: JSONRPCClient } | { error: ToolResult } {
+  getRpcClient: () => LaceClient | null,
+): { client: LaceClient } | { error: ToolResult } {
   const client = getRpcClient();
   if (!client) {
     return { error: ENGINE_NOT_RUNNING };

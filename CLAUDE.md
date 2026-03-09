@@ -3,7 +3,7 @@
 VS Code extension for visually composing Terraform modules. Users browse
 modules from a registry sidebar, add them to a ReactFlow canvas, wire
 inputs/outputs, configure settings, and generate `.tf` files. The extension
-talks to a Go CLI binary (`lace`) over JSON-RPC stdin/stdout.
+talks to a Go CLI binary (`lace`) over gRPC on an ephemeral TCP port.
 
 ## Build & Test
 
@@ -17,7 +17,7 @@ npm run build            # Rspack build (host + webview)
 ## Critical Rules
 
 1. **The extension has NO IR types.** All IR knowledge (Bundle, Module, Binding, etc.) lives in the Go CLI. The extension only uses RenderModel types from `webview/types/render.ts`.
-2. All canvas mutations go through the CLI via JSON-RPC (`action/*` methods). The extension never modifies state directly.
+2. All canvas mutations go through the CLI via gRPC (`action/*` methods). The extension never modifies state directly.
 3. File I/O (canvas persistence, protobuf encoding) is handled by the CLI via `session/open`, `session/save`, `session/close`.
 4. Two Rspack entries — do not import VS Code APIs in webview code or DOM APIs in host code.
 5. The `CanvasEngine` interface (`webview/engine.ts`) is the contract between webview and CLI — all operations are async RPC calls.
@@ -30,7 +30,7 @@ npm run build            # Rspack build (host + webview)
 | Extension host | `extension.ts`, `createWebviewPanel.ts`, `ModuleDetailPanel.ts`, `containers-views/`, `utilities/engine/` | Node.js                    |
 | Chat           | `chat/participant.ts`, `chat/tools/`, `chat/system-prompt.ts`                                             | Node.js (VS Code Chat API) |
 | Webview UI     | `webview/Canvas.tsx`, `webview/components/`, `webview/state/engine-context.ts`                            | Browser                    |
-| Engine         | `webview/engine.ts` (interface), `utilities/engine/rpc-client.ts` (implementation)                        | Shared / Node.js           |
+| Engine         | `webview/engine.ts` (interface), `utilities/engine/grpc-client.ts` (implementation)                       | Shared / Node.js           |
 | Types          | `types/protocol.ts`, `webview/types/render.ts`                                                            | Shared                     |
 | Tests          | `webview/__tests__/`                                                                                      | Vitest                     |
 

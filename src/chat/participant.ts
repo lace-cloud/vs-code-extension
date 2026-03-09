@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 
-import type { JSONRPCClient } from '../utilities/engine/rpc-client';
+import type { LaceClient } from '../utilities/engine/grpc-client';
 import type { RegistryModule } from '../types/protocol';
 
 import { SYSTEM_PROMPT } from './system-prompt';
@@ -26,7 +26,7 @@ import {
 // ── Dependencies injected from extension.ts ──
 
 export type ChatParticipantDeps = {
-  getRpcClient: () => JSONRPCClient | null;
+  getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
   getLaceDir: () => string | undefined;
 };

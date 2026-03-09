@@ -3,13 +3,13 @@
 // Tools: lace_describe_graph, lace_validate_graph
 // All operations go through RPC to the CLI.
 
-import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
+import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { requireEngine, errorMessage } from './helpers';
 
 export type GraphReadDeps = {
-  getRpcClient: () => JSONRPCClient | null;
+  getRpcClient: () => LaceClient | null;
 };
 
 export function registerGraphReadTools(deps: GraphReadDeps): void {

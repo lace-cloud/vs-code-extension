@@ -2,14 +2,14 @@
 //
 // Tool: lace_search_registry — search the module registry.
 
-import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
+import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { RegistryModule } from '../../types/protocol';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { requireEngine, errorMessage } from './helpers';
 
 export type RegistryToolDeps = {
-  getRpcClient: () => JSONRPCClient | null;
+  getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
 };
 
@@ -152,49 +152,29 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
         version: match.version,
       });
 
-      const deployBundle = versionResponse?.deploy_bundle;
-      if (!deployBundle) {
+      if (!versionResponse?.deploy_bundle && !versionResponse?.module_interface) {
         return {
           content: `**${match.name}** (${match.system}, v${match.version})\nNo deploy bundle available.`,
         };
       }
-
-      // Extract the entry module's interface from the deploy bundle (opaque type)
-      const bundle = deployBundle as {
-        entry?: string;
-        modules?: Record<
-          string,
-          {
-            interface?: {
-              inputs?: Array<{
-                name: string;
-                type: string;
-                required?: boolean;
-                default?: unknown;
-                description?: string;
-              }>;
-              outputs?: Array<{ name: string; type: string; description?: string }>;
-            };
-          }
-        >;
-      };
-      const entryDef = bundle.modules?.[bundle.entry ?? ''];
 
       const lines: string[] = [];
       lines.push(`**${match.name}** (${match.system}, v${match.version})`);
       if (match.description) lines.push(match.description);
       lines.push('');
 
-      if (entryDef?.interface) {
-        const inputs = entryDef.interface.inputs ?? [];
-        const outputs = entryDef.interface.outputs ?? [];
+      if (versionResponse.module_interface) {
+        const inputs = versionResponse.module_interface.inputs ?? [];
+        const outputs = versionResponse.module_interface.outputs ?? [];
 
         if (inputs.length > 0) {
           lines.push('### Inputs');
           for (const inp of inputs) {
             const req = inp.required ? ' **(required)**' : '';
             const def =
-              inp.default !== undefined ? ` (default: ${JSON.stringify(inp.default)})` : '';
+              inp.default_value !== undefined
+                ? ` (default: ${JSON.stringify(inp.default_value)})`
+                : '';
             const desc = inp.description ? ` — ${inp.description}` : '';
             lines.push(`- \`${inp.name}\` (${inp.type})${req}${def}${desc}`);
           }

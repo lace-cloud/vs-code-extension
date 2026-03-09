@@ -212,7 +212,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           };
           try {
             const client = requireClient(server.rpcClient, method);
-            const result = await client.call(method, params);
+            const result = await client.dispatch(method, params);
             postToWebview(panel, { command: 'engineResult', requestId, result });
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);

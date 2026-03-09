@@ -1,13 +1,13 @@
 // src/webview/ModuleDetailPanel.ts
 import * as vscode from 'vscode';
-import type { JSONRPCClient } from '../utilities/engine/rpc-client';
+import type { LaceClient } from '../utilities/engine/grpc-client';
 import type { RegistryModule } from '../types/protocol';
 
 const activePanels = new Map<string, vscode.WebviewPanel>();
 
 export async function showModuleDetail(
   mod: RegistryModule,
-  rpcClient: JSONRPCClient | null,
+  rpcClient: LaceClient | null,
   onAddToCanvas: (name: string, system: string, version: string) => void,
 ) {
   const panelKey = `${mod.system}/${mod.name}`;
@@ -66,32 +66,22 @@ export async function showModuleDetail(
         version: mod.version,
       });
 
-      const deployBundle = versionResult?.deploy_bundle as
-        | {
-            modules?: Record<
-              string,
-              {
-                source?: string;
-                description?: string;
-                interface?: { inputs?: InterfaceField[]; outputs?: InterfaceField[] };
-              }
-            >;
-          }
-        | undefined;
-      hasDeployBundle = !!deployBundle;
+      hasDeployBundle = !!versionResult?.deploy_bundle;
 
-      if (deployBundle?.modules) {
-        const moduleDefs = Object.values(deployBundle.modules);
-        const leafDef = moduleDefs.find((d) => d.source != null) ?? moduleDefs[0];
-        if (leafDef?.interface) {
-          moduleInterface = {
-            inputs: leafDef.interface.inputs ?? [],
-            outputs: leafDef.interface.outputs ?? [],
-          };
-        }
-        if (leafDef?.description) {
-          description = leafDef.description;
-        }
+      if (versionResult?.module_interface) {
+        moduleInterface = {
+          inputs: versionResult.module_interface.inputs.map((f) => ({
+            name: f.name,
+            type: f.type,
+            required: f.required,
+            description: f.description,
+          })),
+          outputs: versionResult.module_interface.outputs.map((f) => ({
+            name: f.name,
+            type: f.type,
+            description: f.description,
+          })),
+        };
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

@@ -1,7 +1,7 @@
 // src/webview/post-message-engine.ts
 //
 // Implements CanvasEngine by forwarding every method call to the extension
-// host via postMessage. The host routes these to the CLI via JSON-RPC.
+// host via postMessage. The host routes these to the CLI via gRPC.
 
 import type {
   CanvasEngine,

@@ -30,6 +30,7 @@ module.exports = [
     },
     externals: {
       vscode: 'commonjs vscode',
+      '@grpc/grpc-js': 'commonjs @grpc/grpc-js',
     },
     devtool: 'source-map',
   },

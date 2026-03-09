@@ -1,14 +1,56 @@
 // src/utilities/engine/server-manager.ts
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
+import * as readline from 'readline';
 import * as vscode from 'vscode';
-import { JSONRPCClient, type AuthStatusResult, type AuthLoginResult } from './rpc-client';
+import { LaceClient, type AuthStatusResult, type AuthLoginResult } from './grpc-client';
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'error';
 
+/** Reads stdout line-by-line looking for `LACE_GRPC_PORT=<number>`. */
+function waitForPort(proc: ChildProcess, timeoutMs = 10_000): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    if (!proc.stdout) {
+      reject(new Error('Process has no stdout'));
+      return;
+    }
+
+    const rl = readline.createInterface({ input: proc.stdout });
+    const timer = setTimeout(() => {
+      rl.close();
+      reject(new Error('Timed out waiting for LACE_GRPC_PORT'));
+    }, timeoutMs);
+
+    rl.on('line', (line) => {
+      const match = line.match(/^LACE_GRPC_PORT=(\d+)$/);
+      if (match) {
+        clearTimeout(timer);
+        rl.close();
+        resolve(Number(match[1]));
+      }
+    });
+
+    rl.on('close', () => {
+      clearTimeout(timer);
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      rl.close();
+      reject(err);
+    });
+
+    proc.on('exit', (code) => {
+      clearTimeout(timer);
+      rl.close();
+      reject(new Error(`Process exited with code ${code} before printing LACE_GRPC_PORT`));
+    });
+  });
+}
+
 export class ServerManager extends EventEmitter {
   private process: ChildProcess | null = null;
-  private client: JSONRPCClient | null = null;
+  private client: LaceClient | null = null;
   private state: ServerState = 'stopped';
   private restartCount = 0;
   private readonly maxRestarts = 3;
@@ -24,7 +66,7 @@ export class ServerManager extends EventEmitter {
     this.outputChannel?.appendLine(`[${new Date().toISOString()}] ${msg}`);
   }
 
-  get rpcClient(): JSONRPCClient | null {
+  get rpcClient(): LaceClient | null {
     return this.client;
   }
 
@@ -55,6 +97,11 @@ export class ServerManager extends EventEmitter {
         this.log(`[stderr] ${text}`);
       });
 
+      // Wait for the gRPC port before attaching process lifecycle handlers,
+      // so that early exits during port-wait are caught by waitForPort.
+      const port = await waitForPort(this.process);
+      this.log(`gRPC port: ${port}`);
+
       this.process.on('error', (err) => {
         this.log(`Process error: ${err.message}`);
         this.emit('error', err);
@@ -70,7 +117,7 @@ export class ServerManager extends EventEmitter {
         }
       });
 
-      this.client = new JSONRPCClient(this.process, 30_000, this.outputChannel);
+      this.client = new LaceClient(port);
 
       await this.client.initialize('0.1.0');
 

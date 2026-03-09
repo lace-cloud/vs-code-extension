@@ -4,7 +4,7 @@ This document is for AI coding agents working on the Lace codebase. It contains 
 
 ## What This Project Is
 
-Lace VS Code Extension -- a visual Terraform composer. Users browse modules from a registry sidebar, drag them onto a ReactFlow canvas, wire inputs/outputs, configure settings, and generate `.tf` files. The extension talks to a Go CLI binary (`lace`) over JSON-RPC stdin/stdout.
+Lace VS Code Extension -- a visual Terraform composer. Users browse modules from a registry sidebar, drag them onto a ReactFlow canvas, wire inputs/outputs, configure settings, and generate `.tf` files. The extension talks to a Go CLI binary (`lace`) over gRPC on an ephemeral TCP port.
 
 The extension is an **opaque rendering layer**. It does NOT understand Terraform IR -- no Bundle, no Module, no Binding types. All IR knowledge lives in the CLI. The extension receives a `CanvasView` (a view model of nodes, edges, errors) from the CLI and renders it. All mutations go through the CLI via RPC.
 
@@ -20,7 +20,7 @@ npx tsc --noEmit         # Type-check only -- must be zero errors
 
 Always run `npm run test:unit` after any change. All 64 unit tests must pass. TypeScript must compile with zero errors.
 
-E2E tests spawn a real `lace module serve` process and exercise the full JSON-RPC transport. They require the `lace` binary and `terraform` to be installed. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
+E2E tests spawn a real `lace module serve` process and exercise the full gRPC transport. They require the `lace` binary and `terraform` to be installed. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
 
 ## Architecture Overview
 
@@ -28,8 +28,8 @@ E2E tests spawn a real `lace module serve` process and exercise the full JSON-RP
 
 - **`extension.ts`** -- activation, command registration, server lifecycle, `lace.login` command (GitHub PAT input → auth/login RPC)
 - **`createWebviewPanel.ts`** -- manages canvas panel lifecycle, routes PostMessage between webview and CLI RPC, handles auto-save (debounced ~2s after last edit), dirty tracking, module drops from sidebar
-- **`server-manager.ts`** -- manages the CLI engine server process (`lace module serve`), spawns/restarts the child process, exposes `rpcClient` for JSON-RPC calls, checks auth status after init (emits `'auth'` event), exposes `login(token)` and `checkAuth()` methods
-- **`rpc-client.ts`** -- JSON-RPC client over stdin/stdout to the CLI process
+- **`server-manager.ts`** -- manages the CLI engine server process (`lace module serve`), spawns/restarts the child process, reads `LACE_GRPC_PORT=<port>` from stdout, exposes `rpcClient` (gRPC `LaceClient`), checks auth status after init (emits `'auth'` event), exposes `login(token)` and `checkAuth()` methods
+- **`grpc-client.ts`** -- gRPC client wrapping the generated `LaceEngineClient`, promisifies callbacks, converts proto types to extension render types
 - **`RegistrySidebarProvider.ts`** -- WebviewViewProvider for the registry sidebar, fetches module data, posts `addToCanvas` messages to canvas
 - **`ModuleDetailPanel.ts`** -- detail tab for inspecting registry modules
 
@@ -38,7 +38,7 @@ E2E tests spawn a real `lace module serve` process and exercise the full JSON-RP
 - **`App.tsx`** -- root component, creates `PostMessageEngine`, listens for `HostToWebview` messages, routes `engineResult` to engine's pending promises, forwards `loadState` to context
 - **`Canvas.tsx`** -- renders the `CanvasView` using `CompositeEditor` (ReactFlow), handles user interactions (connect, delete, drag, save, generate, undo/redo), delegates all mutations to engine
 - **`engine-context.ts`** -- React context providing `CanvasState` (view, loading, error, generation) + `CanvasEngine` + `updateView`
-- **`post-message-engine.ts`** -- implements `CanvasEngine` by sending postMessages to the host, which forwards them to the CLI via JSON-RPC
+- **`post-message-engine.ts`** -- implements `CanvasEngine` by sending postMessages to the host, which forwards them to the CLI via gRPC
 
 ### Chat participant (`@lace`)
 
@@ -88,7 +88,7 @@ Defined in `src/types/protocol.ts`. Messages are discriminated unions on `comman
 
 ```
 CanvasView { module_name, nodes: RenderNode[], edges: RenderEdge[], errors: RenderError[], can_undo, can_redo, is_dirty }
-RenderNode { id, label, kind, module_key?, icon_url?, position, has_errors, error_messages }
+RenderNode { id, label, kind, module_key?, position, has_errors, error_messages }
 RenderEdge { id, source, target, source_output, target_input }
 ```
 
@@ -120,7 +120,7 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 | Host: detail    | `webview/ModuleDetailPanel.ts`                | Registry module detail tab                        |
 | Host: sidebar   | `containers-views/RegistrySidebarProvider.ts` | Registry sidebar provider                         |
 | Host: engine    | `utilities/engine/server-manager.ts`          | CLI process lifecycle                             |
-| Host: RPC       | `utilities/engine/rpc-client.ts`              | JSON-RPC client over stdin/stdout                 |
+| Host: RPC       | `utilities/engine/grpc-client.ts`             | gRPC client (LaceClient)                          |
 | Host: errors    | `utilities/engine/rpc-errors.ts`              | RPC error handling helpers                        |
 | Webview: root   | `webview/App.tsx`                             | Message listener, engine creation, context        |
 | Webview: canvas | `webview/Canvas.tsx`                          | ReactFlow rendering, user interaction handlers    |
@@ -150,7 +150,7 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 
 1. **Extension is a rendering layer.** No IR knowledge, no Terraform parsing, no Bundle/Module types. The extension receives `CanvasView` and renders it.
 
-2. **All mutations go through engine interface.** Webview calls `CanvasEngine` methods, `PostMessageEngine` sends `engineCall` postMessages to the host, host forwards to CLI via JSON-RPC. Never modify state directly.
+2. **All mutations go through engine interface.** Webview calls `CanvasEngine` methods, `PostMessageEngine` sends `engineCall` postMessages to the host, host forwards to CLI via gRPC. Never modify state directly.
 
 3. **`CanvasView` is the single source of truth** for what gets rendered. The CLI projects IR into this view model.
 
@@ -166,7 +166,7 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 
 9. **Two Rspack entries.** `out/extension.js` (Node.js, CommonJS) and `out/webview.js` (browser). Don't import VS Code APIs in webview code or DOM APIs in host code.
 
-10. **Registry browsing is host-side.** The webview never fetches registry data. Module drops arrive as `loadState` messages from the host after the host calls `action/drop_module` via RPC.
+10. **Registry browsing is host-side.** The webview never fetches registry data. Module drops arrive as `loadState` messages from the host after the host calls `action/drop_bundle` via gRPC.
 
 11. **Auth is runtime-swappable.** The server checks `auth/status` after initialization and emits an `'auth'` event. If credentials are missing, registry is unavailable but the extension still works. Users can run `lace.login` to authenticate from VS Code — the server hot-swaps its API client without restarting.
 

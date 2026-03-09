@@ -3,13 +3,13 @@
 // Tools: lace_auto_connect, lace_generate
 // All operations go through RPC to the CLI.
 
-import type { JSONRPCClient } from '../../utilities/engine/rpc-client';
+import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { requireEngine, errorMessage } from './helpers';
 
 export type GenerateToolDeps = {
-  getRpcClient: () => JSONRPCClient | null;
+  getRpcClient: () => LaceClient | null;
   getLaceDir: () => string | undefined;
 };
 

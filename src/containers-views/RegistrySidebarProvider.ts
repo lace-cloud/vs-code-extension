@@ -1,6 +1,6 @@
 // src/containers-views/RegistrySidebarProvider.ts
 import * as vscode from 'vscode';
-import type { JSONRPCClient } from '../utilities/engine/rpc-client';
+import type { LaceClient } from '../utilities/engine/grpc-client';
 import type { RegistryModule } from '../types/protocol';
 
 // ── Constants ──
@@ -15,7 +15,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private modules: RegistryModule[] = [];
-  private rpcClient: JSONRPCClient | null = null;
+  private rpcClient: LaceClient | null = null;
   private loading = false;
   private errorMessage: string | null = null;
   private authenticated = false;
@@ -31,7 +31,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     this.favoriteModuleIds = globalState?.get<string[]>('lace.favorites', []) ?? [];
   }
 
-  setRpcClient(client: JSONRPCClient | null) {
+  setRpcClient(client: LaceClient | null) {
     this.rpcClient = client;
   }
 

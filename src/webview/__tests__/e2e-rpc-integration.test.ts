@@ -1,14 +1,14 @@
 /**
- * End-to-End Integration Test: Extension <-> Lace CLI over JSON-RPC
+ * End-to-End Integration Test: Extension <-> Lace CLI over gRPC
  *
  * Spawns the real `lace module serve` binary and exercises the full
- * extension->CLI contract through the actual JSONRPCClient transport:
+ * extension->CLI contract through the gRPC transport:
  *
- *   1. Spawn `lace module serve` child process over stdio
+ *   1. Spawn `lace module serve` — reads LACE_GRPC_PORT from stdout
  *   2. Initialize (version handshake + capability exchange)
- *   3. Open session, drop modules via RPC
- *   4. Validate via RPC (query/validate)
- *   5. Generate Terraform in dry-run mode over RPC
+ *   3. Open session, drop modules via gRPC
+ *   4. Validate via gRPC (query/validate)
+ *   5. Generate Terraform in dry-run mode over gRPC
  *   6. Shutdown gracefully
  *
  * Prerequisites:
@@ -26,7 +26,7 @@ import { join } from 'path';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 
-import { JSONRPCClient } from '../../utilities/engine/rpc-client';
+import { LaceClient } from '../../utilities/engine/grpc-client';
 
 /* ── Binary resolution ── */
 
@@ -58,21 +58,46 @@ function resolveBinary(): string {
 
 /* ── Server lifecycle ── */
 
-function spawnServer(binary: string): { process: ChildProcess; client: JSONRPCClient } {
+async function spawnServer(binary: string): Promise<{ process: ChildProcess; client: LaceClient }> {
   const proc = spawn(binary, ['module', 'serve'], {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
-  const client = new JSONRPCClient(proc, 10_000);
+  // Read the gRPC port from stdout
+  const port = await new Promise<number>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('Timed out waiting for LACE_GRPC_PORT')),
+      10000,
+    );
+    let buffer = '';
+    proc.stdout!.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const match = buffer.match(/LACE_GRPC_PORT=(\d+)/);
+      if (match) {
+        clearTimeout(timeout);
+        resolve(Number(match[1]));
+      }
+    });
+    proc.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+    proc.on('exit', (code) => {
+      clearTimeout(timeout);
+      reject(new Error(`Process exited with code ${code} before reporting port`));
+    });
+  });
+
+  const client = new LaceClient(port);
   return { process: proc, client };
 }
 
 /* ── Tests ── */
 
-describe('E2E: extension <-> lace CLI over JSON-RPC', () => {
+describe('E2E: extension <-> lace CLI over gRPC', () => {
   let binary: string;
   let proc: ChildProcess | undefined;
-  let client: JSONRPCClient | undefined;
+  let client: LaceClient | undefined;
 
   beforeAll(() => {
     binary = resolveBinary();
@@ -94,7 +119,7 @@ describe('E2E: extension <-> lace CLI over JSON-RPC', () => {
   });
 
   test('full pipeline: session open -> drop module -> validate -> generate', async () => {
-    const srv = spawnServer(binary);
+    const srv = await spawnServer(binary);
     proc = srv.process;
     client = srv.client;
 
@@ -122,7 +147,9 @@ describe('E2E: extension <-> lace CLI over JSON-RPC', () => {
         output_dir: tmpDir,
         options: { dry_run: true },
       });
-      const errors = (genResult.diagnostics ?? []).filter((d) => d.severity === 'error');
+      const errors = (genResult.diagnostics ?? []).filter(
+        (d: { severity: string }) => d.severity === 'error',
+      );
       expect(errors).toHaveLength(0);
 
       // 5. Shutdown
@@ -133,13 +160,13 @@ describe('E2E: extension <-> lace CLI over JSON-RPC', () => {
     }
   });
 
-  test('RPC transport: method not found returns error', async () => {
-    const srv = spawnServer(binary);
+  test('RPC transport: unknown method returns error', async () => {
+    const srv = await spawnServer(binary);
     proc = srv.process;
     client = srv.client;
 
     await client.initialize('0.1.0');
-    await expect(client.call('nonexistent/method', {})).rejects.toThrow();
+    await expect(client.dispatch('nonexistent/method', {})).rejects.toThrow();
     await client.shutdown();
   });
 });

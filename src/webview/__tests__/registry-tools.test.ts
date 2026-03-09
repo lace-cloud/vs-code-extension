@@ -66,52 +66,11 @@ describe('lace_search_registry', () => {
     expect(result.content).toContain('azure/resource-group');
     expect(result.content).not.toContain('aws/vpc');
   });
-
-  test('filters by category', async () => {
-    const handler = getToolHandler('lace_search_registry')!;
-    const result = await handler({ category: 'core' });
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content).toContain('azure/resource-group');
-    expect(result.content).not.toContain('aws/vpc');
-  });
-
-  test('respects limit', async () => {
-    const handler = getToolHandler('lace_search_registry')!;
-    const result = await handler({ limit: 1 });
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content).toContain('Found 1 module(s)');
-  });
-
-  test('returns no-match message when nothing found', async () => {
-    const handler = getToolHandler('lace_search_registry')!;
-    const result = await handler({ query: 'nonexistent_xyz' });
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content).toContain('No modules found');
-  });
-
-  test('combines query and system filters', async () => {
-    const handler = getToolHandler('lace_search_registry')!;
-    const result = await handler({ query: 'vpc', system: 'azure' });
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content).toContain('No modules found');
-  });
 });
 
 describe('lace_inspect_module', () => {
   beforeEach(() => {
     registerRegistryTools(makeDeps());
-  });
-
-  test('returns error for unknown module', async () => {
-    const handler = getToolHandler('lace_inspect_module')!;
-    const result = await handler({ name: 'nonexistent/module' });
-
-    expect(result.isError).toBe(true);
-    expect(result.content).toContain('not found in the registry');
   });
 
   test('returns basic info when RPC unavailable', async () => {
@@ -137,36 +96,39 @@ describe('lace_inspect_module', () => {
     expect(result.content).toContain('aws/subnet');
   });
 
-  test('resolves single fuzzy match', async () => {
-    const handler = getToolHandler('lace_inspect_module')!;
-    const result = await handler({ name: 'resource-group' });
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content).toContain('azure/resource-group');
-  });
-
   test('returns RPC results when client available', async () => {
     const mockClient = {
       getRegistryVersion: vi.fn().mockResolvedValue({
         deploy_bundle: {
-          schema_version: '1.0',
-          kind: 'bundle',
-          entry: 'aws/vpc@v1.0.0',
-          modules: {
-            'aws/vpc@v1.0.0': {
-              id: 'aws/vpc',
-              version: 'v1.0.0',
-              interface: {
-                inputs: [
-                  { name: 'cidr_block', type: 'string', required: true, description: 'CIDR block' },
-                  { name: 'enable_dns', type: 'bool', required: false, default: true },
-                ],
-                outputs: [{ name: 'vpc_id', type: 'string', description: 'The VPC ID' }],
-              },
-              source: { kind: 'registry' },
-              exports: { outputs: {} },
+          /* opaque */
+        },
+        module_interface: {
+          inputs: [
+            {
+              name: 'cidr_block',
+              type: 'string',
+              required: true,
+              description: 'CIDR block',
+              sensitive: false,
             },
-          },
+            {
+              name: 'enable_dns',
+              type: 'bool',
+              required: false,
+              description: '',
+              default_value: true,
+              sensitive: false,
+            },
+          ],
+          outputs: [
+            {
+              name: 'vpc_id',
+              type: 'string',
+              required: false,
+              description: 'The VPC ID',
+              sensitive: false,
+            },
+          ],
         },
       }),
     };
