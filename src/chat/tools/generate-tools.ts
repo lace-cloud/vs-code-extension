@@ -32,7 +32,7 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      const canvasView = await engineResult.client.actionAutoConnect({
+      const canvasView = await engineResult.client.autoConnect({
         source: sourceInstance,
         target: targetInstance,
       });

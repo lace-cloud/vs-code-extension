@@ -2,7 +2,7 @@
 // versions:
 //   protoc-gen-ts_proto  v2.11.4
 //   protoc               v7.34.0
-// source: proto/service.proto
+// source: service.proto
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
@@ -18,7 +18,8 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
-import { Struct, Value } from "../google/protobuf/struct";
+import { Empty } from "./google/protobuf/empty";
+import { Struct, Value } from "./google/protobuf/struct";
 
 export const protobufPackage = "lace.engine";
 
@@ -181,26 +182,16 @@ export interface InitializeResponse {
   supported_protocols: string[];
 }
 
-export interface ShutdownRequest {
-}
-
 export interface ShutdownResponse {
   status: string;
 }
 
-export interface AuthStatusRequest {
-}
-
 export interface AuthStatusResponse {
   authenticated: boolean;
-  user: UserRecord | undefined;
+  user_id: string;
+  user_email: string;
+  user_name: string;
   base_url: string;
-}
-
-export interface UserRecord {
-  id: string;
-  email: string;
-  name: string;
 }
 
 export interface AuthLoginRequest {
@@ -209,11 +200,10 @@ export interface AuthLoginRequest {
 
 export interface AuthLoginResponse {
   success: boolean;
-  user: UserRecord | undefined;
+  user_id: string;
+  user_email: string;
+  user_name: string;
   error: string;
-}
-
-export interface AuthLogoutRequest {
 }
 
 export interface AuthLogoutResponse {
@@ -224,30 +214,27 @@ export interface RegistryListRequest {
   system: string;
   search: string;
   category: string;
+  kind: string;
   page: number;
   limit: number;
   organization: string;
 }
 
 export interface RegistryListResponse {
-  modules: RegistryModule[];
-  pagination: Pagination | undefined;
+  modules: RegistryModuleEntry[];
+  page: number;
+  limit: number;
+  total: number;
 }
 
-export interface RegistryModule {
+export interface RegistryModuleEntry {
   id: string;
   name: string;
   system: string;
   version: string;
+  categories: string[];
   description: string;
   icon_url: string;
-  categories: string[];
-}
-
-export interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
 }
 
 export interface RegistryGetRequest {
@@ -259,10 +246,10 @@ export interface RegistryGetRequest {
 export interface RegistryGetResponse {
   name: string;
   system: string;
-  versions: RegistryVersionSummary[];
+  versions: RegistryVersionEntry[];
 }
 
-export interface RegistryVersionSummary {
+export interface RegistryVersionEntry {
   version: string;
   description: string;
 }
@@ -281,7 +268,6 @@ export interface RegistryVersionResponse {
   deploy_bundle: Buffer;
   module_interface: ModuleInterface | undefined;
   description: string;
-  git_url: string;
 }
 
 /**
@@ -307,14 +293,8 @@ export interface SessionOpenRequest {
   workspace_name: string;
 }
 
-export interface SessionSaveRequest {
-}
-
 export interface SessionSaveResponse {
   saved: boolean;
-}
-
-export interface SessionCloseRequest {
 }
 
 export interface SessionCloseResponse {
@@ -323,23 +303,19 @@ export interface SessionCloseResponse {
 
 export interface SessionGenerateRequest {
   output_dir: string;
-  options: GenerateOptions | undefined;
-}
-
-export interface GenerateOptions {
   dry_run: boolean;
   format: boolean;
   validate: boolean;
   overwrite: boolean;
 }
 
-export interface GenerateResponse {
+export interface SessionGenerateResponse {
   files_written: string[];
   files: { [key: string]: string };
   diagnostics: Diagnostic[];
 }
 
-export interface GenerateResponse_FilesEntry {
+export interface SessionGenerateResponse_FilesEntry {
   key: string;
   value: string;
 }
@@ -352,134 +328,136 @@ export interface Diagnostic {
   column: number;
 }
 
-export interface ActionDropBundleRequest {
+export interface DropBundleRequest {
   deploy_bundle: Buffer;
   position: Position | undefined;
 }
 
-export interface ActionConnectRequest {
+export interface ConnectRequest {
   source: string;
   target: string;
   source_output: string;
   target_input: string;
 }
 
-export interface ActionDisconnectRequest {
+export interface AutoConnectRequest {
+  source: string;
+  target: string;
+}
+
+export interface DisconnectRequest {
   target: string;
   input_name: string;
 }
 
-export interface ActionUpdateInputRequest {
+export interface UpdateInputRequest {
   instance_id: string;
   input_name: string;
-  binding: Binding | undefined;
+  mode: InputMode;
+  value: any | undefined;
+  variable: string;
+  expression: string;
 }
 
-export interface ActionUpdateAllInputsRequest {
+export interface InputEntry {
+  name: string;
+  mode: InputMode;
+  value: any | undefined;
+  variable: string;
+  expression: string;
+}
+
+export interface UpdateAllInputsRequest {
   instance_id: string;
-  inputs: { [key: string]: Binding };
+  inputs: InputEntry[];
 }
 
-export interface ActionUpdateAllInputsRequest_InputsEntry {
-  key: string;
-  value: Binding | undefined;
-}
-
-export interface ActionRenameInstanceRequest {
+export interface RenameInstanceRequest {
   old_id: string;
   new_id: string;
 }
 
-export interface ActionDeleteInstanceRequest {
+export interface DeleteInstanceRequest {
   instance_id: string;
 }
 
-export interface ActionSyncLayoutRequest {
+export interface SyncLayoutRequest {
   positions: { [key: string]: Position };
 }
 
-export interface ActionSyncLayoutRequest_PositionsEntry {
+export interface SyncLayoutRequest_PositionsEntry {
   key: string;
   value: Position | undefined;
 }
 
-export interface ActionSetVariablesRequest {
+export interface SetVariablesRequest {
   variables: InputDef[];
 }
 
-export interface ActionSetExportsRequest {
-  outputs: { [key: string]: OutputExport };
+export interface OutputExportEntry {
+  name: string;
+  source_instance: string;
+  source_output: string;
+}
+
+export interface SetExportsRequest {
+  outputs: OutputExportEntry[];
   output_defs: OutputDef[];
 }
 
-export interface ActionSetExportsRequest_OutputsEntry {
-  key: string;
-  value: OutputExport | undefined;
+export interface SetTerraformRequest {
+  required_version: string;
+  required_providers: ProviderReqView[];
+  backend: BackendView | undefined;
 }
 
-export interface ActionSetTerraformRequest {
-  terraform: TerraformBlock | undefined;
+export interface SetProvidersRequest {
+  providers: ProviderView[];
 }
 
-export interface ActionSetProvidersRequest {
-  providers: ProviderConfig[];
+export interface LocalEntry {
+  name: string;
+  mode: string;
+  value: any | undefined;
+  variable: string;
+  expression: string;
 }
 
-export interface ActionSetLocalsRequest {
-  locals: LocalDef[];
+export interface SetLocalsRequest {
+  locals: LocalEntry[];
 }
 
-export interface ActionSetDependsOnRequest {
+export interface SetDependsOnRequest {
   instance_id: string;
   depends_on: string[];
 }
 
-export interface ActionSetEnvironmentsRequest {
+export interface SetEnvironmentsRequest {
   environments: { [key: string]: { [key: string]: any } | undefined };
-  environment_backends: { [key: string]: BackendConfig };
+  environment_backends: { [key: string]: BackendView };
 }
 
-export interface ActionSetEnvironmentsRequest_EnvironmentsEntry {
+export interface SetEnvironmentsRequest_EnvironmentsEntry {
   key: string;
   value: { [key: string]: any } | undefined;
 }
 
-export interface ActionSetEnvironmentsRequest_EnvironmentBackendsEntry {
+export interface SetEnvironmentsRequest_EnvironmentBackendsEntry {
   key: string;
-  value: BackendConfig | undefined;
+  value: BackendView | undefined;
 }
 
-export interface ActionAutoConnectRequest {
-  source: string;
-  target: string;
-}
-
-export interface ActionUndoRequest {
-}
-
-export interface ActionRedoRequest {
-}
-
-export interface QueryNodeConfigRequest {
+export interface NodeConfigRequest {
   instance_id: string;
 }
 
-export interface QueryEdgeConfigRequest {
+export interface EdgeConfigRequest {
   source: string;
   target: string;
-}
-
-export interface QuerySettingsRequest {
-}
-
-export interface QueryGraphSummaryRequest {
 }
 
 export interface GraphSummaryResponse {
   text: string;
-}
-
-export interface QueryValidateRequest {
 }
 
 export interface ValidateResponse {
@@ -501,6 +479,7 @@ export interface RenderNode {
   label: string;
   kind: NodeKind;
   module_key: string;
+  icon_url: string;
   position: Position | undefined;
   has_errors: boolean;
   error_messages: string[];
@@ -557,7 +536,7 @@ export interface EdgeConfig {
 }
 
 export interface SettingsConfig {
-  terraform: TerraformSettings | undefined;
+  terraform: TerraformView | undefined;
   providers: ProviderView[];
   locals: LocalView[];
   environments: { [key: string]: { [key: string]: any } | undefined };
@@ -574,7 +553,7 @@ export interface SettingsConfig_EnvironmentBackendsEntry {
   value: BackendView | undefined;
 }
 
-export interface TerraformSettings {
+export interface TerraformView {
   required_version: string;
   required_providers: ProviderReqView[];
   backend: BackendView | undefined;
@@ -624,23 +603,6 @@ export interface Position {
   y: number;
 }
 
-export interface Binding {
-  lit?: any | undefined;
-  var?: string | undefined;
-  out?: OutputRef | undefined;
-  expr?: Expression | undefined;
-}
-
-export interface OutputRef {
-  module: string;
-  name: string;
-}
-
-export interface Expression {
-  lang: string;
-  value: string;
-}
-
 export interface InputDef {
   name: string;
   type: string;
@@ -660,55 +622,6 @@ export interface OutputDef {
   type: string;
   description: string;
   sensitive: boolean;
-}
-
-export interface OutputExport {
-  out: OutputRef | undefined;
-  lit: any | undefined;
-  var: string;
-  expr: Expression | undefined;
-}
-
-export interface LocalDef {
-  name: string;
-  value: Binding | undefined;
-}
-
-export interface TerraformBlock {
-  required_version: string;
-  required_providers: { [key: string]: ProviderRequirement };
-  backend: BackendConfig | undefined;
-}
-
-export interface TerraformBlock_RequiredProvidersEntry {
-  key: string;
-  value: ProviderRequirement | undefined;
-}
-
-export interface ProviderRequirement {
-  source: string;
-  version: string;
-}
-
-export interface BackendConfig {
-  type: string;
-  config: { [key: string]: any | undefined };
-}
-
-export interface BackendConfig_ConfigEntry {
-  key: string;
-  value: any | undefined;
-}
-
-export interface ProviderConfig {
-  name: string;
-  alias: string;
-  config: { [key: string]: any | undefined };
-}
-
-export interface ProviderConfig_ConfigEntry {
-  key: string;
-  value: any | undefined;
 }
 
 function createBaseInitializeRequest(): InitializeRequest {
@@ -917,49 +830,6 @@ export const InitializeResponse: MessageFns<InitializeResponse> = {
   },
 };
 
-function createBaseShutdownRequest(): ShutdownRequest {
-  return {};
-}
-
-export const ShutdownRequest: MessageFns<ShutdownRequest> = {
-  encode(_: ShutdownRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ShutdownRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseShutdownRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): ShutdownRequest {
-    return {};
-  },
-
-  toJSON(_: ShutdownRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ShutdownRequest>, I>>(base?: I): ShutdownRequest {
-    return ShutdownRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ShutdownRequest>, I>>(_: I): ShutdownRequest {
-    const message = createBaseShutdownRequest();
-    return message;
-  },
-};
-
 function createBaseShutdownResponse(): ShutdownResponse {
   return { status: "" };
 }
@@ -1018,51 +888,8 @@ export const ShutdownResponse: MessageFns<ShutdownResponse> = {
   },
 };
 
-function createBaseAuthStatusRequest(): AuthStatusRequest {
-  return {};
-}
-
-export const AuthStatusRequest: MessageFns<AuthStatusRequest> = {
-  encode(_: AuthStatusRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): AuthStatusRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseAuthStatusRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): AuthStatusRequest {
-    return {};
-  },
-
-  toJSON(_: AuthStatusRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<AuthStatusRequest>, I>>(base?: I): AuthStatusRequest {
-    return AuthStatusRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<AuthStatusRequest>, I>>(_: I): AuthStatusRequest {
-    const message = createBaseAuthStatusRequest();
-    return message;
-  },
-};
-
 function createBaseAuthStatusResponse(): AuthStatusResponse {
-  return { authenticated: false, user: undefined, base_url: "" };
+  return { authenticated: false, user_id: "", user_email: "", user_name: "", base_url: "" };
 }
 
 export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
@@ -1070,11 +897,17 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
     if (message.authenticated !== false) {
       writer.uint32(8).bool(message.authenticated);
     }
-    if (message.user !== undefined) {
-      UserRecord.encode(message.user, writer.uint32(18).fork()).join();
+    if (message.user_id !== "") {
+      writer.uint32(18).string(message.user_id);
+    }
+    if (message.user_email !== "") {
+      writer.uint32(26).string(message.user_email);
+    }
+    if (message.user_name !== "") {
+      writer.uint32(34).string(message.user_name);
     }
     if (message.base_url !== "") {
-      writer.uint32(26).string(message.base_url);
+      writer.uint32(42).string(message.base_url);
     }
     return writer;
   },
@@ -1099,11 +932,27 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
             break;
           }
 
-          message.user = UserRecord.decode(reader, reader.uint32());
+          message.user_id = reader.string();
           continue;
         }
         case 3: {
           if (tag !== 26) {
+            break;
+          }
+
+          message.user_email = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.user_name = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
             break;
           }
 
@@ -1122,7 +971,21 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
   fromJSON(object: any): AuthStatusResponse {
     return {
       authenticated: isSet(object.authenticated) ? globalThis.Boolean(object.authenticated) : false,
-      user: isSet(object.user) ? UserRecord.fromJSON(object.user) : undefined,
+      user_id: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      user_email: isSet(object.userEmail)
+        ? globalThis.String(object.userEmail)
+        : isSet(object.user_email)
+        ? globalThis.String(object.user_email)
+        : "",
+      user_name: isSet(object.userName)
+        ? globalThis.String(object.userName)
+        : isSet(object.user_name)
+        ? globalThis.String(object.user_name)
+        : "",
       base_url: isSet(object.baseUrl)
         ? globalThis.String(object.baseUrl)
         : isSet(object.base_url)
@@ -1136,8 +999,14 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
     if (message.authenticated !== false) {
       obj.authenticated = message.authenticated;
     }
-    if (message.user !== undefined) {
-      obj.user = UserRecord.toJSON(message.user);
+    if (message.user_id !== "") {
+      obj.userId = message.user_id;
+    }
+    if (message.user_email !== "") {
+      obj.userEmail = message.user_email;
+    }
+    if (message.user_name !== "") {
+      obj.userName = message.user_name;
     }
     if (message.base_url !== "") {
       obj.baseUrl = message.base_url;
@@ -1151,102 +1020,10 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
   fromPartial<I extends Exact<DeepPartial<AuthStatusResponse>, I>>(object: I): AuthStatusResponse {
     const message = createBaseAuthStatusResponse();
     message.authenticated = object.authenticated ?? false;
-    message.user = (object.user !== undefined && object.user !== null)
-      ? UserRecord.fromPartial(object.user)
-      : undefined;
+    message.user_id = object.user_id ?? "";
+    message.user_email = object.user_email ?? "";
+    message.user_name = object.user_name ?? "";
     message.base_url = object.base_url ?? "";
-    return message;
-  },
-};
-
-function createBaseUserRecord(): UserRecord {
-  return { id: "", email: "", name: "" };
-}
-
-export const UserRecord: MessageFns<UserRecord> = {
-  encode(message: UserRecord, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.email !== "") {
-      writer.uint32(18).string(message.email);
-    }
-    if (message.name !== "") {
-      writer.uint32(26).string(message.name);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): UserRecord {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseUserRecord();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.id = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.email = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.name = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): UserRecord {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      email: isSet(object.email) ? globalThis.String(object.email) : "",
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-    };
-  },
-
-  toJSON(message: UserRecord): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.email !== "") {
-      obj.email = message.email;
-    }
-    if (message.name !== "") {
-      obj.name = message.name;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<UserRecord>, I>>(base?: I): UserRecord {
-    return UserRecord.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<UserRecord>, I>>(object: I): UserRecord {
-    const message = createBaseUserRecord();
-    message.id = object.id ?? "";
-    message.email = object.email ?? "";
-    message.name = object.name ?? "";
     return message;
   },
 };
@@ -1310,7 +1087,7 @@ export const AuthLoginRequest: MessageFns<AuthLoginRequest> = {
 };
 
 function createBaseAuthLoginResponse(): AuthLoginResponse {
-  return { success: false, user: undefined, error: "" };
+  return { success: false, user_id: "", user_email: "", user_name: "", error: "" };
 }
 
 export const AuthLoginResponse: MessageFns<AuthLoginResponse> = {
@@ -1318,11 +1095,17 @@ export const AuthLoginResponse: MessageFns<AuthLoginResponse> = {
     if (message.success !== false) {
       writer.uint32(8).bool(message.success);
     }
-    if (message.user !== undefined) {
-      UserRecord.encode(message.user, writer.uint32(18).fork()).join();
+    if (message.user_id !== "") {
+      writer.uint32(18).string(message.user_id);
+    }
+    if (message.user_email !== "") {
+      writer.uint32(26).string(message.user_email);
+    }
+    if (message.user_name !== "") {
+      writer.uint32(34).string(message.user_name);
     }
     if (message.error !== "") {
-      writer.uint32(26).string(message.error);
+      writer.uint32(42).string(message.error);
     }
     return writer;
   },
@@ -1347,11 +1130,27 @@ export const AuthLoginResponse: MessageFns<AuthLoginResponse> = {
             break;
           }
 
-          message.user = UserRecord.decode(reader, reader.uint32());
+          message.user_id = reader.string();
           continue;
         }
         case 3: {
           if (tag !== 26) {
+            break;
+          }
+
+          message.user_email = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.user_name = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
             break;
           }
 
@@ -1370,7 +1169,21 @@ export const AuthLoginResponse: MessageFns<AuthLoginResponse> = {
   fromJSON(object: any): AuthLoginResponse {
     return {
       success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
-      user: isSet(object.user) ? UserRecord.fromJSON(object.user) : undefined,
+      user_id: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      user_email: isSet(object.userEmail)
+        ? globalThis.String(object.userEmail)
+        : isSet(object.user_email)
+        ? globalThis.String(object.user_email)
+        : "",
+      user_name: isSet(object.userName)
+        ? globalThis.String(object.userName)
+        : isSet(object.user_name)
+        ? globalThis.String(object.user_name)
+        : "",
       error: isSet(object.error) ? globalThis.String(object.error) : "",
     };
   },
@@ -1380,8 +1193,14 @@ export const AuthLoginResponse: MessageFns<AuthLoginResponse> = {
     if (message.success !== false) {
       obj.success = message.success;
     }
-    if (message.user !== undefined) {
-      obj.user = UserRecord.toJSON(message.user);
+    if (message.user_id !== "") {
+      obj.userId = message.user_id;
+    }
+    if (message.user_email !== "") {
+      obj.userEmail = message.user_email;
+    }
+    if (message.user_name !== "") {
+      obj.userName = message.user_name;
     }
     if (message.error !== "") {
       obj.error = message.error;
@@ -1395,53 +1214,10 @@ export const AuthLoginResponse: MessageFns<AuthLoginResponse> = {
   fromPartial<I extends Exact<DeepPartial<AuthLoginResponse>, I>>(object: I): AuthLoginResponse {
     const message = createBaseAuthLoginResponse();
     message.success = object.success ?? false;
-    message.user = (object.user !== undefined && object.user !== null)
-      ? UserRecord.fromPartial(object.user)
-      : undefined;
+    message.user_id = object.user_id ?? "";
+    message.user_email = object.user_email ?? "";
+    message.user_name = object.user_name ?? "";
     message.error = object.error ?? "";
-    return message;
-  },
-};
-
-function createBaseAuthLogoutRequest(): AuthLogoutRequest {
-  return {};
-}
-
-export const AuthLogoutRequest: MessageFns<AuthLogoutRequest> = {
-  encode(_: AuthLogoutRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): AuthLogoutRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseAuthLogoutRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): AuthLogoutRequest {
-    return {};
-  },
-
-  toJSON(_: AuthLogoutRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<AuthLogoutRequest>, I>>(base?: I): AuthLogoutRequest {
-    return AuthLogoutRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<AuthLogoutRequest>, I>>(_: I): AuthLogoutRequest {
-    const message = createBaseAuthLogoutRequest();
     return message;
   },
 };
@@ -1505,7 +1281,7 @@ export const AuthLogoutResponse: MessageFns<AuthLogoutResponse> = {
 };
 
 function createBaseRegistryListRequest(): RegistryListRequest {
-  return { system: "", search: "", category: "", page: 0, limit: 0, organization: "" };
+  return { system: "", search: "", category: "", kind: "", page: 0, limit: 0, organization: "" };
 }
 
 export const RegistryListRequest: MessageFns<RegistryListRequest> = {
@@ -1519,14 +1295,17 @@ export const RegistryListRequest: MessageFns<RegistryListRequest> = {
     if (message.category !== "") {
       writer.uint32(26).string(message.category);
     }
+    if (message.kind !== "") {
+      writer.uint32(34).string(message.kind);
+    }
     if (message.page !== 0) {
-      writer.uint32(32).int32(message.page);
+      writer.uint32(40).int32(message.page);
     }
     if (message.limit !== 0) {
-      writer.uint32(40).int32(message.limit);
+      writer.uint32(48).int32(message.limit);
     }
     if (message.organization !== "") {
-      writer.uint32(50).string(message.organization);
+      writer.uint32(58).string(message.organization);
     }
     return writer;
   },
@@ -1563,11 +1342,11 @@ export const RegistryListRequest: MessageFns<RegistryListRequest> = {
           continue;
         }
         case 4: {
-          if (tag !== 32) {
+          if (tag !== 34) {
             break;
           }
 
-          message.page = reader.int32();
+          message.kind = reader.string();
           continue;
         }
         case 5: {
@@ -1575,11 +1354,19 @@ export const RegistryListRequest: MessageFns<RegistryListRequest> = {
             break;
           }
 
-          message.limit = reader.int32();
+          message.page = reader.int32();
           continue;
         }
         case 6: {
-          if (tag !== 50) {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.limit = reader.int32();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
             break;
           }
 
@@ -1600,6 +1387,7 @@ export const RegistryListRequest: MessageFns<RegistryListRequest> = {
       system: isSet(object.system) ? globalThis.String(object.system) : "",
       search: isSet(object.search) ? globalThis.String(object.search) : "",
       category: isSet(object.category) ? globalThis.String(object.category) : "",
+      kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
       page: isSet(object.page) ? globalThis.Number(object.page) : 0,
       limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
       organization: isSet(object.organization) ? globalThis.String(object.organization) : "",
@@ -1616,6 +1404,9 @@ export const RegistryListRequest: MessageFns<RegistryListRequest> = {
     }
     if (message.category !== "") {
       obj.category = message.category;
+    }
+    if (message.kind !== "") {
+      obj.kind = message.kind;
     }
     if (message.page !== 0) {
       obj.page = Math.round(message.page);
@@ -1637,6 +1428,7 @@ export const RegistryListRequest: MessageFns<RegistryListRequest> = {
     message.system = object.system ?? "";
     message.search = object.search ?? "";
     message.category = object.category ?? "";
+    message.kind = object.kind ?? "";
     message.page = object.page ?? 0;
     message.limit = object.limit ?? 0;
     message.organization = object.organization ?? "";
@@ -1645,16 +1437,22 @@ export const RegistryListRequest: MessageFns<RegistryListRequest> = {
 };
 
 function createBaseRegistryListResponse(): RegistryListResponse {
-  return { modules: [], pagination: undefined };
+  return { modules: [], page: 0, limit: 0, total: 0 };
 }
 
 export const RegistryListResponse: MessageFns<RegistryListResponse> = {
   encode(message: RegistryListResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.modules) {
-      RegistryModule.encode(v!, writer.uint32(10).fork()).join();
+      RegistryModuleEntry.encode(v!, writer.uint32(10).fork()).join();
     }
-    if (message.pagination !== undefined) {
-      Pagination.encode(message.pagination, writer.uint32(18).fork()).join();
+    if (message.page !== 0) {
+      writer.uint32(16).int32(message.page);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(24).int32(message.limit);
+    }
+    if (message.total !== 0) {
+      writer.uint32(32).int32(message.total);
     }
     return writer;
   },
@@ -1671,15 +1469,31 @@ export const RegistryListResponse: MessageFns<RegistryListResponse> = {
             break;
           }
 
-          message.modules.push(RegistryModule.decode(reader, reader.uint32()));
+          message.modules.push(RegistryModuleEntry.decode(reader, reader.uint32()));
           continue;
         }
         case 2: {
-          if (tag !== 18) {
+          if (tag !== 16) {
             break;
           }
 
-          message.pagination = Pagination.decode(reader, reader.uint32());
+          message.page = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.limit = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.total = reader.int32();
           continue;
         }
       }
@@ -1694,19 +1508,27 @@ export const RegistryListResponse: MessageFns<RegistryListResponse> = {
   fromJSON(object: any): RegistryListResponse {
     return {
       modules: globalThis.Array.isArray(object?.modules)
-        ? object.modules.map((e: any) => RegistryModule.fromJSON(e))
+        ? object.modules.map((e: any) => RegistryModuleEntry.fromJSON(e))
         : [],
-      pagination: isSet(object.pagination) ? Pagination.fromJSON(object.pagination) : undefined,
+      page: isSet(object.page) ? globalThis.Number(object.page) : 0,
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+      total: isSet(object.total) ? globalThis.Number(object.total) : 0,
     };
   },
 
   toJSON(message: RegistryListResponse): unknown {
     const obj: any = {};
     if (message.modules?.length) {
-      obj.modules = message.modules.map((e) => RegistryModule.toJSON(e));
+      obj.modules = message.modules.map((e) => RegistryModuleEntry.toJSON(e));
     }
-    if (message.pagination !== undefined) {
-      obj.pagination = Pagination.toJSON(message.pagination);
+    if (message.page !== 0) {
+      obj.page = Math.round(message.page);
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    if (message.total !== 0) {
+      obj.total = Math.round(message.total);
     }
     return obj;
   },
@@ -1716,20 +1538,20 @@ export const RegistryListResponse: MessageFns<RegistryListResponse> = {
   },
   fromPartial<I extends Exact<DeepPartial<RegistryListResponse>, I>>(object: I): RegistryListResponse {
     const message = createBaseRegistryListResponse();
-    message.modules = object.modules?.map((e) => RegistryModule.fromPartial(e)) || [];
-    message.pagination = (object.pagination !== undefined && object.pagination !== null)
-      ? Pagination.fromPartial(object.pagination)
-      : undefined;
+    message.modules = object.modules?.map((e) => RegistryModuleEntry.fromPartial(e)) || [];
+    message.page = object.page ?? 0;
+    message.limit = object.limit ?? 0;
+    message.total = object.total ?? 0;
     return message;
   },
 };
 
-function createBaseRegistryModule(): RegistryModule {
-  return { id: "", name: "", system: "", version: "", description: "", icon_url: "", categories: [] };
+function createBaseRegistryModuleEntry(): RegistryModuleEntry {
+  return { id: "", name: "", system: "", version: "", categories: [], description: "", icon_url: "" };
 }
 
-export const RegistryModule: MessageFns<RegistryModule> = {
-  encode(message: RegistryModule, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const RegistryModuleEntry: MessageFns<RegistryModuleEntry> = {
+  encode(message: RegistryModuleEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
@@ -1742,22 +1564,22 @@ export const RegistryModule: MessageFns<RegistryModule> = {
     if (message.version !== "") {
       writer.uint32(34).string(message.version);
     }
+    for (const v of message.categories) {
+      writer.uint32(42).string(v!);
+    }
     if (message.description !== "") {
-      writer.uint32(42).string(message.description);
+      writer.uint32(50).string(message.description);
     }
     if (message.icon_url !== "") {
-      writer.uint32(50).string(message.icon_url);
-    }
-    for (const v of message.categories) {
-      writer.uint32(58).string(v!);
+      writer.uint32(58).string(message.icon_url);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): RegistryModule {
+  decode(input: BinaryReader | Uint8Array, length?: number): RegistryModuleEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRegistryModule();
+    const message = createBaseRegistryModuleEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -1798,7 +1620,7 @@ export const RegistryModule: MessageFns<RegistryModule> = {
             break;
           }
 
-          message.description = reader.string();
+          message.categories.push(reader.string());
           continue;
         }
         case 6: {
@@ -1806,7 +1628,7 @@ export const RegistryModule: MessageFns<RegistryModule> = {
             break;
           }
 
-          message.icon_url = reader.string();
+          message.description = reader.string();
           continue;
         }
         case 7: {
@@ -1814,7 +1636,7 @@ export const RegistryModule: MessageFns<RegistryModule> = {
             break;
           }
 
-          message.categories.push(reader.string());
+          message.icon_url = reader.string();
           continue;
         }
       }
@@ -1826,25 +1648,25 @@ export const RegistryModule: MessageFns<RegistryModule> = {
     return message;
   },
 
-  fromJSON(object: any): RegistryModule {
+  fromJSON(object: any): RegistryModuleEntry {
     return {
       id: isSet(object.id) ? globalThis.String(object.id) : "",
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       system: isSet(object.system) ? globalThis.String(object.system) : "",
       version: isSet(object.version) ? globalThis.String(object.version) : "",
+      categories: globalThis.Array.isArray(object?.categories)
+        ? object.categories.map((e: any) => globalThis.String(e))
+        : [],
       description: isSet(object.description) ? globalThis.String(object.description) : "",
       icon_url: isSet(object.iconUrl)
         ? globalThis.String(object.iconUrl)
         : isSet(object.icon_url)
         ? globalThis.String(object.icon_url)
         : "",
-      categories: globalThis.Array.isArray(object?.categories)
-        ? object.categories.map((e: any) => globalThis.String(e))
-        : [],
     };
   },
 
-  toJSON(message: RegistryModule): unknown {
+  toJSON(message: RegistryModuleEntry): unknown {
     const obj: any = {};
     if (message.id !== "") {
       obj.id = message.id;
@@ -1858,122 +1680,30 @@ export const RegistryModule: MessageFns<RegistryModule> = {
     if (message.version !== "") {
       obj.version = message.version;
     }
+    if (message.categories?.length) {
+      obj.categories = message.categories;
+    }
     if (message.description !== "") {
       obj.description = message.description;
     }
     if (message.icon_url !== "") {
       obj.iconUrl = message.icon_url;
     }
-    if (message.categories?.length) {
-      obj.categories = message.categories;
-    }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<RegistryModule>, I>>(base?: I): RegistryModule {
-    return RegistryModule.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<RegistryModuleEntry>, I>>(base?: I): RegistryModuleEntry {
+    return RegistryModuleEntry.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<RegistryModule>, I>>(object: I): RegistryModule {
-    const message = createBaseRegistryModule();
+  fromPartial<I extends Exact<DeepPartial<RegistryModuleEntry>, I>>(object: I): RegistryModuleEntry {
+    const message = createBaseRegistryModuleEntry();
     message.id = object.id ?? "";
     message.name = object.name ?? "";
     message.system = object.system ?? "";
     message.version = object.version ?? "";
+    message.categories = object.categories?.map((e) => e) || [];
     message.description = object.description ?? "";
     message.icon_url = object.icon_url ?? "";
-    message.categories = object.categories?.map((e) => e) || [];
-    return message;
-  },
-};
-
-function createBasePagination(): Pagination {
-  return { page: 0, limit: 0, total: 0 };
-}
-
-export const Pagination: MessageFns<Pagination> = {
-  encode(message: Pagination, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.page !== 0) {
-      writer.uint32(8).int32(message.page);
-    }
-    if (message.limit !== 0) {
-      writer.uint32(16).int32(message.limit);
-    }
-    if (message.total !== 0) {
-      writer.uint32(24).int32(message.total);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): Pagination {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBasePagination();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 8) {
-            break;
-          }
-
-          message.page = reader.int32();
-          continue;
-        }
-        case 2: {
-          if (tag !== 16) {
-            break;
-          }
-
-          message.limit = reader.int32();
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.total = reader.int32();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): Pagination {
-    return {
-      page: isSet(object.page) ? globalThis.Number(object.page) : 0,
-      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
-      total: isSet(object.total) ? globalThis.Number(object.total) : 0,
-    };
-  },
-
-  toJSON(message: Pagination): unknown {
-    const obj: any = {};
-    if (message.page !== 0) {
-      obj.page = Math.round(message.page);
-    }
-    if (message.limit !== 0) {
-      obj.limit = Math.round(message.limit);
-    }
-    if (message.total !== 0) {
-      obj.total = Math.round(message.total);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<Pagination>, I>>(base?: I): Pagination {
-    return Pagination.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<Pagination>, I>>(object: I): Pagination {
-    const message = createBasePagination();
-    message.page = object.page ?? 0;
-    message.limit = object.limit ?? 0;
-    message.total = object.total ?? 0;
     return message;
   },
 };
@@ -2083,7 +1813,7 @@ export const RegistryGetResponse: MessageFns<RegistryGetResponse> = {
       writer.uint32(18).string(message.system);
     }
     for (const v of message.versions) {
-      RegistryVersionSummary.encode(v!, writer.uint32(26).fork()).join();
+      RegistryVersionEntry.encode(v!, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -2116,7 +1846,7 @@ export const RegistryGetResponse: MessageFns<RegistryGetResponse> = {
             break;
           }
 
-          message.versions.push(RegistryVersionSummary.decode(reader, reader.uint32()));
+          message.versions.push(RegistryVersionEntry.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -2133,7 +1863,7 @@ export const RegistryGetResponse: MessageFns<RegistryGetResponse> = {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       system: isSet(object.system) ? globalThis.String(object.system) : "",
       versions: globalThis.Array.isArray(object?.versions)
-        ? object.versions.map((e: any) => RegistryVersionSummary.fromJSON(e))
+        ? object.versions.map((e: any) => RegistryVersionEntry.fromJSON(e))
         : [],
     };
   },
@@ -2147,7 +1877,7 @@ export const RegistryGetResponse: MessageFns<RegistryGetResponse> = {
       obj.system = message.system;
     }
     if (message.versions?.length) {
-      obj.versions = message.versions.map((e) => RegistryVersionSummary.toJSON(e));
+      obj.versions = message.versions.map((e) => RegistryVersionEntry.toJSON(e));
     }
     return obj;
   },
@@ -2159,17 +1889,17 @@ export const RegistryGetResponse: MessageFns<RegistryGetResponse> = {
     const message = createBaseRegistryGetResponse();
     message.name = object.name ?? "";
     message.system = object.system ?? "";
-    message.versions = object.versions?.map((e) => RegistryVersionSummary.fromPartial(e)) || [];
+    message.versions = object.versions?.map((e) => RegistryVersionEntry.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseRegistryVersionSummary(): RegistryVersionSummary {
+function createBaseRegistryVersionEntry(): RegistryVersionEntry {
   return { version: "", description: "" };
 }
 
-export const RegistryVersionSummary: MessageFns<RegistryVersionSummary> = {
-  encode(message: RegistryVersionSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const RegistryVersionEntry: MessageFns<RegistryVersionEntry> = {
+  encode(message: RegistryVersionEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.version !== "") {
       writer.uint32(10).string(message.version);
     }
@@ -2179,10 +1909,10 @@ export const RegistryVersionSummary: MessageFns<RegistryVersionSummary> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): RegistryVersionSummary {
+  decode(input: BinaryReader | Uint8Array, length?: number): RegistryVersionEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRegistryVersionSummary();
+    const message = createBaseRegistryVersionEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2211,14 +1941,14 @@ export const RegistryVersionSummary: MessageFns<RegistryVersionSummary> = {
     return message;
   },
 
-  fromJSON(object: any): RegistryVersionSummary {
+  fromJSON(object: any): RegistryVersionEntry {
     return {
       version: isSet(object.version) ? globalThis.String(object.version) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
     };
   },
 
-  toJSON(message: RegistryVersionSummary): unknown {
+  toJSON(message: RegistryVersionEntry): unknown {
     const obj: any = {};
     if (message.version !== "") {
       obj.version = message.version;
@@ -2229,11 +1959,11 @@ export const RegistryVersionSummary: MessageFns<RegistryVersionSummary> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<RegistryVersionSummary>, I>>(base?: I): RegistryVersionSummary {
-    return RegistryVersionSummary.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<RegistryVersionEntry>, I>>(base?: I): RegistryVersionEntry {
+    return RegistryVersionEntry.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<RegistryVersionSummary>, I>>(object: I): RegistryVersionSummary {
-    const message = createBaseRegistryVersionSummary();
+  fromPartial<I extends Exact<DeepPartial<RegistryVersionEntry>, I>>(object: I): RegistryVersionEntry {
+    const message = createBaseRegistryVersionEntry();
     message.version = object.version ?? "";
     message.description = object.description ?? "";
     return message;
@@ -2356,7 +2086,6 @@ function createBaseRegistryVersionResponse(): RegistryVersionResponse {
     deploy_bundle: Buffer.alloc(0),
     module_interface: undefined,
     description: "",
-    git_url: "",
   };
 }
 
@@ -2379,9 +2108,6 @@ export const RegistryVersionResponse: MessageFns<RegistryVersionResponse> = {
     }
     if (message.description !== "") {
       writer.uint32(50).string(message.description);
-    }
-    if (message.git_url !== "") {
-      writer.uint32(58).string(message.git_url);
     }
     return writer;
   },
@@ -2441,14 +2167,6 @@ export const RegistryVersionResponse: MessageFns<RegistryVersionResponse> = {
           message.description = reader.string();
           continue;
         }
-        case 7: {
-          if (tag !== 58) {
-            break;
-          }
-
-          message.git_url = reader.string();
-          continue;
-        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2474,11 +2192,6 @@ export const RegistryVersionResponse: MessageFns<RegistryVersionResponse> = {
         ? ModuleInterface.fromJSON(object.module_interface)
         : undefined,
       description: isSet(object.description) ? globalThis.String(object.description) : "",
-      git_url: isSet(object.gitUrl)
-        ? globalThis.String(object.gitUrl)
-        : isSet(object.git_url)
-        ? globalThis.String(object.git_url)
-        : "",
     };
   },
 
@@ -2502,9 +2215,6 @@ export const RegistryVersionResponse: MessageFns<RegistryVersionResponse> = {
     if (message.description !== "") {
       obj.description = message.description;
     }
-    if (message.git_url !== "") {
-      obj.gitUrl = message.git_url;
-    }
     return obj;
   },
 
@@ -2521,7 +2231,6 @@ export const RegistryVersionResponse: MessageFns<RegistryVersionResponse> = {
       ? ModuleInterface.fromPartial(object.module_interface)
       : undefined;
     message.description = object.description ?? "";
-    message.git_url = object.git_url ?? "";
     return message;
   },
 };
@@ -2832,49 +2541,6 @@ export const SessionOpenRequest: MessageFns<SessionOpenRequest> = {
   },
 };
 
-function createBaseSessionSaveRequest(): SessionSaveRequest {
-  return {};
-}
-
-export const SessionSaveRequest: MessageFns<SessionSaveRequest> = {
-  encode(_: SessionSaveRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SessionSaveRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSessionSaveRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): SessionSaveRequest {
-    return {};
-  },
-
-  toJSON(_: SessionSaveRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<SessionSaveRequest>, I>>(base?: I): SessionSaveRequest {
-    return SessionSaveRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<SessionSaveRequest>, I>>(_: I): SessionSaveRequest {
-    const message = createBaseSessionSaveRequest();
-    return message;
-  },
-};
-
 function createBaseSessionSaveResponse(): SessionSaveResponse {
   return { saved: false };
 }
@@ -2929,49 +2595,6 @@ export const SessionSaveResponse: MessageFns<SessionSaveResponse> = {
   fromPartial<I extends Exact<DeepPartial<SessionSaveResponse>, I>>(object: I): SessionSaveResponse {
     const message = createBaseSessionSaveResponse();
     message.saved = object.saved ?? false;
-    return message;
-  },
-};
-
-function createBaseSessionCloseRequest(): SessionCloseRequest {
-  return {};
-}
-
-export const SessionCloseRequest: MessageFns<SessionCloseRequest> = {
-  encode(_: SessionCloseRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SessionCloseRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSessionCloseRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): SessionCloseRequest {
-    return {};
-  },
-
-  toJSON(_: SessionCloseRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<SessionCloseRequest>, I>>(base?: I): SessionCloseRequest {
-    return SessionCloseRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<SessionCloseRequest>, I>>(_: I): SessionCloseRequest {
-    const message = createBaseSessionCloseRequest();
     return message;
   },
 };
@@ -3035,7 +2658,7 @@ export const SessionCloseResponse: MessageFns<SessionCloseResponse> = {
 };
 
 function createBaseSessionGenerateRequest(): SessionGenerateRequest {
-  return { output_dir: "", options: undefined };
+  return { output_dir: "", dry_run: false, format: false, validate: false, overwrite: false };
 }
 
 export const SessionGenerateRequest: MessageFns<SessionGenerateRequest> = {
@@ -3043,8 +2666,17 @@ export const SessionGenerateRequest: MessageFns<SessionGenerateRequest> = {
     if (message.output_dir !== "") {
       writer.uint32(10).string(message.output_dir);
     }
-    if (message.options !== undefined) {
-      GenerateOptions.encode(message.options, writer.uint32(18).fork()).join();
+    if (message.dry_run !== false) {
+      writer.uint32(16).bool(message.dry_run);
+    }
+    if (message.format !== false) {
+      writer.uint32(24).bool(message.format);
+    }
+    if (message.validate !== false) {
+      writer.uint32(32).bool(message.validate);
+    }
+    if (message.overwrite !== false) {
+      writer.uint32(40).bool(message.overwrite);
     }
     return writer;
   },
@@ -3065,11 +2697,35 @@ export const SessionGenerateRequest: MessageFns<SessionGenerateRequest> = {
           continue;
         }
         case 2: {
-          if (tag !== 18) {
+          if (tag !== 16) {
             break;
           }
 
-          message.options = GenerateOptions.decode(reader, reader.uint32());
+          message.dry_run = reader.bool();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.format = reader.bool();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.validate = reader.bool();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.overwrite = reader.bool();
           continue;
         }
       }
@@ -3088,105 +2744,6 @@ export const SessionGenerateRequest: MessageFns<SessionGenerateRequest> = {
         : isSet(object.output_dir)
         ? globalThis.String(object.output_dir)
         : "",
-      options: isSet(object.options) ? GenerateOptions.fromJSON(object.options) : undefined,
-    };
-  },
-
-  toJSON(message: SessionGenerateRequest): unknown {
-    const obj: any = {};
-    if (message.output_dir !== "") {
-      obj.outputDir = message.output_dir;
-    }
-    if (message.options !== undefined) {
-      obj.options = GenerateOptions.toJSON(message.options);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<SessionGenerateRequest>, I>>(base?: I): SessionGenerateRequest {
-    return SessionGenerateRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<SessionGenerateRequest>, I>>(object: I): SessionGenerateRequest {
-    const message = createBaseSessionGenerateRequest();
-    message.output_dir = object.output_dir ?? "";
-    message.options = (object.options !== undefined && object.options !== null)
-      ? GenerateOptions.fromPartial(object.options)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseGenerateOptions(): GenerateOptions {
-  return { dry_run: false, format: false, validate: false, overwrite: false };
-}
-
-export const GenerateOptions: MessageFns<GenerateOptions> = {
-  encode(message: GenerateOptions, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.dry_run !== false) {
-      writer.uint32(8).bool(message.dry_run);
-    }
-    if (message.format !== false) {
-      writer.uint32(16).bool(message.format);
-    }
-    if (message.validate !== false) {
-      writer.uint32(24).bool(message.validate);
-    }
-    if (message.overwrite !== false) {
-      writer.uint32(32).bool(message.overwrite);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GenerateOptions {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseGenerateOptions();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 8) {
-            break;
-          }
-
-          message.dry_run = reader.bool();
-          continue;
-        }
-        case 2: {
-          if (tag !== 16) {
-            break;
-          }
-
-          message.format = reader.bool();
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.validate = reader.bool();
-          continue;
-        }
-        case 4: {
-          if (tag !== 32) {
-            break;
-          }
-
-          message.overwrite = reader.bool();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): GenerateOptions {
-    return {
       dry_run: isSet(object.dryRun)
         ? globalThis.Boolean(object.dryRun)
         : isSet(object.dry_run)
@@ -3198,8 +2755,11 @@ export const GenerateOptions: MessageFns<GenerateOptions> = {
     };
   },
 
-  toJSON(message: GenerateOptions): unknown {
+  toJSON(message: SessionGenerateRequest): unknown {
     const obj: any = {};
+    if (message.output_dir !== "") {
+      obj.outputDir = message.output_dir;
+    }
     if (message.dry_run !== false) {
       obj.dryRun = message.dry_run;
     }
@@ -3215,11 +2775,12 @@ export const GenerateOptions: MessageFns<GenerateOptions> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<GenerateOptions>, I>>(base?: I): GenerateOptions {
-    return GenerateOptions.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SessionGenerateRequest>, I>>(base?: I): SessionGenerateRequest {
+    return SessionGenerateRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<GenerateOptions>, I>>(object: I): GenerateOptions {
-    const message = createBaseGenerateOptions();
+  fromPartial<I extends Exact<DeepPartial<SessionGenerateRequest>, I>>(object: I): SessionGenerateRequest {
+    const message = createBaseSessionGenerateRequest();
+    message.output_dir = object.output_dir ?? "";
     message.dry_run = object.dry_run ?? false;
     message.format = object.format ?? false;
     message.validate = object.validate ?? false;
@@ -3228,17 +2789,17 @@ export const GenerateOptions: MessageFns<GenerateOptions> = {
   },
 };
 
-function createBaseGenerateResponse(): GenerateResponse {
+function createBaseSessionGenerateResponse(): SessionGenerateResponse {
   return { files_written: [], files: {}, diagnostics: [] };
 }
 
-export const GenerateResponse: MessageFns<GenerateResponse> = {
-  encode(message: GenerateResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SessionGenerateResponse: MessageFns<SessionGenerateResponse> = {
+  encode(message: SessionGenerateResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.files_written) {
       writer.uint32(10).string(v!);
     }
     globalThis.Object.entries(message.files).forEach(([key, value]: [string, string]) => {
-      GenerateResponse_FilesEntry.encode({ key: key as any, value }, writer.uint32(18).fork()).join();
+      SessionGenerateResponse_FilesEntry.encode({ key: key as any, value }, writer.uint32(18).fork()).join();
     });
     for (const v of message.diagnostics) {
       Diagnostic.encode(v!, writer.uint32(26).fork()).join();
@@ -3246,10 +2807,10 @@ export const GenerateResponse: MessageFns<GenerateResponse> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): GenerateResponse {
+  decode(input: BinaryReader | Uint8Array, length?: number): SessionGenerateResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseGenerateResponse();
+    const message = createBaseSessionGenerateResponse();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3266,7 +2827,7 @@ export const GenerateResponse: MessageFns<GenerateResponse> = {
             break;
           }
 
-          const entry2 = GenerateResponse_FilesEntry.decode(reader, reader.uint32());
+          const entry2 = SessionGenerateResponse_FilesEntry.decode(reader, reader.uint32());
           if (entry2.value !== undefined) {
             message.files[entry2.key] = entry2.value;
           }
@@ -3289,7 +2850,7 @@ export const GenerateResponse: MessageFns<GenerateResponse> = {
     return message;
   },
 
-  fromJSON(object: any): GenerateResponse {
+  fromJSON(object: any): SessionGenerateResponse {
     return {
       files_written: globalThis.Array.isArray(object?.filesWritten)
         ? object.filesWritten.map((e: any) => globalThis.String(e))
@@ -3311,7 +2872,7 @@ export const GenerateResponse: MessageFns<GenerateResponse> = {
     };
   },
 
-  toJSON(message: GenerateResponse): unknown {
+  toJSON(message: SessionGenerateResponse): unknown {
     const obj: any = {};
     if (message.files_written?.length) {
       obj.filesWritten = message.files_written;
@@ -3331,11 +2892,11 @@ export const GenerateResponse: MessageFns<GenerateResponse> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<GenerateResponse>, I>>(base?: I): GenerateResponse {
-    return GenerateResponse.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SessionGenerateResponse>, I>>(base?: I): SessionGenerateResponse {
+    return SessionGenerateResponse.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<GenerateResponse>, I>>(object: I): GenerateResponse {
-    const message = createBaseGenerateResponse();
+  fromPartial<I extends Exact<DeepPartial<SessionGenerateResponse>, I>>(object: I): SessionGenerateResponse {
+    const message = createBaseSessionGenerateResponse();
     message.files_written = object.files_written?.map((e) => e) || [];
     message.files = (globalThis.Object.entries(object.files ?? {}) as [string, string][]).reduce(
       (acc: { [key: string]: string }, [key, value]: [string, string]) => {
@@ -3351,12 +2912,12 @@ export const GenerateResponse: MessageFns<GenerateResponse> = {
   },
 };
 
-function createBaseGenerateResponse_FilesEntry(): GenerateResponse_FilesEntry {
+function createBaseSessionGenerateResponse_FilesEntry(): SessionGenerateResponse_FilesEntry {
   return { key: "", value: "" };
 }
 
-export const GenerateResponse_FilesEntry: MessageFns<GenerateResponse_FilesEntry> = {
-  encode(message: GenerateResponse_FilesEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SessionGenerateResponse_FilesEntry: MessageFns<SessionGenerateResponse_FilesEntry> = {
+  encode(message: SessionGenerateResponse_FilesEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.key !== "") {
       writer.uint32(10).string(message.key);
     }
@@ -3366,10 +2927,10 @@ export const GenerateResponse_FilesEntry: MessageFns<GenerateResponse_FilesEntry
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): GenerateResponse_FilesEntry {
+  decode(input: BinaryReader | Uint8Array, length?: number): SessionGenerateResponse_FilesEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseGenerateResponse_FilesEntry();
+    const message = createBaseSessionGenerateResponse_FilesEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3398,14 +2959,14 @@ export const GenerateResponse_FilesEntry: MessageFns<GenerateResponse_FilesEntry
     return message;
   },
 
-  fromJSON(object: any): GenerateResponse_FilesEntry {
+  fromJSON(object: any): SessionGenerateResponse_FilesEntry {
     return {
       key: isSet(object.key) ? globalThis.String(object.key) : "",
       value: isSet(object.value) ? globalThis.String(object.value) : "",
     };
   },
 
-  toJSON(message: GenerateResponse_FilesEntry): unknown {
+  toJSON(message: SessionGenerateResponse_FilesEntry): unknown {
     const obj: any = {};
     if (message.key !== "") {
       obj.key = message.key;
@@ -3416,11 +2977,15 @@ export const GenerateResponse_FilesEntry: MessageFns<GenerateResponse_FilesEntry
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<GenerateResponse_FilesEntry>, I>>(base?: I): GenerateResponse_FilesEntry {
-    return GenerateResponse_FilesEntry.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SessionGenerateResponse_FilesEntry>, I>>(
+    base?: I,
+  ): SessionGenerateResponse_FilesEntry {
+    return SessionGenerateResponse_FilesEntry.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<GenerateResponse_FilesEntry>, I>>(object: I): GenerateResponse_FilesEntry {
-    const message = createBaseGenerateResponse_FilesEntry();
+  fromPartial<I extends Exact<DeepPartial<SessionGenerateResponse_FilesEntry>, I>>(
+    object: I,
+  ): SessionGenerateResponse_FilesEntry {
+    const message = createBaseSessionGenerateResponse_FilesEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
     return message;
@@ -3551,12 +3116,12 @@ export const Diagnostic: MessageFns<Diagnostic> = {
   },
 };
 
-function createBaseActionDropBundleRequest(): ActionDropBundleRequest {
+function createBaseDropBundleRequest(): DropBundleRequest {
   return { deploy_bundle: Buffer.alloc(0), position: undefined };
 }
 
-export const ActionDropBundleRequest: MessageFns<ActionDropBundleRequest> = {
-  encode(message: ActionDropBundleRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const DropBundleRequest: MessageFns<DropBundleRequest> = {
+  encode(message: DropBundleRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.deploy_bundle.length !== 0) {
       writer.uint32(10).bytes(message.deploy_bundle);
     }
@@ -3566,10 +3131,10 @@ export const ActionDropBundleRequest: MessageFns<ActionDropBundleRequest> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionDropBundleRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): DropBundleRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionDropBundleRequest();
+    const message = createBaseDropBundleRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3598,7 +3163,7 @@ export const ActionDropBundleRequest: MessageFns<ActionDropBundleRequest> = {
     return message;
   },
 
-  fromJSON(object: any): ActionDropBundleRequest {
+  fromJSON(object: any): DropBundleRequest {
     return {
       deploy_bundle: isSet(object.deployBundle)
         ? Buffer.from(bytesFromBase64(object.deployBundle))
@@ -3609,7 +3174,7 @@ export const ActionDropBundleRequest: MessageFns<ActionDropBundleRequest> = {
     };
   },
 
-  toJSON(message: ActionDropBundleRequest): unknown {
+  toJSON(message: DropBundleRequest): unknown {
     const obj: any = {};
     if (message.deploy_bundle.length !== 0) {
       obj.deployBundle = base64FromBytes(message.deploy_bundle);
@@ -3620,11 +3185,11 @@ export const ActionDropBundleRequest: MessageFns<ActionDropBundleRequest> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionDropBundleRequest>, I>>(base?: I): ActionDropBundleRequest {
-    return ActionDropBundleRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<DropBundleRequest>, I>>(base?: I): DropBundleRequest {
+    return DropBundleRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionDropBundleRequest>, I>>(object: I): ActionDropBundleRequest {
-    const message = createBaseActionDropBundleRequest();
+  fromPartial<I extends Exact<DeepPartial<DropBundleRequest>, I>>(object: I): DropBundleRequest {
+    const message = createBaseDropBundleRequest();
     message.deploy_bundle = object.deploy_bundle ?? Buffer.alloc(0);
     message.position = (object.position !== undefined && object.position !== null)
       ? Position.fromPartial(object.position)
@@ -3633,12 +3198,12 @@ export const ActionDropBundleRequest: MessageFns<ActionDropBundleRequest> = {
   },
 };
 
-function createBaseActionConnectRequest(): ActionConnectRequest {
+function createBaseConnectRequest(): ConnectRequest {
   return { source: "", target: "", source_output: "", target_input: "" };
 }
 
-export const ActionConnectRequest: MessageFns<ActionConnectRequest> = {
-  encode(message: ActionConnectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const ConnectRequest: MessageFns<ConnectRequest> = {
+  encode(message: ConnectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.source !== "") {
       writer.uint32(10).string(message.source);
     }
@@ -3654,10 +3219,10 @@ export const ActionConnectRequest: MessageFns<ActionConnectRequest> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionConnectRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): ConnectRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionConnectRequest();
+    const message = createBaseConnectRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3702,7 +3267,7 @@ export const ActionConnectRequest: MessageFns<ActionConnectRequest> = {
     return message;
   },
 
-  fromJSON(object: any): ActionConnectRequest {
+  fromJSON(object: any): ConnectRequest {
     return {
       source: isSet(object.source) ? globalThis.String(object.source) : "",
       target: isSet(object.target) ? globalThis.String(object.target) : "",
@@ -3719,7 +3284,7 @@ export const ActionConnectRequest: MessageFns<ActionConnectRequest> = {
     };
   },
 
-  toJSON(message: ActionConnectRequest): unknown {
+  toJSON(message: ConnectRequest): unknown {
     const obj: any = {};
     if (message.source !== "") {
       obj.source = message.source;
@@ -3736,11 +3301,11 @@ export const ActionConnectRequest: MessageFns<ActionConnectRequest> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionConnectRequest>, I>>(base?: I): ActionConnectRequest {
-    return ActionConnectRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<ConnectRequest>, I>>(base?: I): ConnectRequest {
+    return ConnectRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionConnectRequest>, I>>(object: I): ActionConnectRequest {
-    const message = createBaseActionConnectRequest();
+  fromPartial<I extends Exact<DeepPartial<ConnectRequest>, I>>(object: I): ConnectRequest {
+    const message = createBaseConnectRequest();
     message.source = object.source ?? "";
     message.target = object.target ?? "";
     message.source_output = object.source_output ?? "";
@@ -3749,12 +3314,88 @@ export const ActionConnectRequest: MessageFns<ActionConnectRequest> = {
   },
 };
 
-function createBaseActionDisconnectRequest(): ActionDisconnectRequest {
+function createBaseAutoConnectRequest(): AutoConnectRequest {
+  return { source: "", target: "" };
+}
+
+export const AutoConnectRequest: MessageFns<AutoConnectRequest> = {
+  encode(message: AutoConnectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== "") {
+      writer.uint32(10).string(message.source);
+    }
+    if (message.target !== "") {
+      writer.uint32(18).string(message.target);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AutoConnectRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAutoConnectRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.target = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AutoConnectRequest {
+    return {
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+      target: isSet(object.target) ? globalThis.String(object.target) : "",
+    };
+  },
+
+  toJSON(message: AutoConnectRequest): unknown {
+    const obj: any = {};
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    if (message.target !== "") {
+      obj.target = message.target;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AutoConnectRequest>, I>>(base?: I): AutoConnectRequest {
+    return AutoConnectRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AutoConnectRequest>, I>>(object: I): AutoConnectRequest {
+    const message = createBaseAutoConnectRequest();
+    message.source = object.source ?? "";
+    message.target = object.target ?? "";
+    return message;
+  },
+};
+
+function createBaseDisconnectRequest(): DisconnectRequest {
   return { target: "", input_name: "" };
 }
 
-export const ActionDisconnectRequest: MessageFns<ActionDisconnectRequest> = {
-  encode(message: ActionDisconnectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const DisconnectRequest: MessageFns<DisconnectRequest> = {
+  encode(message: DisconnectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.target !== "") {
       writer.uint32(10).string(message.target);
     }
@@ -3764,10 +3405,10 @@ export const ActionDisconnectRequest: MessageFns<ActionDisconnectRequest> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionDisconnectRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): DisconnectRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionDisconnectRequest();
+    const message = createBaseDisconnectRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3796,7 +3437,7 @@ export const ActionDisconnectRequest: MessageFns<ActionDisconnectRequest> = {
     return message;
   },
 
-  fromJSON(object: any): ActionDisconnectRequest {
+  fromJSON(object: any): DisconnectRequest {
     return {
       target: isSet(object.target) ? globalThis.String(object.target) : "",
       input_name: isSet(object.inputName)
@@ -3807,7 +3448,7 @@ export const ActionDisconnectRequest: MessageFns<ActionDisconnectRequest> = {
     };
   },
 
-  toJSON(message: ActionDisconnectRequest): unknown {
+  toJSON(message: DisconnectRequest): unknown {
     const obj: any = {};
     if (message.target !== "") {
       obj.target = message.target;
@@ -3818,39 +3459,48 @@ export const ActionDisconnectRequest: MessageFns<ActionDisconnectRequest> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionDisconnectRequest>, I>>(base?: I): ActionDisconnectRequest {
-    return ActionDisconnectRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<DisconnectRequest>, I>>(base?: I): DisconnectRequest {
+    return DisconnectRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionDisconnectRequest>, I>>(object: I): ActionDisconnectRequest {
-    const message = createBaseActionDisconnectRequest();
+  fromPartial<I extends Exact<DeepPartial<DisconnectRequest>, I>>(object: I): DisconnectRequest {
+    const message = createBaseDisconnectRequest();
     message.target = object.target ?? "";
     message.input_name = object.input_name ?? "";
     return message;
   },
 };
 
-function createBaseActionUpdateInputRequest(): ActionUpdateInputRequest {
-  return { instance_id: "", input_name: "", binding: undefined };
+function createBaseUpdateInputRequest(): UpdateInputRequest {
+  return { instance_id: "", input_name: "", mode: 0, value: undefined, variable: "", expression: "" };
 }
 
-export const ActionUpdateInputRequest: MessageFns<ActionUpdateInputRequest> = {
-  encode(message: ActionUpdateInputRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const UpdateInputRequest: MessageFns<UpdateInputRequest> = {
+  encode(message: UpdateInputRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.instance_id !== "") {
       writer.uint32(10).string(message.instance_id);
     }
     if (message.input_name !== "") {
       writer.uint32(18).string(message.input_name);
     }
-    if (message.binding !== undefined) {
-      Binding.encode(message.binding, writer.uint32(26).fork()).join();
+    if (message.mode !== 0) {
+      writer.uint32(24).int32(message.mode);
+    }
+    if (message.value !== undefined) {
+      Value.encode(Value.wrap(message.value), writer.uint32(34).fork()).join();
+    }
+    if (message.variable !== "") {
+      writer.uint32(42).string(message.variable);
+    }
+    if (message.expression !== "") {
+      writer.uint32(50).string(message.expression);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionUpdateInputRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateInputRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionUpdateInputRequest();
+    const message = createBaseUpdateInputRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3871,11 +3521,35 @@ export const ActionUpdateInputRequest: MessageFns<ActionUpdateInputRequest> = {
           continue;
         }
         case 3: {
-          if (tag !== 26) {
+          if (tag !== 24) {
             break;
           }
 
-          message.binding = Binding.decode(reader, reader.uint32());
+          message.mode = reader.int32() as any;
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.value = Value.unwrap(Value.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.variable = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.expression = reader.string();
           continue;
         }
       }
@@ -3887,7 +3561,7 @@ export const ActionUpdateInputRequest: MessageFns<ActionUpdateInputRequest> = {
     return message;
   },
 
-  fromJSON(object: any): ActionUpdateInputRequest {
+  fromJSON(object: any): UpdateInputRequest {
     return {
       instance_id: isSet(object.instanceId)
         ? globalThis.String(object.instanceId)
@@ -3899,11 +3573,14 @@ export const ActionUpdateInputRequest: MessageFns<ActionUpdateInputRequest> = {
         : isSet(object.input_name)
         ? globalThis.String(object.input_name)
         : "",
-      binding: isSet(object.binding) ? Binding.fromJSON(object.binding) : undefined,
+      mode: isSet(object.mode) ? inputModeFromJSON(object.mode) : 0,
+      value: isSet(object?.value) ? object.value : undefined,
+      variable: isSet(object.variable) ? globalThis.String(object.variable) : "",
+      expression: isSet(object.expression) ? globalThis.String(object.expression) : "",
     };
   },
 
-  toJSON(message: ActionUpdateInputRequest): unknown {
+  toJSON(message: UpdateInputRequest): unknown {
     const obj: any = {};
     if (message.instance_id !== "") {
       obj.instanceId = message.instance_id;
@@ -3911,45 +3588,179 @@ export const ActionUpdateInputRequest: MessageFns<ActionUpdateInputRequest> = {
     if (message.input_name !== "") {
       obj.inputName = message.input_name;
     }
-    if (message.binding !== undefined) {
-      obj.binding = Binding.toJSON(message.binding);
+    if (message.mode !== 0) {
+      obj.mode = inputModeToJSON(message.mode);
+    }
+    if (message.value !== undefined) {
+      obj.value = message.value;
+    }
+    if (message.variable !== "") {
+      obj.variable = message.variable;
+    }
+    if (message.expression !== "") {
+      obj.expression = message.expression;
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionUpdateInputRequest>, I>>(base?: I): ActionUpdateInputRequest {
-    return ActionUpdateInputRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<UpdateInputRequest>, I>>(base?: I): UpdateInputRequest {
+    return UpdateInputRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionUpdateInputRequest>, I>>(object: I): ActionUpdateInputRequest {
-    const message = createBaseActionUpdateInputRequest();
+  fromPartial<I extends Exact<DeepPartial<UpdateInputRequest>, I>>(object: I): UpdateInputRequest {
+    const message = createBaseUpdateInputRequest();
     message.instance_id = object.instance_id ?? "";
     message.input_name = object.input_name ?? "";
-    message.binding = (object.binding !== undefined && object.binding !== null)
-      ? Binding.fromPartial(object.binding)
-      : undefined;
+    message.mode = object.mode ?? 0;
+    message.value = object.value ?? undefined;
+    message.variable = object.variable ?? "";
+    message.expression = object.expression ?? "";
     return message;
   },
 };
 
-function createBaseActionUpdateAllInputsRequest(): ActionUpdateAllInputsRequest {
-  return { instance_id: "", inputs: {} };
+function createBaseInputEntry(): InputEntry {
+  return { name: "", mode: 0, value: undefined, variable: "", expression: "" };
 }
 
-export const ActionUpdateAllInputsRequest: MessageFns<ActionUpdateAllInputsRequest> = {
-  encode(message: ActionUpdateAllInputsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.instance_id !== "") {
-      writer.uint32(10).string(message.instance_id);
+export const InputEntry: MessageFns<InputEntry> = {
+  encode(message: InputEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
     }
-    globalThis.Object.entries(message.inputs).forEach(([key, value]: [string, Binding]) => {
-      ActionUpdateAllInputsRequest_InputsEntry.encode({ key: key as any, value }, writer.uint32(18).fork()).join();
-    });
+    if (message.mode !== 0) {
+      writer.uint32(16).int32(message.mode);
+    }
+    if (message.value !== undefined) {
+      Value.encode(Value.wrap(message.value), writer.uint32(26).fork()).join();
+    }
+    if (message.variable !== "") {
+      writer.uint32(34).string(message.variable);
+    }
+    if (message.expression !== "") {
+      writer.uint32(42).string(message.expression);
+    }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionUpdateAllInputsRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): InputEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionUpdateAllInputsRequest();
+    const message = createBaseInputEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.mode = reader.int32() as any;
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.value = Value.unwrap(Value.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.variable = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.expression = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputEntry {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      mode: isSet(object.mode) ? inputModeFromJSON(object.mode) : 0,
+      value: isSet(object?.value) ? object.value : undefined,
+      variable: isSet(object.variable) ? globalThis.String(object.variable) : "",
+      expression: isSet(object.expression) ? globalThis.String(object.expression) : "",
+    };
+  },
+
+  toJSON(message: InputEntry): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.mode !== 0) {
+      obj.mode = inputModeToJSON(message.mode);
+    }
+    if (message.value !== undefined) {
+      obj.value = message.value;
+    }
+    if (message.variable !== "") {
+      obj.variable = message.variable;
+    }
+    if (message.expression !== "") {
+      obj.expression = message.expression;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputEntry>, I>>(base?: I): InputEntry {
+    return InputEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputEntry>, I>>(object: I): InputEntry {
+    const message = createBaseInputEntry();
+    message.name = object.name ?? "";
+    message.mode = object.mode ?? 0;
+    message.value = object.value ?? undefined;
+    message.variable = object.variable ?? "";
+    message.expression = object.expression ?? "";
+    return message;
+  },
+};
+
+function createBaseUpdateAllInputsRequest(): UpdateAllInputsRequest {
+  return { instance_id: "", inputs: [] };
+}
+
+export const UpdateAllInputsRequest: MessageFns<UpdateAllInputsRequest> = {
+  encode(message: UpdateAllInputsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.instance_id !== "") {
+      writer.uint32(10).string(message.instance_id);
+    }
+    for (const v of message.inputs) {
+      InputEntry.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateAllInputsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateAllInputsRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3966,10 +3777,7 @@ export const ActionUpdateAllInputsRequest: MessageFns<ActionUpdateAllInputsReque
             break;
           }
 
-          const entry2 = ActionUpdateAllInputsRequest_InputsEntry.decode(reader, reader.uint32());
-          if (entry2.value !== undefined) {
-            message.inputs[entry2.key] = entry2.value;
-          }
+          message.inputs.push(InputEntry.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -3981,149 +3789,45 @@ export const ActionUpdateAllInputsRequest: MessageFns<ActionUpdateAllInputsReque
     return message;
   },
 
-  fromJSON(object: any): ActionUpdateAllInputsRequest {
+  fromJSON(object: any): UpdateAllInputsRequest {
     return {
       instance_id: isSet(object.instanceId)
         ? globalThis.String(object.instanceId)
         : isSet(object.instance_id)
         ? globalThis.String(object.instance_id)
         : "",
-      inputs: isObject(object.inputs)
-        ? (globalThis.Object.entries(object.inputs) as [string, any][]).reduce(
-          (acc: { [key: string]: Binding }, [key, value]: [string, any]) => {
-            acc[key] = Binding.fromJSON(value);
-            return acc;
-          },
-          {},
-        )
-        : {},
+      inputs: globalThis.Array.isArray(object?.inputs) ? object.inputs.map((e: any) => InputEntry.fromJSON(e)) : [],
     };
   },
 
-  toJSON(message: ActionUpdateAllInputsRequest): unknown {
+  toJSON(message: UpdateAllInputsRequest): unknown {
     const obj: any = {};
     if (message.instance_id !== "") {
       obj.instanceId = message.instance_id;
     }
-    if (message.inputs) {
-      const entries = globalThis.Object.entries(message.inputs) as [string, Binding][];
-      if (entries.length > 0) {
-        obj.inputs = {};
-        entries.forEach(([k, v]) => {
-          obj.inputs[k] = Binding.toJSON(v);
-        });
-      }
+    if (message.inputs?.length) {
+      obj.inputs = message.inputs.map((e) => InputEntry.toJSON(e));
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionUpdateAllInputsRequest>, I>>(base?: I): ActionUpdateAllInputsRequest {
-    return ActionUpdateAllInputsRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<UpdateAllInputsRequest>, I>>(base?: I): UpdateAllInputsRequest {
+    return UpdateAllInputsRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionUpdateAllInputsRequest>, I>>(object: I): ActionUpdateAllInputsRequest {
-    const message = createBaseActionUpdateAllInputsRequest();
+  fromPartial<I extends Exact<DeepPartial<UpdateAllInputsRequest>, I>>(object: I): UpdateAllInputsRequest {
+    const message = createBaseUpdateAllInputsRequest();
     message.instance_id = object.instance_id ?? "";
-    message.inputs = (globalThis.Object.entries(object.inputs ?? {}) as [string, Binding][]).reduce(
-      (acc: { [key: string]: Binding }, [key, value]: [string, Binding]) => {
-        if (value !== undefined) {
-          acc[key] = Binding.fromPartial(value);
-        }
-        return acc;
-      },
-      {},
-    );
+    message.inputs = object.inputs?.map((e) => InputEntry.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseActionUpdateAllInputsRequest_InputsEntry(): ActionUpdateAllInputsRequest_InputsEntry {
-  return { key: "", value: undefined };
-}
-
-export const ActionUpdateAllInputsRequest_InputsEntry: MessageFns<ActionUpdateAllInputsRequest_InputsEntry> = {
-  encode(message: ActionUpdateAllInputsRequest_InputsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
-    }
-    if (message.value !== undefined) {
-      Binding.encode(message.value, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionUpdateAllInputsRequest_InputsEntry {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionUpdateAllInputsRequest_InputsEntry();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.key = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = Binding.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ActionUpdateAllInputsRequest_InputsEntry {
-    return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object.value) ? Binding.fromJSON(object.value) : undefined,
-    };
-  },
-
-  toJSON(message: ActionUpdateAllInputsRequest_InputsEntry): unknown {
-    const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
-    }
-    if (message.value !== undefined) {
-      obj.value = Binding.toJSON(message.value);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ActionUpdateAllInputsRequest_InputsEntry>, I>>(
-    base?: I,
-  ): ActionUpdateAllInputsRequest_InputsEntry {
-    return ActionUpdateAllInputsRequest_InputsEntry.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ActionUpdateAllInputsRequest_InputsEntry>, I>>(
-    object: I,
-  ): ActionUpdateAllInputsRequest_InputsEntry {
-    const message = createBaseActionUpdateAllInputsRequest_InputsEntry();
-    message.key = object.key ?? "";
-    message.value = (object.value !== undefined && object.value !== null)
-      ? Binding.fromPartial(object.value)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseActionRenameInstanceRequest(): ActionRenameInstanceRequest {
+function createBaseRenameInstanceRequest(): RenameInstanceRequest {
   return { old_id: "", new_id: "" };
 }
 
-export const ActionRenameInstanceRequest: MessageFns<ActionRenameInstanceRequest> = {
-  encode(message: ActionRenameInstanceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const RenameInstanceRequest: MessageFns<RenameInstanceRequest> = {
+  encode(message: RenameInstanceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.old_id !== "") {
       writer.uint32(10).string(message.old_id);
     }
@@ -4133,10 +3837,10 @@ export const ActionRenameInstanceRequest: MessageFns<ActionRenameInstanceRequest
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionRenameInstanceRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): RenameInstanceRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionRenameInstanceRequest();
+    const message = createBaseRenameInstanceRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4165,7 +3869,7 @@ export const ActionRenameInstanceRequest: MessageFns<ActionRenameInstanceRequest
     return message;
   },
 
-  fromJSON(object: any): ActionRenameInstanceRequest {
+  fromJSON(object: any): RenameInstanceRequest {
     return {
       old_id: isSet(object.oldId)
         ? globalThis.String(object.oldId)
@@ -4180,7 +3884,7 @@ export const ActionRenameInstanceRequest: MessageFns<ActionRenameInstanceRequest
     };
   },
 
-  toJSON(message: ActionRenameInstanceRequest): unknown {
+  toJSON(message: RenameInstanceRequest): unknown {
     const obj: any = {};
     if (message.old_id !== "") {
       obj.oldId = message.old_id;
@@ -4191,33 +3895,33 @@ export const ActionRenameInstanceRequest: MessageFns<ActionRenameInstanceRequest
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionRenameInstanceRequest>, I>>(base?: I): ActionRenameInstanceRequest {
-    return ActionRenameInstanceRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<RenameInstanceRequest>, I>>(base?: I): RenameInstanceRequest {
+    return RenameInstanceRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionRenameInstanceRequest>, I>>(object: I): ActionRenameInstanceRequest {
-    const message = createBaseActionRenameInstanceRequest();
+  fromPartial<I extends Exact<DeepPartial<RenameInstanceRequest>, I>>(object: I): RenameInstanceRequest {
+    const message = createBaseRenameInstanceRequest();
     message.old_id = object.old_id ?? "";
     message.new_id = object.new_id ?? "";
     return message;
   },
 };
 
-function createBaseActionDeleteInstanceRequest(): ActionDeleteInstanceRequest {
+function createBaseDeleteInstanceRequest(): DeleteInstanceRequest {
   return { instance_id: "" };
 }
 
-export const ActionDeleteInstanceRequest: MessageFns<ActionDeleteInstanceRequest> = {
-  encode(message: ActionDeleteInstanceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const DeleteInstanceRequest: MessageFns<DeleteInstanceRequest> = {
+  encode(message: DeleteInstanceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.instance_id !== "") {
       writer.uint32(10).string(message.instance_id);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionDeleteInstanceRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteInstanceRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionDeleteInstanceRequest();
+    const message = createBaseDeleteInstanceRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4238,7 +3942,7 @@ export const ActionDeleteInstanceRequest: MessageFns<ActionDeleteInstanceRequest
     return message;
   },
 
-  fromJSON(object: any): ActionDeleteInstanceRequest {
+  fromJSON(object: any): DeleteInstanceRequest {
     return {
       instance_id: isSet(object.instanceId)
         ? globalThis.String(object.instanceId)
@@ -4248,7 +3952,7 @@ export const ActionDeleteInstanceRequest: MessageFns<ActionDeleteInstanceRequest
     };
   },
 
-  toJSON(message: ActionDeleteInstanceRequest): unknown {
+  toJSON(message: DeleteInstanceRequest): unknown {
     const obj: any = {};
     if (message.instance_id !== "") {
       obj.instanceId = message.instance_id;
@@ -4256,32 +3960,32 @@ export const ActionDeleteInstanceRequest: MessageFns<ActionDeleteInstanceRequest
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionDeleteInstanceRequest>, I>>(base?: I): ActionDeleteInstanceRequest {
-    return ActionDeleteInstanceRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<DeleteInstanceRequest>, I>>(base?: I): DeleteInstanceRequest {
+    return DeleteInstanceRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionDeleteInstanceRequest>, I>>(object: I): ActionDeleteInstanceRequest {
-    const message = createBaseActionDeleteInstanceRequest();
+  fromPartial<I extends Exact<DeepPartial<DeleteInstanceRequest>, I>>(object: I): DeleteInstanceRequest {
+    const message = createBaseDeleteInstanceRequest();
     message.instance_id = object.instance_id ?? "";
     return message;
   },
 };
 
-function createBaseActionSyncLayoutRequest(): ActionSyncLayoutRequest {
+function createBaseSyncLayoutRequest(): SyncLayoutRequest {
   return { positions: {} };
 }
 
-export const ActionSyncLayoutRequest: MessageFns<ActionSyncLayoutRequest> = {
-  encode(message: ActionSyncLayoutRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SyncLayoutRequest: MessageFns<SyncLayoutRequest> = {
+  encode(message: SyncLayoutRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     globalThis.Object.entries(message.positions).forEach(([key, value]: [string, Position]) => {
-      ActionSyncLayoutRequest_PositionsEntry.encode({ key: key as any, value }, writer.uint32(10).fork()).join();
+      SyncLayoutRequest_PositionsEntry.encode({ key: key as any, value }, writer.uint32(10).fork()).join();
     });
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSyncLayoutRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): SyncLayoutRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSyncLayoutRequest();
+    const message = createBaseSyncLayoutRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4290,7 +3994,7 @@ export const ActionSyncLayoutRequest: MessageFns<ActionSyncLayoutRequest> = {
             break;
           }
 
-          const entry1 = ActionSyncLayoutRequest_PositionsEntry.decode(reader, reader.uint32());
+          const entry1 = SyncLayoutRequest_PositionsEntry.decode(reader, reader.uint32());
           if (entry1.value !== undefined) {
             message.positions[entry1.key] = entry1.value;
           }
@@ -4305,7 +4009,7 @@ export const ActionSyncLayoutRequest: MessageFns<ActionSyncLayoutRequest> = {
     return message;
   },
 
-  fromJSON(object: any): ActionSyncLayoutRequest {
+  fromJSON(object: any): SyncLayoutRequest {
     return {
       positions: isObject(object.positions)
         ? (globalThis.Object.entries(object.positions) as [string, any][]).reduce(
@@ -4319,7 +4023,7 @@ export const ActionSyncLayoutRequest: MessageFns<ActionSyncLayoutRequest> = {
     };
   },
 
-  toJSON(message: ActionSyncLayoutRequest): unknown {
+  toJSON(message: SyncLayoutRequest): unknown {
     const obj: any = {};
     if (message.positions) {
       const entries = globalThis.Object.entries(message.positions) as [string, Position][];
@@ -4333,11 +4037,11 @@ export const ActionSyncLayoutRequest: MessageFns<ActionSyncLayoutRequest> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSyncLayoutRequest>, I>>(base?: I): ActionSyncLayoutRequest {
-    return ActionSyncLayoutRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SyncLayoutRequest>, I>>(base?: I): SyncLayoutRequest {
+    return SyncLayoutRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSyncLayoutRequest>, I>>(object: I): ActionSyncLayoutRequest {
-    const message = createBaseActionSyncLayoutRequest();
+  fromPartial<I extends Exact<DeepPartial<SyncLayoutRequest>, I>>(object: I): SyncLayoutRequest {
+    const message = createBaseSyncLayoutRequest();
     message.positions = (globalThis.Object.entries(object.positions ?? {}) as [string, Position][]).reduce(
       (acc: { [key: string]: Position }, [key, value]: [string, Position]) => {
         if (value !== undefined) {
@@ -4351,12 +4055,12 @@ export const ActionSyncLayoutRequest: MessageFns<ActionSyncLayoutRequest> = {
   },
 };
 
-function createBaseActionSyncLayoutRequest_PositionsEntry(): ActionSyncLayoutRequest_PositionsEntry {
+function createBaseSyncLayoutRequest_PositionsEntry(): SyncLayoutRequest_PositionsEntry {
   return { key: "", value: undefined };
 }
 
-export const ActionSyncLayoutRequest_PositionsEntry: MessageFns<ActionSyncLayoutRequest_PositionsEntry> = {
-  encode(message: ActionSyncLayoutRequest_PositionsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SyncLayoutRequest_PositionsEntry: MessageFns<SyncLayoutRequest_PositionsEntry> = {
+  encode(message: SyncLayoutRequest_PositionsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.key !== "") {
       writer.uint32(10).string(message.key);
     }
@@ -4366,10 +4070,10 @@ export const ActionSyncLayoutRequest_PositionsEntry: MessageFns<ActionSyncLayout
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSyncLayoutRequest_PositionsEntry {
+  decode(input: BinaryReader | Uint8Array, length?: number): SyncLayoutRequest_PositionsEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSyncLayoutRequest_PositionsEntry();
+    const message = createBaseSyncLayoutRequest_PositionsEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4398,14 +4102,14 @@ export const ActionSyncLayoutRequest_PositionsEntry: MessageFns<ActionSyncLayout
     return message;
   },
 
-  fromJSON(object: any): ActionSyncLayoutRequest_PositionsEntry {
+  fromJSON(object: any): SyncLayoutRequest_PositionsEntry {
     return {
       key: isSet(object.key) ? globalThis.String(object.key) : "",
       value: isSet(object.value) ? Position.fromJSON(object.value) : undefined,
     };
   },
 
-  toJSON(message: ActionSyncLayoutRequest_PositionsEntry): unknown {
+  toJSON(message: SyncLayoutRequest_PositionsEntry): unknown {
     const obj: any = {};
     if (message.key !== "") {
       obj.key = message.key;
@@ -4416,15 +4120,15 @@ export const ActionSyncLayoutRequest_PositionsEntry: MessageFns<ActionSyncLayout
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSyncLayoutRequest_PositionsEntry>, I>>(
+  create<I extends Exact<DeepPartial<SyncLayoutRequest_PositionsEntry>, I>>(
     base?: I,
-  ): ActionSyncLayoutRequest_PositionsEntry {
-    return ActionSyncLayoutRequest_PositionsEntry.fromPartial(base ?? ({} as any));
+  ): SyncLayoutRequest_PositionsEntry {
+    return SyncLayoutRequest_PositionsEntry.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSyncLayoutRequest_PositionsEntry>, I>>(
+  fromPartial<I extends Exact<DeepPartial<SyncLayoutRequest_PositionsEntry>, I>>(
     object: I,
-  ): ActionSyncLayoutRequest_PositionsEntry {
-    const message = createBaseActionSyncLayoutRequest_PositionsEntry();
+  ): SyncLayoutRequest_PositionsEntry {
+    const message = createBaseSyncLayoutRequest_PositionsEntry();
     message.key = object.key ?? "";
     message.value = (object.value !== undefined && object.value !== null)
       ? Position.fromPartial(object.value)
@@ -4433,22 +4137,22 @@ export const ActionSyncLayoutRequest_PositionsEntry: MessageFns<ActionSyncLayout
   },
 };
 
-function createBaseActionSetVariablesRequest(): ActionSetVariablesRequest {
+function createBaseSetVariablesRequest(): SetVariablesRequest {
   return { variables: [] };
 }
 
-export const ActionSetVariablesRequest: MessageFns<ActionSetVariablesRequest> = {
-  encode(message: ActionSetVariablesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SetVariablesRequest: MessageFns<SetVariablesRequest> = {
+  encode(message: SetVariablesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.variables) {
       InputDef.encode(v!, writer.uint32(10).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetVariablesRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): SetVariablesRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetVariablesRequest();
+    const message = createBaseSetVariablesRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4469,7 +4173,7 @@ export const ActionSetVariablesRequest: MessageFns<ActionSetVariablesRequest> = 
     return message;
   },
 
-  fromJSON(object: any): ActionSetVariablesRequest {
+  fromJSON(object: any): SetVariablesRequest {
     return {
       variables: globalThis.Array.isArray(object?.variables)
         ? object.variables.map((e: any) => InputDef.fromJSON(e))
@@ -4477,7 +4181,7 @@ export const ActionSetVariablesRequest: MessageFns<ActionSetVariablesRequest> = 
     };
   },
 
-  toJSON(message: ActionSetVariablesRequest): unknown {
+  toJSON(message: SetVariablesRequest): unknown {
     const obj: any = {};
     if (message.variables?.length) {
       obj.variables = message.variables.map((e) => InputDef.toJSON(e));
@@ -4485,35 +4189,38 @@ export const ActionSetVariablesRequest: MessageFns<ActionSetVariablesRequest> = 
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetVariablesRequest>, I>>(base?: I): ActionSetVariablesRequest {
-    return ActionSetVariablesRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SetVariablesRequest>, I>>(base?: I): SetVariablesRequest {
+    return SetVariablesRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetVariablesRequest>, I>>(object: I): ActionSetVariablesRequest {
-    const message = createBaseActionSetVariablesRequest();
+  fromPartial<I extends Exact<DeepPartial<SetVariablesRequest>, I>>(object: I): SetVariablesRequest {
+    const message = createBaseSetVariablesRequest();
     message.variables = object.variables?.map((e) => InputDef.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseActionSetExportsRequest(): ActionSetExportsRequest {
-  return { outputs: {}, output_defs: [] };
+function createBaseOutputExportEntry(): OutputExportEntry {
+  return { name: "", source_instance: "", source_output: "" };
 }
 
-export const ActionSetExportsRequest: MessageFns<ActionSetExportsRequest> = {
-  encode(message: ActionSetExportsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    globalThis.Object.entries(message.outputs).forEach(([key, value]: [string, OutputExport]) => {
-      ActionSetExportsRequest_OutputsEntry.encode({ key: key as any, value }, writer.uint32(10).fork()).join();
-    });
-    for (const v of message.output_defs) {
-      OutputDef.encode(v!, writer.uint32(18).fork()).join();
+export const OutputExportEntry: MessageFns<OutputExportEntry> = {
+  encode(message: OutputExportEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.source_instance !== "") {
+      writer.uint32(18).string(message.source_instance);
+    }
+    if (message.source_output !== "") {
+      writer.uint32(26).string(message.source_output);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetExportsRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): OutputExportEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetExportsRequest();
+    const message = createBaseOutputExportEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4522,10 +4229,104 @@ export const ActionSetExportsRequest: MessageFns<ActionSetExportsRequest> = {
             break;
           }
 
-          const entry1 = ActionSetExportsRequest_OutputsEntry.decode(reader, reader.uint32());
-          if (entry1.value !== undefined) {
-            message.outputs[entry1.key] = entry1.value;
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
           }
+
+          message.source_instance = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.source_output = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OutputExportEntry {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      source_instance: isSet(object.sourceInstance)
+        ? globalThis.String(object.sourceInstance)
+        : isSet(object.source_instance)
+        ? globalThis.String(object.source_instance)
+        : "",
+      source_output: isSet(object.sourceOutput)
+        ? globalThis.String(object.sourceOutput)
+        : isSet(object.source_output)
+        ? globalThis.String(object.source_output)
+        : "",
+    };
+  },
+
+  toJSON(message: OutputExportEntry): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.source_instance !== "") {
+      obj.sourceInstance = message.source_instance;
+    }
+    if (message.source_output !== "") {
+      obj.sourceOutput = message.source_output;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OutputExportEntry>, I>>(base?: I): OutputExportEntry {
+    return OutputExportEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OutputExportEntry>, I>>(object: I): OutputExportEntry {
+    const message = createBaseOutputExportEntry();
+    message.name = object.name ?? "";
+    message.source_instance = object.source_instance ?? "";
+    message.source_output = object.source_output ?? "";
+    return message;
+  },
+};
+
+function createBaseSetExportsRequest(): SetExportsRequest {
+  return { outputs: [], output_defs: [] };
+}
+
+export const SetExportsRequest: MessageFns<SetExportsRequest> = {
+  encode(message: SetExportsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.outputs) {
+      OutputExportEntry.encode(v!, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.output_defs) {
+      OutputDef.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetExportsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetExportsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.outputs.push(OutputExportEntry.decode(reader, reader.uint32()));
           continue;
         }
         case 2: {
@@ -4545,17 +4346,11 @@ export const ActionSetExportsRequest: MessageFns<ActionSetExportsRequest> = {
     return message;
   },
 
-  fromJSON(object: any): ActionSetExportsRequest {
+  fromJSON(object: any): SetExportsRequest {
     return {
-      outputs: isObject(object.outputs)
-        ? (globalThis.Object.entries(object.outputs) as [string, any][]).reduce(
-          (acc: { [key: string]: OutputExport }, [key, value]: [string, any]) => {
-            acc[key] = OutputExport.fromJSON(value);
-            return acc;
-          },
-          {},
-        )
-        : {},
+      outputs: globalThis.Array.isArray(object?.outputs)
+        ? object.outputs.map((e: any) => OutputExportEntry.fromJSON(e))
+        : [],
       output_defs: globalThis.Array.isArray(object?.outputDefs)
         ? object.outputDefs.map((e: any) => OutputDef.fromJSON(e))
         : globalThis.Array.isArray(object?.output_defs)
@@ -4564,16 +4359,10 @@ export const ActionSetExportsRequest: MessageFns<ActionSetExportsRequest> = {
     };
   },
 
-  toJSON(message: ActionSetExportsRequest): unknown {
+  toJSON(message: SetExportsRequest): unknown {
     const obj: any = {};
-    if (message.outputs) {
-      const entries = globalThis.Object.entries(message.outputs) as [string, OutputExport][];
-      if (entries.length > 0) {
-        obj.outputs = {};
-        entries.forEach(([k, v]) => {
-          obj.outputs[k] = OutputExport.toJSON(v);
-        });
-      }
+    if (message.outputs?.length) {
+      obj.outputs = message.outputs.map((e) => OutputExportEntry.toJSON(e));
     }
     if (message.output_defs?.length) {
       obj.outputDefs = message.output_defs.map((e) => OutputDef.toJSON(e));
@@ -4581,44 +4370,39 @@ export const ActionSetExportsRequest: MessageFns<ActionSetExportsRequest> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetExportsRequest>, I>>(base?: I): ActionSetExportsRequest {
-    return ActionSetExportsRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SetExportsRequest>, I>>(base?: I): SetExportsRequest {
+    return SetExportsRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetExportsRequest>, I>>(object: I): ActionSetExportsRequest {
-    const message = createBaseActionSetExportsRequest();
-    message.outputs = (globalThis.Object.entries(object.outputs ?? {}) as [string, OutputExport][]).reduce(
-      (acc: { [key: string]: OutputExport }, [key, value]: [string, OutputExport]) => {
-        if (value !== undefined) {
-          acc[key] = OutputExport.fromPartial(value);
-        }
-        return acc;
-      },
-      {},
-    );
+  fromPartial<I extends Exact<DeepPartial<SetExportsRequest>, I>>(object: I): SetExportsRequest {
+    const message = createBaseSetExportsRequest();
+    message.outputs = object.outputs?.map((e) => OutputExportEntry.fromPartial(e)) || [];
     message.output_defs = object.output_defs?.map((e) => OutputDef.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseActionSetExportsRequest_OutputsEntry(): ActionSetExportsRequest_OutputsEntry {
-  return { key: "", value: undefined };
+function createBaseSetTerraformRequest(): SetTerraformRequest {
+  return { required_version: "", required_providers: [], backend: undefined };
 }
 
-export const ActionSetExportsRequest_OutputsEntry: MessageFns<ActionSetExportsRequest_OutputsEntry> = {
-  encode(message: ActionSetExportsRequest_OutputsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
+export const SetTerraformRequest: MessageFns<SetTerraformRequest> = {
+  encode(message: SetTerraformRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.required_version !== "") {
+      writer.uint32(10).string(message.required_version);
     }
-    if (message.value !== undefined) {
-      OutputExport.encode(message.value, writer.uint32(18).fork()).join();
+    for (const v of message.required_providers) {
+      ProviderReqView.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.backend !== undefined) {
+      BackendView.encode(message.backend, writer.uint32(26).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetExportsRequest_OutputsEntry {
+  decode(input: BinaryReader | Uint8Array, length?: number): SetTerraformRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetExportsRequest_OutputsEntry();
+    const message = createBaseSetTerraformRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4627,7 +4411,7 @@ export const ActionSetExportsRequest_OutputsEntry: MessageFns<ActionSetExportsRe
             break;
           }
 
-          message.key = reader.string();
+          message.required_version = reader.string();
           continue;
         }
         case 2: {
@@ -4635,7 +4419,15 @@ export const ActionSetExportsRequest_OutputsEntry: MessageFns<ActionSetExportsRe
             break;
           }
 
-          message.value = OutputExport.decode(reader, reader.uint32());
+          message.required_providers.push(ProviderReqView.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.backend = BackendView.decode(reader, reader.uint32());
           continue;
         }
       }
@@ -4647,117 +4439,66 @@ export const ActionSetExportsRequest_OutputsEntry: MessageFns<ActionSetExportsRe
     return message;
   },
 
-  fromJSON(object: any): ActionSetExportsRequest_OutputsEntry {
+  fromJSON(object: any): SetTerraformRequest {
     return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object.value) ? OutputExport.fromJSON(object.value) : undefined,
+      required_version: isSet(object.requiredVersion)
+        ? globalThis.String(object.requiredVersion)
+        : isSet(object.required_version)
+        ? globalThis.String(object.required_version)
+        : "",
+      required_providers: globalThis.Array.isArray(object?.requiredProviders)
+        ? object.requiredProviders.map((e: any) => ProviderReqView.fromJSON(e))
+        : globalThis.Array.isArray(object?.required_providers)
+        ? object.required_providers.map((e: any) => ProviderReqView.fromJSON(e))
+        : [],
+      backend: isSet(object.backend) ? BackendView.fromJSON(object.backend) : undefined,
     };
   },
 
-  toJSON(message: ActionSetExportsRequest_OutputsEntry): unknown {
+  toJSON(message: SetTerraformRequest): unknown {
     const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
+    if (message.required_version !== "") {
+      obj.requiredVersion = message.required_version;
     }
-    if (message.value !== undefined) {
-      obj.value = OutputExport.toJSON(message.value);
+    if (message.required_providers?.length) {
+      obj.requiredProviders = message.required_providers.map((e) => ProviderReqView.toJSON(e));
+    }
+    if (message.backend !== undefined) {
+      obj.backend = BackendView.toJSON(message.backend);
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetExportsRequest_OutputsEntry>, I>>(
-    base?: I,
-  ): ActionSetExportsRequest_OutputsEntry {
-    return ActionSetExportsRequest_OutputsEntry.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SetTerraformRequest>, I>>(base?: I): SetTerraformRequest {
+    return SetTerraformRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetExportsRequest_OutputsEntry>, I>>(
-    object: I,
-  ): ActionSetExportsRequest_OutputsEntry {
-    const message = createBaseActionSetExportsRequest_OutputsEntry();
-    message.key = object.key ?? "";
-    message.value = (object.value !== undefined && object.value !== null)
-      ? OutputExport.fromPartial(object.value)
+  fromPartial<I extends Exact<DeepPartial<SetTerraformRequest>, I>>(object: I): SetTerraformRequest {
+    const message = createBaseSetTerraformRequest();
+    message.required_version = object.required_version ?? "";
+    message.required_providers = object.required_providers?.map((e) => ProviderReqView.fromPartial(e)) || [];
+    message.backend = (object.backend !== undefined && object.backend !== null)
+      ? BackendView.fromPartial(object.backend)
       : undefined;
     return message;
   },
 };
 
-function createBaseActionSetTerraformRequest(): ActionSetTerraformRequest {
-  return { terraform: undefined };
-}
-
-export const ActionSetTerraformRequest: MessageFns<ActionSetTerraformRequest> = {
-  encode(message: ActionSetTerraformRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.terraform !== undefined) {
-      TerraformBlock.encode(message.terraform, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetTerraformRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetTerraformRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.terraform = TerraformBlock.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ActionSetTerraformRequest {
-    return { terraform: isSet(object.terraform) ? TerraformBlock.fromJSON(object.terraform) : undefined };
-  },
-
-  toJSON(message: ActionSetTerraformRequest): unknown {
-    const obj: any = {};
-    if (message.terraform !== undefined) {
-      obj.terraform = TerraformBlock.toJSON(message.terraform);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ActionSetTerraformRequest>, I>>(base?: I): ActionSetTerraformRequest {
-    return ActionSetTerraformRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ActionSetTerraformRequest>, I>>(object: I): ActionSetTerraformRequest {
-    const message = createBaseActionSetTerraformRequest();
-    message.terraform = (object.terraform !== undefined && object.terraform !== null)
-      ? TerraformBlock.fromPartial(object.terraform)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseActionSetProvidersRequest(): ActionSetProvidersRequest {
+function createBaseSetProvidersRequest(): SetProvidersRequest {
   return { providers: [] };
 }
 
-export const ActionSetProvidersRequest: MessageFns<ActionSetProvidersRequest> = {
-  encode(message: ActionSetProvidersRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SetProvidersRequest: MessageFns<SetProvidersRequest> = {
+  encode(message: SetProvidersRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.providers) {
-      ProviderConfig.encode(v!, writer.uint32(10).fork()).join();
+      ProviderView.encode(v!, writer.uint32(10).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetProvidersRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): SetProvidersRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetProvidersRequest();
+    const message = createBaseSetProvidersRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4766,7 +4507,7 @@ export const ActionSetProvidersRequest: MessageFns<ActionSetProvidersRequest> = 
             break;
           }
 
-          message.providers.push(ProviderConfig.decode(reader, reader.uint32()));
+          message.providers.push(ProviderView.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -4778,48 +4519,60 @@ export const ActionSetProvidersRequest: MessageFns<ActionSetProvidersRequest> = 
     return message;
   },
 
-  fromJSON(object: any): ActionSetProvidersRequest {
+  fromJSON(object: any): SetProvidersRequest {
     return {
       providers: globalThis.Array.isArray(object?.providers)
-        ? object.providers.map((e: any) => ProviderConfig.fromJSON(e))
+        ? object.providers.map((e: any) => ProviderView.fromJSON(e))
         : [],
     };
   },
 
-  toJSON(message: ActionSetProvidersRequest): unknown {
+  toJSON(message: SetProvidersRequest): unknown {
     const obj: any = {};
     if (message.providers?.length) {
-      obj.providers = message.providers.map((e) => ProviderConfig.toJSON(e));
+      obj.providers = message.providers.map((e) => ProviderView.toJSON(e));
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetProvidersRequest>, I>>(base?: I): ActionSetProvidersRequest {
-    return ActionSetProvidersRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SetProvidersRequest>, I>>(base?: I): SetProvidersRequest {
+    return SetProvidersRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetProvidersRequest>, I>>(object: I): ActionSetProvidersRequest {
-    const message = createBaseActionSetProvidersRequest();
-    message.providers = object.providers?.map((e) => ProviderConfig.fromPartial(e)) || [];
+  fromPartial<I extends Exact<DeepPartial<SetProvidersRequest>, I>>(object: I): SetProvidersRequest {
+    const message = createBaseSetProvidersRequest();
+    message.providers = object.providers?.map((e) => ProviderView.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseActionSetLocalsRequest(): ActionSetLocalsRequest {
-  return { locals: [] };
+function createBaseLocalEntry(): LocalEntry {
+  return { name: "", mode: "", value: undefined, variable: "", expression: "" };
 }
 
-export const ActionSetLocalsRequest: MessageFns<ActionSetLocalsRequest> = {
-  encode(message: ActionSetLocalsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.locals) {
-      LocalDef.encode(v!, writer.uint32(10).fork()).join();
+export const LocalEntry: MessageFns<LocalEntry> = {
+  encode(message: LocalEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.mode !== "") {
+      writer.uint32(18).string(message.mode);
+    }
+    if (message.value !== undefined) {
+      Value.encode(Value.wrap(message.value), writer.uint32(26).fork()).join();
+    }
+    if (message.variable !== "") {
+      writer.uint32(34).string(message.variable);
+    }
+    if (message.expression !== "") {
+      writer.uint32(42).string(message.expression);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetLocalsRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): LocalEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetLocalsRequest();
+    const message = createBaseLocalEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4828,7 +4581,39 @@ export const ActionSetLocalsRequest: MessageFns<ActionSetLocalsRequest> = {
             break;
           }
 
-          message.locals.push(LocalDef.decode(reader, reader.uint32()));
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.value = Value.unwrap(Value.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.variable = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.expression = reader.string();
           continue;
         }
       }
@@ -4840,36 +4625,116 @@ export const ActionSetLocalsRequest: MessageFns<ActionSetLocalsRequest> = {
     return message;
   },
 
-  fromJSON(object: any): ActionSetLocalsRequest {
+  fromJSON(object: any): LocalEntry {
     return {
-      locals: globalThis.Array.isArray(object?.locals) ? object.locals.map((e: any) => LocalDef.fromJSON(e)) : [],
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      value: isSet(object?.value) ? object.value : undefined,
+      variable: isSet(object.variable) ? globalThis.String(object.variable) : "",
+      expression: isSet(object.expression) ? globalThis.String(object.expression) : "",
     };
   },
 
-  toJSON(message: ActionSetLocalsRequest): unknown {
+  toJSON(message: LocalEntry): unknown {
     const obj: any = {};
-    if (message.locals?.length) {
-      obj.locals = message.locals.map((e) => LocalDef.toJSON(e));
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.value !== undefined) {
+      obj.value = message.value;
+    }
+    if (message.variable !== "") {
+      obj.variable = message.variable;
+    }
+    if (message.expression !== "") {
+      obj.expression = message.expression;
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetLocalsRequest>, I>>(base?: I): ActionSetLocalsRequest {
-    return ActionSetLocalsRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<LocalEntry>, I>>(base?: I): LocalEntry {
+    return LocalEntry.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetLocalsRequest>, I>>(object: I): ActionSetLocalsRequest {
-    const message = createBaseActionSetLocalsRequest();
-    message.locals = object.locals?.map((e) => LocalDef.fromPartial(e)) || [];
+  fromPartial<I extends Exact<DeepPartial<LocalEntry>, I>>(object: I): LocalEntry {
+    const message = createBaseLocalEntry();
+    message.name = object.name ?? "";
+    message.mode = object.mode ?? "";
+    message.value = object.value ?? undefined;
+    message.variable = object.variable ?? "";
+    message.expression = object.expression ?? "";
     return message;
   },
 };
 
-function createBaseActionSetDependsOnRequest(): ActionSetDependsOnRequest {
+function createBaseSetLocalsRequest(): SetLocalsRequest {
+  return { locals: [] };
+}
+
+export const SetLocalsRequest: MessageFns<SetLocalsRequest> = {
+  encode(message: SetLocalsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.locals) {
+      LocalEntry.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetLocalsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetLocalsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.locals.push(LocalEntry.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetLocalsRequest {
+    return {
+      locals: globalThis.Array.isArray(object?.locals) ? object.locals.map((e: any) => LocalEntry.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: SetLocalsRequest): unknown {
+    const obj: any = {};
+    if (message.locals?.length) {
+      obj.locals = message.locals.map((e) => LocalEntry.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetLocalsRequest>, I>>(base?: I): SetLocalsRequest {
+    return SetLocalsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetLocalsRequest>, I>>(object: I): SetLocalsRequest {
+    const message = createBaseSetLocalsRequest();
+    message.locals = object.locals?.map((e) => LocalEntry.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSetDependsOnRequest(): SetDependsOnRequest {
   return { instance_id: "", depends_on: [] };
 }
 
-export const ActionSetDependsOnRequest: MessageFns<ActionSetDependsOnRequest> = {
-  encode(message: ActionSetDependsOnRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SetDependsOnRequest: MessageFns<SetDependsOnRequest> = {
+  encode(message: SetDependsOnRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.instance_id !== "") {
       writer.uint32(10).string(message.instance_id);
     }
@@ -4879,10 +4744,10 @@ export const ActionSetDependsOnRequest: MessageFns<ActionSetDependsOnRequest> = 
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetDependsOnRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): SetDependsOnRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetDependsOnRequest();
+    const message = createBaseSetDependsOnRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4911,7 +4776,7 @@ export const ActionSetDependsOnRequest: MessageFns<ActionSetDependsOnRequest> = 
     return message;
   },
 
-  fromJSON(object: any): ActionSetDependsOnRequest {
+  fromJSON(object: any): SetDependsOnRequest {
     return {
       instance_id: isSet(object.instanceId)
         ? globalThis.String(object.instanceId)
@@ -4926,7 +4791,7 @@ export const ActionSetDependsOnRequest: MessageFns<ActionSetDependsOnRequest> = 
     };
   },
 
-  toJSON(message: ActionSetDependsOnRequest): unknown {
+  toJSON(message: SetDependsOnRequest): unknown {
     const obj: any = {};
     if (message.instance_id !== "") {
       obj.instanceId = message.instance_id;
@@ -4937,42 +4802,41 @@ export const ActionSetDependsOnRequest: MessageFns<ActionSetDependsOnRequest> = 
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetDependsOnRequest>, I>>(base?: I): ActionSetDependsOnRequest {
-    return ActionSetDependsOnRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SetDependsOnRequest>, I>>(base?: I): SetDependsOnRequest {
+    return SetDependsOnRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetDependsOnRequest>, I>>(object: I): ActionSetDependsOnRequest {
-    const message = createBaseActionSetDependsOnRequest();
+  fromPartial<I extends Exact<DeepPartial<SetDependsOnRequest>, I>>(object: I): SetDependsOnRequest {
+    const message = createBaseSetDependsOnRequest();
     message.instance_id = object.instance_id ?? "";
     message.depends_on = object.depends_on?.map((e) => e) || [];
     return message;
   },
 };
 
-function createBaseActionSetEnvironmentsRequest(): ActionSetEnvironmentsRequest {
+function createBaseSetEnvironmentsRequest(): SetEnvironmentsRequest {
   return { environments: {}, environment_backends: {} };
 }
 
-export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsRequest> = {
-  encode(message: ActionSetEnvironmentsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SetEnvironmentsRequest: MessageFns<SetEnvironmentsRequest> = {
+  encode(message: SetEnvironmentsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     globalThis.Object.entries(message.environments).forEach(
       ([key, value]: [string, { [key: string]: any } | undefined]) => {
         if (value !== undefined) {
-          ActionSetEnvironmentsRequest_EnvironmentsEntry.encode({ key: key as any, value }, writer.uint32(10).fork())
-            .join();
+          SetEnvironmentsRequest_EnvironmentsEntry.encode({ key: key as any, value }, writer.uint32(10).fork()).join();
         }
       },
     );
-    globalThis.Object.entries(message.environment_backends).forEach(([key, value]: [string, BackendConfig]) => {
-      ActionSetEnvironmentsRequest_EnvironmentBackendsEntry.encode({ key: key as any, value }, writer.uint32(18).fork())
+    globalThis.Object.entries(message.environment_backends).forEach(([key, value]: [string, BackendView]) => {
+      SetEnvironmentsRequest_EnvironmentBackendsEntry.encode({ key: key as any, value }, writer.uint32(18).fork())
         .join();
     });
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetEnvironmentsRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): SetEnvironmentsRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetEnvironmentsRequest();
+    const message = createBaseSetEnvironmentsRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -4981,7 +4845,7 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
             break;
           }
 
-          const entry1 = ActionSetEnvironmentsRequest_EnvironmentsEntry.decode(reader, reader.uint32());
+          const entry1 = SetEnvironmentsRequest_EnvironmentsEntry.decode(reader, reader.uint32());
           if (entry1.value !== undefined) {
             message.environments[entry1.key] = entry1.value;
           }
@@ -4992,7 +4856,7 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
             break;
           }
 
-          const entry2 = ActionSetEnvironmentsRequest_EnvironmentBackendsEntry.decode(reader, reader.uint32());
+          const entry2 = SetEnvironmentsRequest_EnvironmentBackendsEntry.decode(reader, reader.uint32());
           if (entry2.value !== undefined) {
             message.environment_backends[entry2.key] = entry2.value;
           }
@@ -5007,7 +4871,7 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
     return message;
   },
 
-  fromJSON(object: any): ActionSetEnvironmentsRequest {
+  fromJSON(object: any): SetEnvironmentsRequest {
     return {
       environments: isObject(object.environments)
         ? (globalThis.Object.entries(object.environments) as [string, any][]).reduce(
@@ -5020,16 +4884,16 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
         : {},
       environment_backends: isObject(object.environmentBackends)
         ? (globalThis.Object.entries(object.environmentBackends) as [string, any][]).reduce(
-          (acc: { [key: string]: BackendConfig }, [key, value]: [string, any]) => {
-            acc[key] = BackendConfig.fromJSON(value);
+          (acc: { [key: string]: BackendView }, [key, value]: [string, any]) => {
+            acc[key] = BackendView.fromJSON(value);
             return acc;
           },
           {},
         )
         : isObject(object.environment_backends)
         ? (globalThis.Object.entries(object.environment_backends) as [string, any][]).reduce(
-          (acc: { [key: string]: BackendConfig }, [key, value]: [string, any]) => {
-            acc[key] = BackendConfig.fromJSON(value);
+          (acc: { [key: string]: BackendView }, [key, value]: [string, any]) => {
+            acc[key] = BackendView.fromJSON(value);
             return acc;
           },
           {},
@@ -5038,7 +4902,7 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
     };
   },
 
-  toJSON(message: ActionSetEnvironmentsRequest): unknown {
+  toJSON(message: SetEnvironmentsRequest): unknown {
     const obj: any = {};
     if (message.environments) {
       const entries = globalThis.Object.entries(message.environments) as [string, { [key: string]: any } | undefined][];
@@ -5050,22 +4914,22 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
       }
     }
     if (message.environment_backends) {
-      const entries = globalThis.Object.entries(message.environment_backends) as [string, BackendConfig][];
+      const entries = globalThis.Object.entries(message.environment_backends) as [string, BackendView][];
       if (entries.length > 0) {
         obj.environmentBackends = {};
         entries.forEach(([k, v]) => {
-          obj.environmentBackends[k] = BackendConfig.toJSON(v);
+          obj.environmentBackends[k] = BackendView.toJSON(v);
         });
       }
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetEnvironmentsRequest>, I>>(base?: I): ActionSetEnvironmentsRequest {
-    return ActionSetEnvironmentsRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SetEnvironmentsRequest>, I>>(base?: I): SetEnvironmentsRequest {
+    return SetEnvironmentsRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetEnvironmentsRequest>, I>>(object: I): ActionSetEnvironmentsRequest {
-    const message = createBaseActionSetEnvironmentsRequest();
+  fromPartial<I extends Exact<DeepPartial<SetEnvironmentsRequest>, I>>(object: I): SetEnvironmentsRequest {
+    const message = createBaseSetEnvironmentsRequest();
     message.environments =
       (globalThis.Object.entries(object.environments ?? {}) as [string, { [key: string]: any } | undefined][]).reduce(
         (
@@ -5080,10 +4944,10 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
         {},
       );
     message.environment_backends =
-      (globalThis.Object.entries(object.environment_backends ?? {}) as [string, BackendConfig][]).reduce(
-        (acc: { [key: string]: BackendConfig }, [key, value]: [string, BackendConfig]) => {
+      (globalThis.Object.entries(object.environment_backends ?? {}) as [string, BackendView][]).reduce(
+        (acc: { [key: string]: BackendView }, [key, value]: [string, BackendView]) => {
           if (value !== undefined) {
-            acc[key] = BackendConfig.fromPartial(value);
+            acc[key] = BackendView.fromPartial(value);
           }
           return acc;
         },
@@ -5093,17 +4957,12 @@ export const ActionSetEnvironmentsRequest: MessageFns<ActionSetEnvironmentsReque
   },
 };
 
-function createBaseActionSetEnvironmentsRequest_EnvironmentsEntry(): ActionSetEnvironmentsRequest_EnvironmentsEntry {
+function createBaseSetEnvironmentsRequest_EnvironmentsEntry(): SetEnvironmentsRequest_EnvironmentsEntry {
   return { key: "", value: undefined };
 }
 
-export const ActionSetEnvironmentsRequest_EnvironmentsEntry: MessageFns<
-  ActionSetEnvironmentsRequest_EnvironmentsEntry
-> = {
-  encode(
-    message: ActionSetEnvironmentsRequest_EnvironmentsEntry,
-    writer: BinaryWriter = new BinaryWriter(),
-  ): BinaryWriter {
+export const SetEnvironmentsRequest_EnvironmentsEntry: MessageFns<SetEnvironmentsRequest_EnvironmentsEntry> = {
+  encode(message: SetEnvironmentsRequest_EnvironmentsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.key !== "") {
       writer.uint32(10).string(message.key);
     }
@@ -5113,10 +4972,10 @@ export const ActionSetEnvironmentsRequest_EnvironmentsEntry: MessageFns<
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetEnvironmentsRequest_EnvironmentsEntry {
+  decode(input: BinaryReader | Uint8Array, length?: number): SetEnvironmentsRequest_EnvironmentsEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetEnvironmentsRequest_EnvironmentsEntry();
+    const message = createBaseSetEnvironmentsRequest_EnvironmentsEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -5145,14 +5004,14 @@ export const ActionSetEnvironmentsRequest_EnvironmentsEntry: MessageFns<
     return message;
   },
 
-  fromJSON(object: any): ActionSetEnvironmentsRequest_EnvironmentsEntry {
+  fromJSON(object: any): SetEnvironmentsRequest_EnvironmentsEntry {
     return {
       key: isSet(object.key) ? globalThis.String(object.key) : "",
       value: isObject(object.value) ? object.value : undefined,
     };
   },
 
-  toJSON(message: ActionSetEnvironmentsRequest_EnvironmentsEntry): unknown {
+  toJSON(message: SetEnvironmentsRequest_EnvironmentsEntry): unknown {
     const obj: any = {};
     if (message.key !== "") {
       obj.key = message.key;
@@ -5163,45 +5022,45 @@ export const ActionSetEnvironmentsRequest_EnvironmentsEntry: MessageFns<
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetEnvironmentsRequest_EnvironmentsEntry>, I>>(
+  create<I extends Exact<DeepPartial<SetEnvironmentsRequest_EnvironmentsEntry>, I>>(
     base?: I,
-  ): ActionSetEnvironmentsRequest_EnvironmentsEntry {
-    return ActionSetEnvironmentsRequest_EnvironmentsEntry.fromPartial(base ?? ({} as any));
+  ): SetEnvironmentsRequest_EnvironmentsEntry {
+    return SetEnvironmentsRequest_EnvironmentsEntry.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetEnvironmentsRequest_EnvironmentsEntry>, I>>(
+  fromPartial<I extends Exact<DeepPartial<SetEnvironmentsRequest_EnvironmentsEntry>, I>>(
     object: I,
-  ): ActionSetEnvironmentsRequest_EnvironmentsEntry {
-    const message = createBaseActionSetEnvironmentsRequest_EnvironmentsEntry();
+  ): SetEnvironmentsRequest_EnvironmentsEntry {
+    const message = createBaseSetEnvironmentsRequest_EnvironmentsEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? undefined;
     return message;
   },
 };
 
-function createBaseActionSetEnvironmentsRequest_EnvironmentBackendsEntry(): ActionSetEnvironmentsRequest_EnvironmentBackendsEntry {
+function createBaseSetEnvironmentsRequest_EnvironmentBackendsEntry(): SetEnvironmentsRequest_EnvironmentBackendsEntry {
   return { key: "", value: undefined };
 }
 
-export const ActionSetEnvironmentsRequest_EnvironmentBackendsEntry: MessageFns<
-  ActionSetEnvironmentsRequest_EnvironmentBackendsEntry
+export const SetEnvironmentsRequest_EnvironmentBackendsEntry: MessageFns<
+  SetEnvironmentsRequest_EnvironmentBackendsEntry
 > = {
   encode(
-    message: ActionSetEnvironmentsRequest_EnvironmentBackendsEntry,
+    message: SetEnvironmentsRequest_EnvironmentBackendsEntry,
     writer: BinaryWriter = new BinaryWriter(),
   ): BinaryWriter {
     if (message.key !== "") {
       writer.uint32(10).string(message.key);
     }
     if (message.value !== undefined) {
-      BackendConfig.encode(message.value, writer.uint32(18).fork()).join();
+      BackendView.encode(message.value, writer.uint32(18).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionSetEnvironmentsRequest_EnvironmentBackendsEntry {
+  decode(input: BinaryReader | Uint8Array, length?: number): SetEnvironmentsRequest_EnvironmentBackendsEntry {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionSetEnvironmentsRequest_EnvironmentBackendsEntry();
+    const message = createBaseSetEnvironmentsRequest_EnvironmentBackendsEntry();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -5218,7 +5077,7 @@ export const ActionSetEnvironmentsRequest_EnvironmentBackendsEntry: MessageFns<
             break;
           }
 
-          message.value = BackendConfig.decode(reader, reader.uint32());
+          message.value = BackendView.decode(reader, reader.uint32());
           continue;
         }
       }
@@ -5230,219 +5089,57 @@ export const ActionSetEnvironmentsRequest_EnvironmentBackendsEntry: MessageFns<
     return message;
   },
 
-  fromJSON(object: any): ActionSetEnvironmentsRequest_EnvironmentBackendsEntry {
+  fromJSON(object: any): SetEnvironmentsRequest_EnvironmentBackendsEntry {
     return {
       key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object.value) ? BackendConfig.fromJSON(object.value) : undefined,
+      value: isSet(object.value) ? BackendView.fromJSON(object.value) : undefined,
     };
   },
 
-  toJSON(message: ActionSetEnvironmentsRequest_EnvironmentBackendsEntry): unknown {
+  toJSON(message: SetEnvironmentsRequest_EnvironmentBackendsEntry): unknown {
     const obj: any = {};
     if (message.key !== "") {
       obj.key = message.key;
     }
     if (message.value !== undefined) {
-      obj.value = BackendConfig.toJSON(message.value);
+      obj.value = BackendView.toJSON(message.value);
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<ActionSetEnvironmentsRequest_EnvironmentBackendsEntry>, I>>(
+  create<I extends Exact<DeepPartial<SetEnvironmentsRequest_EnvironmentBackendsEntry>, I>>(
     base?: I,
-  ): ActionSetEnvironmentsRequest_EnvironmentBackendsEntry {
-    return ActionSetEnvironmentsRequest_EnvironmentBackendsEntry.fromPartial(base ?? ({} as any));
+  ): SetEnvironmentsRequest_EnvironmentBackendsEntry {
+    return SetEnvironmentsRequest_EnvironmentBackendsEntry.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<ActionSetEnvironmentsRequest_EnvironmentBackendsEntry>, I>>(
+  fromPartial<I extends Exact<DeepPartial<SetEnvironmentsRequest_EnvironmentBackendsEntry>, I>>(
     object: I,
-  ): ActionSetEnvironmentsRequest_EnvironmentBackendsEntry {
-    const message = createBaseActionSetEnvironmentsRequest_EnvironmentBackendsEntry();
+  ): SetEnvironmentsRequest_EnvironmentBackendsEntry {
+    const message = createBaseSetEnvironmentsRequest_EnvironmentBackendsEntry();
     message.key = object.key ?? "";
     message.value = (object.value !== undefined && object.value !== null)
-      ? BackendConfig.fromPartial(object.value)
+      ? BackendView.fromPartial(object.value)
       : undefined;
     return message;
   },
 };
 
-function createBaseActionAutoConnectRequest(): ActionAutoConnectRequest {
-  return { source: "", target: "" };
-}
-
-export const ActionAutoConnectRequest: MessageFns<ActionAutoConnectRequest> = {
-  encode(message: ActionAutoConnectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.source !== "") {
-      writer.uint32(10).string(message.source);
-    }
-    if (message.target !== "") {
-      writer.uint32(18).string(message.target);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionAutoConnectRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionAutoConnectRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.source = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.target = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ActionAutoConnectRequest {
-    return {
-      source: isSet(object.source) ? globalThis.String(object.source) : "",
-      target: isSet(object.target) ? globalThis.String(object.target) : "",
-    };
-  },
-
-  toJSON(message: ActionAutoConnectRequest): unknown {
-    const obj: any = {};
-    if (message.source !== "") {
-      obj.source = message.source;
-    }
-    if (message.target !== "") {
-      obj.target = message.target;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ActionAutoConnectRequest>, I>>(base?: I): ActionAutoConnectRequest {
-    return ActionAutoConnectRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ActionAutoConnectRequest>, I>>(object: I): ActionAutoConnectRequest {
-    const message = createBaseActionAutoConnectRequest();
-    message.source = object.source ?? "";
-    message.target = object.target ?? "";
-    return message;
-  },
-};
-
-function createBaseActionUndoRequest(): ActionUndoRequest {
-  return {};
-}
-
-export const ActionUndoRequest: MessageFns<ActionUndoRequest> = {
-  encode(_: ActionUndoRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionUndoRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionUndoRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): ActionUndoRequest {
-    return {};
-  },
-
-  toJSON(_: ActionUndoRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ActionUndoRequest>, I>>(base?: I): ActionUndoRequest {
-    return ActionUndoRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ActionUndoRequest>, I>>(_: I): ActionUndoRequest {
-    const message = createBaseActionUndoRequest();
-    return message;
-  },
-};
-
-function createBaseActionRedoRequest(): ActionRedoRequest {
-  return {};
-}
-
-export const ActionRedoRequest: MessageFns<ActionRedoRequest> = {
-  encode(_: ActionRedoRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ActionRedoRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseActionRedoRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): ActionRedoRequest {
-    return {};
-  },
-
-  toJSON(_: ActionRedoRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ActionRedoRequest>, I>>(base?: I): ActionRedoRequest {
-    return ActionRedoRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ActionRedoRequest>, I>>(_: I): ActionRedoRequest {
-    const message = createBaseActionRedoRequest();
-    return message;
-  },
-};
-
-function createBaseQueryNodeConfigRequest(): QueryNodeConfigRequest {
+function createBaseNodeConfigRequest(): NodeConfigRequest {
   return { instance_id: "" };
 }
 
-export const QueryNodeConfigRequest: MessageFns<QueryNodeConfigRequest> = {
-  encode(message: QueryNodeConfigRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const NodeConfigRequest: MessageFns<NodeConfigRequest> = {
+  encode(message: NodeConfigRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.instance_id !== "") {
       writer.uint32(10).string(message.instance_id);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): QueryNodeConfigRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): NodeConfigRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseQueryNodeConfigRequest();
+    const message = createBaseNodeConfigRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -5463,7 +5160,7 @@ export const QueryNodeConfigRequest: MessageFns<QueryNodeConfigRequest> = {
     return message;
   },
 
-  fromJSON(object: any): QueryNodeConfigRequest {
+  fromJSON(object: any): NodeConfigRequest {
     return {
       instance_id: isSet(object.instanceId)
         ? globalThis.String(object.instanceId)
@@ -5473,7 +5170,7 @@ export const QueryNodeConfigRequest: MessageFns<QueryNodeConfigRequest> = {
     };
   },
 
-  toJSON(message: QueryNodeConfigRequest): unknown {
+  toJSON(message: NodeConfigRequest): unknown {
     const obj: any = {};
     if (message.instance_id !== "") {
       obj.instanceId = message.instance_id;
@@ -5481,22 +5178,22 @@ export const QueryNodeConfigRequest: MessageFns<QueryNodeConfigRequest> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<QueryNodeConfigRequest>, I>>(base?: I): QueryNodeConfigRequest {
-    return QueryNodeConfigRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<NodeConfigRequest>, I>>(base?: I): NodeConfigRequest {
+    return NodeConfigRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<QueryNodeConfigRequest>, I>>(object: I): QueryNodeConfigRequest {
-    const message = createBaseQueryNodeConfigRequest();
+  fromPartial<I extends Exact<DeepPartial<NodeConfigRequest>, I>>(object: I): NodeConfigRequest {
+    const message = createBaseNodeConfigRequest();
     message.instance_id = object.instance_id ?? "";
     return message;
   },
 };
 
-function createBaseQueryEdgeConfigRequest(): QueryEdgeConfigRequest {
+function createBaseEdgeConfigRequest(): EdgeConfigRequest {
   return { source: "", target: "" };
 }
 
-export const QueryEdgeConfigRequest: MessageFns<QueryEdgeConfigRequest> = {
-  encode(message: QueryEdgeConfigRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const EdgeConfigRequest: MessageFns<EdgeConfigRequest> = {
+  encode(message: EdgeConfigRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.source !== "") {
       writer.uint32(10).string(message.source);
     }
@@ -5506,10 +5203,10 @@ export const QueryEdgeConfigRequest: MessageFns<QueryEdgeConfigRequest> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): QueryEdgeConfigRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): EdgeConfigRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseQueryEdgeConfigRequest();
+    const message = createBaseEdgeConfigRequest();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -5538,14 +5235,14 @@ export const QueryEdgeConfigRequest: MessageFns<QueryEdgeConfigRequest> = {
     return message;
   },
 
-  fromJSON(object: any): QueryEdgeConfigRequest {
+  fromJSON(object: any): EdgeConfigRequest {
     return {
       source: isSet(object.source) ? globalThis.String(object.source) : "",
       target: isSet(object.target) ? globalThis.String(object.target) : "",
     };
   },
 
-  toJSON(message: QueryEdgeConfigRequest): unknown {
+  toJSON(message: EdgeConfigRequest): unknown {
     const obj: any = {};
     if (message.source !== "") {
       obj.source = message.source;
@@ -5556,99 +5253,13 @@ export const QueryEdgeConfigRequest: MessageFns<QueryEdgeConfigRequest> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<QueryEdgeConfigRequest>, I>>(base?: I): QueryEdgeConfigRequest {
-    return QueryEdgeConfigRequest.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<EdgeConfigRequest>, I>>(base?: I): EdgeConfigRequest {
+    return EdgeConfigRequest.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<QueryEdgeConfigRequest>, I>>(object: I): QueryEdgeConfigRequest {
-    const message = createBaseQueryEdgeConfigRequest();
+  fromPartial<I extends Exact<DeepPartial<EdgeConfigRequest>, I>>(object: I): EdgeConfigRequest {
+    const message = createBaseEdgeConfigRequest();
     message.source = object.source ?? "";
     message.target = object.target ?? "";
-    return message;
-  },
-};
-
-function createBaseQuerySettingsRequest(): QuerySettingsRequest {
-  return {};
-}
-
-export const QuerySettingsRequest: MessageFns<QuerySettingsRequest> = {
-  encode(_: QuerySettingsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): QuerySettingsRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseQuerySettingsRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): QuerySettingsRequest {
-    return {};
-  },
-
-  toJSON(_: QuerySettingsRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<QuerySettingsRequest>, I>>(base?: I): QuerySettingsRequest {
-    return QuerySettingsRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<QuerySettingsRequest>, I>>(_: I): QuerySettingsRequest {
-    const message = createBaseQuerySettingsRequest();
-    return message;
-  },
-};
-
-function createBaseQueryGraphSummaryRequest(): QueryGraphSummaryRequest {
-  return {};
-}
-
-export const QueryGraphSummaryRequest: MessageFns<QueryGraphSummaryRequest> = {
-  encode(_: QueryGraphSummaryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): QueryGraphSummaryRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseQueryGraphSummaryRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): QueryGraphSummaryRequest {
-    return {};
-  },
-
-  toJSON(_: QueryGraphSummaryRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<QueryGraphSummaryRequest>, I>>(base?: I): QueryGraphSummaryRequest {
-    return QueryGraphSummaryRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<QueryGraphSummaryRequest>, I>>(_: I): QueryGraphSummaryRequest {
-    const message = createBaseQueryGraphSummaryRequest();
     return message;
   },
 };
@@ -5707,49 +5318,6 @@ export const GraphSummaryResponse: MessageFns<GraphSummaryResponse> = {
   fromPartial<I extends Exact<DeepPartial<GraphSummaryResponse>, I>>(object: I): GraphSummaryResponse {
     const message = createBaseGraphSummaryResponse();
     message.text = object.text ?? "";
-    return message;
-  },
-};
-
-function createBaseQueryValidateRequest(): QueryValidateRequest {
-  return {};
-}
-
-export const QueryValidateRequest: MessageFns<QueryValidateRequest> = {
-  encode(_: QueryValidateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): QueryValidateRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseQueryValidateRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(_: any): QueryValidateRequest {
-    return {};
-  },
-
-  toJSON(_: QueryValidateRequest): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<QueryValidateRequest>, I>>(base?: I): QueryValidateRequest {
-    return QueryValidateRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<QueryValidateRequest>, I>>(_: I): QueryValidateRequest {
-    const message = createBaseQueryValidateRequest();
     return message;
   },
 };
@@ -5987,7 +5555,16 @@ export const CanvasView: MessageFns<CanvasView> = {
 };
 
 function createBaseRenderNode(): RenderNode {
-  return { id: "", label: "", kind: 0, module_key: "", position: undefined, has_errors: false, error_messages: [] };
+  return {
+    id: "",
+    label: "",
+    kind: 0,
+    module_key: "",
+    icon_url: "",
+    position: undefined,
+    has_errors: false,
+    error_messages: [],
+  };
 }
 
 export const RenderNode: MessageFns<RenderNode> = {
@@ -6004,14 +5581,17 @@ export const RenderNode: MessageFns<RenderNode> = {
     if (message.module_key !== "") {
       writer.uint32(34).string(message.module_key);
     }
+    if (message.icon_url !== "") {
+      writer.uint32(42).string(message.icon_url);
+    }
     if (message.position !== undefined) {
-      Position.encode(message.position, writer.uint32(42).fork()).join();
+      Position.encode(message.position, writer.uint32(50).fork()).join();
     }
     if (message.has_errors !== false) {
-      writer.uint32(48).bool(message.has_errors);
+      writer.uint32(56).bool(message.has_errors);
     }
     for (const v of message.error_messages) {
-      writer.uint32(58).string(v!);
+      writer.uint32(66).string(v!);
     }
     return writer;
   },
@@ -6060,19 +5640,27 @@ export const RenderNode: MessageFns<RenderNode> = {
             break;
           }
 
-          message.position = Position.decode(reader, reader.uint32());
+          message.icon_url = reader.string();
           continue;
         }
         case 6: {
-          if (tag !== 48) {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.position = Position.decode(reader, reader.uint32());
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
             break;
           }
 
           message.has_errors = reader.bool();
           continue;
         }
-        case 7: {
-          if (tag !== 58) {
+        case 8: {
+          if (tag !== 66) {
             break;
           }
 
@@ -6097,6 +5685,11 @@ export const RenderNode: MessageFns<RenderNode> = {
         ? globalThis.String(object.moduleKey)
         : isSet(object.module_key)
         ? globalThis.String(object.module_key)
+        : "",
+      icon_url: isSet(object.iconUrl)
+        ? globalThis.String(object.iconUrl)
+        : isSet(object.icon_url)
+        ? globalThis.String(object.icon_url)
         : "",
       position: isSet(object.position) ? Position.fromJSON(object.position) : undefined,
       has_errors: isSet(object.hasErrors)
@@ -6126,6 +5719,9 @@ export const RenderNode: MessageFns<RenderNode> = {
     if (message.module_key !== "") {
       obj.moduleKey = message.module_key;
     }
+    if (message.icon_url !== "") {
+      obj.iconUrl = message.icon_url;
+    }
     if (message.position !== undefined) {
       obj.position = Position.toJSON(message.position);
     }
@@ -6147,6 +5743,7 @@ export const RenderNode: MessageFns<RenderNode> = {
     message.label = object.label ?? "";
     message.kind = object.kind ?? 0;
     message.module_key = object.module_key ?? "";
+    message.icon_url = object.icon_url ?? "";
     message.position = (object.position !== undefined && object.position !== null)
       ? Position.fromPartial(object.position)
       : undefined;
@@ -7003,7 +6600,7 @@ function createBaseSettingsConfig(): SettingsConfig {
 export const SettingsConfig: MessageFns<SettingsConfig> = {
   encode(message: SettingsConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.terraform !== undefined) {
-      TerraformSettings.encode(message.terraform, writer.uint32(10).fork()).join();
+      TerraformView.encode(message.terraform, writer.uint32(10).fork()).join();
     }
     for (const v of message.providers) {
       ProviderView.encode(v!, writer.uint32(18).fork()).join();
@@ -7036,7 +6633,7 @@ export const SettingsConfig: MessageFns<SettingsConfig> = {
             break;
           }
 
-          message.terraform = TerraformSettings.decode(reader, reader.uint32());
+          message.terraform = TerraformView.decode(reader, reader.uint32());
           continue;
         }
         case 2: {
@@ -7088,7 +6685,7 @@ export const SettingsConfig: MessageFns<SettingsConfig> = {
 
   fromJSON(object: any): SettingsConfig {
     return {
-      terraform: isSet(object.terraform) ? TerraformSettings.fromJSON(object.terraform) : undefined,
+      terraform: isSet(object.terraform) ? TerraformView.fromJSON(object.terraform) : undefined,
       providers: globalThis.Array.isArray(object?.providers)
         ? object.providers.map((e: any) => ProviderView.fromJSON(e))
         : [],
@@ -7125,7 +6722,7 @@ export const SettingsConfig: MessageFns<SettingsConfig> = {
   toJSON(message: SettingsConfig): unknown {
     const obj: any = {};
     if (message.terraform !== undefined) {
-      obj.terraform = TerraformSettings.toJSON(message.terraform);
+      obj.terraform = TerraformView.toJSON(message.terraform);
     }
     if (message.providers?.length) {
       obj.providers = message.providers.map((e) => ProviderView.toJSON(e));
@@ -7160,7 +6757,7 @@ export const SettingsConfig: MessageFns<SettingsConfig> = {
   fromPartial<I extends Exact<DeepPartial<SettingsConfig>, I>>(object: I): SettingsConfig {
     const message = createBaseSettingsConfig();
     message.terraform = (object.terraform !== undefined && object.terraform !== null)
-      ? TerraformSettings.fromPartial(object.terraform)
+      ? TerraformView.fromPartial(object.terraform)
       : undefined;
     message.providers = object.providers?.map((e) => ProviderView.fromPartial(e)) || [];
     message.locals = object.locals?.map((e) => LocalView.fromPartial(e)) || [];
@@ -7353,12 +6950,12 @@ export const SettingsConfig_EnvironmentBackendsEntry: MessageFns<SettingsConfig_
   },
 };
 
-function createBaseTerraformSettings(): TerraformSettings {
+function createBaseTerraformView(): TerraformView {
   return { required_version: "", required_providers: [], backend: undefined };
 }
 
-export const TerraformSettings: MessageFns<TerraformSettings> = {
-  encode(message: TerraformSettings, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const TerraformView: MessageFns<TerraformView> = {
+  encode(message: TerraformView, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.required_version !== "") {
       writer.uint32(10).string(message.required_version);
     }
@@ -7371,10 +6968,10 @@ export const TerraformSettings: MessageFns<TerraformSettings> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): TerraformSettings {
+  decode(input: BinaryReader | Uint8Array, length?: number): TerraformView {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseTerraformSettings();
+    const message = createBaseTerraformView();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -7411,7 +7008,7 @@ export const TerraformSettings: MessageFns<TerraformSettings> = {
     return message;
   },
 
-  fromJSON(object: any): TerraformSettings {
+  fromJSON(object: any): TerraformView {
     return {
       required_version: isSet(object.requiredVersion)
         ? globalThis.String(object.requiredVersion)
@@ -7427,7 +7024,7 @@ export const TerraformSettings: MessageFns<TerraformSettings> = {
     };
   },
 
-  toJSON(message: TerraformSettings): unknown {
+  toJSON(message: TerraformView): unknown {
     const obj: any = {};
     if (message.required_version !== "") {
       obj.requiredVersion = message.required_version;
@@ -7441,11 +7038,11 @@ export const TerraformSettings: MessageFns<TerraformSettings> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<TerraformSettings>, I>>(base?: I): TerraformSettings {
-    return TerraformSettings.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<TerraformView>, I>>(base?: I): TerraformView {
+    return TerraformView.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<TerraformSettings>, I>>(object: I): TerraformSettings {
-    const message = createBaseTerraformSettings();
+  fromPartial<I extends Exact<DeepPartial<TerraformView>, I>>(object: I): TerraformView {
+    const message = createBaseTerraformView();
     message.required_version = object.required_version ?? "";
     message.required_providers = object.required_providers?.map((e) => ProviderReqView.fromPartial(e)) || [];
     message.backend = (object.backend !== undefined && object.backend !== null)
@@ -8193,268 +7790,6 @@ export const Position: MessageFns<Position> = {
   },
 };
 
-function createBaseBinding(): Binding {
-  return { lit: undefined, var: undefined, out: undefined, expr: undefined };
-}
-
-export const Binding: MessageFns<Binding> = {
-  encode(message: Binding, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.lit !== undefined) {
-      Value.encode(Value.wrap(message.lit), writer.uint32(10).fork()).join();
-    }
-    if (message.var !== undefined) {
-      writer.uint32(18).string(message.var);
-    }
-    if (message.out !== undefined) {
-      OutputRef.encode(message.out, writer.uint32(26).fork()).join();
-    }
-    if (message.expr !== undefined) {
-      Expression.encode(message.expr, writer.uint32(34).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): Binding {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseBinding();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.lit = Value.unwrap(Value.decode(reader, reader.uint32()));
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.var = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.out = OutputRef.decode(reader, reader.uint32());
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.expr = Expression.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): Binding {
-    return {
-      lit: isSet(object?.lit) ? object.lit : undefined,
-      var: isSet(object.var) ? globalThis.String(object.var) : undefined,
-      out: isSet(object.out) ? OutputRef.fromJSON(object.out) : undefined,
-      expr: isSet(object.expr) ? Expression.fromJSON(object.expr) : undefined,
-    };
-  },
-
-  toJSON(message: Binding): unknown {
-    const obj: any = {};
-    if (message.lit !== undefined) {
-      obj.lit = message.lit;
-    }
-    if (message.var !== undefined) {
-      obj.var = message.var;
-    }
-    if (message.out !== undefined) {
-      obj.out = OutputRef.toJSON(message.out);
-    }
-    if (message.expr !== undefined) {
-      obj.expr = Expression.toJSON(message.expr);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<Binding>, I>>(base?: I): Binding {
-    return Binding.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<Binding>, I>>(object: I): Binding {
-    const message = createBaseBinding();
-    message.lit = object.lit ?? undefined;
-    message.var = object.var ?? undefined;
-    message.out = (object.out !== undefined && object.out !== null) ? OutputRef.fromPartial(object.out) : undefined;
-    message.expr = (object.expr !== undefined && object.expr !== null)
-      ? Expression.fromPartial(object.expr)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseOutputRef(): OutputRef {
-  return { module: "", name: "" };
-}
-
-export const OutputRef: MessageFns<OutputRef> = {
-  encode(message: OutputRef, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.module !== "") {
-      writer.uint32(10).string(message.module);
-    }
-    if (message.name !== "") {
-      writer.uint32(18).string(message.name);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): OutputRef {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseOutputRef();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.module = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.name = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): OutputRef {
-    return {
-      module: isSet(object.module) ? globalThis.String(object.module) : "",
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-    };
-  },
-
-  toJSON(message: OutputRef): unknown {
-    const obj: any = {};
-    if (message.module !== "") {
-      obj.module = message.module;
-    }
-    if (message.name !== "") {
-      obj.name = message.name;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<OutputRef>, I>>(base?: I): OutputRef {
-    return OutputRef.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<OutputRef>, I>>(object: I): OutputRef {
-    const message = createBaseOutputRef();
-    message.module = object.module ?? "";
-    message.name = object.name ?? "";
-    return message;
-  },
-};
-
-function createBaseExpression(): Expression {
-  return { lang: "", value: "" };
-}
-
-export const Expression: MessageFns<Expression> = {
-  encode(message: Expression, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.lang !== "") {
-      writer.uint32(10).string(message.lang);
-    }
-    if (message.value !== "") {
-      writer.uint32(18).string(message.value);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): Expression {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseExpression();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.lang = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): Expression {
-    return {
-      lang: isSet(object.lang) ? globalThis.String(object.lang) : "",
-      value: isSet(object.value) ? globalThis.String(object.value) : "",
-    };
-  },
-
-  toJSON(message: Expression): unknown {
-    const obj: any = {};
-    if (message.lang !== "") {
-      obj.lang = message.lang;
-    }
-    if (message.value !== "") {
-      obj.value = message.value;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<Expression>, I>>(base?: I): Expression {
-    return Expression.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<Expression>, I>>(object: I): Expression {
-    const message = createBaseExpression();
-    message.lang = object.lang ?? "";
-    message.value = object.value ?? "";
-    return message;
-  },
-};
-
 function createBaseInputDef(): InputDef {
   return { name: "", type: "", required: false, description: "", default_value: undefined, validation: undefined };
 }
@@ -8789,858 +8124,6 @@ export const OutputDef: MessageFns<OutputDef> = {
   },
 };
 
-function createBaseOutputExport(): OutputExport {
-  return { out: undefined, lit: undefined, var: "", expr: undefined };
-}
-
-export const OutputExport: MessageFns<OutputExport> = {
-  encode(message: OutputExport, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.out !== undefined) {
-      OutputRef.encode(message.out, writer.uint32(10).fork()).join();
-    }
-    if (message.lit !== undefined) {
-      Value.encode(Value.wrap(message.lit), writer.uint32(18).fork()).join();
-    }
-    if (message.var !== "") {
-      writer.uint32(26).string(message.var);
-    }
-    if (message.expr !== undefined) {
-      Expression.encode(message.expr, writer.uint32(34).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): OutputExport {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseOutputExport();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.out = OutputRef.decode(reader, reader.uint32());
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.lit = Value.unwrap(Value.decode(reader, reader.uint32()));
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.var = reader.string();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.expr = Expression.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): OutputExport {
-    return {
-      out: isSet(object.out) ? OutputRef.fromJSON(object.out) : undefined,
-      lit: isSet(object?.lit) ? object.lit : undefined,
-      var: isSet(object.var) ? globalThis.String(object.var) : "",
-      expr: isSet(object.expr) ? Expression.fromJSON(object.expr) : undefined,
-    };
-  },
-
-  toJSON(message: OutputExport): unknown {
-    const obj: any = {};
-    if (message.out !== undefined) {
-      obj.out = OutputRef.toJSON(message.out);
-    }
-    if (message.lit !== undefined) {
-      obj.lit = message.lit;
-    }
-    if (message.var !== "") {
-      obj.var = message.var;
-    }
-    if (message.expr !== undefined) {
-      obj.expr = Expression.toJSON(message.expr);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<OutputExport>, I>>(base?: I): OutputExport {
-    return OutputExport.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<OutputExport>, I>>(object: I): OutputExport {
-    const message = createBaseOutputExport();
-    message.out = (object.out !== undefined && object.out !== null) ? OutputRef.fromPartial(object.out) : undefined;
-    message.lit = object.lit ?? undefined;
-    message.var = object.var ?? "";
-    message.expr = (object.expr !== undefined && object.expr !== null)
-      ? Expression.fromPartial(object.expr)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseLocalDef(): LocalDef {
-  return { name: "", value: undefined };
-}
-
-export const LocalDef: MessageFns<LocalDef> = {
-  encode(message: LocalDef, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.name !== "") {
-      writer.uint32(10).string(message.name);
-    }
-    if (message.value !== undefined) {
-      Binding.encode(message.value, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): LocalDef {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseLocalDef();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.name = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = Binding.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): LocalDef {
-    return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      value: isSet(object.value) ? Binding.fromJSON(object.value) : undefined,
-    };
-  },
-
-  toJSON(message: LocalDef): unknown {
-    const obj: any = {};
-    if (message.name !== "") {
-      obj.name = message.name;
-    }
-    if (message.value !== undefined) {
-      obj.value = Binding.toJSON(message.value);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<LocalDef>, I>>(base?: I): LocalDef {
-    return LocalDef.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<LocalDef>, I>>(object: I): LocalDef {
-    const message = createBaseLocalDef();
-    message.name = object.name ?? "";
-    message.value = (object.value !== undefined && object.value !== null)
-      ? Binding.fromPartial(object.value)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseTerraformBlock(): TerraformBlock {
-  return { required_version: "", required_providers: {}, backend: undefined };
-}
-
-export const TerraformBlock: MessageFns<TerraformBlock> = {
-  encode(message: TerraformBlock, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.required_version !== "") {
-      writer.uint32(10).string(message.required_version);
-    }
-    globalThis.Object.entries(message.required_providers).forEach(([key, value]: [string, ProviderRequirement]) => {
-      TerraformBlock_RequiredProvidersEntry.encode({ key: key as any, value }, writer.uint32(18).fork()).join();
-    });
-    if (message.backend !== undefined) {
-      BackendConfig.encode(message.backend, writer.uint32(26).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): TerraformBlock {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseTerraformBlock();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.required_version = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          const entry2 = TerraformBlock_RequiredProvidersEntry.decode(reader, reader.uint32());
-          if (entry2.value !== undefined) {
-            message.required_providers[entry2.key] = entry2.value;
-          }
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.backend = BackendConfig.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): TerraformBlock {
-    return {
-      required_version: isSet(object.requiredVersion)
-        ? globalThis.String(object.requiredVersion)
-        : isSet(object.required_version)
-        ? globalThis.String(object.required_version)
-        : "",
-      required_providers: isObject(object.requiredProviders)
-        ? (globalThis.Object.entries(object.requiredProviders) as [string, any][]).reduce(
-          (acc: { [key: string]: ProviderRequirement }, [key, value]: [string, any]) => {
-            acc[key] = ProviderRequirement.fromJSON(value);
-            return acc;
-          },
-          {},
-        )
-        : isObject(object.required_providers)
-        ? (globalThis.Object.entries(object.required_providers) as [string, any][]).reduce(
-          (acc: { [key: string]: ProviderRequirement }, [key, value]: [string, any]) => {
-            acc[key] = ProviderRequirement.fromJSON(value);
-            return acc;
-          },
-          {},
-        )
-        : {},
-      backend: isSet(object.backend) ? BackendConfig.fromJSON(object.backend) : undefined,
-    };
-  },
-
-  toJSON(message: TerraformBlock): unknown {
-    const obj: any = {};
-    if (message.required_version !== "") {
-      obj.requiredVersion = message.required_version;
-    }
-    if (message.required_providers) {
-      const entries = globalThis.Object.entries(message.required_providers) as [string, ProviderRequirement][];
-      if (entries.length > 0) {
-        obj.requiredProviders = {};
-        entries.forEach(([k, v]) => {
-          obj.requiredProviders[k] = ProviderRequirement.toJSON(v);
-        });
-      }
-    }
-    if (message.backend !== undefined) {
-      obj.backend = BackendConfig.toJSON(message.backend);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<TerraformBlock>, I>>(base?: I): TerraformBlock {
-    return TerraformBlock.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<TerraformBlock>, I>>(object: I): TerraformBlock {
-    const message = createBaseTerraformBlock();
-    message.required_version = object.required_version ?? "";
-    message.required_providers =
-      (globalThis.Object.entries(object.required_providers ?? {}) as [string, ProviderRequirement][]).reduce(
-        (acc: { [key: string]: ProviderRequirement }, [key, value]: [string, ProviderRequirement]) => {
-          if (value !== undefined) {
-            acc[key] = ProviderRequirement.fromPartial(value);
-          }
-          return acc;
-        },
-        {},
-      );
-    message.backend = (object.backend !== undefined && object.backend !== null)
-      ? BackendConfig.fromPartial(object.backend)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseTerraformBlock_RequiredProvidersEntry(): TerraformBlock_RequiredProvidersEntry {
-  return { key: "", value: undefined };
-}
-
-export const TerraformBlock_RequiredProvidersEntry: MessageFns<TerraformBlock_RequiredProvidersEntry> = {
-  encode(message: TerraformBlock_RequiredProvidersEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
-    }
-    if (message.value !== undefined) {
-      ProviderRequirement.encode(message.value, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): TerraformBlock_RequiredProvidersEntry {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseTerraformBlock_RequiredProvidersEntry();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.key = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = ProviderRequirement.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): TerraformBlock_RequiredProvidersEntry {
-    return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object.value) ? ProviderRequirement.fromJSON(object.value) : undefined,
-    };
-  },
-
-  toJSON(message: TerraformBlock_RequiredProvidersEntry): unknown {
-    const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
-    }
-    if (message.value !== undefined) {
-      obj.value = ProviderRequirement.toJSON(message.value);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<TerraformBlock_RequiredProvidersEntry>, I>>(
-    base?: I,
-  ): TerraformBlock_RequiredProvidersEntry {
-    return TerraformBlock_RequiredProvidersEntry.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<TerraformBlock_RequiredProvidersEntry>, I>>(
-    object: I,
-  ): TerraformBlock_RequiredProvidersEntry {
-    const message = createBaseTerraformBlock_RequiredProvidersEntry();
-    message.key = object.key ?? "";
-    message.value = (object.value !== undefined && object.value !== null)
-      ? ProviderRequirement.fromPartial(object.value)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseProviderRequirement(): ProviderRequirement {
-  return { source: "", version: "" };
-}
-
-export const ProviderRequirement: MessageFns<ProviderRequirement> = {
-  encode(message: ProviderRequirement, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.source !== "") {
-      writer.uint32(10).string(message.source);
-    }
-    if (message.version !== "") {
-      writer.uint32(18).string(message.version);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProviderRequirement {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseProviderRequirement();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.source = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.version = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ProviderRequirement {
-    return {
-      source: isSet(object.source) ? globalThis.String(object.source) : "",
-      version: isSet(object.version) ? globalThis.String(object.version) : "",
-    };
-  },
-
-  toJSON(message: ProviderRequirement): unknown {
-    const obj: any = {};
-    if (message.source !== "") {
-      obj.source = message.source;
-    }
-    if (message.version !== "") {
-      obj.version = message.version;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ProviderRequirement>, I>>(base?: I): ProviderRequirement {
-    return ProviderRequirement.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ProviderRequirement>, I>>(object: I): ProviderRequirement {
-    const message = createBaseProviderRequirement();
-    message.source = object.source ?? "";
-    message.version = object.version ?? "";
-    return message;
-  },
-};
-
-function createBaseBackendConfig(): BackendConfig {
-  return { type: "", config: {} };
-}
-
-export const BackendConfig: MessageFns<BackendConfig> = {
-  encode(message: BackendConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.type !== "") {
-      writer.uint32(10).string(message.type);
-    }
-    globalThis.Object.entries(message.config).forEach(([key, value]: [string, any | undefined]) => {
-      if (value !== undefined) {
-        BackendConfig_ConfigEntry.encode({ key: key as any, value }, writer.uint32(18).fork()).join();
-      }
-    });
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): BackendConfig {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseBackendConfig();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.type = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          const entry2 = BackendConfig_ConfigEntry.decode(reader, reader.uint32());
-          if (entry2.value !== undefined) {
-            message.config[entry2.key] = entry2.value;
-          }
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): BackendConfig {
-    return {
-      type: isSet(object.type) ? globalThis.String(object.type) : "",
-      config: isObject(object.config)
-        ? (globalThis.Object.entries(object.config) as [string, any][]).reduce(
-          (acc: { [key: string]: any | undefined }, [key, value]: [string, any]) => {
-            acc[key] = value as any | undefined;
-            return acc;
-          },
-          {},
-        )
-        : {},
-    };
-  },
-
-  toJSON(message: BackendConfig): unknown {
-    const obj: any = {};
-    if (message.type !== "") {
-      obj.type = message.type;
-    }
-    if (message.config) {
-      const entries = globalThis.Object.entries(message.config) as [string, any | undefined][];
-      if (entries.length > 0) {
-        obj.config = {};
-        entries.forEach(([k, v]) => {
-          obj.config[k] = v;
-        });
-      }
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<BackendConfig>, I>>(base?: I): BackendConfig {
-    return BackendConfig.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<BackendConfig>, I>>(object: I): BackendConfig {
-    const message = createBaseBackendConfig();
-    message.type = object.type ?? "";
-    message.config = (globalThis.Object.entries(object.config ?? {}) as [string, any | undefined][]).reduce(
-      (acc: { [key: string]: any | undefined }, [key, value]: [string, any | undefined]) => {
-        if (value !== undefined) {
-          acc[key] = value;
-        }
-        return acc;
-      },
-      {},
-    );
-    return message;
-  },
-};
-
-function createBaseBackendConfig_ConfigEntry(): BackendConfig_ConfigEntry {
-  return { key: "", value: undefined };
-}
-
-export const BackendConfig_ConfigEntry: MessageFns<BackendConfig_ConfigEntry> = {
-  encode(message: BackendConfig_ConfigEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
-    }
-    if (message.value !== undefined) {
-      Value.encode(Value.wrap(message.value), writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): BackendConfig_ConfigEntry {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseBackendConfig_ConfigEntry();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.key = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = Value.unwrap(Value.decode(reader, reader.uint32()));
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): BackendConfig_ConfigEntry {
-    return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object?.value) ? object.value : undefined,
-    };
-  },
-
-  toJSON(message: BackendConfig_ConfigEntry): unknown {
-    const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
-    }
-    if (message.value !== undefined) {
-      obj.value = message.value;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<BackendConfig_ConfigEntry>, I>>(base?: I): BackendConfig_ConfigEntry {
-    return BackendConfig_ConfigEntry.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<BackendConfig_ConfigEntry>, I>>(object: I): BackendConfig_ConfigEntry {
-    const message = createBaseBackendConfig_ConfigEntry();
-    message.key = object.key ?? "";
-    message.value = object.value ?? undefined;
-    return message;
-  },
-};
-
-function createBaseProviderConfig(): ProviderConfig {
-  return { name: "", alias: "", config: {} };
-}
-
-export const ProviderConfig: MessageFns<ProviderConfig> = {
-  encode(message: ProviderConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.name !== "") {
-      writer.uint32(10).string(message.name);
-    }
-    if (message.alias !== "") {
-      writer.uint32(18).string(message.alias);
-    }
-    globalThis.Object.entries(message.config).forEach(([key, value]: [string, any | undefined]) => {
-      if (value !== undefined) {
-        ProviderConfig_ConfigEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
-      }
-    });
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProviderConfig {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseProviderConfig();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.name = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.alias = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          const entry3 = ProviderConfig_ConfigEntry.decode(reader, reader.uint32());
-          if (entry3.value !== undefined) {
-            message.config[entry3.key] = entry3.value;
-          }
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ProviderConfig {
-    return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      alias: isSet(object.alias) ? globalThis.String(object.alias) : "",
-      config: isObject(object.config)
-        ? (globalThis.Object.entries(object.config) as [string, any][]).reduce(
-          (acc: { [key: string]: any | undefined }, [key, value]: [string, any]) => {
-            acc[key] = value as any | undefined;
-            return acc;
-          },
-          {},
-        )
-        : {},
-    };
-  },
-
-  toJSON(message: ProviderConfig): unknown {
-    const obj: any = {};
-    if (message.name !== "") {
-      obj.name = message.name;
-    }
-    if (message.alias !== "") {
-      obj.alias = message.alias;
-    }
-    if (message.config) {
-      const entries = globalThis.Object.entries(message.config) as [string, any | undefined][];
-      if (entries.length > 0) {
-        obj.config = {};
-        entries.forEach(([k, v]) => {
-          obj.config[k] = v;
-        });
-      }
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ProviderConfig>, I>>(base?: I): ProviderConfig {
-    return ProviderConfig.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ProviderConfig>, I>>(object: I): ProviderConfig {
-    const message = createBaseProviderConfig();
-    message.name = object.name ?? "";
-    message.alias = object.alias ?? "";
-    message.config = (globalThis.Object.entries(object.config ?? {}) as [string, any | undefined][]).reduce(
-      (acc: { [key: string]: any | undefined }, [key, value]: [string, any | undefined]) => {
-        if (value !== undefined) {
-          acc[key] = value;
-        }
-        return acc;
-      },
-      {},
-    );
-    return message;
-  },
-};
-
-function createBaseProviderConfig_ConfigEntry(): ProviderConfig_ConfigEntry {
-  return { key: "", value: undefined };
-}
-
-export const ProviderConfig_ConfigEntry: MessageFns<ProviderConfig_ConfigEntry> = {
-  encode(message: ProviderConfig_ConfigEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
-    }
-    if (message.value !== undefined) {
-      Value.encode(Value.wrap(message.value), writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProviderConfig_ConfigEntry {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseProviderConfig_ConfigEntry();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.key = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = Value.unwrap(Value.decode(reader, reader.uint32()));
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ProviderConfig_ConfigEntry {
-    return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object?.value) ? object.value : undefined,
-    };
-  },
-
-  toJSON(message: ProviderConfig_ConfigEntry): unknown {
-    const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
-    }
-    if (message.value !== undefined) {
-      obj.value = message.value;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ProviderConfig_ConfigEntry>, I>>(base?: I): ProviderConfig_ConfigEntry {
-    return ProviderConfig_ConfigEntry.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ProviderConfig_ConfigEntry>, I>>(object: I): ProviderConfig_ConfigEntry {
-    const message = createBaseProviderConfig_ConfigEntry();
-    message.key = object.key ?? "";
-    message.value = object.value ?? undefined;
-    return message;
-  },
-};
-
 export type LaceEngineService = typeof LaceEngineService;
 export const LaceEngineService = {
   /** Lifecycle */
@@ -9657,8 +8140,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/Shutdown",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ShutdownRequest): Buffer => Buffer.from(ShutdownRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ShutdownRequest => ShutdownRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: ShutdownResponse): Buffer => Buffer.from(ShutdownResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ShutdownResponse => ShutdownResponse.decode(value),
   },
@@ -9667,8 +8150,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/AuthStatus",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: AuthStatusRequest): Buffer => Buffer.from(AuthStatusRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): AuthStatusRequest => AuthStatusRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: AuthStatusResponse): Buffer => Buffer.from(AuthStatusResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): AuthStatusResponse => AuthStatusResponse.decode(value),
   },
@@ -9685,8 +8168,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/AuthLogout",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: AuthLogoutRequest): Buffer => Buffer.from(AuthLogoutRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): AuthLogoutRequest => AuthLogoutRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: AuthLogoutResponse): Buffer => Buffer.from(AuthLogoutResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): AuthLogoutResponse => AuthLogoutResponse.decode(value),
   },
@@ -9735,8 +8218,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/SessionSave",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: SessionSaveRequest): Buffer => Buffer.from(SessionSaveRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): SessionSaveRequest => SessionSaveRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: SessionSaveResponse): Buffer => Buffer.from(SessionSaveResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): SessionSaveResponse => SessionSaveResponse.decode(value),
   },
@@ -9744,8 +8227,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/SessionClose",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: SessionCloseRequest): Buffer => Buffer.from(SessionCloseRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): SessionCloseRequest => SessionCloseRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: SessionCloseResponse): Buffer =>
       Buffer.from(SessionCloseResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): SessionCloseResponse => SessionCloseResponse.decode(value),
@@ -9757,184 +8240,174 @@ export const LaceEngineService = {
     requestSerialize: (value: SessionGenerateRequest): Buffer =>
       Buffer.from(SessionGenerateRequest.encode(value).finish()),
     requestDeserialize: (value: Buffer): SessionGenerateRequest => SessionGenerateRequest.decode(value),
-    responseSerialize: (value: GenerateResponse): Buffer => Buffer.from(GenerateResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GenerateResponse => GenerateResponse.decode(value),
+    responseSerialize: (value: SessionGenerateResponse): Buffer =>
+      Buffer.from(SessionGenerateResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SessionGenerateResponse => SessionGenerateResponse.decode(value),
   },
   /** Actions (mutate workspace, return new canvas view) */
-  actionDropBundle: {
-    path: "/lace.engine.LaceEngine/ActionDropBundle",
+  dropBundle: {
+    path: "/lace.engine.LaceEngine/DropBundle",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionDropBundleRequest): Buffer =>
-      Buffer.from(ActionDropBundleRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionDropBundleRequest => ActionDropBundleRequest.decode(value),
+    requestSerialize: (value: DropBundleRequest): Buffer => Buffer.from(DropBundleRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DropBundleRequest => DropBundleRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionConnect: {
-    path: "/lace.engine.LaceEngine/ActionConnect",
+  connect: {
+    path: "/lace.engine.LaceEngine/Connect",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionConnectRequest): Buffer => Buffer.from(ActionConnectRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionConnectRequest => ActionConnectRequest.decode(value),
+    requestSerialize: (value: ConnectRequest): Buffer => Buffer.from(ConnectRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ConnectRequest => ConnectRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionDisconnect: {
-    path: "/lace.engine.LaceEngine/ActionDisconnect",
+  autoConnect: {
+    path: "/lace.engine.LaceEngine/AutoConnect",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionDisconnectRequest): Buffer =>
-      Buffer.from(ActionDisconnectRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionDisconnectRequest => ActionDisconnectRequest.decode(value),
+    requestSerialize: (value: AutoConnectRequest): Buffer => Buffer.from(AutoConnectRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AutoConnectRequest => AutoConnectRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionUpdateInput: {
-    path: "/lace.engine.LaceEngine/ActionUpdateInput",
+  disconnect: {
+    path: "/lace.engine.LaceEngine/Disconnect",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionUpdateInputRequest): Buffer =>
-      Buffer.from(ActionUpdateInputRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionUpdateInputRequest => ActionUpdateInputRequest.decode(value),
+    requestSerialize: (value: DisconnectRequest): Buffer => Buffer.from(DisconnectRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DisconnectRequest => DisconnectRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionUpdateAllInputs: {
-    path: "/lace.engine.LaceEngine/ActionUpdateAllInputs",
+  updateInput: {
+    path: "/lace.engine.LaceEngine/UpdateInput",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionUpdateAllInputsRequest): Buffer =>
-      Buffer.from(ActionUpdateAllInputsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionUpdateAllInputsRequest => ActionUpdateAllInputsRequest.decode(value),
+    requestSerialize: (value: UpdateInputRequest): Buffer => Buffer.from(UpdateInputRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateInputRequest => UpdateInputRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionRenameInstance: {
-    path: "/lace.engine.LaceEngine/ActionRenameInstance",
+  updateAllInputs: {
+    path: "/lace.engine.LaceEngine/UpdateAllInputs",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionRenameInstanceRequest): Buffer =>
-      Buffer.from(ActionRenameInstanceRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionRenameInstanceRequest => ActionRenameInstanceRequest.decode(value),
+    requestSerialize: (value: UpdateAllInputsRequest): Buffer =>
+      Buffer.from(UpdateAllInputsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateAllInputsRequest => UpdateAllInputsRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionDeleteInstance: {
-    path: "/lace.engine.LaceEngine/ActionDeleteInstance",
+  renameInstance: {
+    path: "/lace.engine.LaceEngine/RenameInstance",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionDeleteInstanceRequest): Buffer =>
-      Buffer.from(ActionDeleteInstanceRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionDeleteInstanceRequest => ActionDeleteInstanceRequest.decode(value),
+    requestSerialize: (value: RenameInstanceRequest): Buffer =>
+      Buffer.from(RenameInstanceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RenameInstanceRequest => RenameInstanceRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionSyncLayout: {
-    path: "/lace.engine.LaceEngine/ActionSyncLayout",
+  deleteInstance: {
+    path: "/lace.engine.LaceEngine/DeleteInstance",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionSyncLayoutRequest): Buffer =>
-      Buffer.from(ActionSyncLayoutRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSyncLayoutRequest => ActionSyncLayoutRequest.decode(value),
+    requestSerialize: (value: DeleteInstanceRequest): Buffer =>
+      Buffer.from(DeleteInstanceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteInstanceRequest => DeleteInstanceRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionSetVariables: {
-    path: "/lace.engine.LaceEngine/ActionSetVariables",
+  syncLayout: {
+    path: "/lace.engine.LaceEngine/SyncLayout",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionSetVariablesRequest): Buffer =>
-      Buffer.from(ActionSetVariablesRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSetVariablesRequest => ActionSetVariablesRequest.decode(value),
+    requestSerialize: (value: SyncLayoutRequest): Buffer => Buffer.from(SyncLayoutRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SyncLayoutRequest => SyncLayoutRequest.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+  setVariables: {
+    path: "/lace.engine.LaceEngine/SetVariables",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: SetVariablesRequest): Buffer => Buffer.from(SetVariablesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetVariablesRequest => SetVariablesRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionSetExports: {
-    path: "/lace.engine.LaceEngine/ActionSetExports",
+  setExports: {
+    path: "/lace.engine.LaceEngine/SetExports",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionSetExportsRequest): Buffer =>
-      Buffer.from(ActionSetExportsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSetExportsRequest => ActionSetExportsRequest.decode(value),
+    requestSerialize: (value: SetExportsRequest): Buffer => Buffer.from(SetExportsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetExportsRequest => SetExportsRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionSetTerraform: {
-    path: "/lace.engine.LaceEngine/ActionSetTerraform",
+  setTerraform: {
+    path: "/lace.engine.LaceEngine/SetTerraform",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionSetTerraformRequest): Buffer =>
-      Buffer.from(ActionSetTerraformRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSetTerraformRequest => ActionSetTerraformRequest.decode(value),
+    requestSerialize: (value: SetTerraformRequest): Buffer => Buffer.from(SetTerraformRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetTerraformRequest => SetTerraformRequest.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+  setProviders: {
+    path: "/lace.engine.LaceEngine/SetProviders",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: SetProvidersRequest): Buffer => Buffer.from(SetProvidersRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetProvidersRequest => SetProvidersRequest.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+  setLocals: {
+    path: "/lace.engine.LaceEngine/SetLocals",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: SetLocalsRequest): Buffer => Buffer.from(SetLocalsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetLocalsRequest => SetLocalsRequest.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionSetProviders: {
-    path: "/lace.engine.LaceEngine/ActionSetProviders",
+  setDependsOn: {
+    path: "/lace.engine.LaceEngine/SetDependsOn",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionSetProvidersRequest): Buffer =>
-      Buffer.from(ActionSetProvidersRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSetProvidersRequest => ActionSetProvidersRequest.decode(value),
+    requestSerialize: (value: SetDependsOnRequest): Buffer => Buffer.from(SetDependsOnRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetDependsOnRequest => SetDependsOnRequest.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+  setEnvironments: {
+    path: "/lace.engine.LaceEngine/SetEnvironments",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: SetEnvironmentsRequest): Buffer =>
+      Buffer.from(SetEnvironmentsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetEnvironmentsRequest => SetEnvironmentsRequest.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+  undo: {
+    path: "/lace.engine.LaceEngine/Undo",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
-  actionSetLocals: {
-    path: "/lace.engine.LaceEngine/ActionSetLocals",
+  redo: {
+    path: "/lace.engine.LaceEngine/Redo",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: ActionSetLocalsRequest): Buffer =>
-      Buffer.from(ActionSetLocalsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSetLocalsRequest => ActionSetLocalsRequest.decode(value),
-    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
-    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
-  },
-  actionSetDependsOn: {
-    path: "/lace.engine.LaceEngine/ActionSetDependsOn",
-    requestStream: false,
-    responseStream: false,
-    requestSerialize: (value: ActionSetDependsOnRequest): Buffer =>
-      Buffer.from(ActionSetDependsOnRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSetDependsOnRequest => ActionSetDependsOnRequest.decode(value),
-    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
-    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
-  },
-  actionSetEnvironments: {
-    path: "/lace.engine.LaceEngine/ActionSetEnvironments",
-    requestStream: false,
-    responseStream: false,
-    requestSerialize: (value: ActionSetEnvironmentsRequest): Buffer =>
-      Buffer.from(ActionSetEnvironmentsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionSetEnvironmentsRequest => ActionSetEnvironmentsRequest.decode(value),
-    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
-    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
-  },
-  actionAutoConnect: {
-    path: "/lace.engine.LaceEngine/ActionAutoConnect",
-    requestStream: false,
-    responseStream: false,
-    requestSerialize: (value: ActionAutoConnectRequest): Buffer =>
-      Buffer.from(ActionAutoConnectRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionAutoConnectRequest => ActionAutoConnectRequest.decode(value),
-    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
-    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
-  },
-  actionUndo: {
-    path: "/lace.engine.LaceEngine/ActionUndo",
-    requestStream: false,
-    responseStream: false,
-    requestSerialize: (value: ActionUndoRequest): Buffer => Buffer.from(ActionUndoRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionUndoRequest => ActionUndoRequest.decode(value),
-    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
-    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
-  },
-  actionRedo: {
-    path: "/lace.engine.LaceEngine/ActionRedo",
-    requestStream: false,
-    responseStream: false,
-    requestSerialize: (value: ActionRedoRequest): Buffer => Buffer.from(ActionRedoRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ActionRedoRequest => ActionRedoRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
@@ -9943,9 +8416,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/QueryNodeConfig",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: QueryNodeConfigRequest): Buffer =>
-      Buffer.from(QueryNodeConfigRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): QueryNodeConfigRequest => QueryNodeConfigRequest.decode(value),
+    requestSerialize: (value: NodeConfigRequest): Buffer => Buffer.from(NodeConfigRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): NodeConfigRequest => NodeConfigRequest.decode(value),
     responseSerialize: (value: NodeConfig): Buffer => Buffer.from(NodeConfig.encode(value).finish()),
     responseDeserialize: (value: Buffer): NodeConfig => NodeConfig.decode(value),
   },
@@ -9953,9 +8425,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/QueryEdgeConfig",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: QueryEdgeConfigRequest): Buffer =>
-      Buffer.from(QueryEdgeConfigRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): QueryEdgeConfigRequest => QueryEdgeConfigRequest.decode(value),
+    requestSerialize: (value: EdgeConfigRequest): Buffer => Buffer.from(EdgeConfigRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): EdgeConfigRequest => EdgeConfigRequest.decode(value),
     responseSerialize: (value: EdgeConfig): Buffer => Buffer.from(EdgeConfig.encode(value).finish()),
     responseDeserialize: (value: Buffer): EdgeConfig => EdgeConfig.decode(value),
   },
@@ -9963,8 +8434,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/QuerySettings",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: QuerySettingsRequest): Buffer => Buffer.from(QuerySettingsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): QuerySettingsRequest => QuerySettingsRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: SettingsConfig): Buffer => Buffer.from(SettingsConfig.encode(value).finish()),
     responseDeserialize: (value: Buffer): SettingsConfig => SettingsConfig.decode(value),
   },
@@ -9972,9 +8443,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/QueryGraphSummary",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: QueryGraphSummaryRequest): Buffer =>
-      Buffer.from(QueryGraphSummaryRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): QueryGraphSummaryRequest => QueryGraphSummaryRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: GraphSummaryResponse): Buffer =>
       Buffer.from(GraphSummaryResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GraphSummaryResponse => GraphSummaryResponse.decode(value),
@@ -9983,8 +8453,8 @@ export const LaceEngineService = {
     path: "/lace.engine.LaceEngine/QueryValidate",
     requestStream: false,
     responseStream: false,
-    requestSerialize: (value: QueryValidateRequest): Buffer => Buffer.from(QueryValidateRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): QueryValidateRequest => QueryValidateRequest.decode(value),
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
     responseSerialize: (value: ValidateResponse): Buffer => Buffer.from(ValidateResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ValidateResponse => ValidateResponse.decode(value),
   },
@@ -9993,45 +8463,45 @@ export const LaceEngineService = {
 export interface LaceEngineServer extends UntypedServiceImplementation {
   /** Lifecycle */
   initialize: handleUnaryCall<InitializeRequest, InitializeResponse>;
-  shutdown: handleUnaryCall<ShutdownRequest, ShutdownResponse>;
+  shutdown: handleUnaryCall<Empty, ShutdownResponse>;
   /** Auth */
-  authStatus: handleUnaryCall<AuthStatusRequest, AuthStatusResponse>;
+  authStatus: handleUnaryCall<Empty, AuthStatusResponse>;
   authLogin: handleUnaryCall<AuthLoginRequest, AuthLoginResponse>;
-  authLogout: handleUnaryCall<AuthLogoutRequest, AuthLogoutResponse>;
+  authLogout: handleUnaryCall<Empty, AuthLogoutResponse>;
   /** Registry */
   registryList: handleUnaryCall<RegistryListRequest, RegistryListResponse>;
   registryGet: handleUnaryCall<RegistryGetRequest, RegistryGetResponse>;
   registryVersion: handleUnaryCall<RegistryVersionRequest, RegistryVersionResponse>;
   /** Session */
   sessionOpen: handleUnaryCall<SessionOpenRequest, CanvasView>;
-  sessionSave: handleUnaryCall<SessionSaveRequest, SessionSaveResponse>;
-  sessionClose: handleUnaryCall<SessionCloseRequest, SessionCloseResponse>;
-  sessionGenerate: handleUnaryCall<SessionGenerateRequest, GenerateResponse>;
+  sessionSave: handleUnaryCall<Empty, SessionSaveResponse>;
+  sessionClose: handleUnaryCall<Empty, SessionCloseResponse>;
+  sessionGenerate: handleUnaryCall<SessionGenerateRequest, SessionGenerateResponse>;
   /** Actions (mutate workspace, return new canvas view) */
-  actionDropBundle: handleUnaryCall<ActionDropBundleRequest, CanvasView>;
-  actionConnect: handleUnaryCall<ActionConnectRequest, CanvasView>;
-  actionDisconnect: handleUnaryCall<ActionDisconnectRequest, CanvasView>;
-  actionUpdateInput: handleUnaryCall<ActionUpdateInputRequest, CanvasView>;
-  actionUpdateAllInputs: handleUnaryCall<ActionUpdateAllInputsRequest, CanvasView>;
-  actionRenameInstance: handleUnaryCall<ActionRenameInstanceRequest, CanvasView>;
-  actionDeleteInstance: handleUnaryCall<ActionDeleteInstanceRequest, CanvasView>;
-  actionSyncLayout: handleUnaryCall<ActionSyncLayoutRequest, CanvasView>;
-  actionSetVariables: handleUnaryCall<ActionSetVariablesRequest, CanvasView>;
-  actionSetExports: handleUnaryCall<ActionSetExportsRequest, CanvasView>;
-  actionSetTerraform: handleUnaryCall<ActionSetTerraformRequest, CanvasView>;
-  actionSetProviders: handleUnaryCall<ActionSetProvidersRequest, CanvasView>;
-  actionSetLocals: handleUnaryCall<ActionSetLocalsRequest, CanvasView>;
-  actionSetDependsOn: handleUnaryCall<ActionSetDependsOnRequest, CanvasView>;
-  actionSetEnvironments: handleUnaryCall<ActionSetEnvironmentsRequest, CanvasView>;
-  actionAutoConnect: handleUnaryCall<ActionAutoConnectRequest, CanvasView>;
-  actionUndo: handleUnaryCall<ActionUndoRequest, CanvasView>;
-  actionRedo: handleUnaryCall<ActionRedoRequest, CanvasView>;
+  dropBundle: handleUnaryCall<DropBundleRequest, CanvasView>;
+  connect: handleUnaryCall<ConnectRequest, CanvasView>;
+  autoConnect: handleUnaryCall<AutoConnectRequest, CanvasView>;
+  disconnect: handleUnaryCall<DisconnectRequest, CanvasView>;
+  updateInput: handleUnaryCall<UpdateInputRequest, CanvasView>;
+  updateAllInputs: handleUnaryCall<UpdateAllInputsRequest, CanvasView>;
+  renameInstance: handleUnaryCall<RenameInstanceRequest, CanvasView>;
+  deleteInstance: handleUnaryCall<DeleteInstanceRequest, CanvasView>;
+  syncLayout: handleUnaryCall<SyncLayoutRequest, Empty>;
+  setVariables: handleUnaryCall<SetVariablesRequest, CanvasView>;
+  setExports: handleUnaryCall<SetExportsRequest, CanvasView>;
+  setTerraform: handleUnaryCall<SetTerraformRequest, Empty>;
+  setProviders: handleUnaryCall<SetProvidersRequest, Empty>;
+  setLocals: handleUnaryCall<SetLocalsRequest, CanvasView>;
+  setDependsOn: handleUnaryCall<SetDependsOnRequest, Empty>;
+  setEnvironments: handleUnaryCall<SetEnvironmentsRequest, Empty>;
+  undo: handleUnaryCall<Empty, CanvasView>;
+  redo: handleUnaryCall<Empty, CanvasView>;
   /** Queries (read-only projections) */
-  queryNodeConfig: handleUnaryCall<QueryNodeConfigRequest, NodeConfig>;
-  queryEdgeConfig: handleUnaryCall<QueryEdgeConfigRequest, EdgeConfig>;
-  querySettings: handleUnaryCall<QuerySettingsRequest, SettingsConfig>;
-  queryGraphSummary: handleUnaryCall<QueryGraphSummaryRequest, GraphSummaryResponse>;
-  queryValidate: handleUnaryCall<QueryValidateRequest, ValidateResponse>;
+  queryNodeConfig: handleUnaryCall<NodeConfigRequest, NodeConfig>;
+  queryEdgeConfig: handleUnaryCall<EdgeConfigRequest, EdgeConfig>;
+  querySettings: handleUnaryCall<Empty, SettingsConfig>;
+  queryGraphSummary: handleUnaryCall<Empty, GraphSummaryResponse>;
+  queryValidate: handleUnaryCall<Empty, ValidateResponse>;
 }
 
 export interface LaceEngineClient extends Client {
@@ -10051,33 +8521,30 @@ export interface LaceEngineClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: InitializeResponse) => void,
   ): ClientUnaryCall;
+  shutdown(request: Empty, callback: (error: ServiceError | null, response: ShutdownResponse) => void): ClientUnaryCall;
   shutdown(
-    request: ShutdownRequest,
-    callback: (error: ServiceError | null, response: ShutdownResponse) => void,
-  ): ClientUnaryCall;
-  shutdown(
-    request: ShutdownRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: ShutdownResponse) => void,
   ): ClientUnaryCall;
   shutdown(
-    request: ShutdownRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ShutdownResponse) => void,
   ): ClientUnaryCall;
   /** Auth */
   authStatus(
-    request: AuthStatusRequest,
+    request: Empty,
     callback: (error: ServiceError | null, response: AuthStatusResponse) => void,
   ): ClientUnaryCall;
   authStatus(
-    request: AuthStatusRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: AuthStatusResponse) => void,
   ): ClientUnaryCall;
   authStatus(
-    request: AuthStatusRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: AuthStatusResponse) => void,
@@ -10098,16 +8565,16 @@ export interface LaceEngineClient extends Client {
     callback: (error: ServiceError | null, response: AuthLoginResponse) => void,
   ): ClientUnaryCall;
   authLogout(
-    request: AuthLogoutRequest,
+    request: Empty,
     callback: (error: ServiceError | null, response: AuthLogoutResponse) => void,
   ): ClientUnaryCall;
   authLogout(
-    request: AuthLogoutRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: AuthLogoutResponse) => void,
   ): ClientUnaryCall;
   authLogout(
-    request: AuthLogoutRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: AuthLogoutResponse) => void,
@@ -10175,393 +8642,387 @@ export interface LaceEngineClient extends Client {
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
   sessionSave(
-    request: SessionSaveRequest,
+    request: Empty,
     callback: (error: ServiceError | null, response: SessionSaveResponse) => void,
   ): ClientUnaryCall;
   sessionSave(
-    request: SessionSaveRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: SessionSaveResponse) => void,
   ): ClientUnaryCall;
   sessionSave(
-    request: SessionSaveRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SessionSaveResponse) => void,
   ): ClientUnaryCall;
   sessionClose(
-    request: SessionCloseRequest,
+    request: Empty,
     callback: (error: ServiceError | null, response: SessionCloseResponse) => void,
   ): ClientUnaryCall;
   sessionClose(
-    request: SessionCloseRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: SessionCloseResponse) => void,
   ): ClientUnaryCall;
   sessionClose(
-    request: SessionCloseRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SessionCloseResponse) => void,
   ): ClientUnaryCall;
   sessionGenerate(
     request: SessionGenerateRequest,
-    callback: (error: ServiceError | null, response: GenerateResponse) => void,
+    callback: (error: ServiceError | null, response: SessionGenerateResponse) => void,
   ): ClientUnaryCall;
   sessionGenerate(
     request: SessionGenerateRequest,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: GenerateResponse) => void,
+    callback: (error: ServiceError | null, response: SessionGenerateResponse) => void,
   ): ClientUnaryCall;
   sessionGenerate(
     request: SessionGenerateRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GenerateResponse) => void,
+    callback: (error: ServiceError | null, response: SessionGenerateResponse) => void,
   ): ClientUnaryCall;
   /** Actions (mutate workspace, return new canvas view) */
-  actionDropBundle(
-    request: ActionDropBundleRequest,
+  dropBundle(
+    request: DropBundleRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDropBundle(
-    request: ActionDropBundleRequest,
+  dropBundle(
+    request: DropBundleRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDropBundle(
-    request: ActionDropBundleRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionConnect(
-    request: ActionConnectRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionConnect(
-    request: ActionConnectRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionConnect(
-    request: ActionConnectRequest,
+  dropBundle(
+    request: DropBundleRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDisconnect(
-    request: ActionDisconnectRequest,
+  connect(
+    request: ConnectRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDisconnect(
-    request: ActionDisconnectRequest,
+  connect(
+    request: ConnectRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDisconnect(
-    request: ActionDisconnectRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionUpdateInput(
-    request: ActionUpdateInputRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionUpdateInput(
-    request: ActionUpdateInputRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionUpdateInput(
-    request: ActionUpdateInputRequest,
+  connect(
+    request: ConnectRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionUpdateAllInputs(
-    request: ActionUpdateAllInputsRequest,
+  autoConnect(
+    request: AutoConnectRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionUpdateAllInputs(
-    request: ActionUpdateAllInputsRequest,
+  autoConnect(
+    request: AutoConnectRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionUpdateAllInputs(
-    request: ActionUpdateAllInputsRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionRenameInstance(
-    request: ActionRenameInstanceRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionRenameInstance(
-    request: ActionRenameInstanceRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionRenameInstance(
-    request: ActionRenameInstanceRequest,
+  autoConnect(
+    request: AutoConnectRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDeleteInstance(
-    request: ActionDeleteInstanceRequest,
+  disconnect(
+    request: DisconnectRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDeleteInstance(
-    request: ActionDeleteInstanceRequest,
+  disconnect(
+    request: DisconnectRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionDeleteInstance(
-    request: ActionDeleteInstanceRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSyncLayout(
-    request: ActionSyncLayoutRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSyncLayout(
-    request: ActionSyncLayoutRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSyncLayout(
-    request: ActionSyncLayoutRequest,
+  disconnect(
+    request: DisconnectRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetVariables(
-    request: ActionSetVariablesRequest,
+  updateInput(
+    request: UpdateInputRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetVariables(
-    request: ActionSetVariablesRequest,
+  updateInput(
+    request: UpdateInputRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetVariables(
-    request: ActionSetVariablesRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetExports(
-    request: ActionSetExportsRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetExports(
-    request: ActionSetExportsRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetExports(
-    request: ActionSetExportsRequest,
+  updateInput(
+    request: UpdateInputRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetTerraform(
-    request: ActionSetTerraformRequest,
+  updateAllInputs(
+    request: UpdateAllInputsRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetTerraform(
-    request: ActionSetTerraformRequest,
+  updateAllInputs(
+    request: UpdateAllInputsRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetTerraform(
-    request: ActionSetTerraformRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetProviders(
-    request: ActionSetProvidersRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetProviders(
-    request: ActionSetProvidersRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetProviders(
-    request: ActionSetProvidersRequest,
+  updateAllInputs(
+    request: UpdateAllInputsRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetLocals(
-    request: ActionSetLocalsRequest,
+  renameInstance(
+    request: RenameInstanceRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetLocals(
-    request: ActionSetLocalsRequest,
+  renameInstance(
+    request: RenameInstanceRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetLocals(
-    request: ActionSetLocalsRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetDependsOn(
-    request: ActionSetDependsOnRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetDependsOn(
-    request: ActionSetDependsOnRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionSetDependsOn(
-    request: ActionSetDependsOnRequest,
+  renameInstance(
+    request: RenameInstanceRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetEnvironments(
-    request: ActionSetEnvironmentsRequest,
+  deleteInstance(
+    request: DeleteInstanceRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetEnvironments(
-    request: ActionSetEnvironmentsRequest,
+  deleteInstance(
+    request: DeleteInstanceRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionSetEnvironments(
-    request: ActionSetEnvironmentsRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionAutoConnect(
-    request: ActionAutoConnectRequest,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionAutoConnect(
-    request: ActionAutoConnectRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CanvasView) => void,
-  ): ClientUnaryCall;
-  actionAutoConnect(
-    request: ActionAutoConnectRequest,
+  deleteInstance(
+    request: DeleteInstanceRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionUndo(
-    request: ActionUndoRequest,
+  syncLayout(
+    request: SyncLayoutRequest,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  syncLayout(
+    request: SyncLayoutRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  syncLayout(
+    request: SyncLayoutRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setVariables(
+    request: SetVariablesRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionUndo(
-    request: ActionUndoRequest,
+  setVariables(
+    request: SetVariablesRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionUndo(
-    request: ActionUndoRequest,
+  setVariables(
+    request: SetVariablesRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionRedo(
-    request: ActionRedoRequest,
+  setExports(
+    request: SetExportsRequest,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionRedo(
-    request: ActionRedoRequest,
+  setExports(
+    request: SetExportsRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
-  actionRedo(
-    request: ActionRedoRequest,
+  setExports(
+    request: SetExportsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  setTerraform(
+    request: SetTerraformRequest,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setTerraform(
+    request: SetTerraformRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setTerraform(
+    request: SetTerraformRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setProviders(
+    request: SetProvidersRequest,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setProviders(
+    request: SetProvidersRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setProviders(
+    request: SetProvidersRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setLocals(
+    request: SetLocalsRequest,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  setLocals(
+    request: SetLocalsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  setLocals(
+    request: SetLocalsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  setDependsOn(
+    request: SetDependsOnRequest,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setDependsOn(
+    request: SetDependsOnRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setDependsOn(
+    request: SetDependsOnRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setEnvironments(
+    request: SetEnvironmentsRequest,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setEnvironments(
+    request: SetEnvironmentsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  setEnvironments(
+    request: SetEnvironmentsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  undo(request: Empty, callback: (error: ServiceError | null, response: CanvasView) => void): ClientUnaryCall;
+  undo(
+    request: Empty,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  undo(
+    request: Empty,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  redo(request: Empty, callback: (error: ServiceError | null, response: CanvasView) => void): ClientUnaryCall;
+  redo(
+    request: Empty,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  redo(
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
   /** Queries (read-only projections) */
   queryNodeConfig(
-    request: QueryNodeConfigRequest,
+    request: NodeConfigRequest,
     callback: (error: ServiceError | null, response: NodeConfig) => void,
   ): ClientUnaryCall;
   queryNodeConfig(
-    request: QueryNodeConfigRequest,
+    request: NodeConfigRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: NodeConfig) => void,
   ): ClientUnaryCall;
   queryNodeConfig(
-    request: QueryNodeConfigRequest,
+    request: NodeConfigRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: NodeConfig) => void,
   ): ClientUnaryCall;
   queryEdgeConfig(
-    request: QueryEdgeConfigRequest,
+    request: EdgeConfigRequest,
     callback: (error: ServiceError | null, response: EdgeConfig) => void,
   ): ClientUnaryCall;
   queryEdgeConfig(
-    request: QueryEdgeConfigRequest,
+    request: EdgeConfigRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: EdgeConfig) => void,
   ): ClientUnaryCall;
   queryEdgeConfig(
-    request: QueryEdgeConfigRequest,
+    request: EdgeConfigRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: EdgeConfig) => void,
   ): ClientUnaryCall;
   querySettings(
-    request: QuerySettingsRequest,
+    request: Empty,
     callback: (error: ServiceError | null, response: SettingsConfig) => void,
   ): ClientUnaryCall;
   querySettings(
-    request: QuerySettingsRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: SettingsConfig) => void,
   ): ClientUnaryCall;
   querySettings(
-    request: QuerySettingsRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SettingsConfig) => void,
   ): ClientUnaryCall;
   queryGraphSummary(
-    request: QueryGraphSummaryRequest,
+    request: Empty,
     callback: (error: ServiceError | null, response: GraphSummaryResponse) => void,
   ): ClientUnaryCall;
   queryGraphSummary(
-    request: QueryGraphSummaryRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: GraphSummaryResponse) => void,
   ): ClientUnaryCall;
   queryGraphSummary(
-    request: QueryGraphSummaryRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GraphSummaryResponse) => void,
   ): ClientUnaryCall;
   queryValidate(
-    request: QueryValidateRequest,
+    request: Empty,
     callback: (error: ServiceError | null, response: ValidateResponse) => void,
   ): ClientUnaryCall;
   queryValidate(
-    request: QueryValidateRequest,
+    request: Empty,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: ValidateResponse) => void,
   ): ClientUnaryCall;
   queryValidate(
-    request: QueryValidateRequest,
+    request: Empty,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ValidateResponse) => void,

@@ -14,11 +14,11 @@ function makeMockClient(overrides: Record<string, unknown> = {}) {
     getRegistryVersion: vi
       .fn()
       .mockResolvedValue({ deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} } }),
-    actionDropBundle: vi
+    dropBundle: vi
       .fn()
       .mockResolvedValue(makeCanvasView([makeNode('vpc', 'module', 'aws/vpc@v1.0.0')])),
-    actionUpdateInput: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
-    actionAutoConnect: vi
+    updateInput: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
+    autoConnect: vi
       .fn()
       .mockResolvedValue(
         makeCanvasView(
@@ -100,7 +100,7 @@ describe('write tools', () => {
         system: 'aws',
         version: 'v1.0.0',
       });
-      expect(mockClient.actionDropBundle).toHaveBeenCalledWith({
+      expect(mockClient.dropBundle).toHaveBeenCalledWith({
         deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} },
       });
     });
@@ -150,7 +150,7 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('literal true');
-      expect(mockClient.actionUpdateInput).toHaveBeenCalledWith({
+      expect(mockClient.updateInput).toHaveBeenCalledWith({
         instance_id: 'vpc',
         input_name: 'enable_dns',
         mode: 'literal',
@@ -170,7 +170,7 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('variable "vpc_cidr"');
-      expect(mockClient.actionUpdateInput).toHaveBeenCalledWith({
+      expect(mockClient.updateInput).toHaveBeenCalledWith({
         instance_id: 'vpc',
         input_name: 'cidr_block',
         mode: 'variable',
@@ -231,14 +231,14 @@ describe('generate tools', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Auto-connected 1 wire(s)');
       expect(result.content).toContain('vpc.vpc_id');
-      expect(mockClient.actionAutoConnect).toHaveBeenCalledWith({
+      expect(mockClient.autoConnect).toHaveBeenCalledWith({
         source: 'vpc',
         target: 'subnet',
       });
     });
 
     test('reports no match when no edges returned', async () => {
-      mockClient.actionAutoConnect.mockResolvedValue(
+      mockClient.autoConnect.mockResolvedValue(
         makeCanvasView([makeNode('vpc'), makeNode('subnet')]),
       );
       const handler = getToolHandler('lace_auto_connect')!;

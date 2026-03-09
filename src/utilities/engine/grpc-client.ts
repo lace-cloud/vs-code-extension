@@ -16,7 +16,7 @@ import type {
   RenderError as ProtoRenderError,
   ValidateResponse,
   GraphSummaryResponse,
-  GenerateResponse,
+  SessionGenerateResponse,
   InitializeResponse,
   ShutdownResponse,
   AuthStatusResponse,
@@ -28,10 +28,14 @@ import type {
   SessionSaveResponse,
   SessionCloseResponse,
   Diagnostic as ProtoDiagnostic,
-  Binding,
-  OutputExport,
-  LocalDef,
+  InputEntry,
+  OutputExportEntry,
+  LocalEntry,
+  ProviderReqView,
+  BackendView,
+  ProviderView,
 } from '../../generated/proto/service';
+import type { Empty } from '../../generated/proto/google/protobuf/empty';
 import type {
   CanvasView,
   NodeConfig,
@@ -276,11 +280,17 @@ function convertDiagnostic(d: ProtoDiagnostic): Diagnostic {
   };
 }
 
-function convertUser(
-  user: { id: string; email: string; name: string } | undefined,
-): { id: string; email: string; name: string } | undefined {
-  if (!user) return undefined;
-  return { id: user.id, email: user.email, name: user.name };
+function modeToInputMode(mode: string): InputMode {
+  switch (mode) {
+    case 'literal':
+      return InputMode.INPUT_MODE_LITERAL;
+    case 'variable':
+      return InputMode.INPUT_MODE_VARIABLE;
+    case 'expression':
+      return InputMode.INPUT_MODE_EXPRESSION;
+    default:
+      return InputMode.INPUT_MODE_EMPTY;
+  }
 }
 
 // ── LaceClient ──
@@ -339,7 +349,9 @@ export class LaceClient {
     );
     return {
       authenticated: res.authenticated,
-      user: convertUser(res.user),
+      user: res.user_id
+        ? { id: res.user_id, email: res.user_email, name: res.user_name }
+        : undefined,
       base_url: res.base_url || undefined,
     };
   }
@@ -350,7 +362,9 @@ export class LaceClient {
     });
     return {
       success: res.success,
-      user: convertUser(res.user),
+      user: res.user_id
+        ? { id: res.user_id, email: res.user_email, name: res.user_name }
+        : undefined,
       error: res.error || undefined,
     };
   }
@@ -369,6 +383,7 @@ export class LaceClient {
     system?: string;
     search?: string;
     category?: string;
+    kind?: string;
     page?: number;
     limit?: number;
     organization?: string;
@@ -378,6 +393,7 @@ export class LaceClient {
         system: string;
         search: string;
         category: string;
+        kind: string;
         page: number;
         limit: number;
         organization: string;
@@ -387,6 +403,7 @@ export class LaceClient {
       system: params?.system ?? '',
       search: params?.search ?? '',
       category: params?.category ?? '',
+      kind: params?.kind ?? '',
       page: params?.page ?? 0,
       limit: params?.limit ?? 0,
       organization: params?.organization ?? '',
@@ -401,9 +418,8 @@ export class LaceClient {
         icon_url: m.icon_url || undefined,
         categories: m.categories.length > 0 ? m.categories : undefined,
       })),
-      pagination: res.pagination
-        ? { page: res.pagination.page, limit: res.pagination.limit, total: res.pagination.total }
-        : undefined,
+      pagination:
+        res.total > 0 ? { page: res.page, limit: res.limit, total: res.total } : undefined,
     };
   }
 
@@ -510,21 +526,18 @@ export class LaceClient {
     const res = await this.unary<
       {
         output_dir: string;
-        options:
-          | { dry_run: boolean; format: boolean; validate: boolean; overwrite: boolean }
-          | undefined;
+        dry_run: boolean;
+        format: boolean;
+        validate: boolean;
+        overwrite: boolean;
       },
-      GenerateResponse
+      SessionGenerateResponse
     >(this.inner.sessionGenerate, {
       output_dir: params.output_dir,
-      options: params.options
-        ? {
-            dry_run: params.options.dry_run ?? false,
-            format: params.options.format ?? false,
-            validate: params.options.validate ?? false,
-            overwrite: params.options.overwrite ?? false,
-          }
-        : undefined,
+      dry_run: params.options?.dry_run ?? false,
+      format: params.options?.format ?? false,
+      validate: params.options?.validate ?? false,
+      overwrite: params.options?.overwrite ?? false,
     });
     return {
       files_written: res.files_written.length > 0 ? res.files_written : undefined,
@@ -535,47 +548,41 @@ export class LaceClient {
 
   // ── Actions ──
 
-  async actionDropBundle(params: {
+  async dropBundle(params: {
     deploy_bundle: Buffer;
     position?: { x: number; y: number };
   }): Promise<CanvasView> {
     const res = await this.unary<
       { deploy_bundle: Buffer; position: { x: number; y: number } | undefined },
       ProtoCanvasView
-    >(this.inner.actionDropBundle, {
+    >(this.inner.dropBundle, {
       deploy_bundle: params.deploy_bundle,
       position: params.position,
     });
     return convertCanvasView(res);
   }
 
-  async actionConnect(params: {
+  async connect(params: {
     source: string;
     target: string;
     source_output: string;
     target_input: string;
   }): Promise<CanvasView> {
-    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.actionConnect, params);
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.connect, params);
     return convertCanvasView(res);
   }
 
-  async actionAutoConnect(params: { source: string; target: string }): Promise<CanvasView> {
-    const res = await this.unary<typeof params, ProtoCanvasView>(
-      this.inner.actionAutoConnect,
-      params,
-    );
+  async autoConnect(params: { source: string; target: string }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.autoConnect, params);
     return convertCanvasView(res);
   }
 
-  async actionDisconnect(params: { target: string; input_name: string }): Promise<CanvasView> {
-    const res = await this.unary<typeof params, ProtoCanvasView>(
-      this.inner.actionDisconnect,
-      params,
-    );
+  async disconnect(params: { target: string; input_name: string }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.disconnect, params);
     return convertCanvasView(res);
   }
 
-  async actionUpdateInput(params: {
+  async updateInput(params: {
     instance_id: string;
     input_name: string;
     mode: string;
@@ -584,17 +591,27 @@ export class LaceClient {
     expression?: string;
   }): Promise<CanvasView> {
     const res = await this.unary<
-      { instance_id: string; input_name: string; binding: Binding | undefined },
+      {
+        instance_id: string;
+        input_name: string;
+        mode: InputMode;
+        value: unknown;
+        variable: string;
+        expression: string;
+      },
       ProtoCanvasView
-    >(this.inner.actionUpdateInput, {
+    >(this.inner.updateInput, {
       instance_id: params.instance_id,
       input_name: params.input_name,
-      binding: modeToBinding(params.mode, params.value, params.variable, params.expression),
+      mode: modeToInputMode(params.mode),
+      value: params.value ?? undefined,
+      variable: params.variable ?? '',
+      expression: params.expression ?? '',
     });
     return convertCanvasView(res);
   }
 
-  async actionUpdateAllInputs(params: {
+  async updateAllInputs(params: {
     instance_id: string;
     inputs: Array<{
       name: string;
@@ -604,47 +621,44 @@ export class LaceClient {
       expression?: string;
     }>;
   }): Promise<CanvasView> {
-    const inputs: { [key: string]: Binding } = {};
-    for (const inp of params.inputs) {
-      inputs[inp.name] = modeToBinding(inp.mode, inp.value, inp.variable, inp.expression);
-    }
-    const res = await this.unary<
-      { instance_id: string; inputs: { [key: string]: Binding } },
-      ProtoCanvasView
-    >(this.inner.actionUpdateAllInputs, {
-      instance_id: params.instance_id,
-      inputs,
-    });
-    return convertCanvasView(res);
-  }
-
-  async actionRenameInstance(params: { old_id: string; new_id: string }): Promise<CanvasView> {
-    const res = await this.unary<typeof params, ProtoCanvasView>(
-      this.inner.actionRenameInstance,
-      params,
+    const inputs: InputEntry[] = params.inputs.map((inp) => ({
+      name: inp.name,
+      mode: modeToInputMode(inp.mode),
+      value: inp.value ?? undefined,
+      variable: inp.variable ?? '',
+      expression: inp.expression ?? '',
+    }));
+    const res = await this.unary<{ instance_id: string; inputs: InputEntry[] }, ProtoCanvasView>(
+      this.inner.updateAllInputs,
+      {
+        instance_id: params.instance_id,
+        inputs,
+      },
     );
     return convertCanvasView(res);
   }
 
-  async actionDeleteInstance(params: { instance_id: string }): Promise<CanvasView> {
-    const res = await this.unary<typeof params, ProtoCanvasView>(
-      this.inner.actionDeleteInstance,
-      params,
-    );
+  async renameInstance(params: { old_id: string; new_id: string }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.renameInstance, params);
     return convertCanvasView(res);
   }
 
-  async actionSyncLayout(params: {
+  async deleteInstance(params: { instance_id: string }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.deleteInstance, params);
+    return convertCanvasView(res);
+  }
+
+  async syncLayout(params: {
     positions: Record<string, { x: number; y: number }>;
   }): Promise<Record<string, never>> {
-    await this.unary<{ positions: Record<string, { x: number; y: number }> }, ProtoCanvasView>(
-      this.inner.actionSyncLayout,
+    await this.unary<{ positions: Record<string, { x: number; y: number }> }, Empty>(
+      this.inner.syncLayout,
       params,
     );
     return {};
   }
 
-  async actionSetVariables(params: {
+  async setVariables(params: {
     variables: Array<{
       name: string;
       type: string;
@@ -665,7 +679,7 @@ export class LaceClient {
         }>;
       },
       ProtoCanvasView
-    >(this.inner.actionSetVariables, {
+    >(this.inner.setVariables, {
       variables: params.variables.map((v) => ({
         name: v.name,
         type: v.type,
@@ -678,22 +692,18 @@ export class LaceClient {
     return convertCanvasView(res);
   }
 
-  async actionSetExports(params: {
+  async setExports(params: {
     outputs: Array<{ name: string; source_instance: string; source_output: string }>;
     output_defs: Array<{ name: string; type: string; description?: string; sensitive?: boolean }>;
   }): Promise<CanvasView> {
-    const outputs: { [key: string]: OutputExport } = {};
-    for (const o of params.outputs) {
-      outputs[o.name] = {
-        out: { module: o.source_instance, name: o.source_output },
-        var: '',
-        expr: undefined,
-        lit: undefined,
-      };
-    }
+    const outputs: OutputExportEntry[] = params.outputs.map((o) => ({
+      name: o.name,
+      source_instance: o.source_instance,
+      source_output: o.source_output,
+    }));
     const res = await this.unary<
       {
-        outputs: { [key: string]: OutputExport };
+        outputs: OutputExportEntry[];
         output_defs: Array<{
           name: string;
           type: string;
@@ -702,7 +712,7 @@ export class LaceClient {
         }>;
       },
       ProtoCanvasView
-    >(this.inner.actionSetExports, {
+    >(this.inner.setExports, {
       outputs,
       output_defs: params.output_defs.map((d) => ({
         name: d.name,
@@ -714,43 +724,37 @@ export class LaceClient {
     return convertCanvasView(res);
   }
 
-  async actionSetTerraform(params: {
+  async setTerraform(params: {
     required_version?: string;
     required_providers?: Array<{ name: string; source: string; version: string }>;
     backend?: { type: string; config: Record<string, unknown> };
   }): Promise<Record<string, never>> {
-    const requiredProviders: Record<string, { source: string; version: string }> = {};
-    for (const p of params.required_providers ?? []) {
-      requiredProviders[p.name] = { source: p.source, version: p.version };
-    }
+    const requiredProviders: ProviderReqView[] = (params.required_providers ?? []).map((p) => ({
+      name: p.name,
+      source: p.source,
+      version: p.version,
+    }));
     await this.unary<
       {
-        terraform: {
-          required_version: string;
-          required_providers: Record<string, { source: string; version: string }>;
-          backend: { type: string; config: Record<string, unknown> } | undefined;
-        };
+        required_version: string;
+        required_providers: ProviderReqView[];
+        backend: BackendView | undefined;
       },
-      ProtoCanvasView
-    >(this.inner.actionSetTerraform, {
-      terraform: {
-        required_version: params.required_version ?? '',
-        required_providers: requiredProviders,
-        backend: params.backend,
-      },
+      Empty
+    >(this.inner.setTerraform, {
+      required_version: params.required_version ?? '',
+      required_providers: requiredProviders,
+      backend: params.backend
+        ? { type: params.backend.type, config: params.backend.config }
+        : undefined,
     });
     return {};
   }
 
-  async actionSetProviders(params: {
+  async setProviders(params: {
     providers: Array<{ name: string; alias?: string; config: Record<string, unknown> }>;
   }): Promise<Record<string, never>> {
-    await this.unary<
-      {
-        providers: Array<{ name: string; alias: string; config: Record<string, unknown> }>;
-      },
-      ProtoCanvasView
-    >(this.inner.actionSetProviders, {
+    await this.unary<{ providers: ProviderView[] }, Empty>(this.inner.setProviders, {
       providers: params.providers.map((p) => ({
         name: p.name,
         alias: p.alias ?? '',
@@ -760,7 +764,7 @@ export class LaceClient {
     return {};
   }
 
-  async actionSetLocals(params: {
+  async setLocals(params: {
     locals: Array<{
       name: string;
       mode: string;
@@ -769,41 +773,42 @@ export class LaceClient {
       expression?: string;
     }>;
   }): Promise<CanvasView> {
-    const res = await this.unary<{ locals: LocalDef[] }, ProtoCanvasView>(
-      this.inner.actionSetLocals,
-      {
-        locals: params.locals.map((l) => ({
-          name: l.name,
-          value: modeToBinding(l.mode, l.value, l.variable, l.expression),
-        })),
-      },
-    );
+    const locals: LocalEntry[] = params.locals.map((l) => ({
+      name: l.name,
+      mode: l.mode,
+      value: l.value ?? undefined,
+      variable: l.variable ?? '',
+      expression: l.expression ?? '',
+    }));
+    const res = await this.unary<{ locals: LocalEntry[] }, ProtoCanvasView>(this.inner.setLocals, {
+      locals,
+    });
     return convertCanvasView(res);
   }
 
-  async actionSetDependsOn(params: {
+  async setDependsOn(params: {
     instance_id: string;
     depends_on: string[];
   }): Promise<Record<string, never>> {
-    await this.unary<typeof params, ProtoCanvasView>(this.inner.actionSetDependsOn, params);
+    await this.unary<typeof params, Empty>(this.inner.setDependsOn, params);
     return {};
   }
 
-  async actionSetEnvironments(params: {
+  async setEnvironments(params: {
     environments: Record<string, Record<string, unknown>>;
     environment_backends: Record<string, { type: string; config: Record<string, unknown> }>;
   }): Promise<Record<string, never>> {
-    await this.unary<typeof params, ProtoCanvasView>(this.inner.actionSetEnvironments, params);
+    await this.unary<typeof params, Empty>(this.inner.setEnvironments, params);
     return {};
   }
 
-  async actionUndo(): Promise<CanvasView> {
-    const res = await this.unary<Record<string, never>, ProtoCanvasView>(this.inner.actionUndo, {});
+  async undo(): Promise<CanvasView> {
+    const res = await this.unary<Record<string, never>, ProtoCanvasView>(this.inner.undo, {});
     return convertCanvasView(res);
   }
 
-  async actionRedo(): Promise<CanvasView> {
-    const res = await this.unary<Record<string, never>, ProtoCanvasView>(this.inner.actionRedo, {});
+  async redo(): Promise<CanvasView> {
+    const res = await this.unary<Record<string, never>, ProtoCanvasView>(this.inner.redo, {});
     return convertCanvasView(res);
   }
 
@@ -872,11 +877,11 @@ export class LaceClient {
           },
         );
       case 'action/drop_bundle':
-        return this.actionDropBundle(
+        return this.dropBundle(
           params as { deploy_bundle: Buffer; position?: { x: number; y: number } },
         );
       case 'action/connect':
-        return this.actionConnect(
+        return this.connect(
           params as {
             source: string;
             target: string;
@@ -885,11 +890,11 @@ export class LaceClient {
           },
         );
       case 'action/auto_connect':
-        return this.actionAutoConnect(params as { source: string; target: string });
+        return this.autoConnect(params as { source: string; target: string });
       case 'action/disconnect':
-        return this.actionDisconnect(params as { target: string; input_name: string });
+        return this.disconnect(params as { target: string; input_name: string });
       case 'action/update_input':
-        return this.actionUpdateInput(
+        return this.updateInput(
           params as {
             instance_id: string;
             input_name: string;
@@ -900,7 +905,7 @@ export class LaceClient {
           },
         );
       case 'action/update_all_inputs':
-        return this.actionUpdateAllInputs(
+        return this.updateAllInputs(
           params as {
             instance_id: string;
             inputs: Array<{
@@ -913,15 +918,13 @@ export class LaceClient {
           },
         );
       case 'action/rename_instance':
-        return this.actionRenameInstance(params as { old_id: string; new_id: string });
+        return this.renameInstance(params as { old_id: string; new_id: string });
       case 'action/delete_instance':
-        return this.actionDeleteInstance(params as { instance_id: string });
+        return this.deleteInstance(params as { instance_id: string });
       case 'action/sync_layout':
-        return this.actionSyncLayout(
-          params as { positions: Record<string, { x: number; y: number }> },
-        );
+        return this.syncLayout(params as { positions: Record<string, { x: number; y: number }> });
       case 'action/set_variables':
-        return this.actionSetVariables(
+        return this.setVariables(
           params as {
             variables: Array<{
               name: string;
@@ -933,7 +936,7 @@ export class LaceClient {
           },
         );
       case 'action/set_exports':
-        return this.actionSetExports(
+        return this.setExports(
           params as {
             outputs: Array<{ name: string; source_instance: string; source_output: string }>;
             output_defs: Array<{
@@ -945,7 +948,7 @@ export class LaceClient {
           },
         );
       case 'action/set_terraform':
-        return this.actionSetTerraform(
+        return this.setTerraform(
           params as {
             required_version?: string;
             required_providers?: Array<{ name: string; source: string; version: string }>;
@@ -953,13 +956,13 @@ export class LaceClient {
           },
         );
       case 'action/set_providers':
-        return this.actionSetProviders(
+        return this.setProviders(
           params as {
             providers: Array<{ name: string; alias?: string; config: Record<string, unknown> }>;
           },
         );
       case 'action/set_locals':
-        return this.actionSetLocals(
+        return this.setLocals(
           params as {
             locals: Array<{
               name: string;
@@ -971,18 +974,18 @@ export class LaceClient {
           },
         );
       case 'action/set_depends_on':
-        return this.actionSetDependsOn(params as { instance_id: string; depends_on: string[] });
+        return this.setDependsOn(params as { instance_id: string; depends_on: string[] });
       case 'action/set_environments':
-        return this.actionSetEnvironments(
+        return this.setEnvironments(
           params as {
             environments: Record<string, Record<string, unknown>>;
             environment_backends: Record<string, { type: string; config: Record<string, unknown> }>;
           },
         );
       case 'action/undo':
-        return this.actionUndo();
+        return this.undo();
       case 'action/redo':
-        return this.actionRedo();
+        return this.redo();
       case 'query/node_config':
         return this.queryNodeConfig(params as { instance_id: string });
       case 'query/edge_config':
@@ -1002,25 +1005,5 @@ export class LaceClient {
 
   dispose(): void {
     this.inner.close();
-  }
-}
-
-// ── Helper: convert mode+value to proto Binding ──
-
-function modeToBinding(
-  mode: string,
-  value?: unknown,
-  variable?: string,
-  expression?: string,
-): Binding {
-  switch (mode) {
-    case 'literal':
-      return { lit: value };
-    case 'variable':
-      return { var: variable };
-    case 'expression':
-      return { expr: { lang: 'hcl', value: expression ?? '' } };
-    default:
-      return {};
   }
 }

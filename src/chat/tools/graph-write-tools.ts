@@ -80,7 +80,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       }
 
       // Step 2: Apply deploy bundle to canvas
-      const canvasView = await engineResult.client.actionDropBundle({
+      const canvasView = await engineResult.client.dropBundle({
         deploy_bundle: deployBundle,
       });
 
@@ -120,7 +120,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.actionDeleteInstance({ instance_id: instanceId });
+      await engineResult.client.deleteInstance({ instance_id: instanceId });
       return { content: `Removed instance "${instanceId}" from the canvas.` };
     } catch (err: unknown) {
       return { content: `Failed to remove instance: ${errorMessage(err)}`, isError: true };
@@ -148,7 +148,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.actionConnect({
+      await engineResult.client.connect({
         source: sourceInstance,
         target: targetInstance,
         source_output: sourceOutput,
@@ -180,7 +180,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.actionDisconnect({
+      await engineResult.client.disconnect({
         target: targetInstance,
         input_name: inputName,
       });
@@ -238,7 +238,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.actionUpdateInput({
+      await engineResult.client.updateInput({
         instance_id: instanceId,
         input_name: inputName,
         mode,
@@ -286,7 +286,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.actionRenameInstance({ old_id: oldId, new_id: newId });
+      await engineResult.client.renameInstance({ old_id: oldId, new_id: newId });
       return { content: `Renamed instance "${oldId}" to "${newId}".` };
     } catch (err: unknown) {
       return { content: `Failed to rename instance: ${errorMessage(err)}`, isError: true };

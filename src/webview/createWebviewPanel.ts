@@ -53,7 +53,7 @@ export async function addModuleToActiveCanvas(
         }
 
         // Step 2: Apply deploy bundle to canvas
-        const canvasView = await client.actionDropBundle({ deploy_bundle: deployBundle });
+        const canvasView = await client.dropBundle({ deploy_bundle: deployBundle });
         postToWebview(panel, { command: 'loadState', state: canvasView });
       } catch (err: unknown) {
         handleRpcError(err, 'action/drop_bundle', 'add module to canvas');
