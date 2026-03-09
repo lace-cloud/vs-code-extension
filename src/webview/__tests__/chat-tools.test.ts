@@ -10,7 +10,10 @@ import type { RenderError } from '../types/render';
 
 function makeMockClient(overrides: Record<string, unknown> = {}) {
   return {
-    actionDropModule: vi
+    getRegistryVersion: vi
+      .fn()
+      .mockResolvedValue({ deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} } }),
+    actionDropBundle: vi
       .fn()
       .mockResolvedValue(makeCanvasView([makeNode('vpc', 'module', 'aws/vpc@v1.0.0')])),
     actionDeleteInstance: vi.fn().mockResolvedValue(makeCanvasView()),

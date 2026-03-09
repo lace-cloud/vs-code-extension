@@ -108,8 +108,8 @@ export class PostMessageEngine implements CanvasEngine {
 
   // ── Actions ──
 
-  dropModule(registryKey: string, position?: { x: number; y: number }): Promise<CanvasView> {
-    return this.call('action/drop_module', { registry_key: registryKey, position });
+  dropBundle(deployBundle: unknown, position?: { x: number; y: number }): Promise<CanvasView> {
+    return this.call('action/drop_bundle', { deploy_bundle: deployBundle, position });
   }
 
   connect(

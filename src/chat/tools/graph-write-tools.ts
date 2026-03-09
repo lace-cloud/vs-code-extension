@@ -68,8 +68,21 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      const registryKey = `${match.id}@${match.version}`;
-      const canvasView = await engineResult.client.actionDropModule({ registry_key: registryKey });
+      // Step 1: Fetch deploy bundle from registry
+      const versionResult = await engineResult.client.getRegistryVersion({
+        name: match.name,
+        system: match.system,
+        version: match.version,
+      });
+      const deployBundle = versionResult?.deploy_bundle;
+      if (!deployBundle) {
+        return { content: 'Module has no deploy bundle.', isError: true };
+      }
+
+      // Step 2: Apply deploy bundle to canvas
+      const canvasView = await engineResult.client.actionDropBundle({
+        deploy_bundle: deployBundle,
+      });
 
       // Find the newly added node from the returned canvas view
       const addedNode = canvasView.nodes.find(

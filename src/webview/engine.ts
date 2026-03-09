@@ -88,7 +88,7 @@ export interface CanvasEngine {
   ): Promise<GenerateResult>;
 
   // Actions
-  dropModule(registryKey: string, position?: { x: number; y: number }): Promise<CanvasView>;
+  dropBundle(deployBundle: unknown, position?: { x: number; y: number }): Promise<CanvasView>;
   connect(
     source: string,
     target: string,

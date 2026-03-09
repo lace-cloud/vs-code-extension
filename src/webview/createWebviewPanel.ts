@@ -24,19 +24,42 @@ export function getLaceDir(): string | undefined {
   return path.join(workspaceFolder.uri.fsPath, LACE_DIR);
 }
 
-/** Drop a module into the active canvas via RPC. */
-export async function addModuleToActiveCanvas(server: ServerManager, registryKey: string) {
+/** Drop a module into the active canvas via two-step RPC: fetch deploy_bundle, then apply. */
+export async function addModuleToActiveCanvas(
+  server: ServerManager,
+  name: string,
+  system: string,
+  version: string,
+) {
   if (!canvasPanel) {
     vscode.window.showWarningMessage('No canvas open. Run "Lace: Open Canvas" first.');
     return;
   }
-  try {
-    const client = requireClient(server.rpcClient, 'drop module');
-    const canvasView = await client.actionDropModule({ registry_key: registryKey });
-    postToWebview(canvasPanel, { command: 'loadState', state: canvasView });
-  } catch (err: unknown) {
-    handleRpcError(err, 'action/drop_module', 'add module to canvas');
-  }
+
+  const panel = canvasPanel;
+
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Adding ${name}...` },
+    async () => {
+      try {
+        const client = requireClient(server.rpcClient, 'drop module');
+
+        // Step 1: Fetch deploy bundle from registry
+        const versionResult = await client.getRegistryVersion({ name, system, version });
+        const deployBundle = versionResult?.deploy_bundle;
+        if (!deployBundle) {
+          vscode.window.showErrorMessage('Module has no deploy bundle.');
+          return;
+        }
+
+        // Step 2: Apply deploy bundle to canvas
+        const canvasView = await client.actionDropBundle({ deploy_bundle: deployBundle });
+        postToWebview(panel, { command: 'loadState', state: canvasView });
+      } catch (err: unknown) {
+        handleRpcError(err, 'action/drop_bundle', 'add module to canvas');
+      }
+    },
+  );
 }
 
 /** Trigger generate on the active canvas via RPC directly. */

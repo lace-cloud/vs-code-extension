@@ -241,8 +241,8 @@ export class JSONRPCClient extends EventEmitter {
 
   // ── Action methods ──
 
-  actionDropModule(params: { registry_key: string; position?: { x: number; y: number } }) {
-    return this.call<CanvasView>('action/drop_module', params);
+  actionDropBundle(params: { deploy_bundle: unknown; position?: { x: number; y: number } }) {
+    return this.call<CanvasView>('action/drop_bundle', params);
   }
 
   actionConnect(params: {

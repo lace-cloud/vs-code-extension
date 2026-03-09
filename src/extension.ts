@@ -195,9 +195,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // ── Registry: click module in sidebar → detail panel ──
     vscode.commands.registerCommand('lace.showModuleDetail', (mod: RegistryModule) => {
-      showModuleDetail(mod, server?.rpcClient ?? null, (registryKey) => {
+      showModuleDetail(mod, server?.rpcClient ?? null, (name, system, version) => {
         if (server) {
-          addModuleToActiveCanvas(server, registryKey);
+          addModuleToActiveCanvas(server, name, system, version);
         }
       });
     }),
@@ -217,8 +217,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (server) {
           const mod = node.module;
-          const registryKey = `${mod.id}@${mod.version}`;
-          addModuleToActiveCanvas(server, registryKey);
+          addModuleToActiveCanvas(server, mod.name, mod.system, mod.version);
         }
         registryProvider?.trackRecentlyUsed(node.module.id);
       },
@@ -253,8 +252,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         if (server) {
           const mod = pick.module;
-          const registryKey = `${mod.id}@${mod.version}`;
-          addModuleToActiveCanvas(server, registryKey);
+          addModuleToActiveCanvas(server, mod.name, mod.system, mod.version);
         }
         registryProvider?.trackRecentlyUsed(pick.module.id);
       }
