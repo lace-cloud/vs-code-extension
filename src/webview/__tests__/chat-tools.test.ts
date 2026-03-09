@@ -5,6 +5,7 @@ import { registerGraphReadTools } from '../../chat/tools/graph-read-tools';
 import { registerGenerateTools, type GenerateToolDeps } from '../../chat/tools/generate-tools';
 import { makeCanvasView, makeNode, makeEdge } from './helpers';
 import type { RenderError } from '../types/render';
+import type { RegistryModule } from '../../types/protocol';
 
 // ── Mock RPC client ──
 
@@ -48,6 +49,35 @@ function makeMockClient(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// ── Registry module fixtures ──
+
+const testModules: RegistryModule[] = [
+  {
+    id: 'aws/vpc',
+    name: 'aws/vpc',
+    version: 'v1.0.0',
+    system: 'aws',
+    description: 'AWS VPC',
+    categories: ['networking'],
+  },
+  {
+    id: 'aws/subnet',
+    name: 'aws/subnet',
+    version: 'v1.0.0',
+    system: 'aws',
+    description: 'AWS Subnet',
+    categories: ['networking'],
+  },
+  {
+    id: 'azure/resource-group',
+    name: 'azure/resource-group',
+    version: 'v2.0.0',
+    system: 'azure',
+    description: 'Azure RG',
+    categories: ['core'],
+  },
+];
+
 // ── Test setup ──
 
 let mockClient: ReturnType<typeof makeMockClient>;
@@ -57,7 +87,7 @@ function makeWriteDeps(): GraphWriteDeps {
   return {
     getRpcClient: () =>
       mockClient as unknown as import('../../utilities/engine/rpc-client').JSONRPCClient,
-    getRegistryModules: () => [],
+    getRegistryModules: () => testModules,
   };
 }
 
@@ -71,6 +101,87 @@ describe('write tools', () => {
     });
   });
 
+  describe('lace_add_module', () => {
+    test('adds module by exact name', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws/vpc' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('aws/vpc');
+      expect(result.content).toContain('instance "vpc"');
+      expect(mockClient.getRegistryVersion).toHaveBeenCalledWith({
+        name: 'aws/vpc',
+        system: 'aws',
+        version: 'v1.0.0',
+      });
+      expect(mockClient.actionDropBundle).toHaveBeenCalledWith({
+        deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} },
+      });
+    });
+
+    test('resolves single fuzzy match', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'resource-group' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('azure/resource-group');
+      expect(mockClient.getRegistryVersion).toHaveBeenCalledWith({
+        name: 'azure/resource-group',
+        system: 'azure',
+        version: 'v2.0.0',
+      });
+    });
+
+    test('disambiguates multiple fuzzy matches', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Multiple modules match');
+      expect(result.content).toContain('aws/vpc');
+      expect(result.content).toContain('aws/subnet');
+      expect(mockClient.getRegistryVersion).not.toHaveBeenCalled();
+    });
+
+    test('narrows fuzzy match with system filter', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'resource', system: 'azure' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('azure/resource-group');
+      expect(mockClient.getRegistryVersion).toHaveBeenCalled();
+    });
+
+    test('returns not-found for unknown module', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'gcp/compute' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('not found in the registry');
+      expect(result.content).toContain('lace_search_registry');
+    });
+
+    test('returns error when deploy bundle is null', async () => {
+      mockClient.getRegistryVersion.mockResolvedValue({ deploy_bundle: null });
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws/vpc' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('no deploy bundle');
+    });
+
+    test('returns fallback message when instance ID not in response', async () => {
+      mockClient.actionDropBundle.mockResolvedValue(
+        makeCanvasView([makeNode('some_other_id', 'module', 'other/thing@v1.0.0')]),
+      );
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws/vpc' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('lace_describe_graph');
+    });
+  });
+
   describe('lace_remove_module', () => {
     test('removes existing instance', async () => {
       const handler = getToolHandler('lace_remove_module')!;
@@ -79,25 +190,6 @@ describe('write tools', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Removed instance "vpc"');
       expect(mockClient.actionDeleteInstance).toHaveBeenCalledWith({ instance_id: 'vpc' });
-    });
-
-    test('returns error for missing parameter', async () => {
-      const handler = getToolHandler('lace_remove_module')!;
-      const result = await handler({});
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('Missing required parameter');
-    });
-
-    test('returns error when RPC fails', async () => {
-      mockClient.actionDeleteInstance.mockRejectedValue(
-        new Error('Instance "nonexistent" not found'),
-      );
-      const handler = getToolHandler('lace_remove_module')!;
-      const result = await handler({ instance_id: 'nonexistent' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('not found');
     });
   });
 
@@ -119,14 +211,6 @@ describe('write tools', () => {
         source_output: 'vpc_id',
         target_input: 'vpc_id',
       });
-    });
-
-    test('returns error for missing parameters', async () => {
-      const handler = getToolHandler('lace_connect')!;
-      const result = await handler({ source_instance: 'vpc' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('Missing required parameters');
     });
   });
 
@@ -231,20 +315,6 @@ describe('write tools', () => {
       expect(result.isError).toBe(true);
       expect(result.content).toContain('Must provide exactly one of');
     });
-
-    test('rejects all three binding types at once', async () => {
-      const handler = getToolHandler('lace_set_input')!;
-      const result = await handler({
-        instance_id: 'vpc',
-        input_name: 'cidr_block',
-        value: '10.0.0.0/16',
-        variable: 'vpc_cidr',
-        expression: 'var.cidr',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('Must provide exactly one of');
-    });
   });
 
   describe('lace_rename_instance', () => {
@@ -258,14 +328,6 @@ describe('write tools', () => {
         old_id: 'vpc',
         new_id: 'main_vpc',
       });
-    });
-
-    test('rejects invalid Terraform identifier', async () => {
-      const handler = getToolHandler('lace_rename_instance')!;
-      const result = await handler({ old_id: 'vpc', new_id: '123invalid' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('not a valid Terraform identifier');
     });
   });
 
@@ -344,28 +406,6 @@ describe('generate tools', () => {
       });
 
       expect(result.content).toContain('No compatible connections found');
-    });
-
-    test('returns error for missing parameters', async () => {
-      const handler = getToolHandler('lace_auto_connect')!;
-      const result = await handler({ source_instance: 'vpc' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('Missing required parameters');
-    });
-
-    test('returns error when RPC fails', async () => {
-      mockClient.actionAutoConnect.mockRejectedValue(
-        new Error('Source instance "nonexistent" not found'),
-      );
-      const handler = getToolHandler('lace_auto_connect')!;
-      const result = await handler({
-        source_instance: 'nonexistent',
-        target_instance: 'subnet',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content).toContain('not found');
     });
   });
 

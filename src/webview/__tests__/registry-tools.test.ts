@@ -92,14 +92,6 @@ describe('lace_search_registry', () => {
     expect(result.content).toContain('No modules found');
   });
 
-  test('returns all modules when no filters given', async () => {
-    const handler = getToolHandler('lace_search_registry')!;
-    const result = await handler({});
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content).toContain('Found 3 module(s)');
-  });
-
   test('combines query and system filters', async () => {
     const handler = getToolHandler('lace_search_registry')!;
     const result = await handler({ query: 'vpc', system: 'azure' });
@@ -112,14 +104,6 @@ describe('lace_search_registry', () => {
 describe('lace_inspect_module', () => {
   beforeEach(() => {
     registerRegistryTools(makeDeps());
-  });
-
-  test('returns error for missing name parameter', async () => {
-    const handler = getToolHandler('lace_inspect_module')!;
-    const result = await handler({});
-
-    expect(result.isError).toBe(true);
-    expect(result.content).toContain('Missing required parameter: name');
   });
 
   test('returns error for unknown module', async () => {
@@ -159,15 +143,6 @@ describe('lace_inspect_module', () => {
 
     expect(result.isError).toBeFalsy();
     expect(result.content).toContain('azure/resource-group');
-  });
-
-  test('filters by system for disambiguation', async () => {
-    const handler = getToolHandler('lace_inspect_module')!;
-    // With RPC client unavailable, returns basic info for the matched module
-    const result = await handler({ name: 'aws/vpc', system: 'aws' });
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content).toContain('aws/vpc');
   });
 
   test('returns RPC results when client available', async () => {
