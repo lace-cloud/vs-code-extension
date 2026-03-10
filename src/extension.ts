@@ -11,7 +11,6 @@ import {
   addModuleToActiveCanvas,
   triggerGenerateOnActiveCanvas,
   getLaceDir,
-  isCanvasOpen,
 } from './webview/createWebviewPanel';
 
 import { registerChatParticipant } from './chat/participant';
@@ -126,6 +125,12 @@ export async function activate(context: vscode.ExtensionContext) {
     });
   }
 
+  /** Open canvas (if needed) then drop a module onto it. */
+  async function openCanvasAndAddModule(name: string, system: string, version: string) {
+    await openCanvas(context, server!);
+    await addModuleToActiveCanvas(server!, name, system, version);
+  }
+
   /* ---------- Commands ---------- */
 
   context.subscriptions.push(
@@ -197,7 +202,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.showModuleDetail', (mod: RegistryModule) => {
       showModuleDetail(mod, server?.rpcClient ?? null, (name, system, version) => {
         if (server) {
-          addModuleToActiveCanvas(server, name, system, version);
+          openCanvasAndAddModule(name, system, version);
         }
       });
     }),
@@ -206,19 +211,9 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'lace.addModuleToCanvas',
       async (node: { module?: RegistryModule }) => {
-        if (!node?.module) return;
-
-        // Open canvas first if not already open
-        if (!isCanvasOpen() && server) {
-          await openCanvas(context, server);
-          // Small delay for webview to initialize
-          await new Promise((r) => setTimeout(r, 500));
-        }
-
-        if (server) {
-          const mod = node.module;
-          addModuleToActiveCanvas(server, mod.name, mod.system, mod.version);
-        }
+        if (!node?.module || !server) return;
+        const mod = node.module;
+        await openCanvasAndAddModule(mod.name, mod.system, mod.version);
         registryProvider?.trackRecentlyUsed(node.module.id);
       },
     ),
@@ -244,16 +239,9 @@ export async function activate(context: vscode.ExtensionContext) {
         matchOnDetail: true,
       });
 
-      if (pick) {
-        // Open canvas first if not already open
-        if (!isCanvasOpen() && server) {
-          await openCanvas(context, server);
-          await new Promise((r) => setTimeout(r, 500));
-        }
-        if (server) {
-          const mod = pick.module;
-          addModuleToActiveCanvas(server, mod.name, mod.system, mod.version);
-        }
+      if (pick && server) {
+        const mod = pick.module;
+        await openCanvasAndAddModule(mod.name, mod.system, mod.version);
         registryProvider?.trackRecentlyUsed(pick.module.id);
       }
     }),

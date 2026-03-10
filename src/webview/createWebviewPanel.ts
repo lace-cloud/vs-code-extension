@@ -32,7 +32,7 @@ export async function addModuleToActiveCanvas(
   version: string,
 ) {
   if (!canvasPanel) {
-    vscode.window.showWarningMessage('No canvas open. Run "Lace: Open Canvas" first.');
+    vscode.window.showWarningMessage('No canvas open.');
     return;
   }
 
@@ -110,11 +110,6 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
   }
 }
 
-/** Whether a canvas is currently open. */
-export function isCanvasOpen(): boolean {
-  return canvasPanel !== undefined;
-}
-
 /* ── Typed message helpers ── */
 
 function postToWebview(panel: vscode.WebviewPanel, msg: HostToWebview) {
@@ -182,6 +177,14 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
     }, 2000);
   }
 
+  // ── Session-ready promise (resolves when webviewReady → sessionOpen completes) ──
+
+  let resolveReady: () => void;
+  const sessionReady = new Promise<void>((resolve) => {
+    resolveReady = resolve;
+  });
+  const safetyTimeout = setTimeout(resolveReady!, 10_000);
+
   // ── Message handler ──
 
   panel.webview.onDidReceiveMessage(
@@ -200,6 +203,8 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
             const classified = handleRpcError(err, 'session/open', 'open canvas session');
             vscode.window.showErrorMessage(classified.message);
           }
+          clearTimeout(safetyTimeout);
+          resolveReady();
           break;
         }
 
@@ -240,6 +245,8 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
   );
 
   panel.onDidDispose(async () => {
+    clearTimeout(safetyTimeout);
+    resolveReady();
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
 
     if (isDirtyHostSide) {
@@ -264,4 +271,6 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
 
     canvasPanel = undefined;
   });
+
+  return sessionReady;
 }
