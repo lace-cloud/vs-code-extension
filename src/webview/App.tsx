@@ -70,6 +70,14 @@ export default function App({ vscode }: AppProps) {
     return () => window.removeEventListener('canvasSave', handler);
   }, [engine]);
 
+  useEffect(() => {
+    const handler = () => {
+      vscode.postMessage({ command: 'generate' });
+    };
+    window.addEventListener('canvasGenerate', handler);
+    return () => window.removeEventListener('canvasGenerate', handler);
+  }, [vscode]);
+
   // ── Signal readiness to host ──
   useEffect(() => {
     vscode.postMessage({ command: 'webviewReady' });

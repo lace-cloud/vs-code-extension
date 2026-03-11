@@ -274,20 +274,10 @@ export default function Canvas() {
     setTimeout(() => setStatusMessage(null), TOAST_BRIEF);
   }, [engine]);
 
-  // ── Generate via engine ──
-  const onGenerate = useCallback(async () => {
-    if (!engine) return;
-    const result = await engine.sessionGenerate('.', {
-      format: true,
-      validate: true,
-    });
-    if (result.diagnostics.length > 0) {
-      setStatusMessage(`Generate: ${result.diagnostics.length} diagnostic(s)`);
-    } else {
-      setStatusMessage('Successfully generated');
-    }
-    setTimeout(() => setStatusMessage(null), TOAST_INFO);
-  }, [engine]);
+  // ── Generate via host (correct output dir + error filtering) ──
+  const onGenerate = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('canvasGenerate'));
+  }, []);
 
   // ── Expose undo globally for HTML-level Cmd+Z listener ──
   useEffect(() => {

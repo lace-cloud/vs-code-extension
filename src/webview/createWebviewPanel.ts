@@ -234,6 +234,12 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           break;
         }
 
+        // ── generate: delegate to host-side function ──
+        case 'generate': {
+          triggerGenerateOnActiveCanvas(server);
+          break;
+        }
+
         // ── markClean: undo restored to saved state ──
         case 'markClean': {
           isDirtyHostSide = false;
