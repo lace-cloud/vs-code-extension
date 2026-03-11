@@ -46,6 +46,7 @@ export default function App({ vscode }: AppProps) {
           engine.handleResult(msg.requestId, msg.result, msg.error);
           break;
 
+        case 'generateProgress':
         case 'generateSuccess':
         case 'generateError':
           window.dispatchEvent(new CustomEvent('hostMessage', { detail: msg }));

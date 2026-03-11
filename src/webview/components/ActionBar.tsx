@@ -4,6 +4,7 @@ import { Panel } from '@xyflow/react';
 // ── Types ──
 
 type ActionBarProps = {
+  isGenerating?: boolean;
   onSave: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -15,6 +16,7 @@ type ActionBarProps = {
 // ── Component ──
 
 export default function ActionBar({
+  isGenerating,
   onSave,
   onUndo,
   onRedo,
@@ -76,9 +78,14 @@ export default function ActionBar({
         {/* Right group: project actions */}
         <button
           onClick={onGenerate}
+          disabled={isGenerating}
           title="Generate Terraform files"
           aria-label="Generate"
-          className="w-8 h-8 flex items-center justify-center bg-[#2ea043] border-none text-white cursor-pointer hover:bg-[#3ab550]"
+          className={`w-8 h-8 flex items-center justify-center border-none text-white ${
+            isGenerating
+              ? 'bg-[#2ea043]/50 opacity-50 cursor-not-allowed'
+              : 'bg-[#2ea043] cursor-pointer hover:bg-[#3ab550]'
+          }`}
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
             <path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5zm-7.63 5.29a.996.996 0 00-1.41 0L1.29 18.96a.996.996 0 000 1.41l2.34 2.34c.39.39 1.02.39 1.41 0L16.7 11.05a.996.996 0 000-1.41l-2.33-2.35zm-1.97 5.67L7.73 8.29l2.07-2.07 4.67 4.67-2.07 2.07z" />

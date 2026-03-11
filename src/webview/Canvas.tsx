@@ -23,6 +23,7 @@ import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
 import ActionBar from './components/ActionBar';
 
 import type { CanvasView, RenderNode, RenderEdge } from './types/render';
+import type { GeneratePhase } from '../types/protocol';
 import { useCanvas } from './state/engine-context';
 
 // ── Node types registration ──
@@ -31,10 +32,18 @@ const nodeTypes = {
   moduleNode: ModuleNode,
 };
 
-// ── Toast duration constants ──
+// ── Toast ──
 
 const TOAST_BRIEF = 1500;
 const TOAST_INFO = 3000;
+
+type ToastState = { message: string; type: 'progress' | 'success' | 'error' } | null;
+
+const PHASE_LABELS: Record<GeneratePhase, string> = {
+  generating: 'Generating Terraform...',
+  formatting: 'Formatting...',
+  validating: 'Validating...',
+};
 
 // ══════════════════════════════════════════════════════════════════════
 // CompositeEditor — renders the ReactFlow viewport for a valid graph.
@@ -49,6 +58,7 @@ const TOAST_INFO = 3000;
 type CompositeEditorProps = {
   view: CanvasView;
   fitViewTrigger: number;
+  isGenerating: boolean;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
@@ -64,6 +74,7 @@ type CompositeEditorProps = {
 function CompositeEditor({
   view,
   fitViewTrigger,
+  isGenerating,
   onDragStop,
   onConnect,
   onEdgesDelete,
@@ -214,6 +225,7 @@ function CompositeEditor({
       />
       <Controls position="bottom-right" showInteractive={false} />
       <ActionBar
+        isGenerating={isGenerating}
         onSave={onSave}
         onUndo={onUndo}
         onRedo={onRedo}
@@ -238,7 +250,8 @@ export default function Canvas() {
     source: string;
     target: string;
   } | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const [generating, setGenerating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // ── Listen for openNodeConfig events from ModuleNode ──
@@ -270,8 +283,8 @@ export default function Canvas() {
   const onSave = useCallback(async () => {
     if (!engine) return;
     await engine.sessionSave();
-    setStatusMessage('Saved');
-    setTimeout(() => setStatusMessage(null), TOAST_BRIEF);
+    setToast({ message: 'Saved', type: 'success' });
+    setTimeout(() => setToast(null), TOAST_BRIEF);
   }, [engine]);
 
   // ── Generate via host (correct output dir + error filtering) ──
@@ -374,14 +387,21 @@ export default function Canvas() {
     const handler = (e: Event) => {
       const msg = (e as CustomEvent).detail;
       switch (msg.command) {
+        case 'generateProgress': {
+          setGenerating(true);
+          setToast({ message: PHASE_LABELS[msg.phase as GeneratePhase], type: 'progress' });
+          break;
+        }
         case 'generateSuccess': {
-          setStatusMessage('Successfully generated');
-          setTimeout(() => setStatusMessage(null), TOAST_INFO);
+          setGenerating(false);
+          setToast({ message: 'Successfully generated', type: 'success' });
+          setTimeout(() => setToast(null), TOAST_INFO);
           break;
         }
         case 'generateError': {
-          setStatusMessage(`Generate error: ${msg.message}`);
-          setTimeout(() => setStatusMessage(null), TOAST_INFO);
+          setGenerating(false);
+          setToast({ message: `Generate error: ${msg.message}`, type: 'error' });
+          setTimeout(() => setToast(null), TOAST_INFO);
           break;
         }
       }
@@ -412,9 +432,18 @@ export default function Canvas() {
   // ── Render ──
   return (
     <div className="h-screen flex flex-col relative">
-      {statusMessage && (
-        <div className="absolute top-4 left-4 z-20 bg-[#153238] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)]">
-          {statusMessage}
+      {toast && (
+        <div
+          className={`absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)] border ${
+            toast.type === 'error'
+              ? 'bg-[#3a1518] text-[#f87171] border-[rgba(248,113,113,0.3)]'
+              : 'bg-[#153238] text-[#CEFE65] border-[rgba(206,254,101,0.2)]'
+          }`}
+        >
+          {toast.type === 'progress' && (
+            <div className="w-3.5 h-3.5 border-2 border-[#CEFE65] border-t-transparent rounded-full animate-spin" />
+          )}
+          {toast.message}
         </div>
       )}
 
@@ -423,6 +452,7 @@ export default function Canvas() {
           key={`canvas:${state.generation}`}
           view={view}
           fitViewTrigger={state.generation}
+          isGenerating={generating}
           onDragStop={onDragStop}
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}

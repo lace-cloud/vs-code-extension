@@ -2,8 +2,11 @@ import type { CanvasView } from '../webview/types/render';
 
 // ── Host → Webview ──
 
+export type GeneratePhase = 'generating' | 'formatting' | 'validating';
+
 export type HostToWebview =
   | { command: 'loadState'; state: CanvasView }
+  | { command: 'generateProgress'; phase: GeneratePhase }
   | { command: 'generateSuccess'; files?: string[] }
   | { command: 'generateError'; message: string; diagnostics?: Diagnostic[] }
   | { command: 'engineResult'; requestId: string; result?: unknown; error?: string };

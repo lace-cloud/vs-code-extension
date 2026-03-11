@@ -4,8 +4,9 @@ import path from 'path';
 
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
-import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol';
+import type { HostToWebview, WebviewToHost, Diagnostic, GeneratePhase } from '../types/protocol';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
+import * as terraform from '../utilities/terraform';
 
 /* ── Constants ── */
 
@@ -14,6 +15,7 @@ const LACE_DIR = '.lace';
 /* ── State ── */
 
 let canvasPanel: vscode.WebviewPanel | undefined;
+let isGenerating = false;
 
 /* ── Public API ── */
 
@@ -62,51 +64,68 @@ export async function addModuleToActiveCanvas(
   );
 }
 
-/** Trigger generate on the active canvas via RPC directly. */
+/** Trigger generate on the active canvas via RPC, then format + validate locally. */
 export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
-  if (!canvasPanel) {
-    vscode.window.showWarningMessage('No canvas open.');
-    return;
-  }
+  if (!canvasPanel || isGenerating) return;
+  const panel = canvasPanel;
   const laceDir = getLaceDir();
   if (!laceDir) return;
 
+  isGenerating = true;
+
+  function postProgress(phase: GeneratePhase) {
+    postToWebview(panel, { command: 'generateProgress', phase });
+  }
+
   try {
+    // Phase 1: Generate files (no fmt/validate — we do that locally)
+    postProgress('generating');
     const client = requireClient(server.rpcClient, 'session/generate');
     const result = await client.sessionGenerate({
       output_dir: laceDir,
-      options: {
-        dry_run: false,
-        format: true,
-        validate: true,
-        overwrite: true,
-      },
+      options: { dry_run: false, format: false, validate: false, overwrite: true },
     });
 
-    const diagnosticErrors = (result?.diagnostics ?? []).filter((d) => d.severity === 'error');
-    if (diagnosticErrors.length > 0) {
-      postToWebview(canvasPanel, {
-        command: 'generateError',
-        message: `Generation failed: ${diagnosticErrors.length} error(s)`,
-        diagnostics: diagnosticErrors as Diagnostic[],
-      });
-      return;
+    const filesWritten = result?.files_written ?? [];
+
+    // Check if terraform is available for fmt/validate phases
+    const hasTerraform = await terraform.isAvailable();
+
+    if (hasTerraform && filesWritten.length > 0) {
+      // Phase 2: Format
+      postProgress('formatting');
+      await terraform.format(filesWritten);
+
+      // Phase 3: Validate
+      postProgress('validating');
+      const validation = await terraform.validate(laceDir);
+
+      if (validation && !validation.valid) {
+        const errors = validation.diagnostics.filter((d) => d.severity === 'error');
+        if (errors.length > 0) {
+          postToWebview(panel, {
+            command: 'generateError',
+            message: `Validation: ${errors.length} error(s)`,
+            diagnostics: errors as Diagnostic[],
+          });
+          return;
+        }
+      }
+    } else if (!hasTerraform) {
+      vscode.window.showInformationMessage(
+        'Terraform not found — files generated, but formatting/validation skipped.',
+      );
     }
 
-    postToWebview(canvasPanel, {
-      command: 'generateSuccess',
-      files: result?.files_written,
-    });
-
+    postToWebview(panel, { command: 'generateSuccess', files: filesWritten });
     vscode.window.showInformationMessage(`Terraform generated in ${LACE_DIR}/`);
   } catch (err: unknown) {
     const classified = handleRpcError(err, 'session/generate', 'generate Terraform');
     if (canvasPanel) {
-      postToWebview(canvasPanel, {
-        command: 'generateError',
-        message: classified.message,
-      });
+      postToWebview(canvasPanel, { command: 'generateError', message: classified.message });
     }
+  } finally {
+    isGenerating = false;
   }
 }
 
