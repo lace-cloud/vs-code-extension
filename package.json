@@ -8,6 +8,7 @@
     "type": "git",
     "url": "https://github.com/lace-cloud/vs-code-extension"
   },
+  "license": "BUSL-1.1",
   "icon": "Lace_Logo.png",
   "engines": {
     "vscode": "^1.96.0"
