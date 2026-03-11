@@ -12,13 +12,13 @@ The extension is an **opaque rendering layer**. It does NOT understand Terraform
 
 ```bash
 npm run compile          # Rspack build (host + webview)
-npm run test:unit        # 64 unit tests (vitest, no binary needed)
+npm run test:unit        # 26 unit tests (vitest, no binary needed)
 npm run test:e2e         # 6 E2E tests (requires lace + terraform binaries)
 npm run test:watch       # Watch mode (unit tests)
 npx tsc --noEmit         # Type-check only -- must be zero errors
 ```
 
-Always run `npm run test:unit` after any change. All 64 unit tests must pass. TypeScript must compile with zero errors.
+Always run `npm run test:unit` after any change. All 26 unit tests must pass. TypeScript must compile with zero errors.
 
 E2E tests spawn a real `lace module serve` process and exercise the full gRPC transport. They require the `lace` binary and `terraform` to be installed. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
 
@@ -27,7 +27,7 @@ E2E tests spawn a real `lace module serve` process and exercise the full gRPC tr
 ### Host side (Node.js, VS Code API)
 
 - **`extension.ts`** -- activation, command registration, server lifecycle, `lace.login` command (GitHub PAT input → auth/login RPC)
-- **`createWebviewPanel.ts`** -- manages canvas panel lifecycle, routes PostMessage between webview and CLI RPC, handles auto-save (debounced ~2s after last edit), dirty tracking, module drops from sidebar
+- **`createWebviewPanel.ts`** -- manages canvas panel lifecycle, routes PostMessage between webview and CLI RPC, handles auto-save (debounced ~2s after last edit), dirty tracking, module drops from sidebar, three-phase generate orchestration (generate → fmt → validate with progress messages)
 - **`server-manager.ts`** -- manages the CLI engine server process (`lace module serve`), spawns/restarts the child process, reads `LACE_GRPC_PORT=<port>` from stdout, exposes `rpcClient` (gRPC `LaceClient`), checks auth status after init (emits `'auth'` event), exposes `login(token)` and `checkAuth()` methods
 - **`grpc-client.ts`** -- gRPC client wrapping the generated `LaceEngineClient`, promisifies callbacks, converts proto types to extension render types
 - **`RegistrySidebarProvider.ts`** -- WebviewViewProvider for the registry sidebar, fetches module data, posts `addToCanvas` messages to canvas
@@ -52,12 +52,13 @@ Defined in `src/types/protocol.ts`. Messages are discriminated unions on `comman
 
 ### Host to Webview (`HostToWebview`)
 
-| Command           | Payload                                         | Purpose                             |
-| ----------------- | ----------------------------------------------- | ----------------------------------- |
-| `loadState`       | `state: CanvasView`                             | Send full view model to render      |
-| `generateSuccess` | `files?: string[]`                              | Generation succeeded                |
-| `generateError`   | `message: string`, `diagnostics?: Diagnostic[]` | Generation failed                   |
-| `engineResult`    | `requestId: string`, `result?`, `error?`        | Response to an `engineCall` request |
+| Command            | Payload                                         | Purpose                             |
+| ------------------ | ----------------------------------------------- | ----------------------------------- |
+| `loadState`        | `state: CanvasView`                             | Send full view model to render      |
+| `generateProgress` | `phase: GeneratePhase`                          | Step-by-step generate progress      |
+| `generateSuccess`  | `files?: string[]`                              | Generation succeeded                |
+| `generateError`    | `message: string`, `diagnostics?: Diagnostic[]` | Generation failed                   |
+| `engineResult`     | `requestId: string`, `result?`, `error?`        | Response to an `engineCall` request |
 
 ### Webview to Host (`WebviewToHost`)
 
@@ -101,6 +102,7 @@ RenderEdge { id, source, target, source_output, target_input }
 ### Protocol types (protocol.ts)
 
 - `HostToWebview`, `WebviewToHost` -- message unions
+- `GeneratePhase` -- `'generating' | 'formatting' | 'validating'`
 - `Diagnostic` -- RPC validation diagnostic (severity, message, file, line, column)
 - `RegistryModule` -- shared across sidebar and detail panel
 
@@ -112,37 +114,37 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 
 ## File Organization
 
-| Layer           | Path                                          | Purpose                                           |
-| --------------- | --------------------------------------------- | ------------------------------------------------- |
-| Entry point     | `extension.ts`                                | Activation, command registration                  |
-| Host: canvas    | `webview/createWebviewPanel.ts`               | Panel lifecycle, PostMessage routing, auto-save   |
-| Host: HTML      | `webview/getWebviewContent.ts`                | Webview HTML shell, keyboard handlers             |
-| Host: detail    | `webview/ModuleDetailPanel.ts`                | Registry module detail tab                        |
-| Host: sidebar   | `containers-views/RegistrySidebarProvider.ts` | Registry sidebar provider                         |
-| Host: engine    | `utilities/engine/server-manager.ts`          | CLI process lifecycle                             |
-| Host: RPC       | `utilities/engine/grpc-client.ts`             | gRPC client (LaceClient)                          |
-| Host: errors    | `utilities/engine/rpc-errors.ts`              | RPC error handling helpers                        |
-| Webview: root   | `webview/App.tsx`                             | Message listener, engine creation, context        |
-| Webview: canvas | `webview/Canvas.tsx`                          | ReactFlow rendering, user interaction handlers    |
-| Webview: engine | `webview/engine.ts`                           | CanvasEngine interface                            |
-| Webview: impl   | `webview/post-message-engine.ts`              | PostMessageEngine (CanvasEngine over postMessage) |
-| Webview: state  | `webview/state/engine-context.ts`             | React context (CanvasState + engine)              |
-| Webview: types  | `webview/types/render.ts`                     | CanvasView, RenderNode, RenderEdge, configs       |
-| Shared types    | `types/protocol.ts`                           | HostToWebview, WebviewToHost, Diagnostic          |
-| Components      | `webview/components/`                         | UI: ModuleNode, panels, ActionBar, SlidePanel     |
-| Utilities       | `webview/utils/`                              | identifiers, parseValue                           |
-| Styles          | `webview/styles/panel.ts`                     | Shared panel style constants                      |
-| Chat            | `chat/`                                       | @lace chat participant + tools                    |
-| Tests           | `webview/__tests__/`                          | Unit + E2E tests                                  |
+| Layer           | Path                                          | Purpose                                            |
+| --------------- | --------------------------------------------- | -------------------------------------------------- |
+| Entry point     | `extension.ts`                                | Activation, command registration                   |
+| Host: canvas    | `webview/createWebviewPanel.ts`               | Panel lifecycle, PostMessage routing, auto-save    |
+| Host: HTML      | `webview/getWebviewContent.ts`                | Webview HTML shell, keyboard handlers              |
+| Host: detail    | `webview/ModuleDetailPanel.ts`                | Registry module detail tab                         |
+| Host: sidebar   | `containers-views/RegistrySidebarProvider.ts` | Registry sidebar provider                          |
+| Host: engine    | `utilities/engine/server-manager.ts`          | CLI process lifecycle                              |
+| Host: RPC       | `utilities/engine/grpc-client.ts`             | gRPC client (LaceClient)                           |
+| Host: errors    | `utilities/engine/rpc-errors.ts`              | RPC error handling helpers                         |
+| Host: terraform | `utilities/terraform.ts`                      | Terraform CLI helpers (fmt, validate, isAvailable) |
+| Webview: root   | `webview/App.tsx`                             | Message listener, engine creation, context         |
+| Webview: canvas | `webview/Canvas.tsx`                          | ReactFlow rendering, user interaction handlers     |
+| Webview: engine | `webview/engine.ts`                           | CanvasEngine interface                             |
+| Webview: impl   | `webview/post-message-engine.ts`              | PostMessageEngine (CanvasEngine over postMessage)  |
+| Webview: state  | `webview/state/engine-context.ts`             | React context (CanvasState + engine)               |
+| Webview: types  | `webview/types/render.ts`                     | CanvasView, RenderNode, RenderEdge, configs        |
+| Shared types    | `types/protocol.ts`                           | HostToWebview, WebviewToHost, Diagnostic           |
+| Components      | `webview/components/`                         | UI: ModuleNode, panels, ActionBar, SlidePanel      |
+| Utilities       | `webview/utils/`                              | identifiers, parseValue                            |
+| Styles          | `webview/styles/panel.ts`                     | Shared panel style constants                       |
+| Chat            | `chat/`                                       | @lace chat participant + tools                     |
+| Tests           | `webview/__tests__/`                          | Unit + E2E tests                                   |
 
 ## Testing
 
 | File                          | What it tests                                                       |
 | ----------------------------- | ------------------------------------------------------------------- |
-| `chat-tools.test.ts`          | Chat participant graph-write, graph-read, generate tools (25 tests) |
-| `registry-tools.test.ts`      | Chat participant registry search and inspect (14 tests)             |
-| `parseValue.test.ts`          | HCL literal parsing (14 tests)                                      |
-| `PanelFrame.test.tsx`         | PanelFrame component rendering (8 tests)                            |
+| `chat-tools.test.ts`          | Chat participant graph-write, graph-read, generate tools (13 tests) |
+| `registry-tools.test.ts`      | Chat participant registry search and inspect (5 tests)              |
+| `parseValue.test.ts`          | HCL literal parsing (5 tests)                                       |
 | `identifiers.test.ts`         | Terraform identifier validation (3 tests)                           |
 | `e2e-rpc-integration.test.ts` | Full CLI RPC pipeline, generate to disk (6 tests, E2E)              |
 

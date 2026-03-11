@@ -8,7 +8,7 @@ talks to a Go CLI binary (`lace`) over gRPC on an ephemeral TCP port.
 ## Build & Test
 
 ```
-npm run test:unit        # 64 unit tests (no binary needed) — run after EVERY change
+npm run test:unit        # 26 unit tests (no binary needed) — run after EVERY change
 npm run test:e2e         # 6 tests (requires lace + terraform)
 npx tsc --noEmit         # Type-check — must be zero errors
 npm run build            # Rspack build (host + webview)
