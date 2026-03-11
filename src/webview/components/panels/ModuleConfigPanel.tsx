@@ -80,9 +80,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
           setLocalValues((prev) => ({ ...prev, [name]: input.default_value ?? null }));
           break;
         case 'variable':
-          if (config?.available_variables?.[0]) {
-            setLocalVariables((prev) => ({ ...prev, [name]: config.available_variables[0].name }));
-          }
+          setLocalVariables((prev) => ({ ...prev, [name]: '' }));
           break;
         case 'expression':
           setLocalExpressions((prev) => ({ ...prev, [name]: '' }));
@@ -162,11 +160,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
 
     const buttons: { mode: BindingMode; label: string; disabled?: boolean }[] = [
       { mode: 'literal', label: 'Lit', disabled: isWired },
-      {
-        mode: 'variable',
-        label: 'Var',
-        disabled: isWired || (config?.available_variables ?? []).length === 0,
-      },
+      { mode: 'variable', label: 'Var', disabled: isWired },
       { mode: 'expression', label: 'Expr', disabled: isWired },
       { mode: 'wired', label: 'Wired', disabled: true },
     ];
@@ -240,23 +234,19 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
 
   function renderVariableEditor(input: RenderInput): React.ReactNode {
     const currentVar = localVariables[input.name] ?? input.variable ?? '';
-    const availableVars = config?.available_variables ?? [];
 
     return (
-      <select
+      <input
         value={currentVar}
-        onChange={(e) => setLocalVariables((prev) => ({ ...prev, [input.name]: e.target.value }))}
-        className={inputClasses}
-      >
-        <option value="" disabled>
-          Select variable...
-        </option>
-        {availableVars.map((v) => (
-          <option key={v.name} value={v.name}>
-            var.{v.name} ({v.type})
-          </option>
-        ))}
-      </select>
+        onChange={(e) => {
+          // Strip "var." prefix if user types it — we store just the name
+          const raw = e.target.value;
+          const name = raw.startsWith('var.') ? raw.slice(4) : raw;
+          setLocalVariables((prev) => ({ ...prev, [input.name]: name }));
+        }}
+        placeholder="e.g. region"
+        className={`${inputClasses} font-mono`}
+      />
     );
   }
 
