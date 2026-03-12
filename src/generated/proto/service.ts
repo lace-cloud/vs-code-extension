@@ -2,7 +2,7 @@
 // versions:
 //   protoc-gen-ts_proto  v2.11.4
 //   protoc               v7.34.0
-// source: service.proto
+// source: proto/service.proto
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
@@ -18,8 +18,8 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
-import { Empty } from "./google/protobuf/empty";
-import { Struct, Value } from "./google/protobuf/struct";
+import { Empty } from "../google/protobuf/empty";
+import { Struct, Value } from "../google/protobuf/struct";
 
 export const protobufPackage = "lace.engine";
 
@@ -186,12 +186,19 @@ export interface ShutdownResponse {
   status: string;
 }
 
+export interface OrgMembership {
+  slug: string;
+  name: string;
+  role: string;
+}
+
 export interface AuthStatusResponse {
   authenticated: boolean;
   user_id: string;
   user_email: string;
   user_name: string;
   base_url: string;
+  orgs: OrgMembership[];
 }
 
 export interface AuthLoginRequest {
@@ -888,8 +895,100 @@ export const ShutdownResponse: MessageFns<ShutdownResponse> = {
   },
 };
 
+function createBaseOrgMembership(): OrgMembership {
+  return { slug: "", name: "", role: "" };
+}
+
+export const OrgMembership: MessageFns<OrgMembership> = {
+  encode(message: OrgMembership, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.slug !== "") {
+      writer.uint32(10).string(message.slug);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.role !== "") {
+      writer.uint32(26).string(message.role);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OrgMembership {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOrgMembership();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.slug = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.role = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OrgMembership {
+    return {
+      slug: isSet(object.slug) ? globalThis.String(object.slug) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      role: isSet(object.role) ? globalThis.String(object.role) : "",
+    };
+  },
+
+  toJSON(message: OrgMembership): unknown {
+    const obj: any = {};
+    if (message.slug !== "") {
+      obj.slug = message.slug;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.role !== "") {
+      obj.role = message.role;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OrgMembership>, I>>(base?: I): OrgMembership {
+    return OrgMembership.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OrgMembership>, I>>(object: I): OrgMembership {
+    const message = createBaseOrgMembership();
+    message.slug = object.slug ?? "";
+    message.name = object.name ?? "";
+    message.role = object.role ?? "";
+    return message;
+  },
+};
+
 function createBaseAuthStatusResponse(): AuthStatusResponse {
-  return { authenticated: false, user_id: "", user_email: "", user_name: "", base_url: "" };
+  return { authenticated: false, user_id: "", user_email: "", user_name: "", base_url: "", orgs: [] };
 }
 
 export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
@@ -908,6 +1007,9 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
     }
     if (message.base_url !== "") {
       writer.uint32(42).string(message.base_url);
+    }
+    for (const v of message.orgs) {
+      OrgMembership.encode(v!, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -959,6 +1061,14 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
           message.base_url = reader.string();
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.orgs.push(OrgMembership.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -991,6 +1101,9 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
         : isSet(object.base_url)
         ? globalThis.String(object.base_url)
         : "",
+      orgs: globalThis.Array.isArray(object?.orgs)
+        ? object.orgs.map((e: any) => OrgMembership.fromJSON(e))
+        : [],
     };
   },
 
@@ -1011,6 +1124,9 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
     if (message.base_url !== "") {
       obj.baseUrl = message.base_url;
     }
+    if (message.orgs?.length) {
+      obj.orgs = message.orgs.map((e) => OrgMembership.toJSON(e));
+    }
     return obj;
   },
 
@@ -1024,6 +1140,7 @@ export const AuthStatusResponse: MessageFns<AuthStatusResponse> = {
     message.user_email = object.user_email ?? "";
     message.user_name = object.user_name ?? "";
     message.base_url = object.base_url ?? "";
+    message.orgs = object.orgs?.map((e) => OrgMembership.fromPartial(e)) || [];
     return message;
   },
 };

@@ -162,7 +162,9 @@ export class ServerManager extends EventEmitter {
     if (!this.client) throw new Error('Engine not running');
     const result = await this.client.authLogin({ token });
     if (result.success) {
-      this.emit('auth', { authenticated: true, user: result.user });
+      // Re-fetch full auth status to get org memberships
+      const status = await this.client.authStatus();
+      this.emit('auth', status);
     }
     return result;
   }

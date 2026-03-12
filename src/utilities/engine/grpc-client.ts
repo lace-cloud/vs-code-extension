@@ -49,10 +49,17 @@ import type { Diagnostic, RegistryModule } from '../../types/protocol';
 
 // ── Auth result envelopes (re-exported for consumers) ──
 
+export type OrgMembership = {
+  slug: string;
+  name: string;
+  role: string;
+};
+
 export type AuthStatusResult = {
   authenticated: boolean;
   user?: { id: string; email: string; name: string };
   base_url?: string;
+  orgs?: OrgMembership[];
 };
 
 export type AuthLoginResult = {
@@ -297,10 +304,19 @@ function modeToInputMode(mode: string): InputMode {
 
 export class LaceClient {
   private inner: GrpcLaceEngineClient;
+  private orgContext: string | null = null;
 
   constructor(port: number) {
     const address = `127.0.0.1:${port}`;
     this.inner = new GrpcLaceEngineClient(address, grpc.credentials.createInsecure());
+  }
+
+  setOrgContext(org: string | null): void {
+    this.orgContext = org;
+  }
+
+  private get resolvedOrg(): string | undefined {
+    return this.orgContext ?? undefined;
   }
 
   // ── Private helper: promisify unary calls ──
@@ -353,6 +369,9 @@ export class LaceClient {
         ? { id: res.user_id, email: res.user_email, name: res.user_name }
         : undefined,
       base_url: res.base_url || undefined,
+      orgs: res.orgs?.length
+        ? res.orgs.map((o) => ({ slug: o.slug, name: o.name, role: o.role }))
+        : undefined,
     };
   }
 
@@ -406,7 +425,7 @@ export class LaceClient {
       kind: params?.kind ?? '',
       page: params?.page ?? 0,
       limit: params?.limit ?? 0,
-      organization: params?.organization ?? '',
+      organization: params?.organization ?? this.resolvedOrg ?? '',
     });
     return {
       modules: res.modules.map((m) => ({
@@ -436,7 +455,7 @@ export class LaceClient {
       name: params.name,
       system: params.system,
       version: params.version,
-      organization: params.organization ?? '',
+      organization: params.organization ?? this.resolvedOrg ?? '',
     });
     return {
       name: res.name,
@@ -477,7 +496,7 @@ export class LaceClient {
     >(this.inner.registryGet, {
       name: params.name,
       system: params.system,
-      organization: params.organization ?? '',
+      organization: params.organization ?? this.resolvedOrg ?? '',
     });
     return {
       name: res.name,

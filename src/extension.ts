@@ -24,6 +24,8 @@ import { ServerManager } from './utilities/engine/server-manager';
 let server: ServerManager | undefined;
 let engineStatusBar: vscode.StatusBarItem | undefined;
 let registryProvider: RegistrySidebarProvider | undefined;
+let selectedOrg: string | null = null;
+let userOrgs: Array<{ slug: string; name: string; role: string }> = [];
 
 /* ---------------------------------- */
 /* UI Helpers                         */
@@ -83,6 +85,10 @@ export async function activate(context: vscode.ExtensionContext) {
   /* ---------- Registry Browser (sidebar) ---------- */
 
   registryProvider = new RegistrySidebarProvider(context.globalState, outputChannel);
+  registryProvider.onOrganizationChange((org) => {
+    selectedOrg = org;
+    server?.rpcClient?.setOrgContext(org);
+  });
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(RegistrySidebarProvider.viewType, registryProvider),
@@ -108,16 +114,30 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showErrorMessage(`Lace Engine Error: ${err.message}`),
   );
 
-  server.on('auth', (status: { authenticated: boolean; user?: { name?: string } }) => {
-    registryProvider?.setAuthenticated(status.authenticated);
-    if (status.authenticated) {
-      registryProvider?.setRpcClient(server?.rpcClient ?? null);
-      registryProvider?.refresh();
-    } else {
-      registryProvider?.setRpcClient(null);
-      registryProvider?.refresh();
-    }
-  });
+  server.on(
+    'auth',
+    (status: {
+      authenticated: boolean;
+      user?: { name?: string };
+      orgs?: Array<{ slug: string; name: string; role: string }>;
+    }) => {
+      registryProvider?.setAuthenticated(status.authenticated);
+      userOrgs = status.orgs ?? [];
+      registryProvider?.setOrganizations(userOrgs);
+      if (status.authenticated) {
+        server?.rpcClient?.setOrgContext(selectedOrg);
+        registryProvider?.setRpcClient(server?.rpcClient ?? null);
+        registryProvider?.refresh();
+      } else {
+        selectedOrg = null;
+        server?.rpcClient?.setOrgContext(null);
+        userOrgs = [];
+        registryProvider?.setOrganizations([]);
+        registryProvider?.setRpcClient(null);
+        registryProvider?.refresh();
+      }
+    },
+  );
 
   if (vscode.workspace.getConfiguration('lace').get<boolean>('autoStart', true)) {
     server.start().catch((err) => {

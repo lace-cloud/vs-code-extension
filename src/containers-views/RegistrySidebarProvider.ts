@@ -24,6 +24,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   private recentModuleIds: string[] = [];
   private cache = new Map<string, { modules: RegistryModule[]; fetchedAt: number }>();
   private outputChannel: vscode.OutputChannel | null = null;
+  private organizations: Array<{ slug: string; name: string; role: string }> = [];
+  private selectedOrg: string | null = null;
+  private orgChangeCallback: ((org: string | null) => void) | null = null;
 
   constructor(globalState?: vscode.Memento, outputChannel?: vscode.OutputChannel) {
     this.globalState = globalState;
@@ -38,6 +41,15 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   setAuthenticated(value: boolean) {
     this.authenticated = value;
     this.updateWebview();
+  }
+
+  setOrganizations(orgs: Array<{ slug: string; name: string; role: string }>) {
+    this.organizations = orgs;
+    this.updateWebview();
+  }
+
+  onOrganizationChange(callback: (org: string | null) => void) {
+    this.orgChangeCallback = callback;
   }
 
   /** Get all loaded modules (for command palette quick pick). */
@@ -152,6 +164,12 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         case 'login':
           vscode.commands.executeCommand('lace.login');
           break;
+        case 'setOrganization':
+          this.selectedOrg = (msg.organization as string) || null;
+          this.cache.clear();
+          this.orgChangeCallback?.(this.selectedOrg);
+          this.refresh(true);
+          break;
         case 'toggleFavorite': {
           const id = msg.moduleId as string;
           const idx = this.favoriteModuleIds.indexOf(id);
@@ -180,6 +198,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const errorJson = JSON.stringify(this.errorMessage);
     const favoritesJson = JSON.stringify(this.favoriteModuleIds);
     const recentJson = JSON.stringify(this.recentModuleIds);
+    const orgsJson = JSON.stringify(this.organizations);
+    const selectedOrgJson = JSON.stringify(this.selectedOrg);
     const hasEngine = this.rpcClient !== null;
     const authenticated = this.authenticated;
 
@@ -230,6 +250,23 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     .search-input::placeholder {
       color: var(--vscode-input-placeholderForeground, #888);
+    }
+
+    .org-picker {
+      width: 100%;
+      padding: 4px 8px;
+      margin-top: 4px;
+      border: 1px solid var(--vscode-input-border, #3c3c3c);
+      background: var(--vscode-input-background, #3c3c3c);
+      color: var(--vscode-input-foreground, #ccc);
+      border-radius: 4px;
+      font-size: 11px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .org-picker:focus {
+      border-color: var(--vscode-focusBorder, #007fd4);
     }
 
     .filter-toggle {
@@ -529,6 +566,14 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       />
       <button class="filter-toggle" id="filterToggle" title="Toggle filters">&#x25BD;</button>
     </div>
+    ${
+      this.organizations.length > 0
+        ? `<select id="orgPicker" class="org-picker">
+      <option value="">Public Registry</option>
+      ${this.organizations.map((o) => `<option value="${o.slug}" ${this.selectedOrg === o.slug ? 'selected' : ''}>${o.name}</option>`).join('')}
+    </select>`
+        : ''
+    }
   </div>
   <div id="chips"></div>
   <div id="content"></div>
@@ -542,6 +587,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const recentIds = ${recentJson};
     const hasEngine = ${hasEngine};
     const authenticated = ${authenticated};
+    const orgs = ${orgsJson};
+    const selectedOrg = ${selectedOrgJson};
 
     const searchInput = document.getElementById('search');
     const chipsEl = document.getElementById('chips');
@@ -557,6 +604,13 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       filtersVisible = !filtersVisible;
       render(searchInput.value);
     });
+
+    const orgPicker = document.getElementById('orgPicker');
+    if (orgPicker) {
+      orgPicker.addEventListener('change', () => {
+        vscode.postMessage({ command: 'setOrganization', organization: orgPicker.value || null });
+      });
+    }
 
     // ── Helpers ──
 
