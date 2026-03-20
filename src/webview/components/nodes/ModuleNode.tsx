@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { RenderNode } from '../../types/render';
 import { isValidTerraformIdentifier } from '../../utils/identifiers';
-import { useEngine } from '../../state/engine-context';
+import { useCanvas } from '../../state/engine-context';
 
 // ── Node data contract (serializable — no callbacks) ──
 
@@ -42,7 +42,7 @@ function BrokenIcon() {
 // ── Component ──
 
 const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
-  const engine = useEngine();
+  const { engine, updateView } = useCanvas();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(id);
   const [hovered, setHovered] = useState(false);
@@ -72,7 +72,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const commitRename = useCallback(async () => {
     setEditing(false);
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed)) {
+    if (engine && trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed)) {
       await engine.renameInstance(id, trimmed);
     }
   }, [editValue, id, engine]);
@@ -98,9 +98,12 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onDeleteInstance = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
-      await engine.deleteInstance(data.id);
+      if (!engine) return;
+      setHovered(false);
+      const result = await engine.deleteInstance(data.id);
+      updateView(result);
     },
-    [data.id, engine],
+    [data.id, engine, updateView],
   );
 
   // ── Helpers ──
