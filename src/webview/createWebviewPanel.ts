@@ -187,11 +187,13 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
     autoSaveTimer = setTimeout(async () => {
       try {
         const client = requireClient(server.rpcClient, 'auto-save');
-        await client.sessionSave();
+        console.log(`[Canvas] auto-save triggered`);
+        const saveResult = await client.sessionSave();
+        console.log(`[Canvas] auto-save result:`, saveResult);
         isDirtyHostSide = false;
         panel.title = `Lace · ${folderName}`;
-      } catch {
-        // Auto-save is best-effort
+      } catch (err) {
+        console.error(`[Canvas] auto-save FAILED:`, err);
       }
     }, 2000);
   }
@@ -213,12 +215,17 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
         case 'webviewReady': {
           try {
             const client = requireClient(server.rpcClient, 'session/open');
+            console.log(`[Canvas] session/open file_path="${laceDir}" workspace="${folderName}"`);
             const canvasView = await client.sessionOpen({
               file_path: laceDir,
               workspace_name: folderName,
             });
+            console.log(
+              `[Canvas] session/open result: ${canvasView.nodes?.length ?? 0} nodes, ${canvasView.edges?.length ?? 0} edges, dirty=${canvasView.is_dirty}`,
+            );
             postToWebview(panel, { command: 'loadState', state: canvasView });
           } catch (err: unknown) {
+            console.error(`[Canvas] session/open FAILED:`, err);
             const classified = handleRpcError(err, 'session/open', 'open canvas session');
             vscode.window.showErrorMessage(classified.message);
           }
@@ -247,6 +254,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
 
         // ── markDirty: update title ──
         case 'markDirty': {
+          console.log(`[Canvas] markDirty — scheduling auto-save`);
           isDirtyHostSide = true;
           panel.title = `Lace · ${folderName} ●`;
           scheduleAutoSave();
@@ -278,11 +286,15 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
       try {
         const client = server.rpcClient;
         if (client) {
-          await client.sessionSave();
+          console.log(`[Canvas] dispose save (dirty=true)`);
+          const saveResult = await client.sessionSave();
+          console.log(`[Canvas] dispose save result:`, saveResult);
         }
-      } catch {
-        // Best-effort save on close
+      } catch (err) {
+        console.error(`[Canvas] dispose save FAILED:`, err);
       }
+    } else {
+      console.log(`[Canvas] dispose — not dirty, skipping save`);
     }
 
     try {

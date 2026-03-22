@@ -4,6 +4,7 @@ import {
   ReactFlow,
   Controls,
   MiniMap,
+  MarkerType,
   useReactFlow,
   applyNodeChanges,
   applyEdgeChanges,
@@ -57,7 +58,6 @@ const PHASE_LABELS: Record<GeneratePhase, string> = {
 
 type CompositeEditorProps = {
   view: CanvasView;
-  fitViewTrigger: number;
   isGenerating: boolean;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
@@ -73,7 +73,6 @@ type CompositeEditorProps = {
 
 function CompositeEditor({
   view,
-  fitViewTrigger,
   isGenerating,
   onDragStop,
   onConnect,
@@ -86,31 +85,45 @@ function CompositeEditor({
   onGenerate,
   onOpenSettings,
 }: CompositeEditorProps) {
+  console.log(
+    `[CompositeEditor] render — view has ${view.nodes.length} nodes, ${view.edges.length} edges`,
+  );
   const { fitView } = useReactFlow();
 
-  // ── Imperative fitView on load, drop, and navigation ──
+  // ── Imperative fitView on initial mount only ──
   useEffect(() => {
     const timer = setTimeout(() => fitView({ padding: 0.2, maxZoom: 1.5 }), 50);
     return () => clearTimeout(timer);
-  }, [fitViewTrigger, fitView]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Derive ReactFlow edges from CanvasView ──
-  const rfEdgesFromView: Edge[] = useMemo(
-    () =>
-      view.edges.map((e: RenderEdge) => ({
-        id: e.id,
-        source: e.source,
-        sourceHandle: 'out-right',
-        target: e.target,
-        targetHandle: 'in-left',
-        data: { source_output: e.source_output, target_input: e.target_input },
-      })),
-    [view.edges],
-  );
+  const rfEdgesFromView: Edge[] = useMemo(() => {
+    console.log(
+      `[CompositeEditor] deriving edges from view:`,
+      view.edges.length,
+      'edges',
+      JSON.stringify(view.edges),
+    );
+    return view.edges.map((e: RenderEdge) => ({
+      id: e.id,
+      source: e.source,
+      sourceHandle: 'out-right',
+      target: e.target,
+      targetHandle: 'in-left',
+      label: `${e.source_output} → ${e.target_input}`,
+      labelStyle: { fill: '#ECEFED', fontSize: 10, fontFamily: 'monospace', opacity: 0.85 },
+      labelBgStyle: { fill: '#153238', opacity: 0.9 },
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 4,
+      data: { source_output: e.source_output, target_input: e.target_input },
+    }));
+  }, [view.edges]);
 
   // ── Local edge state (for selection support) ──
   const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromView);
   useEffect(() => {
+    console.log(`[CompositeEditor] syncing rfEdges:`, rfEdgesFromView.length, 'edges');
     setRfEdges(rfEdgesFromView);
   }, [rfEdgesFromView]);
 
@@ -199,6 +212,10 @@ function CompositeEditor({
     backgroundSize: '16px 16px, 16px 16px, 80px 80px, 80px 80px',
   };
 
+  console.log(
+    `[CompositeEditor] rendering ReactFlow with ${rfNodes.length} nodes, ${rfEdges.length} edges`,
+  );
+
   return (
     <ReactFlow
       nodes={rfNodes}
@@ -210,6 +227,11 @@ function CompositeEditor({
       onNodesDelete={onNodesDelete}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
+      defaultEdgeOptions={{
+        animated: false,
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#CEFE65', width: 16, height: 16 },
+        style: { stroke: '#CEFE65', strokeWidth: 1.5 },
+      }}
       minZoom={0.1}
       maxZoom={4}
       style={gridStyle}
@@ -266,6 +288,19 @@ export default function Canvas() {
     return () => window.removeEventListener('openNodeConfig', handler);
   }, []);
 
+  // ── Listen for canvasViewUpdated events (e.g., delete from node button) ──
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const view = (e as CustomEvent).detail;
+      if (view) {
+        setConfigTarget(null);
+        updateView(view);
+      }
+    };
+    window.addEventListener('canvasViewUpdated', handler);
+    return () => window.removeEventListener('canvasViewUpdated', handler);
+  }, [updateView]);
+
   // ── Undo/Redo via engine ──
   const onUndo = useCallback(async () => {
     if (!engine || !state.view?.can_undo) return;
@@ -312,21 +347,32 @@ export default function Canvas() {
   // ── Event: new connection ──
   const onConnect = useCallback(
     async (conn: Connection) => {
+      console.log(`[Canvas] onConnect fired:`, conn.source, '→', conn.target);
       if (!conn.source || !conn.target || !engine) return;
 
-      // Try auto-connect first
+      const edgesBefore = state.view?.edges.length ?? 0;
+
       try {
         const result = await engine.autoConnect(conn.source, conn.target);
-        updateView(result);
+        const edgesAfter = result.edges?.length ?? 0;
+
+        if (edgesAfter > edgesBefore) {
+          console.log(`[Canvas] autoConnect created ${edgesAfter - edgesBefore} new edge(s)`);
+          updateView(result);
+        } else {
+          // autoConnect returned success but no new edge — open manual panel
+          console.log(
+            `[Canvas] autoConnect no-op (${edgesBefore} → ${edgesAfter} edges), opening manual panel`,
+          );
+          setEdgeConfigState({ source: conn.source, target: conn.target });
+        }
       } catch {
-        // Auto-connect failed (ambiguous) — open edge config panel
-        setEdgeConfigState({
-          source: conn.source,
-          target: conn.target,
-        });
+        // autoConnect threw — open manual panel
+        console.log(`[Canvas] autoConnect failed, opening manual panel`);
+        setEdgeConfigState({ source: conn.source, target: conn.target });
       }
     },
-    [engine, updateView],
+    [engine, state.view?.edges.length, updateView],
   );
 
   // ── Event: edge delete (select edge + Delete/Backspace) ──
@@ -449,9 +495,7 @@ export default function Canvas() {
 
       <div className="flex-1 relative min-h-0">
         <CompositeEditor
-          key={`canvas:${state.generation}`}
           view={view}
-          fitViewTrigger={state.generation}
           isGenerating={generating}
           onDragStop={onDragStop}
           onConnect={onConnect}
