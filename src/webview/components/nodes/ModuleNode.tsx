@@ -176,7 +176,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       )}
 
       {/* ── Handles (CSS controls visibility) ── */}
-      <Handle id="in-top" type="target" position={Position.Top} className={handleClass('in-top')} />
       <Handle
         id="in-left"
         type="target"
@@ -189,13 +188,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
         position={Position.Right}
         className={handleClass('out-right')}
       />
-      <Handle
-        id="out-bottom"
-        type="source"
-        position={Position.Bottom}
-        className={handleClass('out-bottom')}
-      />
-
       {/* ── Label ── */}
       <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 flex flex-col items-center pointer-events-auto">
         {editing ? (
