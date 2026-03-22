@@ -64,7 +64,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      console.log(`[ModuleNode] double-click → editing "${id}"`);
       setEditValue(id);
       setEditing(true);
     },
@@ -72,20 +71,13 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   );
 
   const commitRename = useCallback(async () => {
-    if (renamingRef.current) {
-      console.log(`[ModuleNode] commitRename skipped — already renaming`);
-      return;
-    }
+    if (renamingRef.current) return;
     renamingRef.current = true;
     setEditing(false);
     const trimmed = editValue.trim();
-    console.log(
-      `[ModuleNode] commitRename: "${id}" → "${trimmed}", valid=${isValidTerraformIdentifier(trimmed)}, changed=${trimmed !== id}`,
-    );
     if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed)) {
       try {
         const result = await engine.renameInstance(id, trimmed);
-        console.log(`[ModuleNode] rename success:`, result);
         window.dispatchEvent(new CustomEvent('canvasViewUpdated', { detail: result }));
       } catch (err) {
         console.error(`[ModuleNode] rename failed:`, err);
@@ -97,7 +89,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       e.stopPropagation();
-      console.log(`[ModuleNode] keyDown: "${e.key}"`);
       if (e.key === 'Enter') commitRename();
       else if (e.key === 'Escape') setEditing(false);
     },
@@ -107,7 +98,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      console.log(`[ModuleNode] click → openNodeConfig "${data.id}"`);
       window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }));
     },
     [data.id],
@@ -116,10 +106,8 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onDeleteInstance = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
-      console.log(`[ModuleNode] delete "${data.id}"`);
       try {
         const result = await engine.deleteInstance(data.id);
-        console.log(`[ModuleNode] delete success, nodes remaining: ${result.nodes?.length}`);
         window.dispatchEvent(new CustomEvent('canvasViewUpdated', { detail: result }));
       } catch (err) {
         console.error(`[ModuleNode] delete failed:`, err);

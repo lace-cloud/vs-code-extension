@@ -47,18 +47,10 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
     let cancelled = false;
     setLoading(true);
     setError(null);
-    console.log(`[ModuleConfigPanel] fetching config for "${instance_id}"...`);
     engine
       .queryNodeConfig(instance_id)
       .then((result) => {
         if (cancelled) return;
-        console.log(
-          `[ModuleConfigPanel] config loaded for "${instance_id}":`,
-          result.inputs.length,
-          'inputs,',
-          result.outputs.length,
-          'outputs',
-        );
         setConfig(result);
         setLoading(false);
 

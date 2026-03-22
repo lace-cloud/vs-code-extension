@@ -85,9 +85,6 @@ function CompositeEditor({
   onGenerate,
   onOpenSettings,
 }: CompositeEditorProps) {
-  console.log(
-    `[CompositeEditor] render — view has ${view.nodes.length} nodes, ${view.edges.length} edges`,
-  );
   const { fitView } = useReactFlow();
 
   // ── Imperative fitView on initial mount only ──
@@ -99,12 +96,6 @@ function CompositeEditor({
 
   // ── Derive ReactFlow edges from CanvasView ──
   const rfEdgesFromView: Edge[] = useMemo(() => {
-    console.log(
-      `[CompositeEditor] deriving edges from view:`,
-      view.edges.length,
-      'edges',
-      JSON.stringify(view.edges),
-    );
     return view.edges.map((e: RenderEdge) => ({
       id: e.id,
       source: e.source,
@@ -123,7 +114,6 @@ function CompositeEditor({
   // ── Local edge state (for selection support) ──
   const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromView);
   useEffect(() => {
-    console.log(`[CompositeEditor] syncing rfEdges:`, rfEdgesFromView.length, 'edges');
     setRfEdges(rfEdgesFromView);
   }, [rfEdgesFromView]);
 
@@ -211,10 +201,6 @@ function CompositeEditor({
     ].join(', '),
     backgroundSize: '16px 16px, 16px 16px, 80px 80px, 80px 80px',
   };
-
-  console.log(
-    `[CompositeEditor] rendering ReactFlow with ${rfNodes.length} nodes, ${rfEdges.length} edges`,
-  );
 
   return (
     <ReactFlow
@@ -347,7 +333,6 @@ export default function Canvas() {
   // ── Event: new connection ──
   const onConnect = useCallback(
     async (conn: Connection) => {
-      console.log(`[Canvas] onConnect fired:`, conn.source, '→', conn.target);
       if (!conn.source || !conn.target || !engine) return;
 
       const edgesBefore = state.view?.edges.length ?? 0;
@@ -357,18 +342,11 @@ export default function Canvas() {
         const edgesAfter = result.edges?.length ?? 0;
 
         if (edgesAfter > edgesBefore) {
-          console.log(`[Canvas] autoConnect created ${edgesAfter - edgesBefore} new edge(s)`);
           updateView(result);
         } else {
-          // autoConnect returned success but no new edge — open manual panel
-          console.log(
-            `[Canvas] autoConnect no-op (${edgesBefore} → ${edgesAfter} edges), opening manual panel`,
-          );
           setEdgeConfigState({ source: conn.source, target: conn.target });
         }
       } catch {
-        // autoConnect threw — open manual panel
-        console.log(`[Canvas] autoConnect failed, opening manual panel`);
         setEdgeConfigState({ source: conn.source, target: conn.target });
       }
     },
