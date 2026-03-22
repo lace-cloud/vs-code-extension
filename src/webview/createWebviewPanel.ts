@@ -190,8 +190,8 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
         await client.sessionSave();
         isDirtyHostSide = false;
         panel.title = `Lace · ${folderName}`;
-      } catch {
-        // Auto-save is best-effort
+      } catch (err) {
+        console.error(`[Canvas] auto-save FAILED:`, err);
       }
     }, 2000);
   }
@@ -219,6 +219,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
             });
             postToWebview(panel, { command: 'loadState', state: canvasView });
           } catch (err: unknown) {
+            console.error(`[Canvas] session/open FAILED:`, err);
             const classified = handleRpcError(err, 'session/open', 'open canvas session');
             vscode.window.showErrorMessage(classified.message);
           }
@@ -280,8 +281,8 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
         if (client) {
           await client.sessionSave();
         }
-      } catch {
-        // Best-effort save on close
+      } catch (err) {
+        console.error(`[Canvas] dispose save FAILED:`, err);
       }
     }
 

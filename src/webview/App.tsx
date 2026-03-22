@@ -24,7 +24,7 @@ export default function App({ vscode }: AppProps) {
   const [engine] = useState(() => new PostMessageEngine(vscode));
 
   const updateView = useCallback((view: CanvasView) => {
-    setState((prev) => ({ view, loading: false, error: null, generation: prev.generation }));
+    setState((prev) => ({ view, loading: false, error: null, generation: prev.generation + 1 }));
   }, []);
 
   // ── Central message listener: host → webview ──
