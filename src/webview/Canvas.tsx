@@ -210,6 +210,7 @@ function CompositeEditor({
       onNodesDelete={onNodesDelete}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
+      connectionMode="loose"
       minZoom={0.1}
       maxZoom={4}
       style={gridStyle}
