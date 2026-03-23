@@ -48,6 +48,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const [hovered, setHovered] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const renamingRef = useRef(false);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -70,15 +71,24 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   );
 
   const commitRename = useCallback(async () => {
+    if (renamingRef.current) return;
+    renamingRef.current = true;
     setEditing(false);
     const trimmed = editValue.trim();
     if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed)) {
-      await engine.renameInstance(id, trimmed);
+      try {
+        const result = await engine.renameInstance(id, trimmed);
+        window.dispatchEvent(new CustomEvent('canvasViewUpdated', { detail: result }));
+      } catch (err) {
+        console.error(`[ModuleNode] rename failed:`, err);
+      }
     }
+    renamingRef.current = false;
   }, [editValue, id, engine]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      e.stopPropagation();
       if (e.key === 'Enter') commitRename();
       else if (e.key === 'Escape') setEditing(false);
     },
@@ -88,8 +98,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      // Opening config panel is handled by Canvas via node selection
-      // Post a custom event that Canvas listens to
       window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }));
     },
     [data.id],
@@ -98,7 +106,12 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const onDeleteInstance = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
-      await engine.deleteInstance(data.id);
+      try {
+        const result = await engine.deleteInstance(data.id);
+        window.dispatchEvent(new CustomEvent('canvasViewUpdated', { detail: result }));
+      } catch (err) {
+        console.error(`[ModuleNode] delete failed:`, err);
+      }
     },
     [data.id, engine],
   );

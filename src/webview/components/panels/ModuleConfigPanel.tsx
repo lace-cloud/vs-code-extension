@@ -27,6 +27,7 @@ type Props = {
 // ── Component ──
 
 export default function ModuleConfigPanel({ instance_id, engine, onClose }: Props) {
+  const { state, updateView } = useCanvas();
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,37 +41,47 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
   const [localDependsOn, setLocalDependsOn] = useState<Set<string>>(new Set());
 
   // Fetch config from engine
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    engine.queryNodeConfig(instance_id).then((result) => {
-      if (cancelled) return;
-      setConfig(result);
-      setLoading(false);
+    setError(null);
+    engine
+      .queryNodeConfig(instance_id)
+      .then((result) => {
+        if (cancelled) return;
+        setConfig(result);
+        setLoading(false);
 
-      // Initialize local state from fetched config
-      const modes: Record<string, BindingMode> = {};
-      const values: Record<string, unknown> = {};
-      const variables: Record<string, string> = {};
-      const expressions: Record<string, string> = {};
+        // Initialize local state from fetched config
+        const modes: Record<string, BindingMode> = {};
+        const values: Record<string, unknown> = {};
+        const variables: Record<string, string> = {};
+        const expressions: Record<string, string> = {};
 
-      for (const input of result.inputs) {
-        modes[input.name] = input.mode;
-        if (input.value !== undefined) values[input.name] = input.value;
-        if (input.variable) variables[input.name] = input.variable;
-        if (input.expression) expressions[input.name] = input.expression;
-      }
+        for (const input of result.inputs) {
+          modes[input.name] = input.mode;
+          if (input.value !== undefined) values[input.name] = input.value;
+          if (input.variable) variables[input.name] = input.variable;
+          if (input.expression) expressions[input.name] = input.expression;
+        }
 
-      setLocalModes(modes);
-      setLocalValues(values);
-      setLocalVariables(variables);
-      setLocalExpressions(expressions);
-      setLocalDependsOn(new Set(result.depends_on));
-    });
+        setLocalModes(modes);
+        setLocalValues(values);
+        setLocalVariables(variables);
+        setLocalExpressions(expressions);
+        setLocalDependsOn(new Set(result.depends_on));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error(`[ModuleConfigPanel] queryNodeConfig failed for "${instance_id}":`, err);
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [instance_id, engine]);
+  }, [instance_id, engine, state.generation]);
 
   const switchMode = useCallback(
     (name: string, mode: BindingMode, input: RenderInput) => {
@@ -134,7 +145,8 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
   // ── Disconnect handler ──
 
   const handleDisconnect = async (inputName: string) => {
-    await engine.disconnect(instance_id, inputName);
+    const result = await engine.disconnect(instance_id, inputName);
+    updateView(result);
     // Refresh config after disconnect
     const updated = await engine.queryNodeConfig(instance_id);
     setConfig(updated);
@@ -183,7 +195,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
 
     return (
       <div key={input.name} className="mb-4 flex flex-col gap-1.5">
-        <label className="text-xs font-semibold opacity-90">
+        <label className="text-xs font-semibold text-[#e6e6e6]">
           {input.name}
           {input.required && <span className="text-[#e5484d] ml-1">*</span>}
         </label>
@@ -197,7 +209,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
         {currentMode === 'expression' && renderExpressionEditor(input)}
         {currentMode === 'literal' && renderLiteralEditor(input)}
 
-        {input.description && <div className="text-[11px] opacity-60">{input.description}</div>}
+        {input.description && <div className="text-[11px] text-[#9ca3af]">{input.description}</div>}
       </div>
     );
   }
@@ -337,6 +349,17 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
     );
   }
 
+  if (error) {
+    return (
+      <PanelFrame title="Error" onClose={onClose}>
+        <div className="text-xs text-red-400">
+          Failed to load configuration for "{instance_id}":
+        </div>
+        <div className="text-xs text-red-300 mt-1 break-all">{error}</div>
+      </PanelFrame>
+    );
+  }
+
   if (loading || !config) {
     return (
       <PanelFrame title="Loading..." onClose={onClose}>
@@ -423,7 +446,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
                 <span className="font-mono opacity-75 text-[11px]">{o.type ?? ''}</span>
               </div>
               {o.description && (
-                <div className="mt-1.5 text-[11px] opacity-70">{o.description}</div>
+                <div className="mt-1.5 text-[11px] text-[#9ca3af]">{o.description}</div>
               )}
               {o.sensitive && (
                 <div className="mt-1 text-[10px] text-yellow-400 opacity-80">sensitive</div>
