@@ -1,7 +1,7 @@
 // src/webview/components/panels/ModuleConfigPanel.tsx
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import type { RenderInput, RenderOutput, NodeConfig } from '../../types/render';
-import type { CanvasEngine, InputUpdate } from '../../engine';
+import type { CanvasEngine } from '../../engine';
 import { useCanvas } from '../../state/engine-context';
 import AccordionSection from '../AccordionSection';
 import PanelFrame from '../PanelFrame';
@@ -127,26 +127,30 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
   const handleSave = async () => {
     if (!config) return;
 
-    const inputs: InputUpdate[] = config.inputs
-      .filter((input) => {
-        const mode = localModes[input.name] ?? input.mode;
-        // Skip wired inputs — managed by connect/disconnect
-        return mode !== 'wired';
-      })
-      .map((input) => {
-        const mode = localModes[input.name] ?? input.mode;
-        const update: InputUpdate = {
-          name: input.name,
-          mode: mode === 'wired' ? 'empty' : mode,
-        };
-        if (mode === 'literal') update.value = localValues[input.name];
-        if (mode === 'variable') update.variable = localVariables[input.name];
-        if (mode === 'expression') update.expression = localExpressions[input.name];
-        return update;
-      });
+    // Update each non-wired input individually so the CLI processes them
+    // one at a time. Wired inputs are intentionally skipped — their bindings
+    // are managed by connect/disconnect and must not be touched here.
+    // (Using updateAllInputs with a partial list causes the CLI to replace the
+    // full input set, which erases wired bindings.)
+    let lastView = state.view;
+    for (const input of config.inputs) {
+      const mode = localModes[input.name] ?? input.mode;
+      if (mode === 'wired') continue;
 
-    const result = await engine.updateAllInputs(instance_id, inputs);
-    updateView(result);
+      const result = await engine.updateInput(
+        instance_id,
+        input.name,
+        mode,
+        mode === 'literal' ? localValues[input.name] : undefined,
+        mode === 'variable' ? localVariables[input.name] : undefined,
+        mode === 'expression' ? localExpressions[input.name] : undefined,
+      );
+      lastView = result;
+    }
+
+    if (lastView && lastView !== state.view) {
+      updateView(lastView);
+    }
     await engine.setDependsOn(instance_id, [...localDependsOn]);
     onClose();
   };
