@@ -11,6 +11,7 @@ import {
   addModuleToActiveCanvas,
   triggerGenerateOnActiveCanvas,
   getLaceDir,
+  publishCanvasViewToActivePanel,
 } from './webview/createWebviewPanel';
 
 import { registerChatParticipant } from './chat/participant';
@@ -296,6 +297,7 @@ export async function activate(context: vscode.ExtensionContext) {
       getRpcClient: () => server?.rpcClient ?? null,
       getRegistryModules: () => registryProvider?.getModules() ?? [],
       getLaceDir,
+      publishCanvasView: publishCanvasViewToActivePanel,
     }),
   );
 }
