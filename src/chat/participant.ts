@@ -132,7 +132,7 @@ async function handleChatRequest(
       > = [
         ...textParts.map((t) => new vscode.LanguageModelTextPart(t)),
         ...toolCalls.map(
-          (tc) => new vscode.LanguageModelToolCallPart(tc.name, tc.callId, tc.input),
+          (tc) => new vscode.LanguageModelToolCallPart(tc.callId, tc.name, tc.input),
         ),
       ];
       messages.push(vscode.LanguageModelChatMessage.Assistant(assistantContent));
