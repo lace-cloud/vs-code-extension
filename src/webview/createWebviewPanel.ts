@@ -5,6 +5,7 @@ import path from 'path';
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
 import type { HostToWebview, WebviewToHost, Diagnostic, GeneratePhase } from '../types/protocol';
+import type { CanvasView } from './types/render';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
 import * as terraform from '../utilities/terraform';
 
@@ -133,6 +134,12 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
 
 function postToWebview(panel: vscode.WebviewPanel, msg: HostToWebview) {
   panel.webview.postMessage(msg);
+}
+
+/** Push a fresh CanvasView to the active panel (if open). */
+export function publishCanvasViewToActivePanel(state: CanvasView): void {
+  if (!canvasPanel) return;
+  postToWebview(canvasPanel, { command: 'loadState', state });
 }
 
 // ══════════════════════════════════════════════════════════════════════

@@ -6,6 +6,7 @@
 
 import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { RegistryModule } from '../../types/protocol';
+import type { CanvasView } from '../../webview/types/render';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { isValidTerraformIdentifier } from '../../webview/utils/identifiers';
@@ -14,11 +15,14 @@ import { requireEngine, errorMessage } from './helpers';
 export type GraphWriteDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  publishCanvasView?: (state: CanvasView) => void;
 };
 
 // ── Tool Registration ──
 
 export function registerGraphWriteTools(deps: GraphWriteDeps): void {
+  const publishCanvasView = (state: CanvasView) => deps.publishCanvasView?.(state);
+
   // ─────────────────────────────────────────────
   // lace_add_module
   // ─────────────────────────────────────────────
@@ -83,6 +87,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       const canvasView = await engineResult.client.dropBundle({
         deploy_bundle: deployBundle,
       });
+      publishCanvasView(canvasView);
 
       // Find the newly added node from the returned canvas view
       const addedNode = canvasView.nodes.find(
@@ -120,7 +125,8 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.deleteInstance({ instance_id: instanceId });
+      const canvasView = await engineResult.client.deleteInstance({ instance_id: instanceId });
+      publishCanvasView(canvasView);
       return { content: `Removed instance "${instanceId}" from the canvas.` };
     } catch (err: unknown) {
       return { content: `Failed to remove instance: ${errorMessage(err)}`, isError: true };
@@ -148,12 +154,13 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.connect({
+      const canvasView = await engineResult.client.connect({
         source: sourceInstance,
         target: targetInstance,
         source_output: sourceOutput,
         target_input: targetInput,
       });
+      publishCanvasView(canvasView);
       return {
         content: `Connected ${sourceInstance}.${sourceOutput} → ${targetInstance}.${targetInput}`,
       };
@@ -180,10 +187,11 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.disconnect({
+      const canvasView = await engineResult.client.disconnect({
         target: targetInstance,
         input_name: inputName,
       });
+      publishCanvasView(canvasView);
       return { content: `Disconnected input "${inputName}" on instance "${targetInstance}".` };
     } catch (err: unknown) {
       return { content: `Failed to disconnect: ${errorMessage(err)}`, isError: true };
@@ -238,7 +246,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.updateInput({
+      const canvasView = await engineResult.client.updateInput({
         instance_id: instanceId,
         input_name: inputName,
         mode,
@@ -246,6 +254,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
         variable,
         expression,
       });
+      publishCanvasView(canvasView);
 
       const desc =
         mode === 'literal'
@@ -286,7 +295,8 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      await engineResult.client.renameInstance({ old_id: oldId, new_id: newId });
+      const canvasView = await engineResult.client.renameInstance({ old_id: oldId, new_id: newId });
+      publishCanvasView(canvasView);
       return { content: `Renamed instance "${oldId}" to "${newId}".` };
     } catch (err: unknown) {
       return { content: `Failed to rename instance: ${errorMessage(err)}`, isError: true };
