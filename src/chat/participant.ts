@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 
 import type { LaceClient } from '../utilities/engine/grpc-client';
 import type { RegistryModule } from '../types/protocol';
+import type { CanvasView } from '../webview/types/render';
 
 import { SYSTEM_PROMPT } from './system-prompt';
 import { getToolHandler } from './tool-registry';
@@ -29,6 +30,7 @@ export type ChatParticipantDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
   getLaceDir: () => string | undefined;
+  publishCanvasView?: (state: CanvasView) => void;
 };
 
 // ── Max iterations for the agentic loop ──
@@ -132,7 +134,7 @@ async function handleChatRequest(
       > = [
         ...textParts.map((t) => new vscode.LanguageModelTextPart(t)),
         ...toolCalls.map(
-          (tc) => new vscode.LanguageModelToolCallPart(tc.name, tc.callId, tc.input),
+          (tc) => new vscode.LanguageModelToolCallPart(tc.callId, tc.name, tc.input),
         ),
       ];
       messages.push(vscode.LanguageModelChatMessage.Assistant(assistantContent));
