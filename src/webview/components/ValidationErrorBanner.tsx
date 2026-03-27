@@ -248,11 +248,20 @@ export function ValidationErrorBanner({
 
 /**
  * Extract a canvas node ID from a Terraform diagnostic.
- * Uses the address field ("module.cluster.aws_ecs_cluster.this" → "cluster").
+ * Tries address field first ("module.cluster.aws_ecs_cluster.this" → "cluster"),
+ * then falls back to the file path ("modules/cluster/main.tf" → "cluster").
  */
-function extractNodeId(d: { address?: string }, nodeIds: Set<string>): string | null {
-  if (!d.address) return null;
-  const m = d.address.match(/^module\.([^.]+)/);
-  if (m && nodeIds.has(m[1])) return m[1];
+function extractNodeId(
+  d: { address?: string; file?: string },
+  nodeIds: Set<string>,
+): string | null {
+  if (d.address) {
+    const m = d.address.match(/^module\.([^.]+)/);
+    if (m && nodeIds.has(m[1])) return m[1];
+  }
+  if (d.file) {
+    const m = d.file.match(/(?:^|[\\/])modules[\\/]([^/\\]+)[\\/]/);
+    if (m && nodeIds.has(m[1])) return m[1];
+  }
   return null;
 }
