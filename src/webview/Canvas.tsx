@@ -443,6 +443,7 @@ export default function Canvas() {
       switch (msg.command) {
         case 'generateProgress': {
           setGenerating(true);
+          setValidationErrors([]);
           setToast({ message: PHASE_LABELS[msg.phase as GeneratePhase], type: 'progress' });
           break;
         }
@@ -477,11 +478,11 @@ export default function Canvas() {
   const erroredNodeIds = useMemo<Set<string>>(() => {
     const ids = new Set<string>();
     for (const d of validationErrors) {
-      if (!d.file) continue;
-      // Terraform paths: "module.cluster/main.tf" or ".lace/module.cluster/main.tf"
-      // Extract the first "module.<id>" path segment anywhere in the path.
-      const m = d.file.replace(/\\/g, '/').match(/(?:^|\/)module\.([^./]+)/);
-      if (m) ids.add(m[1]);
+      // address: "module.cluster.aws_ecs_cluster.this" → first segment after "module." is the instance ID
+      if (d.address) {
+        const m = d.address.match(/^module\.([^.]+)/);
+        if (m) ids.add(m[1]);
+      }
     }
     return ids;
   }, [validationErrors]);
