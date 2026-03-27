@@ -79,6 +79,15 @@ export default function App({ vscode }: AppProps) {
     return () => window.removeEventListener('canvasGenerate', handler);
   }, [vscode]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { prompt } = (e as CustomEvent).detail as { prompt: string };
+      vscode.postMessage({ command: 'openChat', prompt });
+    };
+    window.addEventListener('solveWithLace', handler);
+    return () => window.removeEventListener('solveWithLace', handler);
+  }, [vscode]);
+
   // ── Signal readiness to host ──
   useEffect(() => {
     vscode.postMessage({ command: 'webviewReady' });
