@@ -26,6 +26,7 @@ export type WebviewToHost =
 export type Diagnostic = {
   severity: 'error' | 'warning' | 'info';
   message: string;
+  address?: string;
   file?: string;
   line?: number;
   column?: number;
