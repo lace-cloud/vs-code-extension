@@ -1,6 +1,7 @@
 // src/webview/createWebviewPanel.ts
 import * as vscode from 'vscode';
 import path from 'path';
+import * as fs from 'fs';
 
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
@@ -104,10 +105,11 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
       if (validation && !validation.valid) {
         const errors = validation.diagnostics.filter((d) => d.severity === 'error');
         if (errors.length > 0) {
+          const enriched = enrichDiagnosticsWithAddress(errors as Diagnostic[], laceDir);
           postToWebview(panel, {
             command: 'generateError',
             message: `Validation: ${errors.length} error(s)`,
-            diagnostics: errors as Diagnostic[],
+            diagnostics: enriched,
           });
           return;
         }
@@ -128,6 +130,59 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
   } finally {
     isGenerating = false;
   }
+}
+
+/* ── Diagnostic enrichment ── */
+
+/**
+ * For diagnostics pointing at the root main.tf with no address, resolve the
+ * module name by finding which `module "X" {` block the error line falls in.
+ */
+function enrichDiagnosticsWithAddress(diags: Diagnostic[], laceDir: string): Diagnostic[] {
+  // Build a line→moduleName map lazily from main.tf
+  let moduleRanges: Array<{ name: string; start: number; end: number }> | null = null;
+
+  function getModuleRanges() {
+    if (moduleRanges !== null) return moduleRanges;
+    moduleRanges = [];
+    try {
+      const mainTf = fs.readFileSync(path.join(laceDir, 'main.tf'), 'utf8');
+      const lines = mainTf.split('\n');
+      let current: { name: string; start: number } | null = null;
+      let depth = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!current) {
+          const m = line.match(/^\s*module\s+"([^"]+)"\s*\{/);
+          if (m) {
+            current = { name: m[1], start: i + 1 };
+            depth = 1;
+          }
+        } else {
+          for (const ch of line) {
+            if (ch === '{') depth++;
+            else if (ch === '}') depth--;
+          }
+          if (depth <= 0) {
+            moduleRanges.push({ name: current.name, start: current.start, end: i + 1 });
+            current = null;
+            depth = 0;
+          }
+        }
+      }
+    } catch {
+      /* main.tf unreadable — leave ranges empty */
+    }
+    return moduleRanges;
+  }
+
+  return diags.map((d) => {
+    if (d.address || !d.file?.endsWith('main.tf') || d.line == null) return d;
+    const ranges = getModuleRanges();
+    const match = ranges.find((r) => d.line! >= r.start && d.line! <= r.end);
+    if (!match) return d;
+    return { ...d, address: `module.${match.name}` };
+  });
 }
 
 /* ── Typed message helpers ── */
