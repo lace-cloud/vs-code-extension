@@ -68,7 +68,7 @@ function ValidationErrorDialog({
           style={{ gap: 10, display: 'flex', flexDirection: 'column' }}
         >
           {diagnostics.map((d, i) => {
-            const nodeId = d.file ? extractNodeId(d.file, nodeIds) : null;
+            const nodeId = extractNodeId(d, nodeIds);
             const hasFileLink = !!d.file;
             return (
               <div
@@ -117,7 +117,7 @@ function ValidationErrorDialog({
                       cursor: 'pointer',
                     }}
                   >
-                    Go to node
+                    View node
                   </button>
                 )}
               </div>
@@ -247,11 +247,12 @@ export function ValidationErrorBanner({
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /**
- * Terraform paths: "module.cluster/main.tf" or ".lace/module.cluster/main.tf"
- * Find the first "module.<id>" path segment anywhere in the path.
+ * Extract a canvas node ID from a Terraform diagnostic.
+ * Uses the address field ("module.cluster.aws_ecs_cluster.this" → "cluster").
  */
-function extractNodeId(file: string, nodeIds: Set<string>): string | null {
-  const m = file.replace(/\\/g, '/').match(/(?:^|\/)module\.([^./]+)/);
+function extractNodeId(d: { address?: string }, nodeIds: Set<string>): string | null {
+  if (!d.address) return null;
+  const m = d.address.match(/^module\.([^.]+)/);
   if (m && nodeIds.has(m[1])) return m[1];
   return null;
 }
