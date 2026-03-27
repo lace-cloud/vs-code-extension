@@ -1,5 +1,5 @@
 // src/webview/Canvas.tsx
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -22,9 +22,10 @@ import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
 import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
 import ActionBar from './components/ActionBar';
+import { ValidationErrorBanner } from './components/ValidationErrorBanner';
 
 import type { CanvasView, RenderNode, RenderEdge } from './types/render';
-import type { GeneratePhase } from '../types/protocol';
+import type { GeneratePhase, Diagnostic } from '../types/protocol';
 import { useCanvas } from './state/engine-context';
 
 // ── Node types registration ──
@@ -59,6 +60,7 @@ const PHASE_LABELS: Record<GeneratePhase, string> = {
 type CompositeEditorProps = {
   view: CanvasView;
   isGenerating: boolean;
+  erroredNodeIds: Set<string>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
@@ -69,11 +71,13 @@ type CompositeEditorProps = {
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: () => void;
+  registerGoToNode: (fn: (nodeId: string) => void) => void;
 };
 
 function CompositeEditor({
   view,
   isGenerating,
+  erroredNodeIds,
   onDragStop,
   onConnect,
   onEdgesDelete,
@@ -84,13 +88,30 @@ function CompositeEditor({
   onClearGraph,
   onGenerate,
   onOpenSettings,
+  registerGoToNode,
 }: CompositeEditorProps) {
-  const { fitView } = useReactFlow();
+  const { fitView, fitBounds, getNode } = useReactFlow();
 
   // ── Imperative fitView on initial mount only ──
   useEffect(() => {
     const timer = setTimeout(() => fitView({ padding: 0.2, maxZoom: 1.5 }), 50);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Register go-to-node handler (needs ReactFlow context) ──
+  useEffect(() => {
+    registerGoToNode((nodeId: string) => {
+      const node = getNode(nodeId);
+      if (!node) return;
+      const { x, y } = node.position;
+      const w = node.measured?.width ?? 60;
+      const h = node.measured?.height ?? 60;
+      fitBounds({ x, y, width: w, height: h }, { padding: 1.5, duration: 400 });
+      // Open config panel
+      window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: nodeId } }));
+    });
+    // registerGoToNode is stable (useCallback in parent)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -147,9 +168,10 @@ function CompositeEditor({
         data: {
           ...node,
           connectedHandles: connectedHandlesMap[node.id] ?? [],
+          hasValidationError: erroredNodeIds.has(node.id),
         },
       })),
-    [view.nodes, connectedHandlesMap],
+    [view.nodes, connectedHandlesMap, erroredNodeIds],
   );
 
   // ── Local ReactFlow node state ──
@@ -261,6 +283,14 @@ export default function Canvas() {
   const [toast, setToast] = useState<ToastState>(null);
   const [generating, setGenerating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Diagnostic[]>([]);
+  const [errorBannerDismissed, setErrorBannerDismissed] = useState(false);
+
+  // Stable ref for the go-to-node function (implemented inside CompositeEditor)
+  const goToNodeRef = useRef<((nodeId: string) => void) | null>(null);
+  const registerGoToNode = useCallback((fn: (nodeId: string) => void) => {
+    goToNodeRef.current = fn;
+  }, []);
 
   // ── Listen for openNodeConfig events from ModuleNode ──
   useEffect(() => {
@@ -418,14 +448,22 @@ export default function Canvas() {
         }
         case 'generateSuccess': {
           setGenerating(false);
+          setValidationErrors([]);
+          setErrorBannerDismissed(false);
           setToast({ message: 'Successfully generated', type: 'success' });
           setTimeout(() => setToast(null), TOAST_INFO);
           break;
         }
         case 'generateError': {
           setGenerating(false);
-          setToast({ message: `Generate error: ${msg.message}`, type: 'error' });
-          setTimeout(() => setToast(null), TOAST_INFO);
+          const diags: Diagnostic[] = msg.diagnostics ?? [];
+          setValidationErrors(diags);
+          setErrorBannerDismissed(false);
+          // Only show transient toast when there are no structured diagnostics
+          if (diags.length === 0) {
+            setToast({ message: `Generate error: ${msg.message}`, type: 'error' });
+            setTimeout(() => setToast(null), TOAST_INFO);
+          }
           break;
         }
       }
@@ -453,6 +491,31 @@ export default function Canvas() {
 
   const view = state.view;
 
+  // ── Derive errored node IDs from validation diagnostics ──
+  const erroredNodeIds = useMemo<Set<string>>(() => {
+    const ids = new Set<string>();
+    for (const d of validationErrors) {
+      if (!d.file) continue;
+      // "module.<id>" → id
+      const m = d.file.match(/^module\.([^.]+)/);
+      if (m) ids.add(m[1]);
+      else ids.add(d.file);
+    }
+    return ids;
+  }, [validationErrors]);
+
+  // ── Solve with Lace: open chat with errors as context ──
+  const onSolveWithLace = useCallback(() => {
+    const lines = validationErrors.map((d) => {
+      const loc = d.file ? ` (${d.file}${d.line != null ? `:${d.line}` : ''})` : '';
+      return `- ${d.message}${loc}`;
+    });
+    const prompt = `@lace Fix these Terraform validation errors:\n${lines.join('\n')}`;
+    // Copy to clipboard and open chat — VS Code chat API doesn't support pre-fill externally,
+    // so we send the command to open chat and let the webview notify the host to open chat.
+    window.dispatchEvent(new CustomEvent('solveWithLace', { detail: { prompt } }));
+  }, [validationErrors]);
+
   // ── Render ──
   return (
     <div className="h-screen flex flex-col relative">
@@ -471,10 +534,22 @@ export default function Canvas() {
         </div>
       )}
 
+      {/* Persistent validation error banner */}
+      {!errorBannerDismissed && validationErrors.length > 0 && !toast && (
+        <ValidationErrorBanner
+          diagnostics={validationErrors}
+          nodeIds={erroredNodeIds}
+          onGoToNode={(nodeId) => goToNodeRef.current?.(nodeId)}
+          onSolveWithLace={onSolveWithLace}
+          onDismiss={() => setErrorBannerDismissed(true)}
+        />
+      )}
+
       <div className="flex-1 relative min-h-0">
         <CompositeEditor
           view={view}
           isGenerating={generating}
+          erroredNodeIds={erroredNodeIds}
           onDragStop={onDragStop}
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
@@ -485,6 +560,7 @@ export default function Canvas() {
           onClearGraph={onClearGraph}
           onGenerate={onGenerate}
           onOpenSettings={onOpenSettings}
+          registerGoToNode={registerGoToNode}
         />
 
         {/* Module config panel */}
