@@ -282,6 +282,32 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           });
           break;
         }
+
+        // ── openFile: open a generated .tf file at a specific line ──
+        case 'openFile': {
+          const { relativePath, line, column } = msg as {
+            command: string;
+            relativePath: string;
+            line?: number;
+            column?: number;
+          };
+          try {
+            const absPath = path.join(laceDir, relativePath);
+            const uri = vscode.Uri.file(absPath);
+            const doc = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+            if (line != null) {
+              const ln = Math.max(0, line - 1);
+              const col = column != null ? Math.max(0, column - 1) : 0;
+              const pos = new vscode.Position(ln, col);
+              editor.selection = new vscode.Selection(pos, pos);
+              editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+            }
+          } catch (err) {
+            console.error(`[Canvas] openFile failed:`, err);
+          }
+          break;
+        }
       }
     },
   );
