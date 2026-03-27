@@ -8,6 +8,7 @@ import { useEngine } from '../../state/engine-context';
 
 export type ModuleNodeData = RenderNode & {
   connectedHandles?: string[];
+  hasValidationError?: boolean;
 };
 
 type ModuleNodeNode = Node<ModuleNodeData, 'moduleNode'>;
@@ -124,9 +125,9 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     return connected.includes(handleId) ? 'lace-handle lace-handle--connected' : 'lace-handle';
   }
 
-  const errorBorder = data.has_errors ? '1.5px solid #e5484d' : '1px solid transparent';
-
-  const errorShadow = data.has_errors ? '0 0 8px rgba(229, 72, 77, 0.3)' : 'none';
+  const hasAnyError = data.has_errors || data.hasValidationError;
+  const errorBorder = hasAnyError ? '1.5px solid #e5484d' : '1px solid transparent';
+  const errorShadow = hasAnyError ? '0 0 8px rgba(229, 72, 77, 0.3)' : 'none';
 
   return (
     <div
