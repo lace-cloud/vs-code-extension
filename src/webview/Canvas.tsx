@@ -1,5 +1,5 @@
 // src/webview/Canvas.tsx
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -22,9 +22,10 @@ import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
 import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
 import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
 import ActionBar from './components/ActionBar';
+import { ValidationErrorBanner } from './components/ValidationErrorBanner';
 
 import type { CanvasView, RenderNode, RenderEdge } from './types/render';
-import type { GeneratePhase } from '../types/protocol';
+import type { GeneratePhase, Diagnostic } from '../types/protocol';
 import { useCanvas } from './state/engine-context';
 
 // ── Node types registration ──
@@ -59,6 +60,7 @@ const PHASE_LABELS: Record<GeneratePhase, string> = {
 type CompositeEditorProps = {
   view: CanvasView;
   isGenerating: boolean;
+  erroredNodeIds: Set<string>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
@@ -69,11 +71,13 @@ type CompositeEditorProps = {
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: () => void;
+  registerGoToNode: (fn: (nodeId: string) => void) => void;
 };
 
 function CompositeEditor({
   view,
   isGenerating,
+  erroredNodeIds,
   onDragStop,
   onConnect,
   onEdgesDelete,
@@ -84,13 +88,30 @@ function CompositeEditor({
   onClearGraph,
   onGenerate,
   onOpenSettings,
+  registerGoToNode,
 }: CompositeEditorProps) {
-  const { fitView } = useReactFlow();
+  const { fitView, fitBounds, getNode } = useReactFlow();
 
   // ── Imperative fitView on initial mount only ──
   useEffect(() => {
     const timer = setTimeout(() => fitView({ padding: 0.2, maxZoom: 1.5 }), 50);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Register go-to-node handler (needs ReactFlow context) ──
+  useEffect(() => {
+    registerGoToNode((nodeId: string) => {
+      const node = getNode(nodeId);
+      if (!node) return;
+      const { x, y } = node.position;
+      const w = node.measured?.width ?? 60;
+      const h = node.measured?.height ?? 60;
+      fitBounds({ x, y, width: w, height: h }, { padding: 5.0, duration: 400 });
+      // Open config panel
+      window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: nodeId } }));
+    });
+    // registerGoToNode is stable (useCallback in parent)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -147,9 +168,10 @@ function CompositeEditor({
         data: {
           ...node,
           connectedHandles: connectedHandlesMap[node.id] ?? [],
+          hasValidationError: erroredNodeIds.has(node.id),
         },
       })),
-    [view.nodes, connectedHandlesMap],
+    [view.nodes, connectedHandlesMap, erroredNodeIds],
   );
 
   // ── Local ReactFlow node state ──
@@ -261,6 +283,14 @@ export default function Canvas() {
   const [toast, setToast] = useState<ToastState>(null);
   const [generating, setGenerating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Diagnostic[]>([]);
+  const [errorBannerDismissed, setErrorBannerDismissed] = useState(false);
+
+  // Stable ref for the go-to-node function (implemented inside CompositeEditor)
+  const goToNodeRef = useRef<((nodeId: string) => void) | null>(null);
+  const registerGoToNode = useCallback((fn: (nodeId: string) => void) => {
+    goToNodeRef.current = fn;
+  }, []);
 
   // ── Listen for openNodeConfig events from ModuleNode ──
   useEffect(() => {
@@ -413,19 +443,30 @@ export default function Canvas() {
       switch (msg.command) {
         case 'generateProgress': {
           setGenerating(true);
+          setValidationErrors([]);
           setToast({ message: PHASE_LABELS[msg.phase as GeneratePhase], type: 'progress' });
           break;
         }
         case 'generateSuccess': {
           setGenerating(false);
+          setValidationErrors([]);
+          setErrorBannerDismissed(false);
           setToast({ message: 'Successfully generated', type: 'success' });
           setTimeout(() => setToast(null), TOAST_INFO);
           break;
         }
         case 'generateError': {
           setGenerating(false);
-          setToast({ message: `Generate error: ${msg.message}`, type: 'error' });
-          setTimeout(() => setToast(null), TOAST_INFO);
+          const diags: Diagnostic[] = msg.diagnostics ?? [];
+          setValidationErrors(diags);
+          setErrorBannerDismissed(false);
+          if (diags.length > 0) {
+            setToast({ message: `Validation: ${diags.length} error(s)`, type: 'error' });
+            setTimeout(() => setToast(null), TOAST_INFO);
+          } else {
+            setToast({ message: `Generate error: ${msg.message}`, type: 'error' });
+            setTimeout(() => setToast(null), TOAST_INFO);
+          }
           break;
         }
       }
@@ -434,6 +475,37 @@ export default function Canvas() {
     window.addEventListener('hostMessage', handler);
     return () => window.removeEventListener('hostMessage', handler);
   }, []);
+
+  // ── Derive errored node IDs from validation diagnostics ──
+  const erroredNodeIds = useMemo<Set<string>>(() => {
+    const ids = new Set<string>();
+    for (const d of validationErrors) {
+      // Try address first: "module.cluster.aws_ecs_cluster.this" → "cluster"
+      if (d.address) {
+        const m = d.address.match(/^module\.([^.]+)/);
+        if (m) {
+          ids.add(m[1]);
+          continue;
+        }
+      }
+      // Fallback: file path "modules/cluster/main.tf" → "cluster"
+      if (d.file) {
+        const m = d.file.match(/(?:^|[\\/])modules[\\/]([^/\\]+)[\\/]/);
+        if (m) ids.add(m[1]);
+      }
+    }
+    return ids;
+  }, [validationErrors]);
+
+  // ── Solve with Lace: open chat with errors as context ──
+  const onSolveWithLace = useCallback(() => {
+    const lines = validationErrors.map((d) => {
+      const loc = d.file ? ` (${d.file}${d.line != null ? `:${d.line}` : ''})` : '';
+      return `- ${d.message}${loc}`;
+    });
+    const prompt = `@lace Fix these Terraform validation errors:\n${lines.join('\n')}`;
+    window.dispatchEvent(new CustomEvent('solveWithLace', { detail: { prompt } }));
+  }, [validationErrors]);
 
   // ── Guard: need a view to render ──
   if (state.loading || !state.view) {
@@ -471,10 +543,27 @@ export default function Canvas() {
         </div>
       )}
 
+      {/* Persistent validation error banner */}
+      {!errorBannerDismissed && validationErrors.length > 0 && !toast && (
+        <ValidationErrorBanner
+          diagnostics={validationErrors}
+          nodeIds={erroredNodeIds}
+          onGoToNode={(nodeId) => goToNodeRef.current?.(nodeId)}
+          onOpenFile={(relativePath, line, column) =>
+            window.dispatchEvent(
+              new CustomEvent('openFile', { detail: { relativePath, line, column } }),
+            )
+          }
+          onSolveWithLace={onSolveWithLace}
+          onDismiss={() => setErrorBannerDismissed(true)}
+        />
+      )}
+
       <div className="flex-1 relative min-h-0">
         <CompositeEditor
           view={view}
           isGenerating={generating}
+          erroredNodeIds={erroredNodeIds}
           onDragStop={onDragStop}
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
@@ -485,6 +574,7 @@ export default function Canvas() {
           onClearGraph={onClearGraph}
           onGenerate={onGenerate}
           onOpenSettings={onOpenSettings}
+          registerGoToNode={registerGoToNode}
         />
 
         {/* Module config panel */}

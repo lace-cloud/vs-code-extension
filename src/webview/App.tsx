@@ -79,6 +79,28 @@ export default function App({ vscode }: AppProps) {
     return () => window.removeEventListener('canvasGenerate', handler);
   }, [vscode]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { prompt } = (e as CustomEvent).detail as { prompt: string };
+      vscode.postMessage({ command: 'openChat', prompt });
+    };
+    window.addEventListener('solveWithLace', handler);
+    return () => window.removeEventListener('solveWithLace', handler);
+  }, [vscode]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { relativePath, line, column } = (e as CustomEvent).detail as {
+        relativePath: string;
+        line?: number;
+        column?: number;
+      };
+      vscode.postMessage({ command: 'openFile', relativePath, line, column });
+    };
+    window.addEventListener('openFile', handler);
+    return () => window.removeEventListener('openFile', handler);
+  }, [vscode]);
+
   // ── Signal readiness to host ──
   useEffect(() => {
     vscode.postMessage({ command: 'webviewReady' });

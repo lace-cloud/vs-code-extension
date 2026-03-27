@@ -17,13 +17,16 @@ export type WebviewToHost =
   | { command: 'webviewReady' }
   | { command: 'engineCall'; requestId: string; method: string; params?: unknown }
   | { command: 'markDirty' }
-  | { command: 'markClean' };
+  | { command: 'markClean' }
+  | { command: 'openChat'; prompt: string }
+  | { command: 'openFile'; relativePath: string; line?: number; column?: number };
 
 // ── RPC diagnostic (matches Go's server.Diagnostic) ──
 
 export type Diagnostic = {
   severity: 'error' | 'warning' | 'info';
   message: string;
+  address?: string;
   file?: string;
   line?: number;
   column?: number;
