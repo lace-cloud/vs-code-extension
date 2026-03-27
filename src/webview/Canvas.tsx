@@ -306,29 +306,6 @@ export default function Canvas() {
 
   // ── Listen for canvasViewUpdated events (e.g., delete from node button) ──
   useEffect(() => {
-    // ── Derive errored node IDs from validation diagnostics ──
-    const erroredNodeIds = useMemo<Set<string>>(() => {
-      const ids = new Set<string>();
-      for (const d of validationErrors) {
-        if (!d.file) continue;
-        // "module.<id>" → id
-        const m = d.file.match(/^module\.([^.]+)/);
-        if (m) ids.add(m[1]);
-        else ids.add(d.file);
-      }
-      return ids;
-    }, [validationErrors]);
-
-    // ── Solve with Lace: open chat with errors as context ──
-    const onSolveWithLace = useCallback(() => {
-      const lines = validationErrors.map((d) => {
-        const loc = d.file ? ` (${d.file}${d.line != null ? `:${d.line}` : ''})` : '';
-        return `- ${d.message}${loc}`;
-      });
-      const prompt = `@lace Fix these Terraform validation errors:\n${lines.join('\n')}`;
-      window.dispatchEvent(new CustomEvent('solveWithLace', { detail: { prompt } }));
-    }, [validationErrors]);
-
     const handler = (e: Event) => {
       const view = (e as CustomEvent).detail;
       if (view) {
@@ -501,10 +478,10 @@ export default function Canvas() {
     const ids = new Set<string>();
     for (const d of validationErrors) {
       if (!d.file) continue;
-      // "module.<id>" → id
-      const m = d.file.match(/^module\.([^.]+)/);
+      // Terraform paths: "module.cluster/main.tf" or ".lace/module.cluster/main.tf"
+      // Extract the first "module.<id>" path segment anywhere in the path.
+      const m = d.file.replace(/\\/g, '/').match(/(?:^|\/)module\.([^./]+)/);
       if (m) ids.add(m[1]);
-      else ids.add(d.file);
     }
     return ids;
   }, [validationErrors]);
@@ -561,6 +538,11 @@ export default function Canvas() {
           diagnostics={validationErrors}
           nodeIds={erroredNodeIds}
           onGoToNode={(nodeId) => goToNodeRef.current?.(nodeId)}
+          onOpenFile={(relativePath, line, column) =>
+            window.dispatchEvent(
+              new CustomEvent('openFile', { detail: { relativePath, line, column } }),
+            )
+          }
           onSolveWithLace={onSolveWithLace}
           onDismiss={() => setErrorBannerDismissed(true)}
         />
