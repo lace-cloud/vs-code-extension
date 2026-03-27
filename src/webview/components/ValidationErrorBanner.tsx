@@ -7,6 +7,7 @@ type DialogProps = {
   diagnostics: Diagnostic[];
   nodeIds: Set<string>;
   onGoToNode: (nodeId: string) => void;
+  onOpenFile: (relativePath: string, line?: number, column?: number) => void;
   onSolveWithLace: () => void;
   onClose: () => void;
 };
@@ -15,6 +16,7 @@ function ValidationErrorDialog({
   diagnostics,
   nodeIds,
   onGoToNode,
+  onOpenFile,
   onSolveWithLace,
   onClose,
 }: DialogProps) {
@@ -67,6 +69,7 @@ function ValidationErrorDialog({
         >
           {diagnostics.map((d, i) => {
             const nodeId = d.file ? extractNodeId(d.file, nodeIds) : null;
+            const hasFileLink = !!d.file;
             return (
               <div
                 key={i}
@@ -78,12 +81,28 @@ function ValidationErrorDialog({
                 }}
               >
                 <div style={{ color: '#f87171', fontSize: 12, marginBottom: 4 }}>{d.message}</div>
-                {(d.file || d.line != null) && (
-                  <div style={{ color: '#888', fontSize: 10, marginBottom: nodeId ? 6 : 0 }}>
-                    {d.file && <span>{d.file}</span>}
-                    {d.line != null && <span>:{d.line}</span>}
-                    {d.column != null && <span>:{d.column}</span>}
-                  </div>
+                {hasFileLink && (
+                  <button
+                    onClick={() => onOpenFile(d.file!, d.line, d.column)}
+                    title="Open file in editor"
+                    style={{
+                      display: 'block',
+                      color: '#888',
+                      fontSize: 10,
+                      marginBottom: nodeId ? 6 : 0,
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      textDecoration: 'underline',
+                      textDecorationColor: 'rgba(136,136,136,0.4)',
+                    }}
+                  >
+                    {d.file}
+                    {d.line != null && `:${d.line}`}
+                    {d.column != null && `:${d.column}`}
+                  </button>
                 )}
                 {nodeId && (
                   <button
@@ -138,6 +157,7 @@ type BannerProps = {
   diagnostics: Diagnostic[];
   nodeIds: Set<string>;
   onGoToNode: (nodeId: string) => void;
+  onOpenFile: (relativePath: string, line?: number, column?: number) => void;
   onSolveWithLace: () => void;
   onDismiss: () => void;
 };
@@ -146,6 +166,7 @@ export function ValidationErrorBanner({
   diagnostics,
   nodeIds,
   onGoToNode,
+  onOpenFile,
   onSolveWithLace,
   onDismiss,
 }: BannerProps) {
@@ -208,6 +229,10 @@ export function ValidationErrorBanner({
             setDialogOpen(false);
             onGoToNode(nodeId);
           }}
+          onOpenFile={(relativePath, line, column) => {
+            setDialogOpen(false);
+            onOpenFile(relativePath, line, column);
+          }}
           onSolveWithLace={() => {
             setDialogOpen(false);
             onSolveWithLace();
@@ -222,17 +247,11 @@ export function ValidationErrorBanner({
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /**
- * Terraform reports file paths like "module.cluster" or filenames like "main.tf".
- * We try to match a node ID from the diagnostic file string.
- * The convention is: a diagnostic file of "module.<instanceId>" maps to instanceId.
+ * Terraform paths: "module.cluster/main.tf" or ".lace/module.cluster/main.tf"
+ * Find the first "module.<id>" path segment anywhere in the path.
  */
 function extractNodeId(file: string, nodeIds: Set<string>): string | null {
-  // Direct match first
-  if (nodeIds.has(file)) return file;
-
-  // "module.foo" → "foo"
-  const moduleMatch = file.match(/^module\.([^.]+)/);
-  if (moduleMatch && nodeIds.has(moduleMatch[1])) return moduleMatch[1];
-
+  const m = file.replace(/\\/g, '/').match(/(?:^|\/)module\.([^./]+)/);
+  if (m && nodeIds.has(m[1])) return m[1];
   return null;
 }
