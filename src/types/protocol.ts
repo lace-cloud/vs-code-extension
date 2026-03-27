@@ -18,7 +18,8 @@ export type WebviewToHost =
   | { command: 'engineCall'; requestId: string; method: string; params?: unknown }
   | { command: 'markDirty' }
   | { command: 'markClean' }
-  | { command: 'openChat'; prompt: string };
+  | { command: 'openChat'; prompt: string }
+  | { command: 'openFile'; relativePath: string; line?: number; column?: number };
 
 // ── RPC diagnostic (matches Go's server.Diagnostic) ──
 
