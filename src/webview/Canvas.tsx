@@ -107,7 +107,7 @@ function CompositeEditor({
       const { x, y } = node.position;
       const w = node.measured?.width ?? 60;
       const h = node.measured?.height ?? 60;
-      fitBounds({ x, y, width: w, height: h }, { padding: 1.5, duration: 400 });
+      fitBounds({ x, y, width: w, height: h }, { padding: 5.0, duration: 400 });
       // Open config panel
       window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: nodeId } }));
     });
@@ -460,8 +460,10 @@ export default function Canvas() {
           const diags: Diagnostic[] = msg.diagnostics ?? [];
           setValidationErrors(diags);
           setErrorBannerDismissed(false);
-          // Only show transient toast when there are no structured diagnostics
-          if (diags.length === 0) {
+          if (diags.length > 0) {
+            setToast({ message: `Validation: ${diags.length} error(s)`, type: 'error' });
+            setTimeout(() => setToast(null), TOAST_INFO);
+          } else {
             setToast({ message: `Generate error: ${msg.message}`, type: 'error' });
             setTimeout(() => setToast(null), TOAST_INFO);
           }
@@ -478,9 +480,17 @@ export default function Canvas() {
   const erroredNodeIds = useMemo<Set<string>>(() => {
     const ids = new Set<string>();
     for (const d of validationErrors) {
-      // address: "module.cluster.aws_ecs_cluster.this" → first segment after "module." is the instance ID
+      // Try address first: "module.cluster.aws_ecs_cluster.this" → "cluster"
       if (d.address) {
         const m = d.address.match(/^module\.([^.]+)/);
+        if (m) {
+          ids.add(m[1]);
+          continue;
+        }
+      }
+      // Fallback: file path "modules/cluster/main.tf" → "cluster"
+      if (d.file) {
+        const m = d.file.match(/(?:^|[\\/])modules[\\/]([^/\\]+)[\\/]/);
         if (m) ids.add(m[1]);
       }
     }
