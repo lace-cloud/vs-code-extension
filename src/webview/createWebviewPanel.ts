@@ -273,6 +273,15 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           panel.title = `Lace · ${folderName}`;
           break;
         }
+
+        // ── openChat: open @lace chat with prefilled prompt ──
+        case 'openChat': {
+          const { prompt } = msg as { command: string; prompt: string };
+          await vscode.commands.executeCommand('workbench.action.chat.open', {
+            query: prompt,
+          });
+          break;
+        }
       }
     },
   );
