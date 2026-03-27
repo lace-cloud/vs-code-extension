@@ -12,6 +12,7 @@ type ExecResult = { stdout: string; stderr: string; code: number };
 export type ValidateDiagnostic = {
   severity: 'error' | 'warning';
   message: string;
+  address?: string;
   file?: string;
   line?: number;
   column?: number;
@@ -80,6 +81,7 @@ type TerraformValidateJSON = {
     severity: string;
     summary: string;
     detail: string;
+    address?: string;
     range?: { filename: string; start: { line: number; column: number } };
   }>;
 };
@@ -92,6 +94,7 @@ function parseValidateJSON(raw: string): ValidateResult | null {
       diagnostics: (parsed.diagnostics ?? []).map((d) => ({
         severity: d.severity as 'error' | 'warning',
         message: d.summary + (d.detail ? `: ${d.detail}` : ''),
+        address: d.address,
         file: d.range?.filename,
         line: d.range?.start.line,
         column: d.range?.start.column,
