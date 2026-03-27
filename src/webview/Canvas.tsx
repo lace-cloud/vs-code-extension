@@ -306,6 +306,29 @@ export default function Canvas() {
 
   // ── Listen for canvasViewUpdated events (e.g., delete from node button) ──
   useEffect(() => {
+    // ── Derive errored node IDs from validation diagnostics ──
+    const erroredNodeIds = useMemo<Set<string>>(() => {
+      const ids = new Set<string>();
+      for (const d of validationErrors) {
+        if (!d.file) continue;
+        // "module.<id>" → id
+        const m = d.file.match(/^module\.([^.]+)/);
+        if (m) ids.add(m[1]);
+        else ids.add(d.file);
+      }
+      return ids;
+    }, [validationErrors]);
+
+    // ── Solve with Lace: open chat with errors as context ──
+    const onSolveWithLace = useCallback(() => {
+      const lines = validationErrors.map((d) => {
+        const loc = d.file ? ` (${d.file}${d.line != null ? `:${d.line}` : ''})` : '';
+        return `- ${d.message}${loc}`;
+      });
+      const prompt = `@lace Fix these Terraform validation errors:\n${lines.join('\n')}`;
+      window.dispatchEvent(new CustomEvent('solveWithLace', { detail: { prompt } }));
+    }, [validationErrors]);
+
     const handler = (e: Event) => {
       const view = (e as CustomEvent).detail;
       if (view) {
@@ -473,24 +496,6 @@ export default function Canvas() {
     return () => window.removeEventListener('hostMessage', handler);
   }, []);
 
-  // ── Guard: need a view to render ──
-  if (state.loading || !state.view) {
-    if (state.error) {
-      return <ErrorState message={state.error} />;
-    }
-    return (
-      <div className="h-screen flex items-center justify-center text-[#999] text-sm">
-        Loading canvas...
-      </div>
-    );
-  }
-
-  if (!engine) {
-    return <ErrorState message="Engine not available." />;
-  }
-
-  const view = state.view;
-
   // ── Derive errored node IDs from validation diagnostics ──
   const erroredNodeIds = useMemo<Set<string>>(() => {
     const ids = new Set<string>();
@@ -511,10 +516,26 @@ export default function Canvas() {
       return `- ${d.message}${loc}`;
     });
     const prompt = `@lace Fix these Terraform validation errors:\n${lines.join('\n')}`;
-    // Copy to clipboard and open chat — VS Code chat API doesn't support pre-fill externally,
-    // so we send the command to open chat and let the webview notify the host to open chat.
     window.dispatchEvent(new CustomEvent('solveWithLace', { detail: { prompt } }));
   }, [validationErrors]);
+
+  // ── Guard: need a view to render ──
+  if (state.loading || !state.view) {
+    if (state.error) {
+      return <ErrorState message={state.error} />;
+    }
+    return (
+      <div className="h-screen flex items-center justify-center text-[#999] text-sm">
+        Loading canvas...
+      </div>
+    );
+  }
+
+  if (!engine) {
+    return <ErrorState message="Engine not available." />;
+  }
+
+  const view = state.view;
 
   // ── Render ──
   return (
