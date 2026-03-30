@@ -58,15 +58,16 @@ export async function format(filePaths: string[]): Promise<void> {
 }
 
 /**
- * Run `terraform init -backend=false` + `terraform validate -json` in the given directory.
- * Returns structured diagnostics, or null if init/validate produced no usable output.
+ * Run `terraform init -backend=false` then `terraform validate -json` in the given directory.
+ * Init failure does not block validate — validate -json produces structured JSON regardless,
+ * catching errors like invalid module source addresses without a successful init.
+ * Returns null only if validate produced no parseable output at all.
  */
 export async function validate(dir: string): Promise<ValidateResult | null> {
-  // Step 1: terraform init -backend=false
-  const init = await exec(['init', '-backend=false'], dir, 60_000);
-  if (init.code !== 0) return null;
+  // Step 1: best-effort init — failure does not block validate
+  await exec(['init', '-backend=false'], dir, 60_000);
 
-  // Step 2: terraform validate -json
+  // Step 2: validate -json runs regardless of init outcome
   const result = await exec(['validate', '-json'], dir);
   if (!result.stdout) return null;
 
