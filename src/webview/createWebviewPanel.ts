@@ -20,7 +20,6 @@ const LACE_DIR = '.lace';
 let canvasPanel: vscode.WebviewPanel | undefined;
 let isGenerating = false;
 let latestCanvasView: CanvasView | undefined;
-let lastAddedPosition: { x: number; y: number } | undefined;
 
 /** Cheap runtime check: does this look like a CanvasView? */
 function isCanvasView(value: unknown): value is CanvasView {
@@ -76,24 +75,30 @@ export async function addModuleToActiveCanvas(
 
         // Step 2: Apply deploy bundle to canvas; CLI ignores the position field in
         // DropBundleRequest (it always auto-lays out), so we reposition via syncLayout.
-        const existingIds = new Set((latestCanvasView?.nodes ?? []).map((n) => n.id));
+        const existingNodes = latestCanvasView?.nodes ?? [];
+        const existingIds = new Set(existingNodes.map((n) => n.id));
+
+        // Anchor to the last node in the current view — latestCanvasView is kept
+        // up-to-date including user drags (see action/sync_layout patch above), so
+        // this always reflects where the user last worked on the canvas.
+        const anchor =
+          existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
+
         const canvasView = await client.dropBundle({ deploy_bundle: deployBundle });
         latestCanvasView = canvasView;
 
         // Find newly added nodes and assign non-overlapping positions.
-        // Anchor to the last manually-placed position so new modules appear
-        // near where the user last worked, not at the global canvas origin.
-        const existingNodes = latestCanvasView?.nodes.filter((n) => existingIds.has(n.id)) ?? [];
         const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
         if (newNodes.length > 0) {
           const syncPositions: Record<string, { x: number; y: number }> = {};
-          const placed: typeof existingNodes = [...existingNodes];
+          const placed = [...existingNodes];
+          let currentAnchor = anchor;
           for (const node of newNodes) {
-            const pos = findFreePosition(placed, lastAddedPosition);
+            const pos = findFreePosition(placed, currentAnchor);
             syncPositions[node.id] = pos;
             placed.push({ ...node, position: pos });
             node.position = pos; // patch local view so webview renders correctly immediately
-            lastAddedPosition = pos;
+            currentAnchor = pos;
           }
           await client.syncLayout({ positions: syncPositions });
         }
@@ -354,6 +359,21 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
             if (isCanvasView(result)) {
               latestCanvasView = result;
             }
+            // Patch node positions when the user drags — syncLayout returns empty,
+            // so latestCanvasView would otherwise be stale and the next module drop
+            // would anchor to the pre-drag position.
+            if (method === 'action/sync_layout' && latestCanvasView) {
+              const positions = (params as { positions?: Record<string, { x: number; y: number }> })
+                ?.positions;
+              if (positions) {
+                latestCanvasView = {
+                  ...latestCanvasView,
+                  nodes: latestCanvasView.nodes.map((n) =>
+                    positions[n.id] ? { ...n, position: positions[n.id] } : n,
+                  ),
+                };
+              }
+            }
             postToWebview(panel, { command: 'engineResult', requestId, result });
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -452,7 +472,6 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
 
     canvasPanel = undefined;
     latestCanvasView = undefined;
-    lastAddedPosition = undefined;
   });
 
   return sessionReady;
