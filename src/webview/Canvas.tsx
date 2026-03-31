@@ -281,6 +281,7 @@ export default function Canvas() {
   const [configTarget, setConfigTarget] = useState<string | null>(null);
   const [newNodeIds, setNewNodeIds] = useState<Set<string>>(new Set());
   const prevNodeIdsRef = useRef<Set<string>>(new Set());
+  const sessionLoadedRef = useRef(false);
   const [edgeConfigState, setEdgeConfigState] = useState<{
     source: string;
     target: string;
@@ -301,13 +302,18 @@ export default function Canvas() {
   useEffect(() => {
     if (!state.view) return;
     const currentIds = new Set(state.view.nodes.map((n) => n.id));
+
+    if (!sessionLoadedRef.current) {
+      // First view from the session: treat all existing nodes as already-known.
+      // This covers both: opening an existing session (has nodes) and a fresh
+      // blank canvas (has zero nodes). Either way, nothing gets a blue border yet.
+      sessionLoadedRef.current = true;
+      prevNodeIdsRef.current = currentIds;
+      return;
+    }
+
     const prev = prevNodeIdsRef.current;
-    // On first view (session open), prev is empty — treat all existing nodes as
-    // already-known so they don't get a blue border on load.
-    const isInitialLoad = prev.size === 0 && currentIds.size > 0;
-    const added = isInitialLoad
-      ? []
-      : state.view.nodes.filter((n) => !prev.has(n.id)).map((n) => n.id);
+    const added = state.view.nodes.filter((n) => !prev.has(n.id)).map((n) => n.id);
     setNewNodeIds((s) => {
       const next = new Set([...s].filter((id) => currentIds.has(id)));
       for (const id of added) next.add(id);
