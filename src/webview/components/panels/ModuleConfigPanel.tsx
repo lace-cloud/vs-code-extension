@@ -153,7 +153,32 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
       updateView(lastView);
     }
     await engine.setDependsOn(instance_id, [...localDependsOn]);
-    onModified?.(instance_id);
+
+    // Clear the blue "new" border only when at least one required input has
+    // been given a non-empty value. If the module has no required inputs at
+    // all, any save counts as configured.
+    const requiredInputs = config.inputs.filter((i) => i.required);
+    const hasFilledRequired =
+      requiredInputs.length === 0 ||
+      requiredInputs.some((input) => {
+        const mode = localModes[input.name] ?? input.mode;
+        if (mode === 'wired') return true;
+        if (mode === 'literal') {
+          const v = localValues[input.name];
+          return v !== undefined && v !== null && v !== '';
+        }
+        if (mode === 'variable') {
+          return (localVariables[input.name] ?? '').trim().length > 0;
+        }
+        if (mode === 'expression') {
+          return (localExpressions[input.name] ?? '').trim().length > 0;
+        }
+        return false; // mode === 'empty'
+      });
+
+    if (hasFilledRequired) {
+      onModified?.(instance_id);
+    }
     onClose();
   };
 
@@ -162,7 +187,6 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
   const handleDisconnect = async (inputName: string) => {
     const result = await engine.disconnect(instance_id, inputName);
     updateView(result);
-    onModified?.(instance_id);
     // Refresh config after disconnect
     const updated = await engine.queryNodeConfig(instance_id);
     setConfig(updated);
