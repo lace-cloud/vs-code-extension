@@ -23,11 +23,12 @@ type Props = {
   instance_id: string;
   engine: CanvasEngine;
   onClose: () => void;
+  onModified?: (instanceId: string) => void;
 };
 
 // ── Component ──
 
-export default function ModuleConfigPanel({ instance_id, engine, onClose }: Props) {
+export default function ModuleConfigPanel({ instance_id, engine, onClose, onModified }: Props) {
   const { state, updateView } = useCanvas();
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,6 +153,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
       updateView(lastView);
     }
     await engine.setDependsOn(instance_id, [...localDependsOn]);
+    onModified?.(instance_id);
     onClose();
   };
 
@@ -160,6 +162,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
   const handleDisconnect = async (inputName: string) => {
     const result = await engine.disconnect(instance_id, inputName);
     updateView(result);
+    onModified?.(instance_id);
     // Refresh config after disconnect
     const updated = await engine.queryNodeConfig(instance_id);
     setConfig(updated);
