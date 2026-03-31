@@ -20,6 +20,7 @@ const LACE_DIR = '.lace';
 let canvasPanel: vscode.WebviewPanel | undefined;
 let isGenerating = false;
 let latestCanvasView: CanvasView | undefined;
+let lastAddedPosition: { x: number; y: number } | undefined;
 
 /** Cheap runtime check: does this look like a CanvasView? */
 function isCanvasView(value: unknown): value is CanvasView {
@@ -79,17 +80,20 @@ export async function addModuleToActiveCanvas(
         const canvasView = await client.dropBundle({ deploy_bundle: deployBundle });
         latestCanvasView = canvasView;
 
-        // Find newly added nodes and assign non-overlapping positions
+        // Find newly added nodes and assign non-overlapping positions.
+        // Anchor to the last manually-placed position so new modules appear
+        // near where the user last worked, not at the global canvas origin.
         const existingNodes = latestCanvasView?.nodes.filter((n) => existingIds.has(n.id)) ?? [];
         const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
         if (newNodes.length > 0) {
           const syncPositions: Record<string, { x: number; y: number }> = {};
           const placed: typeof existingNodes = [...existingNodes];
           for (const node of newNodes) {
-            const pos = findFreePosition(placed);
+            const pos = findFreePosition(placed, lastAddedPosition);
             syncPositions[node.id] = pos;
             placed.push({ ...node, position: pos });
             node.position = pos; // patch local view so webview renders correctly immediately
+            lastAddedPosition = pos;
           }
           await client.syncLayout({ positions: syncPositions });
         }
@@ -448,6 +452,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
 
     canvasPanel = undefined;
     latestCanvasView = undefined;
+    lastAddedPosition = undefined;
   });
 
   return sessionReady;
