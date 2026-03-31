@@ -9,6 +9,7 @@ import { useEngine } from '../../state/engine-context';
 export type ModuleNodeData = RenderNode & {
   connectedHandles?: string[];
   hasValidationError?: boolean;
+  isNew?: boolean;
 };
 
 type ModuleNodeNode = Node<ModuleNodeData, 'moduleNode'>;
@@ -126,8 +127,17 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   }
 
   const hasAnyError = data.has_errors || data.hasValidationError;
-  const errorBorder = hasAnyError ? '1.5px solid #e5484d' : '1px solid transparent';
-  const errorShadow = hasAnyError ? '0 0 8px rgba(229, 72, 77, 0.3)' : 'none';
+  const isNew = data.isNew && !hasAnyError;
+  const borderStyle = hasAnyError
+    ? '1.5px solid #e5484d'
+    : isNew
+      ? '1.5px solid #3b82f6'
+      : '1px solid transparent';
+  const shadowStyle = hasAnyError
+    ? '0 0 8px rgba(229, 72, 77, 0.3)'
+    : isNew
+      ? '0 0 8px rgba(59, 130, 246, 0.3)'
+      : 'none';
 
   return (
     <div
@@ -141,7 +151,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       {/* ── Card (invisible unless error) ── */}
       <div
         className="w-full h-full rounded-sm flex items-center justify-center"
-        style={{ border: errorBorder, boxShadow: errorShadow }}
+        style={{ border: borderStyle, boxShadow: shadowStyle }}
       >
         {showIcon ? (
           <img
