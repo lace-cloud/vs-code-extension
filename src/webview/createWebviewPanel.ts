@@ -9,6 +9,7 @@ import type { HostToWebview, WebviewToHost, Diagnostic, GeneratePhase } from '..
 import type { CanvasView } from './types/render';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
 import * as terraform from '../utilities/terraform';
+import { findFreePosition } from './utils/layout';
 
 /* ── Constants ── */
 
@@ -18,6 +19,12 @@ const LACE_DIR = '.lace';
 
 let canvasPanel: vscode.WebviewPanel | undefined;
 let isGenerating = false;
+let latestCanvasView: CanvasView | undefined;
+
+/** Returns the latest known CanvasView from the host cache. */
+export function getLatestCanvasView(): CanvasView | undefined {
+  return latestCanvasView;
+}
 
 /* ── Public API ── */
 
@@ -56,8 +63,10 @@ export async function addModuleToActiveCanvas(
           return;
         }
 
-        // Step 2: Apply deploy bundle to canvas
-        const canvasView = await client.dropBundle({ deploy_bundle: deployBundle });
+        // Step 2: Apply deploy bundle to canvas, positioned after existing nodes
+        const position = findFreePosition(latestCanvasView?.nodes ?? []);
+        const canvasView = await client.dropBundle({ deploy_bundle: deployBundle, position });
+        latestCanvasView = canvasView;
         postToWebview(panel, { command: 'loadState', state: canvasView });
       } catch (err: unknown) {
         handleRpcError(err, 'action/drop_bundle', 'add module to canvas');
@@ -288,6 +297,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
               file_path: laceDir,
               workspace_name: folderName,
             });
+            latestCanvasView = canvasView;
             postToWebview(panel, { command: 'loadState', state: canvasView });
           } catch (err: unknown) {
             console.error(`[Canvas] session/open FAILED:`, err);
@@ -406,6 +416,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
     }
 
     canvasPanel = undefined;
+    latestCanvasView = undefined;
   });
 
   return sessionReady;
