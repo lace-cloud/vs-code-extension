@@ -73,10 +73,27 @@ export async function addModuleToActiveCanvas(
           return;
         }
 
-        // Step 2: Apply deploy bundle to canvas, positioned after existing nodes
-        const position = findFreePosition(latestCanvasView?.nodes ?? []);
-        const canvasView = await client.dropBundle({ deploy_bundle: deployBundle, position });
+        // Step 2: Apply deploy bundle to canvas; CLI ignores the position field in
+        // DropBundleRequest (it always auto-lays out), so we reposition via syncLayout.
+        const existingIds = new Set((latestCanvasView?.nodes ?? []).map((n) => n.id));
+        const canvasView = await client.dropBundle({ deploy_bundle: deployBundle });
         latestCanvasView = canvasView;
+
+        // Find newly added nodes and assign non-overlapping positions
+        const existingNodes = latestCanvasView?.nodes.filter((n) => existingIds.has(n.id)) ?? [];
+        const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
+        if (newNodes.length > 0) {
+          const syncPositions: Record<string, { x: number; y: number }> = {};
+          const placed: typeof existingNodes = [...existingNodes];
+          for (const node of newNodes) {
+            const pos = findFreePosition(placed);
+            syncPositions[node.id] = pos;
+            placed.push({ ...node, position: pos });
+            node.position = pos; // patch local view so webview renders correctly immediately
+          }
+          await client.syncLayout({ positions: syncPositions });
+        }
+
         postToWebview(panel, { command: 'loadState', state: canvasView });
       } catch (err: unknown) {
         handleRpcError(err, 'action/drop_bundle', 'add module to canvas');
