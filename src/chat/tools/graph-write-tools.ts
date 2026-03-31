@@ -11,10 +11,12 @@ import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { isValidTerraformIdentifier } from '../../webview/utils/identifiers';
 import { requireEngine, errorMessage } from './helpers';
+import { findFreePosition } from '../../webview/utils/layout';
 
 export type GraphWriteDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  getCanvasView?: () => CanvasView | undefined;
   publishCanvasView?: (state: CanvasView) => void;
 };
 
@@ -22,6 +24,7 @@ export type GraphWriteDeps = {
 
 export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   const publishCanvasView = (state: CanvasView) => deps.publishCanvasView?.(state);
+  const getCanvasView = () => deps.getCanvasView?.();
 
   // ─────────────────────────────────────────────
   // lace_add_module
@@ -83,9 +86,11 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
         return { content: 'Module has no deploy bundle.', isError: true };
       }
 
-      // Step 2: Apply deploy bundle to canvas
+      // Step 2: Apply deploy bundle to canvas, positioned after existing nodes
+      const position = findFreePosition(getCanvasView()?.nodes ?? []);
       const canvasView = await engineResult.client.dropBundle({
         deploy_bundle: deployBundle,
+        position,
       });
       publishCanvasView(canvasView);
 
