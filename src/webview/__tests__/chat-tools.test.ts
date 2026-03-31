@@ -102,6 +102,7 @@ describe('write tools', () => {
       });
       expect(mockClient.dropBundle).toHaveBeenCalledWith({
         deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} },
+        position: { x: 100, y: 100 },
       });
     });
 
