@@ -25,7 +25,6 @@ export type GraphWriteDeps = {
 export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   const publishCanvasView = (state: CanvasView) => deps.publishCanvasView?.(state);
   const getCanvasView = () => deps.getCanvasView?.();
-  let lastAddedPosition: { x: number; y: number } | undefined;
 
   // ─────────────────────────────────────────────
   // lace_add_module
@@ -89,20 +88,27 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
 
       // Step 2: Apply deploy bundle. CLI ignores the position field, so we
       // reposition new nodes via syncLayout after the drop.
-      const existingIds = new Set((getCanvasView()?.nodes ?? []).map((n) => n.id));
       const existingNodes = getCanvasView()?.nodes ?? [];
+      const existingIds = new Set(existingNodes.map((n) => n.id));
+
+      // Anchor to the last node in the current view — reflects where the user
+      // last worked, including any drags that happened before this call.
+      const anchor =
+        existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
+
       const canvasView = await engineResult.client.dropBundle({ deploy_bundle: deployBundle });
 
       const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
       if (newNodes.length > 0) {
         const syncPositions: Record<string, { x: number; y: number }> = {};
         const placed = [...existingNodes];
+        let currentAnchor = anchor;
         for (const node of newNodes) {
-          const pos = findFreePosition(placed, lastAddedPosition);
+          const pos = findFreePosition(placed, currentAnchor);
           syncPositions[node.id] = pos;
           placed.push({ ...node, position: pos });
           node.position = pos;
-          lastAddedPosition = pos;
+          currentAnchor = pos;
         }
         await engineResult.client.syncLayout({ positions: syncPositions });
       }
