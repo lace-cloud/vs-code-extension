@@ -86,12 +86,25 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
         return { content: 'Module has no deploy bundle.', isError: true };
       }
 
-      // Step 2: Apply deploy bundle to canvas, positioned after existing nodes
-      const position = findFreePosition(getCanvasView()?.nodes ?? []);
-      const canvasView = await engineResult.client.dropBundle({
-        deploy_bundle: deployBundle,
-        position,
-      });
+      // Step 2: Apply deploy bundle. CLI ignores the position field, so we
+      // reposition new nodes via syncLayout after the drop.
+      const existingIds = new Set((getCanvasView()?.nodes ?? []).map((n) => n.id));
+      const existingNodes = getCanvasView()?.nodes ?? [];
+      const canvasView = await engineResult.client.dropBundle({ deploy_bundle: deployBundle });
+
+      const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
+      if (newNodes.length > 0) {
+        const syncPositions: Record<string, { x: number; y: number }> = {};
+        const placed = [...existingNodes];
+        for (const node of newNodes) {
+          const pos = findFreePosition(placed);
+          syncPositions[node.id] = pos;
+          placed.push({ ...node, position: pos });
+          node.position = pos;
+        }
+        await engineResult.client.syncLayout({ positions: syncPositions });
+      }
+
       publishCanvasView(canvasView);
 
       // Find the newly added node from the returned canvas view
