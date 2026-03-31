@@ -21,6 +21,16 @@ let canvasPanel: vscode.WebviewPanel | undefined;
 let isGenerating = false;
 let latestCanvasView: CanvasView | undefined;
 
+/** Cheap runtime check: does this look like a CanvasView? */
+function isCanvasView(value: unknown): value is CanvasView {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'nodes' in value &&
+    Array.isArray((value as CanvasView).nodes)
+  );
+}
+
 /** Returns the latest known CanvasView from the host cache. */
 export function getLatestCanvasView(): CanvasView | undefined {
   return latestCanvasView;
@@ -319,6 +329,10 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           try {
             const client = requireClient(server.rpcClient, method);
             const result = await client.dispatch(method, params);
+            // Keep latestCanvasView in sync with any RPC that returns a CanvasView
+            if (isCanvasView(result)) {
+              latestCanvasView = result;
+            }
             postToWebview(panel, { command: 'engineResult', requestId, result });
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
