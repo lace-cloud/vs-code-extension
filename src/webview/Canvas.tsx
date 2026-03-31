@@ -73,6 +73,7 @@ type CompositeEditorProps = {
   onGenerate: () => void;
   onOpenSettings: () => void;
   registerGoToNode: (fn: (nodeId: string) => void) => void;
+  registerZoomToNode: (fn: (nodeId: string) => void) => void;
 };
 
 function CompositeEditor({
@@ -91,6 +92,7 @@ function CompositeEditor({
   onGenerate,
   onOpenSettings,
   registerGoToNode,
+  registerZoomToNode,
 }: CompositeEditorProps) {
   const { fitView, fitBounds, getNode } = useReactFlow();
 
@@ -114,6 +116,20 @@ function CompositeEditor({
       window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: nodeId } }));
     });
     // registerGoToNode is stable (useCallback in parent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Register zoom-only handler (no panel open) ──
+  useEffect(() => {
+    registerZoomToNode((nodeId: string) => {
+      const node = getNode(nodeId);
+      if (!node) return;
+      const { x, y } = node.position;
+      const w = node.measured?.width ?? 60;
+      const h = node.measured?.height ?? 60;
+      fitBounds({ x, y, width: w, height: h }, { padding: 4.0, duration: 400 });
+    });
+    // registerZoomToNode is stable (useCallback in parent)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -174,7 +190,7 @@ function CompositeEditor({
           isNew: newNodeIds.has(node.id),
         },
       })),
-    [view.nodes, connectedHandlesMap, erroredNodeIds],
+    [view.nodes, connectedHandlesMap, erroredNodeIds, newNodeIds],
   );
 
   // ── Local ReactFlow node state ──
@@ -298,6 +314,12 @@ export default function Canvas() {
     goToNodeRef.current = fn;
   }, []);
 
+  // Stable ref for zoom-only (no panel open) — set by CompositeEditor
+  const zoomToNodeRef = useRef<((nodeId: string) => void) | null>(null);
+  const registerZoomToNode = useCallback((fn: (nodeId: string) => void) => {
+    zoomToNodeRef.current = fn;
+  }, []);
+
   // ── Track newly added nodes for "new" (blue border) state ──
   useEffect(() => {
     if (!state.view) return;
@@ -333,18 +355,33 @@ export default function Canvas() {
     });
   }, []);
 
+  // ── Zoom to last newly added node ──
+  const latestNewNodeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (newNodeIds.size === 0) return;
+    const ids = [...newNodeIds];
+    const id = ids[ids.length - 1];
+    if (id === latestNewNodeIdRef.current) return;
+    latestNewNodeIdRef.current = id;
+    // Delay to let ReactFlow render/position the node before fitting
+    const timer = setTimeout(() => {
+      zoomToNodeRef.current?.(id);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [newNodeIds]);
+
   // ── Listen for openNodeConfig events from ModuleNode ──
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.instanceId) {
         setConfigTarget(detail.instanceId);
-        clearNew(detail.instanceId);
+        // Do NOT clear blue border here — it clears only when a required input is saved
       }
     };
     window.addEventListener('openNodeConfig', handler);
     return () => window.removeEventListener('openNodeConfig', handler);
-  }, [clearNew]);
+  }, []);
 
   // ── Listen for canvasViewUpdated events (e.g., delete from node button) ──
   useEffect(() => {
@@ -415,7 +452,6 @@ export default function Canvas() {
 
         if (edgesAfter > edgesBefore) {
           updateView(result);
-          clearNew(conn.source, conn.target);
         } else {
           setEdgeConfigState({ source: conn.source, target: conn.target });
         }
@@ -435,7 +471,6 @@ export default function Canvas() {
         if (targetInput) {
           const result = await engine.disconnect(edge.target, targetInput);
           updateView(result);
-          clearNew(edge.target);
         }
       }
     },
@@ -449,7 +484,6 @@ export default function Canvas() {
       for (const node of nodes) {
         const result = await engine.deleteInstance(node.id);
         updateView(result);
-        clearNew(node.id);
       }
     },
     [engine, updateView, clearNew],
@@ -477,7 +511,6 @@ export default function Canvas() {
       if (!engine) return;
       const result = await engine.connect(source, target, outputName, inputName);
       updateView(result);
-      clearNew(source, target);
       setEdgeConfigState(null);
     },
     [engine, updateView, clearNew],
@@ -622,6 +655,7 @@ export default function Canvas() {
           onGenerate={onGenerate}
           onOpenSettings={onOpenSettings}
           registerGoToNode={registerGoToNode}
+          registerZoomToNode={registerZoomToNode}
         />
 
         {/* Module config panel */}
