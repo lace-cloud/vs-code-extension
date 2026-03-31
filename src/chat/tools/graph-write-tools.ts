@@ -25,6 +25,7 @@ export type GraphWriteDeps = {
 export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   const publishCanvasView = (state: CanvasView) => deps.publishCanvasView?.(state);
   const getCanvasView = () => deps.getCanvasView?.();
+  let lastAddedPosition: { x: number; y: number } | undefined;
 
   // ─────────────────────────────────────────────
   // lace_add_module
@@ -97,10 +98,11 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
         const syncPositions: Record<string, { x: number; y: number }> = {};
         const placed = [...existingNodes];
         for (const node of newNodes) {
-          const pos = findFreePosition(placed);
+          const pos = findFreePosition(placed, lastAddedPosition);
           syncPositions[node.id] = pos;
           placed.push({ ...node, position: pos });
           node.position = pos;
+          lastAddedPosition = pos;
         }
         await engineResult.client.syncLayout({ positions: syncPositions });
       }
