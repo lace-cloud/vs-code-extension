@@ -61,6 +61,7 @@ type CompositeEditorProps = {
   view: CanvasView;
   isGenerating: boolean;
   erroredNodeIds: Set<string>;
+  newNodeIds: Set<string>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
@@ -78,6 +79,7 @@ function CompositeEditor({
   view,
   isGenerating,
   erroredNodeIds,
+  newNodeIds,
   onDragStop,
   onConnect,
   onEdgesDelete,
@@ -169,6 +171,7 @@ function CompositeEditor({
           ...node,
           connectedHandles: connectedHandlesMap[node.id] ?? [],
           hasValidationError: erroredNodeIds.has(node.id),
+          isNew: newNodeIds.has(node.id),
         },
       })),
     [view.nodes, connectedHandlesMap, erroredNodeIds],
@@ -276,6 +279,8 @@ export default function Canvas() {
   const { state, engine, updateView } = useCanvas();
 
   const [configTarget, setConfigTarget] = useState<string | null>(null);
+  const [newNodeIds, setNewNodeIds] = useState<Set<string>>(new Set());
+  const prevNodeIdsRef = useRef<Set<string>>(new Set());
   const [edgeConfigState, setEdgeConfigState] = useState<{
     source: string;
     target: string;
@@ -292,17 +297,48 @@ export default function Canvas() {
     goToNodeRef.current = fn;
   }, []);
 
+  // ── Track newly added nodes for "new" (blue border) state ──
+  useEffect(() => {
+    if (!state.view) return;
+    const currentIds = new Set(state.view.nodes.map((n) => n.id));
+    const prev = prevNodeIdsRef.current;
+    // On first view (session open), prev is empty — treat all existing nodes as
+    // already-known so they don't get a blue border on load.
+    const isInitialLoad = prev.size === 0 && currentIds.size > 0;
+    const added = isInitialLoad
+      ? []
+      : state.view.nodes.filter((n) => !prev.has(n.id)).map((n) => n.id);
+    setNewNodeIds((s) => {
+      const next = new Set([...s].filter((id) => currentIds.has(id)));
+      for (const id of added) next.add(id);
+      return next.size !== s.size || added.length > 0 ? next : s;
+    });
+    prevNodeIdsRef.current = currentIds;
+  }, [state.view]);
+
+  const clearNew = useCallback((...ids: string[]) => {
+    setNewNodeIds((s) => {
+      const next = new Set(s);
+      let changed = false;
+      for (const id of ids) {
+        if (next.delete(id)) changed = true;
+      }
+      return changed ? next : s;
+    });
+  }, []);
+
   // ── Listen for openNodeConfig events from ModuleNode ──
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.instanceId) {
         setConfigTarget(detail.instanceId);
+        clearNew(detail.instanceId);
       }
     };
     window.addEventListener('openNodeConfig', handler);
     return () => window.removeEventListener('openNodeConfig', handler);
-  }, []);
+  }, [clearNew]);
 
   // ── Listen for canvasViewUpdated events (e.g., delete from node button) ──
   useEffect(() => {
@@ -373,6 +409,7 @@ export default function Canvas() {
 
         if (edgesAfter > edgesBefore) {
           updateView(result);
+          clearNew(conn.source, conn.target);
         } else {
           setEdgeConfigState({ source: conn.source, target: conn.target });
         }
@@ -380,7 +417,7 @@ export default function Canvas() {
         setEdgeConfigState({ source: conn.source, target: conn.target });
       }
     },
-    [engine, state.view?.edges.length, updateView],
+    [engine, state.view?.edges.length, updateView, clearNew],
   );
 
   // ── Event: edge delete (select edge + Delete/Backspace) ──
@@ -392,10 +429,11 @@ export default function Canvas() {
         if (targetInput) {
           const result = await engine.disconnect(edge.target, targetInput);
           updateView(result);
+          clearNew(edge.target);
         }
       }
     },
-    [engine, updateView],
+    [engine, updateView, clearNew],
   );
 
   // ── Event: node delete (select node + Delete/Backspace) ──
@@ -405,9 +443,10 @@ export default function Canvas() {
       for (const node of nodes) {
         const result = await engine.deleteInstance(node.id);
         updateView(result);
+        clearNew(node.id);
       }
     },
-    [engine, updateView],
+    [engine, updateView, clearNew],
   );
 
   // ── Event: clear all modules from graph ──
@@ -432,9 +471,10 @@ export default function Canvas() {
       if (!engine) return;
       const result = await engine.connect(source, target, outputName, inputName);
       updateView(result);
+      clearNew(source, target);
       setEdgeConfigState(null);
     },
-    [engine, updateView],
+    [engine, updateView, clearNew],
   );
 
   useEffect(() => {
@@ -564,6 +604,7 @@ export default function Canvas() {
           view={view}
           isGenerating={generating}
           erroredNodeIds={erroredNodeIds}
+          newNodeIds={newNodeIds}
           onDragStop={onDragStop}
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
@@ -584,6 +625,7 @@ export default function Canvas() {
               instance_id={configTarget}
               engine={engine}
               onClose={() => setConfigTarget(null)}
+              onModified={clearNew}
             />
           )}
         </SlidePanel>
