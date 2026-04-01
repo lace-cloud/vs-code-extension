@@ -74,6 +74,7 @@ type CompositeEditorProps = {
   onOpenSettings: () => void;
   registerGoToNode: (fn: (nodeId: string) => void) => void;
   registerZoomToNode: (fn: (nodeId: string) => void) => void;
+  registerGetSelectedIds: (fn: () => string[]) => void;
 };
 
 function CompositeEditor({
@@ -93,6 +94,7 @@ function CompositeEditor({
   onOpenSettings,
   registerGoToNode,
   registerZoomToNode,
+  registerGetSelectedIds,
 }: CompositeEditorProps) {
   const { fitView, fitBounds, getNode } = useReactFlow();
 
@@ -219,6 +221,17 @@ function CompositeEditor({
     setRfNodes((nds) => applyNodeChanges(changes, nds));
   }, []);
 
+  // ── Expose selected node IDs to Canvas for copy/cut ──
+  const rfNodesRef = useRef<Node[]>(rfNodes);
+  useEffect(() => {
+    rfNodesRef.current = rfNodes;
+  }, [rfNodes]);
+  useEffect(() => {
+    registerGetSelectedIds(() => rfNodesRef.current.filter((n) => n.selected).map((n) => n.id));
+    // registerGetSelectedIds is stable (useCallback in parent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Sync positions back to engine on drag stop ──
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, _node: Node, nodes: Node[]) => {
@@ -319,6 +332,16 @@ export default function Canvas() {
   const registerZoomToNode = useCallback((fn: (nodeId: string) => void) => {
     zoomToNodeRef.current = fn;
   }, []);
+
+  // Stable ref for reading selected node IDs — set by CompositeEditor
+  const getSelectedIdsRef = useRef<(() => string[]) | null>(null);
+  const registerGetSelectedIds = useCallback((fn: () => string[]) => {
+    getSelectedIdsRef.current = fn;
+  }, []);
+
+  // ── Clipboard state ──
+  const clipboardRef = useRef<string[]>([]);
+  const isCutRef = useRef(false);
 
   // ── Track newly added nodes for "new" (blue border) state ──
   useEffect(() => {
@@ -429,6 +452,48 @@ export default function Canvas() {
       delete (window as unknown as Record<string, unknown>).__canvasUndo;
     };
   }, [onUndo]);
+
+  // ── Copy/Cut/Paste handlers ──
+  const onCopy = useCallback(() => {
+    const ids = getSelectedIdsRef.current?.() ?? [];
+    if (ids.length === 0) return;
+    clipboardRef.current = ids;
+    isCutRef.current = false;
+  }, []);
+
+  const onCut = useCallback(() => {
+    const ids = getSelectedIdsRef.current?.() ?? [];
+    if (ids.length === 0) return;
+    clipboardRef.current = ids;
+    isCutRef.current = true;
+  }, []);
+
+  const onPaste = useCallback(async () => {
+    if (!engine || clipboardRef.current.length === 0) return;
+    const ids = clipboardRef.current;
+    const result = await engine.copyInstances(ids);
+    updateView(result);
+    if (isCutRef.current) {
+      for (const id of ids) {
+        const r = await engine.deleteInstance(id);
+        updateView(r);
+      }
+      clipboardRef.current = [];
+      isCutRef.current = false;
+    }
+  }, [engine, updateView]);
+
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>;
+    w.__canvasCopy = onCopy;
+    w.__canvasCut = onCut;
+    w.__canvasPaste = onPaste;
+    return () => {
+      delete w.__canvasCopy;
+      delete w.__canvasCut;
+      delete w.__canvasPaste;
+    };
+  }, [onCopy, onCut, onPaste]);
 
   // ── Event: drag stop → sync layout to engine ──
   const onDragStop = useCallback(
@@ -656,6 +721,7 @@ export default function Canvas() {
           onOpenSettings={onOpenSettings}
           registerGoToNode={registerGoToNode}
           registerZoomToNode={registerZoomToNode}
+          registerGetSelectedIds={registerGetSelectedIds}
         />
 
         {/* Module config panel */}
