@@ -108,6 +108,7 @@ export interface CanvasEngine {
   updateAllInputs(instanceId: string, inputs: InputUpdate[]): Promise<CanvasView>;
   renameInstance(oldId: string, newId: string): Promise<CanvasView>;
   deleteInstance(instanceId: string): Promise<CanvasView>;
+  copyInstances(instanceIds: string[]): Promise<CanvasView>;
   syncLayout(positions: Record<string, { x: number; y: number }>): Promise<void>;
   setVariables(variables: VariableDef[]): Promise<CanvasView>;
   setExports(outputs: OutputExportDef[], outputDefs: OutputDefEntry[]): Promise<CanvasView>;
