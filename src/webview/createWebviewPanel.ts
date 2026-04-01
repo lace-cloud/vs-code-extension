@@ -102,7 +102,16 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
       postProgress('validating');
       const validation = await terraform.validate(laceDir);
 
-      if (validation && !validation.valid) {
+      if (validation === null) {
+        // validate produced no output at all — treat as unknown, not clean
+        postToWebview(panel, {
+          command: 'generateError',
+          message: 'Validation could not run — terraform validate produced no output.',
+        });
+        return;
+      }
+
+      if (!validation.valid) {
         const errors = validation.diagnostics.filter((d) => d.severity === 'error');
         if (errors.length > 0) {
           const enriched = enrichDiagnosticsWithAddress(errors as Diagnostic[], laceDir);

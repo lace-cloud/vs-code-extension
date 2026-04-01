@@ -15,6 +15,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private modules: RegistryModule[] = [];
+  private orgModules: RegistryModule[] = [];
   private rpcClient: LaceClient | null = null;
   private loading = false;
   private errorMessage: string | null = null;
@@ -67,13 +68,18 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
   }
 
   /** Fetch modules for a system with page cap, using cache when fresh. */
-  private async fetchAllModules(system: string, force = false): Promise<RegistryModule[]> {
+  private async fetchAllModules(
+    system: string,
+    force = false,
+    organization?: string,
+  ): Promise<RegistryModule[]> {
     if (!this.rpcClient) return [];
 
-    const cached = this.cache.get(system);
+    const cacheKey = `${system}:${organization ?? ''}`;
+    const cached = this.cache.get(cacheKey);
     if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       this.outputChannel?.appendLine(
-        `[registry] ${system}: cache hit (${cached.modules.length} modules, age ${Math.round((Date.now() - cached.fetchedAt) / 1000)}s)`,
+        `[registry] ${system}${organization ? `@${organization}` : ''}: cache hit (${cached.modules.length} modules, age ${Math.round((Date.now() - cached.fetchedAt) / 1000)}s)`,
       );
       return cached.modules;
     }
@@ -83,7 +89,12 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     let page = 1;
     const limit = 100;
     while (page <= MAX_PAGES_PER_SYSTEM) {
-      const result = await this.rpcClient.listRegistryModules({ system, page, limit });
+      const result = await this.rpcClient.listRegistryModules({
+        system,
+        page,
+        limit,
+        organization: organization ?? '',
+      });
       const modules = (result?.modules ?? []) as RegistryModule[];
       allModules.push(...modules);
       if (modules.length < limit) break;
@@ -92,16 +103,17 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     const elapsed = Date.now() - start;
     this.outputChannel?.appendLine(
-      `[registry] ${system}: ${allModules.length} modules in ${page} page(s) (${elapsed}ms)`,
+      `[registry] ${system}${organization ? `@${organization}` : ''}: ${allModules.length} modules in ${page} page(s) (${elapsed}ms)`,
     );
 
-    this.cache.set(system, { modules: allModules, fetchedAt: Date.now() });
+    this.cache.set(cacheKey, { modules: allModules, fetchedAt: Date.now() });
     return allModules;
   }
 
   async refresh(force = false) {
     if (!this.rpcClient) {
       this.modules = [];
+      this.orgModules = [];
       this.errorMessage = null;
       this.updateWebview();
       return;
@@ -111,10 +123,13 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     this.errorMessage = null;
     this.updateWebview();
 
+    const org = this.selectedOrg ?? undefined;
+
+    // Always fetch public modules (org='')
     const [aws, azure, gcp] = await Promise.allSettled([
-      this.fetchAllModules('aws', force),
-      this.fetchAllModules('azure', force),
-      this.fetchAllModules('gcp', force),
+      this.fetchAllModules('aws', force, ''),
+      this.fetchAllModules('azure', force, ''),
+      this.fetchAllModules('gcp', force, ''),
     ]);
 
     const results = [aws, azure, gcp];
@@ -125,6 +140,29 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       if (result.status === 'fulfilled') {
         this.modules.push(...result.value);
       }
+    }
+
+    // When an org is selected, also fetch org-private modules separately
+    if (org) {
+      const [orgAws, orgAzure, orgGcp] = await Promise.allSettled([
+        this.fetchAllModules('aws', force, org),
+        this.fetchAllModules('azure', force, org),
+        this.fetchAllModules('gcp', force, org),
+      ]);
+      this.orgModules = [];
+      for (const result of [orgAws, orgAzure, orgGcp]) {
+        if (result.status === 'fulfilled') {
+          // Only include modules not already in public registry (deduplicate by id)
+          const publicIds = new Set(this.modules.map((m) => m.id));
+          for (const m of result.value) {
+            if (!publicIds.has(m.id)) {
+              this.orgModules.push(m);
+            }
+          }
+        }
+      }
+    } else {
+      this.orgModules = [];
     }
 
     if (failCount === results.length) {
@@ -195,6 +233,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
   private buildHtml(): string {
     const modulesJson = JSON.stringify(this.modules);
+    const orgModulesJson = JSON.stringify(this.orgModules);
     const errorJson = JSON.stringify(this.errorMessage);
     const favoritesJson = JSON.stringify(this.favoriteModuleIds);
     const recentJson = JSON.stringify(this.recentModuleIds);
@@ -580,7 +619,10 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
   <script>
     const vscode = acquireVsCodeApi();
-    const allModules = ${modulesJson};
+    const publicModules = ${modulesJson};
+    const orgModules = ${orgModulesJson};
+    // Combined list for index-based lookup (org modules first, then public)
+    const allModules = [...orgModules, ...publicModules];
     const loading = ${this.loading};
     const errorMessage = ${errorJson};
     const favoriteIds = ${favoritesJson};
@@ -757,9 +799,35 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         }
       }
 
-      // Group by system
+      if (q) {
+        html += '<div class="result-count">' + filtered.length + ' module' + (filtered.length !== 1 ? 's' : '') + '</div>';
+      }
+
+      // When an org is selected, show org-private modules in their own section
+      const orgModuleIds = new Set(orgModules.map(m => m.id));
+      const filteredOrg = filtered.filter(m => orgModuleIds.has(m.id));
+      const filteredPublic = filtered.filter(m => !orgModuleIds.has(m.id));
+
+      if (filteredOrg.length > 0) {
+        const orgLabel = selectedOrg ? selectedOrg.toUpperCase() : 'ORGANIZATION';
+        const isCollapsed = collapsedSystems.has('__org__');
+        html += '<div class="module-list">';
+        html += '<div class="system-header' + (isCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
+        html += '<span class="chevron">&#x25BE;</span> ';
+        html += escHtml(orgLabel);
+        html += ' <span class="module-count">(' + filteredOrg.length + ')</span>';
+        html += '</div>';
+        html += '<div class="system-body' + (isCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
+        filteredOrg.sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
+          html += renderModuleItem(m, allModules.indexOf(m));
+        });
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // Group public modules by system
       const grouped = {};
-      filtered.forEach(m => {
+      filteredPublic.forEach(m => {
         const sys = m.system || 'other';
         if (!grouped[sys]) grouped[sys] = [];
         if (!grouped[sys].some(x => x.id === m.id)) {
@@ -767,11 +835,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         }
       });
 
-      if (q) {
-        html += '<div class="result-count">' + filtered.length + ' module' + (filtered.length !== 1 ? 's' : '') + '</div>';
-      }
       html += '<div class="module-list">';
-
       const systems = Object.keys(grouped).sort();
       for (const sys of systems) {
         const isCollapsed = collapsedSystems.has(sys);
@@ -788,8 +852,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         }
         html += '</div>';
       }
-
       html += '</div>';
+
       content.innerHTML = html;
 
       attachHandlers();
