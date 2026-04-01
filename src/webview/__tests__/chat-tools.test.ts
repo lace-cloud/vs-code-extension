@@ -26,6 +26,7 @@ function makeMockClient(overrides: Record<string, unknown> = {}) {
           [makeEdge('vpc', 'subnet', 'vpc_id', 'vpc_id')],
         ),
       ),
+    syncLayout: vi.fn().mockResolvedValue({}),
     queryValidate: vi.fn().mockResolvedValue({ errors: [] as RenderError[] }),
     sessionGenerate: vi.fn().mockResolvedValue({
       files_written: ['main.tf'],
@@ -102,6 +103,10 @@ describe('write tools', () => {
       });
       expect(mockClient.dropBundle).toHaveBeenCalledWith({
         deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} },
+      });
+      // New node "vpc" is repositioned via syncLayout (empty canvas → x:100, y:100)
+      expect(mockClient.syncLayout).toHaveBeenCalledWith({
+        positions: { vpc: { x: 100, y: 100 } },
       });
     });
 

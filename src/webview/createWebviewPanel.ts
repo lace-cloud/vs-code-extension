@@ -9,6 +9,7 @@ import type { HostToWebview, WebviewToHost, Diagnostic, GeneratePhase } from '..
 import type { CanvasView } from './types/render';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
 import * as terraform from '../utilities/terraform';
+import { findFreePosition } from './utils/layout';
 
 /* ── Constants ── */
 
@@ -18,6 +19,22 @@ const LACE_DIR = '.lace';
 
 let canvasPanel: vscode.WebviewPanel | undefined;
 let isGenerating = false;
+let latestCanvasView: CanvasView | undefined;
+
+/** Cheap runtime check: does this look like a CanvasView? */
+function isCanvasView(value: unknown): value is CanvasView {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'nodes' in value &&
+    Array.isArray((value as CanvasView).nodes)
+  );
+}
+
+/** Returns the latest known CanvasView from the host cache. */
+export function getLatestCanvasView(): CanvasView | undefined {
+  return latestCanvasView;
+}
 
 /* ── Public API ── */
 
@@ -56,8 +73,36 @@ export async function addModuleToActiveCanvas(
           return;
         }
 
-        // Step 2: Apply deploy bundle to canvas
+        // Step 2: Apply deploy bundle to canvas; CLI ignores the position field in
+        // DropBundleRequest (it always auto-lays out), so we reposition via syncLayout.
+        const existingNodes = latestCanvasView?.nodes ?? [];
+        const existingIds = new Set(existingNodes.map((n) => n.id));
+
+        // Anchor to the last node in the current view — latestCanvasView is kept
+        // up-to-date including user drags (see action/sync_layout patch above), so
+        // this always reflects where the user last worked on the canvas.
+        const anchor =
+          existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
+
         const canvasView = await client.dropBundle({ deploy_bundle: deployBundle });
+        latestCanvasView = canvasView;
+
+        // Find newly added nodes and assign non-overlapping positions.
+        const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
+        if (newNodes.length > 0) {
+          const syncPositions: Record<string, { x: number; y: number }> = {};
+          const placed = [...existingNodes];
+          let currentAnchor = anchor;
+          for (const node of newNodes) {
+            const pos = findFreePosition(placed, currentAnchor);
+            syncPositions[node.id] = pos;
+            placed.push({ ...node, position: pos });
+            node.position = pos; // patch local view so webview renders correctly immediately
+            currentAnchor = pos;
+          }
+          await client.syncLayout({ positions: syncPositions });
+        }
+
         postToWebview(panel, { command: 'loadState', state: canvasView });
       } catch (err: unknown) {
         handleRpcError(err, 'action/drop_bundle', 'add module to canvas');
@@ -288,6 +333,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
               file_path: laceDir,
               workspace_name: folderName,
             });
+            latestCanvasView = canvasView;
             postToWebview(panel, { command: 'loadState', state: canvasView });
           } catch (err: unknown) {
             console.error(`[Canvas] session/open FAILED:`, err);
@@ -309,6 +355,25 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           try {
             const client = requireClient(server.rpcClient, method);
             const result = await client.dispatch(method, params);
+            // Keep latestCanvasView in sync with any RPC that returns a CanvasView
+            if (isCanvasView(result)) {
+              latestCanvasView = result;
+            }
+            // Patch node positions when the user drags — syncLayout returns empty,
+            // so latestCanvasView would otherwise be stale and the next module drop
+            // would anchor to the pre-drag position.
+            if (method === 'action/sync_layout' && latestCanvasView) {
+              const positions = (params as { positions?: Record<string, { x: number; y: number }> })
+                ?.positions;
+              if (positions) {
+                latestCanvasView = {
+                  ...latestCanvasView,
+                  nodes: latestCanvasView.nodes.map((n) =>
+                    positions[n.id] ? { ...n, position: positions[n.id] } : n,
+                  ),
+                };
+              }
+            }
             postToWebview(panel, { command: 'engineResult', requestId, result });
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -406,6 +471,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
     }
 
     canvasPanel = undefined;
+    latestCanvasView = undefined;
   });
 
   return sessionReady;

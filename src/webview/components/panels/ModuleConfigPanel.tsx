@@ -23,11 +23,12 @@ type Props = {
   instance_id: string;
   engine: CanvasEngine;
   onClose: () => void;
+  onModified?: (instanceId: string) => void;
 };
 
 // ── Component ──
 
-export default function ModuleConfigPanel({ instance_id, engine, onClose }: Props) {
+export default function ModuleConfigPanel({ instance_id, engine, onClose, onModified }: Props) {
   const { state, updateView } = useCanvas();
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,6 +153,32 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose }: Prop
       updateView(lastView);
     }
     await engine.setDependsOn(instance_id, [...localDependsOn]);
+
+    // Clear the blue "new" border only when at least one required input has
+    // been given a non-empty value. If the module has no required inputs at
+    // all, any save counts as configured.
+    const requiredInputs = config.inputs.filter((i) => i.required);
+    const hasFilledRequired =
+      requiredInputs.length === 0 ||
+      requiredInputs.some((input) => {
+        const mode = localModes[input.name] ?? input.mode;
+        if (mode === 'wired') return true;
+        if (mode === 'literal') {
+          const v = localValues[input.name];
+          return v !== undefined && v !== null && v !== '';
+        }
+        if (mode === 'variable') {
+          return (localVariables[input.name] ?? '').trim().length > 0;
+        }
+        if (mode === 'expression') {
+          return (localExpressions[input.name] ?? '').trim().length > 0;
+        }
+        return false; // mode === 'empty'
+      });
+
+    if (hasFilledRequired) {
+      onModified?.(instance_id);
+    }
     onClose();
   };
 

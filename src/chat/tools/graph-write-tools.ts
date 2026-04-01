@@ -11,10 +11,12 @@ import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { isValidTerraformIdentifier } from '../../webview/utils/identifiers';
 import { requireEngine, errorMessage } from './helpers';
+import { findFreePosition } from '../../webview/utils/layout';
 
 export type GraphWriteDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  getCanvasView?: () => CanvasView | undefined;
   publishCanvasView?: (state: CanvasView) => void;
 };
 
@@ -22,6 +24,7 @@ export type GraphWriteDeps = {
 
 export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   const publishCanvasView = (state: CanvasView) => deps.publishCanvasView?.(state);
+  const getCanvasView = () => deps.getCanvasView?.();
 
   // ─────────────────────────────────────────────
   // lace_add_module
@@ -83,10 +86,33 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
         return { content: 'Module has no deploy bundle.', isError: true };
       }
 
-      // Step 2: Apply deploy bundle to canvas
-      const canvasView = await engineResult.client.dropBundle({
-        deploy_bundle: deployBundle,
-      });
+      // Step 2: Apply deploy bundle. CLI ignores the position field, so we
+      // reposition new nodes via syncLayout after the drop.
+      const existingNodes = getCanvasView()?.nodes ?? [];
+      const existingIds = new Set(existingNodes.map((n) => n.id));
+
+      // Anchor to the last node in the current view — reflects where the user
+      // last worked, including any drags that happened before this call.
+      const anchor =
+        existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
+
+      const canvasView = await engineResult.client.dropBundle({ deploy_bundle: deployBundle });
+
+      const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
+      if (newNodes.length > 0) {
+        const syncPositions: Record<string, { x: number; y: number }> = {};
+        const placed = [...existingNodes];
+        let currentAnchor = anchor;
+        for (const node of newNodes) {
+          const pos = findFreePosition(placed, currentAnchor);
+          syncPositions[node.id] = pos;
+          placed.push({ ...node, position: pos });
+          node.position = pos;
+          currentAnchor = pos;
+        }
+        await engineResult.client.syncLayout({ positions: syncPositions });
+      }
+
       publishCanvasView(canvasView);
 
       // Find the newly added node from the returned canvas view
