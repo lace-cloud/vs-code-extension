@@ -359,6 +359,37 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
             if (isCanvasView(result)) {
               latestCanvasView = result;
             }
+
+            // After copy_instances: position the new nodes using findFreePosition,
+            // anchored to the last existing node (same strategy as drop_bundle).
+            if (method === 'action/copy_instances' && isCanvasView(result)) {
+              const sourceIds = new Set(
+                (params as { instance_ids?: string[] })?.instance_ids ?? [],
+              );
+              const preCopyNodes =
+                latestCanvasView?.nodes.filter((n) => !sourceIds.has(n.id)) ?? [];
+              const newNodes = result.nodes.filter(
+                (n) => !preCopyNodes.some((p) => p.id === n.id) && !sourceIds.has(n.id),
+              );
+              if (newNodes.length > 0) {
+                const anchor =
+                  preCopyNodes.length > 0
+                    ? preCopyNodes[preCopyNodes.length - 1].position
+                    : undefined;
+                const syncPositions: Record<string, { x: number; y: number }> = {};
+                const placed = [...preCopyNodes];
+                let currentAnchor = anchor;
+                for (const node of newNodes) {
+                  const pos = findFreePosition(placed, currentAnchor);
+                  syncPositions[node.id] = pos;
+                  placed.push({ ...node, position: pos });
+                  node.position = pos;
+                  currentAnchor = pos;
+                }
+                await client.syncLayout({ positions: syncPositions });
+                latestCanvasView = result;
+              }
+            }
             // Patch node positions when the user drags — syncLayout returns empty,
             // so latestCanvasView would otherwise be stale and the next module drop
             // would anchor to the pre-drag position.
