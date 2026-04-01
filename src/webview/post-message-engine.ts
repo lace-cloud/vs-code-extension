@@ -164,6 +164,10 @@ export class PostMessageEngine implements CanvasEngine {
     return this.call('action/delete_instance', { instance_id: instanceId });
   }
 
+  copyInstances(instanceIds: string[]): Promise<CanvasView> {
+    return this.call('action/copy_instances', { instance_ids: instanceIds });
+  }
+
   syncLayout(positions: Record<string, { x: number; y: number }>): Promise<void> {
     return this.call('action/sync_layout', { positions });
   }
