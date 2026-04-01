@@ -354,6 +354,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           };
           try {
             const client = requireClient(server.rpcClient, method);
+            const preCopyView = latestCanvasView;
             const result = await client.dispatch(method, params);
             // Keep latestCanvasView in sync with any RPC that returns a CanvasView
             if (isCanvasView(result)) {
@@ -366,8 +367,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
               const sourceIds = new Set(
                 (params as { instance_ids?: string[] })?.instance_ids ?? [],
               );
-              const preCopyNodes =
-                latestCanvasView?.nodes.filter((n) => !sourceIds.has(n.id)) ?? [];
+              const preCopyNodes = preCopyView?.nodes.filter((n) => !sourceIds.has(n.id)) ?? [];
               const newNodes = result.nodes.filter(
                 (n) => !preCopyNodes.some((p) => p.id === n.id) && !sourceIds.has(n.id),
               );
