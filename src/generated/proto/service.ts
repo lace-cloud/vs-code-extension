@@ -388,6 +388,10 @@ export interface DeleteInstanceRequest {
   instance_id: string;
 }
 
+export interface CopyInstancesRequest {
+  instance_ids: string[];
+}
+
 export interface SyncLayoutRequest {
   positions: { [key: string]: Position };
 }
@@ -4083,6 +4087,62 @@ export const DeleteInstanceRequest: MessageFns<DeleteInstanceRequest> = {
   fromPartial<I extends Exact<DeepPartial<DeleteInstanceRequest>, I>>(object: I): DeleteInstanceRequest {
     const message = createBaseDeleteInstanceRequest();
     message.instance_id = object.instance_id ?? "";
+    return message;
+  },
+};
+
+function createBaseCopyInstancesRequest(): CopyInstancesRequest {
+  return { instance_ids: [] };
+}
+
+export const CopyInstancesRequest: MessageFns<CopyInstancesRequest> = {
+  encode(message: CopyInstancesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.instance_ids) {
+      writer.uint32(10).string(v);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CopyInstancesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCopyInstancesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) break;
+          message.instance_ids.push(reader.string());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) break;
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CopyInstancesRequest {
+    return {
+      instance_ids: globalThis.Array.isArray(object?.instanceIds)
+        ? object.instanceIds.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: CopyInstancesRequest): unknown {
+    const obj: any = {};
+    if (message.instance_ids?.length) {
+      obj.instanceIds = message.instance_ids;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CopyInstancesRequest>, I>>(base?: I): CopyInstancesRequest {
+    return CopyInstancesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CopyInstancesRequest>, I>>(object: I): CopyInstancesRequest {
+    const message = createBaseCopyInstancesRequest();
+    message.instance_ids = object.instance_ids?.map((e) => e) || [];
     return message;
   },
 };
@@ -8437,6 +8497,16 @@ export const LaceEngineService = {
     responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
     responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
   },
+  copyInstances: {
+    path: "/lace.engine.LaceEngine/CopyInstances",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: CopyInstancesRequest): Buffer =>
+      Buffer.from(CopyInstancesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CopyInstancesRequest => CopyInstancesRequest.decode(value),
+    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
+  },
   syncLayout: {
     path: "/lace.engine.LaceEngine/SyncLayout",
     requestStream: false,
@@ -8603,6 +8673,7 @@ export interface LaceEngineServer extends UntypedServiceImplementation {
   updateAllInputs: handleUnaryCall<UpdateAllInputsRequest, CanvasView>;
   renameInstance: handleUnaryCall<RenameInstanceRequest, CanvasView>;
   deleteInstance: handleUnaryCall<DeleteInstanceRequest, CanvasView>;
+  copyInstances: handleUnaryCall<CopyInstancesRequest, CanvasView>;
   syncLayout: handleUnaryCall<SyncLayoutRequest, Empty>;
   setVariables: handleUnaryCall<SetVariablesRequest, CanvasView>;
   setExports: handleUnaryCall<SetExportsRequest, CanvasView>;
@@ -8920,6 +8991,21 @@ export interface LaceEngineClient extends Client {
   ): ClientUnaryCall;
   deleteInstance(
     request: DeleteInstanceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  copyInstances(
+    request: CopyInstancesRequest,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  copyInstances(
+    request: CopyInstancesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  copyInstances(
+    request: CopyInstancesRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CanvasView) => void,

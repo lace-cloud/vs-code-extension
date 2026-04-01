@@ -39,6 +39,7 @@ service LaceEngine {
   rpc UpdateAllInputs(UpdateAllInputsRequest) returns (CanvasView);
   rpc RenameInstance(RenameInstanceRequest) returns (CanvasView);
   rpc DeleteInstance(DeleteInstanceRequest) returns (CanvasView);
+  rpc CopyInstances(CopyInstancesRequest) returns (CanvasView);
   rpc SyncLayout(SyncLayoutRequest) returns (google.protobuf.Empty);
   rpc SetVariables(SetVariablesRequest) returns (CanvasView);
   rpc SetExports(SetExportsRequest) returns (CanvasView);
@@ -314,6 +315,10 @@ message RenameInstanceRequest {
 
 message DeleteInstanceRequest {
   string instance_id = 1;
+}
+
+message CopyInstancesRequest {
+  repeated string instance_ids = 1;
 }
 
 message SyncLayoutRequest {

@@ -667,6 +667,11 @@ export class LaceClient {
     return convertCanvasView(res);
   }
 
+  async copyInstances(params: { instance_ids: string[] }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.copyInstances, params);
+    return convertCanvasView(res);
+  }
+
   async syncLayout(params: {
     positions: Record<string, { x: number; y: number }>;
   }): Promise<Record<string, never>> {
@@ -940,6 +945,8 @@ export class LaceClient {
         return this.renameInstance(params as { old_id: string; new_id: string });
       case 'action/delete_instance':
         return this.deleteInstance(params as { instance_id: string });
+      case 'action/copy_instances':
+        return this.copyInstances(params as { instance_ids: string[] });
       case 'action/sync_layout':
         return this.syncLayout(params as { positions: Record<string, { x: number; y: number }> });
       case 'action/set_variables':

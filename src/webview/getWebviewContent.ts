@@ -62,6 +62,18 @@ export function getWebviewContent(
         e.preventDefault();
         if (window.__canvasUndo) window.__canvasUndo();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+        e.preventDefault();
+        if (window.__canvasCopy) window.__canvasCopy();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'x') {
+        e.preventDefault();
+        if (window.__canvasCut) window.__canvasCut();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+        e.preventDefault();
+        if (window.__canvasPaste) window.__canvasPaste();
+      }
     });
   });
   </script>
