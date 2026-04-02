@@ -98,7 +98,7 @@ function CompositeEditor({
   registerZoomToNode,
   registerGetSelectedIds,
 }: CompositeEditorProps) {
-  const { fitView, fitBounds, getNode } = useReactFlow();
+  const { fitView, fitBounds, getNode, getNodes } = useReactFlow();
 
   // ── Imperative fitView on initial mount only ──
   useEffect(() => {
@@ -228,13 +228,15 @@ function CompositeEditor({
   }, []);
 
   // ── Expose selected node IDs to Canvas for copy/cut ──
-  const rfNodesRef = useRef<Node[]>(rfNodes);
+  // Use getNodes() from the ReactFlow store — reads live state synchronously,
+  // so Ctrl+C immediately after a click always sees the updated selection.
   useEffect(() => {
-    rfNodesRef.current = rfNodes;
-  }, [rfNodes]);
-  useEffect(() => {
-    registerGetSelectedIds(() => rfNodesRef.current.filter((n) => n.selected).map((n) => n.id));
-    // registerGetSelectedIds is stable (useCallback in parent)
+    registerGetSelectedIds(() =>
+      getNodes()
+        .filter((n) => n.selected)
+        .map((n) => n.id),
+    );
+    // registerGetSelectedIds and getNodes are both stable refs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
