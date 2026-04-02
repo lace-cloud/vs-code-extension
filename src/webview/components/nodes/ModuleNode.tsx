@@ -99,8 +99,26 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
   const onClick = useCallback(
     (e: React.MouseEvent) => {
+      // Allow ReactFlow to process the click for selection (do not stopPropagation).
+      // Only open config on plain click — shift/meta are multi-select modifiers.
+      if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        window.dispatchEvent(
+          new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }),
+        );
+      }
+    },
+    [data.id],
+  );
+
+  const onContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
       e.stopPropagation();
-      window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }));
+      window.dispatchEvent(
+        new CustomEvent('canvasContextMenu', {
+          detail: { instanceId: data.id, x: e.clientX, y: e.clientY },
+        }),
+      );
     },
     [data.id],
   );
@@ -144,6 +162,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       className="relative cursor-pointer"
       style={{ width: CARD_SIZE, height: CARD_SIZE }}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={data.has_errors ? data.error_messages?.join('\n') : data.id}
