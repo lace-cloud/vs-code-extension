@@ -81,3 +81,34 @@ export function findFreePosition(
   const row = Math.floor(nodes.length / COLUMN_WRAP);
   return { x: originX + col * STEP_X, y: originY + row * STEP_Y };
 }
+
+/**
+ * Given existing nodes (to check against), the relative positions of a group
+ * of nodes to be placed (e.g. [{relX: 0, relY: 0}, {relX: 122, relY: 0}]),
+ * and the source group anchor (top-left corner of the source bounding box),
+ * returns a position for the new group's top-left anchor such that no member
+ * of the group overlaps any existing node.
+ *
+ * Scans rightward from the source anchor, wrapping down, so the pasted group
+ * lands near the original group.
+ */
+export function findFreeGroupPosition(
+  existingNodes: RenderNode[],
+  relPositions: { relX: number; relY: number }[],
+  sourceAnchor: { x: number; y: number },
+): { x: number; y: number } {
+  for (let row = 0; row < 20; row++) {
+    for (let col = 1; col <= COLUMN_WRAP; col++) {
+      const ax = sourceAnchor.x + col * STEP_X;
+      const ay = sourceAnchor.y + row * STEP_Y;
+      const allFree = relPositions.every(
+        ({ relX, relY }) => !hasOverlap(existingNodes, ax + relX, ay + relY),
+      );
+      if (allFree) {
+        return { x: ax, y: ay };
+      }
+    }
+  }
+  // Fallback: place well to the right of the source group
+  return { x: sourceAnchor.x + STEP_X * 3, y: sourceAnchor.y };
+}
