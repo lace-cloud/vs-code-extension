@@ -62,6 +62,7 @@ type CompositeEditorProps = {
   isGenerating: boolean;
   erroredNodeIds: Set<string>;
   newNodeIds: Set<string>;
+  forcePositionsRef: React.MutableRefObject<boolean>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
@@ -82,6 +83,7 @@ function CompositeEditor({
   isGenerating,
   erroredNodeIds,
   newNodeIds,
+  forcePositionsRef,
   onDragStop,
   onConnect,
   onEdgesDelete,
@@ -198,13 +200,17 @@ function CompositeEditor({
   // ── Local ReactFlow node state ──
   const [rfNodes, setRfNodes] = useState<Node[]>(rfNodesFromView);
 
-  // Re-sync when view changes (new drops, renames, deletes).
+  // Re-sync when view changes (new drops, renames, deletes, undo/redo).
+  // forcePositionsRef is set to true by onUndo/onRedo so the CLI-authoritative
+  // positions from the undo stack are applied instead of the stale ReactFlow positions.
   useEffect(() => {
+    const force = forcePositionsRef.current;
+    forcePositionsRef.current = false;
     setRfNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
       return rfNodesFromView.map((wn) => {
         const existing = prevById.get(wn.id);
-        if (existing) {
+        if (existing && !force) {
           return {
             ...existing,
             type: wn.type,
@@ -321,6 +327,9 @@ export default function Canvas() {
   const [validationErrors, setValidationErrors] = useState<Diagnostic[]>([]);
   const [errorBannerDismissed, setErrorBannerDismissed] = useState(false);
 
+  // Signals to CompositeEditor that the next view sync must restore CLI positions (undo/redo).
+  const forcePositionsRef = useRef(false);
+
   // Stable ref for the go-to-node function (implemented inside CompositeEditor)
   const goToNodeRef = useRef<((nodeId: string) => void) | null>(null);
   const registerGoToNode = useCallback((fn: (nodeId: string) => void) => {
@@ -422,12 +431,14 @@ export default function Canvas() {
   // ── Undo/Redo via engine ──
   const onUndo = useCallback(async () => {
     if (!engine || !state.view?.can_undo) return;
+    forcePositionsRef.current = true;
     const result = await engine.undo();
     updateView(result);
   }, [engine, state.view?.can_undo, updateView]);
 
   const onRedo = useCallback(async () => {
     if (!engine || !state.view?.can_redo) return;
+    forcePositionsRef.current = true;
     const result = await engine.redo();
     updateView(result);
   }, [engine, state.view?.can_redo, updateView]);
@@ -709,6 +720,7 @@ export default function Canvas() {
           isGenerating={generating}
           erroredNodeIds={erroredNodeIds}
           newNodeIds={newNodeIds}
+          forcePositionsRef={forcePositionsRef}
           onDragStop={onDragStop}
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
