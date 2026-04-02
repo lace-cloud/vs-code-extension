@@ -99,8 +99,8 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
   const onClick = useCallback(
     (e: React.MouseEvent) => {
-      // Allow ReactFlow to process the click for selection (do not stopPropagation).
-      // Only open config on plain click — shift/meta are multi-select modifiers.
+      e.stopPropagation();
+      // Only open config on plain click — shift/meta/ctrl are multi-select modifiers.
       if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
         window.dispatchEvent(
           new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }),
