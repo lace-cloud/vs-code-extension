@@ -58,12 +58,12 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     return this.modules;
   }
 
-  /** Track a module as recently used (prepend, deduplicate, cap at 10). */
+  /** Track a module as recently used (prepend, deduplicate, cap at 5). */
   trackRecentlyUsed(moduleId: string) {
     this.recentModuleIds = [
       moduleId,
       ...this.recentModuleIds.filter((id) => id !== moduleId),
-    ].slice(0, 10);
+    ].slice(0, 5);
     this.updateWebview();
   }
 
@@ -591,6 +591,88 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
+
+    /* ── Version grouping ── */
+    .version-toggle {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      color: var(--vscode-descriptionForeground, #888);
+      cursor: pointer;
+      border-radius: 4px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      padding: 0;
+    }
+
+    .module-item:hover .version-toggle {
+      display: flex;
+    }
+
+    .version-toggle.has-versions {
+      display: flex;
+    }
+
+    .version-toggle:hover {
+      background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
+      color: var(--vscode-foreground);
+    }
+
+    .version-children {
+      display: none;
+      padding-left: 34px;
+    }
+
+    .version-children.open {
+      display: block;
+    }
+
+    .version-row {
+      display: flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: default;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .version-row:hover {
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+
+    .version-row-label {
+      flex: 1;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground, #888);
+    }
+
+    .version-row-add {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: transparent;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      border-radius: 4px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .version-row:hover .version-row-add {
+      display: flex;
+    }
+
+    .version-row-add:hover {
+      background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
+    }
   </style>
 </head>
 <body>
@@ -662,7 +744,58 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       return d.innerHTML;
     }
 
-    function renderModuleItem(m, idx) {
+    // Parse a semver string (with optional leading 'v') into [major, minor, patch].
+    function parseSemver(v) {
+      const parts = v.replace(/^v/, '').split('.').map(Number);
+      return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+    }
+
+    function compareSemverDesc(a, b) {
+      const pa = parseSemver(a.version);
+      const pb = parseSemver(b.version);
+      for (let i = 0; i < 3; i++) {
+        if (pb[i] !== pa[i]) return pb[i] - pa[i];
+      }
+      return 0;
+    }
+
+    // Group a flat module array by system::name, returning groups sorted by name.
+    // Within each group, versions are sorted descending (latest first).
+    function groupModulesByName(modules) {
+      const map = {};
+      for (const m of modules) {
+        const key = (m.system || 'other') + '::' + m.name;
+        if (!map[key]) map[key] = [];
+        map[key].push(m);
+      }
+      return Object.values(map).map(versions => {
+        versions.sort(compareSemverDesc);
+        return { latest: versions[0], versions };
+      }).sort((a, b) => a.latest.name.localeCompare(b.latest.name));
+    }
+
+    // Render a module group: one primary row (latest version) + collapsed older versions.
+    function renderModuleGroup(group) {
+      const { latest, versions } = group;
+      const olderVersions = versions.slice(1);
+      const latestIdx = allModules.indexOf(latest);
+      const groupKey = escHtml((latest.system || 'other') + '::' + latest.name);
+      let html = renderModuleItem(latest, latestIdx, olderVersions.length > 0, groupKey);
+      if (olderVersions.length > 0) {
+        html += '<div class="version-children" data-group="' + groupKey + '">';
+        for (const v of olderVersions) {
+          const vIdx = allModules.indexOf(v);
+          html += '<div class="version-row">';
+          html += '  <span class="version-row-label">v' + escHtml(v.version) + '</span>';
+          html += '  <button class="version-row-add" data-add-idx="' + vIdx + '" title="Add v' + escHtml(v.version) + ' to canvas">+</button>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      return html;
+    }
+
+    function renderModuleItem(m, idx, hasOlderVersions, groupKey) {
       const cats = (m.categories || []).join(', ');
       const isStarred = favoriteIds.includes(m.id);
       const iconHtml = m.icon_url
@@ -675,6 +808,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       if (cats) html += '    <div class="module-categories">' + escHtml(cats) + '</div>';
       html += '  </div>';
       html += '  <div class="module-actions">';
+      if (hasOlderVersions) {
+        html += '    <button class="version-toggle has-versions" data-group="' + groupKey + '" title="Show all versions">&#x25B8;</button>';
+      }
       html += '    <button class="module-add" data-add-idx="' + idx + '" title="Add to canvas">+</button>';
       html += '    <button class="module-star' + (isStarred ? ' starred' : '') + '" data-star-id="' + escHtml(m.id) + '" title="' + (isStarred ? 'Unfavorite' : 'Favorite') + '">' + (isStarred ? '&#x2605;' : '&#x2606;') + '</button>';
       html += '  </div>';
@@ -784,23 +920,30 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
           html += '<div class="module-list">';
           html += '<div class="system-header">&#x2605; FAVORITES</div>';
           favModules.forEach(m => {
-            html += renderModuleItem(m, allModules.indexOf(m));
+            html += renderModuleItem(m, allModules.indexOf(m), false, null);
           });
           html += '</div>';
         }
 
         if (recModules.length > 0) {
+          const isRecCollapsed = collapsedSystems.has('__recent__');
           html += '<div class="module-list">';
-          html += '<div class="system-header">&#x1F552; RECENTLY USED</div>';
+          html += '<div class="system-header' + (isRecCollapsed ? ' collapsed' : '') + '" data-sys="__recent__">';
+          html += '<span class="chevron">&#x25BE;</span> &#x1F552; RECENTLY USED';
+          html += ' <span class="module-count">(' + recModules.length + ')</span>';
+          html += '</div>';
+          html += '<div class="system-body' + (isRecCollapsed ? ' collapsed' : '') + '" data-sys="__recent__">';
           recModules.forEach(m => {
-            html += renderModuleItem(m, allModules.indexOf(m));
+            html += renderModuleItem(m, allModules.indexOf(m), false, null);
           });
+          html += '</div>';
           html += '</div>';
         }
       }
 
       if (q) {
-        html += '<div class="result-count">' + filtered.length + ' module' + (filtered.length !== 1 ? 's' : '') + '</div>';
+        const filteredGroupCount = groupModulesByName(filtered).length;
+        html += '<div class="result-count">' + filteredGroupCount + ' module' + (filteredGroupCount !== 1 ? 's' : '') + '</div>';
       }
 
       // When an org is selected, show org-private modules in their own section
@@ -811,21 +954,22 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       if (filteredOrg.length > 0) {
         const orgLabel = selectedOrg ? selectedOrg.toUpperCase() : 'ORGANIZATION';
         const isCollapsed = collapsedSystems.has('__org__');
+        const orgGroups = groupModulesByName(filteredOrg);
         html += '<div class="module-list">';
         html += '<div class="system-header' + (isCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
         html += '<span class="chevron">&#x25BE;</span> ';
         html += escHtml(orgLabel);
-        html += ' <span class="module-count">(' + filteredOrg.length + ')</span>';
+        html += ' <span class="module-count">(' + orgGroups.length + ')</span>';
         html += '</div>';
         html += '<div class="system-body' + (isCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
-        filteredOrg.sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
-          html += renderModuleItem(m, allModules.indexOf(m));
+        orgGroups.forEach(group => {
+          html += renderModuleGroup(group);
         });
         html += '</div>';
         html += '</div>';
       }
 
-      // Group public modules by system
+      // Group public modules by system, then by name within each system
       const grouped = {};
       filteredPublic.forEach(m => {
         const sys = m.system || 'other';
@@ -839,16 +983,15 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       const systems = Object.keys(grouped).sort();
       for (const sys of systems) {
         const isCollapsed = collapsedSystems.has(sys);
-        const count = grouped[sys].length;
+        const sysGroups = groupModulesByName(grouped[sys]);
         html += '<div class="system-header' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
         html += '<span class="chevron">&#x25BE;</span> ';
         html += escHtml(sys.toUpperCase());
-        html += ' <span class="module-count">(' + count + ')</span>';
+        html += ' <span class="module-count">(' + sysGroups.length + ')</span>';
         html += '</div>';
         html += '<div class="system-body' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
-        const sorted = grouped[sys].sort((a, b) => a.name.localeCompare(b.name));
-        for (const m of sorted) {
-          html += renderModuleItem(m, allModules.indexOf(m));
+        for (const group of sysGroups) {
+          html += renderModuleGroup(group);
         }
         html += '</div>';
       }
@@ -899,9 +1042,21 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       // Click to show detail
       content.querySelectorAll('.module-item').forEach(el => {
         el.addEventListener('click', (e) => {
-          if (e.target.closest('.module-star') || e.target.closest('.module-add')) return;
+          if (e.target.closest('.module-star') || e.target.closest('.module-add') || e.target.closest('.version-toggle')) return;
           const idx = parseInt(el.dataset.idx);
           vscode.postMessage({ command: 'showDetail', module: allModules[idx] });
+        });
+      });
+
+      // Version toggle — expand/collapse older versions
+      content.querySelectorAll('.version-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const group = btn.dataset.group;
+          const children = content.querySelector('.version-children[data-group="' + group + '"]');
+          if (!children) return;
+          const isOpen = children.classList.toggle('open');
+          btn.textContent = isOpen ? '\u25BE' : '\u25B8';
         });
       });
 
@@ -913,8 +1068,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         });
       });
 
-      // Add to canvas button
-      content.querySelectorAll('.module-add').forEach(btn => {
+      // Add to canvas button (primary row and version children rows)
+      content.querySelectorAll('.module-add, .version-row-add').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const idx = parseInt(btn.dataset.addIdx);
