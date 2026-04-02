@@ -470,20 +470,39 @@ export default function Canvas() {
   // ── Copy/Cut/Paste handlers ──
   const onCopy = useCallback(() => {
     const ids = getSelectedIdsRef.current?.() ?? [];
-    if (ids.length === 0) return;
+    console.log('[Canvas] onCopy fired — selected ids:', ids);
+    if (ids.length === 0) {
+      setToast({ message: 'Nothing selected — click a node first', type: 'error' });
+      setTimeout(() => setToast(null), TOAST_BRIEF);
+      return;
+    }
     clipboardRef.current = ids;
     isCutRef.current = false;
+    setToast({ message: `Copied ${ids.length} node${ids.length > 1 ? 's' : ''}`, type: 'success' });
+    setTimeout(() => setToast(null), TOAST_BRIEF);
   }, []);
 
   const onCut = useCallback(() => {
     const ids = getSelectedIdsRef.current?.() ?? [];
-    if (ids.length === 0) return;
+    console.log('[Canvas] onCut fired — selected ids:', ids);
+    if (ids.length === 0) {
+      setToast({ message: 'Nothing selected — click a node first', type: 'error' });
+      setTimeout(() => setToast(null), TOAST_BRIEF);
+      return;
+    }
     clipboardRef.current = ids;
     isCutRef.current = true;
+    setToast({ message: `Cut ${ids.length} node${ids.length > 1 ? 's' : ''}`, type: 'success' });
+    setTimeout(() => setToast(null), TOAST_BRIEF);
   }, []);
 
   const onPaste = useCallback(async () => {
-    if (!engine || clipboardRef.current.length === 0) return;
+    console.log('[Canvas] onPaste fired — clipboard:', clipboardRef.current);
+    if (!engine || clipboardRef.current.length === 0) {
+      setToast({ message: 'Clipboard empty — copy a node first', type: 'error' });
+      setTimeout(() => setToast(null), TOAST_BRIEF);
+      return;
+    }
     const ids = clipboardRef.current;
     const result = await engine.copyInstances(ids);
     updateView(result);
