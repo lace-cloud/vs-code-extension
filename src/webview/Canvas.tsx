@@ -76,6 +76,7 @@ type CompositeEditorProps = {
   registerGoToNode: (fn: (nodeId: string) => void) => void;
   registerZoomToNode: (fn: (nodeId: string) => void) => void;
   registerGetSelectedIds: (fn: () => string[]) => void;
+  registerSelectNodes: (fn: (ids: string[]) => void) => void;
 };
 
 function CompositeEditor({
@@ -97,11 +98,15 @@ function CompositeEditor({
   registerGoToNode,
   registerZoomToNode,
   registerGetSelectedIds,
+  registerSelectNodes,
 }: CompositeEditorProps) {
   const { fitView, fitBounds, getNode } = useReactFlow();
 
   // Tracks selected node IDs synchronously — updated in onNodesChange before any React render.
   const selectedIdsRef = useRef<string[]>([]);
+
+  // IDs to mark selected on the next rfNodesFromView sync (set before updateView is called).
+  const pendingSelectIdsRef = useRef<string[]>([]);
 
   // ── Imperative fitView on initial mount only ──
   useEffect(() => {
@@ -209,18 +214,22 @@ function CompositeEditor({
   useEffect(() => {
     const force = forcePositionsRef.current;
     forcePositionsRef.current = false;
+    const pendingSelect = pendingSelectIdsRef.current;
+    pendingSelectIdsRef.current = [];
     setRfNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
       return rfNodesFromView.map((wn) => {
         const existing = prevById.get(wn.id);
+        const shouldSelect = pendingSelect.length > 0 && pendingSelect.includes(wn.id);
         if (existing && !force) {
           return {
             ...existing,
             type: wn.type,
             data: wn.data,
+            selected: shouldSelect ? true : existing.selected,
           };
         }
-        return wn;
+        return shouldSelect ? { ...wn, selected: true } : wn;
       });
     });
   }, [rfNodesFromView]);
@@ -246,6 +255,15 @@ function CompositeEditor({
   useEffect(() => {
     registerGetSelectedIds(() => selectedIdsRef.current);
     // registerGetSelectedIds is stable (useCallback in parent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Expose selectNodes to Canvas for post-paste group selection ──
+  useEffect(() => {
+    registerSelectNodes((ids: string[]) => {
+      pendingSelectIdsRef.current = ids;
+    });
+    // registerSelectNodes is stable (useCallback in parent)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -294,11 +312,20 @@ function CompositeEditor({
       selectNodesOnDrag={false}
       style={gridStyle}
       proOptions={{ hideAttribution: true }}
+      deleteKeyCode={['Delete']}
       onNodeContextMenu={(event, node) => {
         event.preventDefault();
         window.dispatchEvent(
           new CustomEvent('canvasContextMenu', {
             detail: { instanceId: node.id, x: event.clientX, y: event.clientY },
+          }),
+        );
+      }}
+      onSelectionContextMenu={(event) => {
+        event.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('canvasContextMenu', {
+            detail: { instanceId: null, x: event.clientX, y: event.clientY },
           }),
         );
       }}
@@ -368,14 +395,22 @@ export default function Canvas() {
     getSelectedIdsRef.current = fn;
   }, []);
 
+  // Stable ref for selecting nodes by ID — set by CompositeEditor
+  const selectNodesRef = useRef<((ids: string[]) => void) | null>(null);
+  const registerSelectNodes = useCallback((fn: (ids: string[]) => void) => {
+    selectNodesRef.current = fn;
+  }, []);
+
   // ── Clipboard state ──
   const clipboardRef = useRef<string[]>([]);
   const isCutRef = useRef(false);
 
   // ── Context menu state ──
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(
-    null,
-  );
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    nodeId: string | null;
+  } | null>(null);
   const contextMenuNodeIdRef = useRef<string | null>(null);
 
   // ── Track newly added nodes for "new" (blue border) state ──
@@ -545,7 +580,14 @@ export default function Canvas() {
       return;
     }
     const ids = clipboardRef.current;
+    const prevIds = new Set((state.view?.nodes ?? []).map((n) => n.id));
     const result = await engine.copyInstances(ids);
+    const newIds = result.nodes
+      .filter((n: { id: string }) => !prevIds.has(n.id) && !ids.includes(n.id))
+      .map((n: { id: string }) => n.id);
+    if (newIds.length > 0) {
+      selectNodesRef.current?.(newIds);
+    }
     updateView(result);
     if (isCutRef.current) {
       for (const id of ids) {
@@ -555,7 +597,7 @@ export default function Canvas() {
       clipboardRef.current = [];
       isCutRef.current = false;
     }
-  }, [engine, updateView]);
+  }, [engine, updateView, state.view]);
 
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
@@ -770,18 +812,19 @@ export default function Canvas() {
         >
           {(
             [
-              { label: 'Copy', action: onCopy },
-              { label: 'Cut', action: onCut },
-              { label: 'Paste', action: onPaste },
-            ] as { label: string; action: () => void }[]
-          ).map(({ label, action }) => (
+              { label: 'Cut', shortcut: 'Ctrl+X', action: onCut },
+              { label: 'Copy', shortcut: 'Ctrl+C', action: onCopy },
+              { label: 'Paste', shortcut: 'Ctrl+V', action: onPaste },
+            ] as { label: string; shortcut: string; action: () => void }[]
+          ).map(({ label, shortcut, action }) => (
             <button
               key={label}
-              className="w-full text-left px-3 py-1 text-xs text-[#CEFE65] hover:bg-[#153238] cursor-pointer"
-              style={{ background: 'none', border: 'none' }}
+              className="w-full text-left px-3 py-1.5 text-xs text-[#CEFE65] hover:bg-[#153238] cursor-pointer flex items-center justify-between gap-4"
+              style={{ background: 'transparent', border: 'none' }}
               onClick={() => action()}
             >
-              {label}
+              <span>{label}</span>
+              <span className="text-[#5a7060] text-[10px]">{shortcut}</span>
             </button>
           ))}
         </div>
@@ -833,6 +876,7 @@ export default function Canvas() {
           registerGoToNode={registerGoToNode}
           registerZoomToNode={registerZoomToNode}
           registerGetSelectedIds={registerGetSelectedIds}
+          registerSelectNodes={registerSelectNodes}
         />
 
         {/* Module config panel */}
