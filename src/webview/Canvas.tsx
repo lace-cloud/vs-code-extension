@@ -6,6 +6,7 @@ import {
   MiniMap,
   MarkerType,
   useReactFlow,
+  useStoreApi,
   applyNodeChanges,
   applyEdgeChanges,
   type Connection,
@@ -98,7 +99,8 @@ function CompositeEditor({
   registerZoomToNode,
   registerGetSelectedIds,
 }: CompositeEditorProps) {
-  const { fitView, fitBounds, getNode, getNodes } = useReactFlow();
+  const { fitView, fitBounds, getNode } = useReactFlow();
+  const storeApi = useStoreApi();
 
   // ── Imperative fitView on initial mount only ──
   useEffect(() => {
@@ -228,15 +230,14 @@ function CompositeEditor({
   }, []);
 
   // ── Expose selected node IDs to Canvas for copy/cut ──
-  // Use getNodes() from the ReactFlow store — reads live state synchronously,
-  // so Ctrl+C immediately after a click always sees the updated selection.
+  // Read from nodeLookup which is mutated synchronously on click (before any
+  // React render cycle), so Ctrl+C immediately after a click always sees
+  // the correct selection.
   useEffect(() => {
     registerGetSelectedIds(() =>
-      getNodes()
-        .filter((n) => n.selected)
-        .map((n) => n.id),
+      [...storeApi.getState().nodeLookup.entries()].filter(([, n]) => n.selected).map(([id]) => id),
     );
-    // registerGetSelectedIds and getNodes are both stable refs
+    // registerGetSelectedIds and storeApi are both stable refs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -354,12 +355,6 @@ export default function Canvas() {
   const clipboardRef = useRef<string[]>([]);
   const isCutRef = useRef(false);
 
-  // ── Context menu state ──
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(
-    null,
-  );
-  const contextMenuNodeIdRef = useRef<string | null>(null);
-
   // ── Track newly added nodes for "new" (blue border) state ──
   useEffect(() => {
     if (!state.view) return;
@@ -436,17 +431,6 @@ export default function Canvas() {
     return () => window.removeEventListener('canvasViewUpdated', handler);
   }, [updateView]);
 
-  // ── Listen for canvasContextMenu events from ModuleNode ──
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { instanceId, x, y } = (e as CustomEvent).detail;
-      contextMenuNodeIdRef.current = instanceId;
-      setContextMenu({ x, y, nodeId: instanceId });
-    };
-    window.addEventListener('canvasContextMenu', handler);
-    return () => window.removeEventListener('canvasContextMenu', handler);
-  }, []);
-
   // ── Undo/Redo via engine ──
   const onUndo = useCallback(async () => {
     if (!engine || !state.view?.can_undo) return;
@@ -485,30 +469,20 @@ export default function Canvas() {
 
   // ── Copy/Cut/Paste handlers ──
   const onCopy = useCallback(() => {
-    const selected = getSelectedIdsRef.current?.() ?? [];
-    const ctx = contextMenuNodeIdRef.current;
-    const ids = ctx && !selected.includes(ctx) ? [...selected, ctx] : selected;
+    const ids = getSelectedIdsRef.current?.() ?? [];
     if (ids.length === 0) return;
     clipboardRef.current = ids;
     isCutRef.current = false;
-    setContextMenu(null);
-    contextMenuNodeIdRef.current = null;
   }, []);
 
   const onCut = useCallback(() => {
-    const selected = getSelectedIdsRef.current?.() ?? [];
-    const ctx = contextMenuNodeIdRef.current;
-    const ids = ctx && !selected.includes(ctx) ? [...selected, ctx] : selected;
+    const ids = getSelectedIdsRef.current?.() ?? [];
     if (ids.length === 0) return;
     clipboardRef.current = ids;
     isCutRef.current = true;
-    setContextMenu(null);
-    contextMenuNodeIdRef.current = null;
   }, []);
 
   const onPaste = useCallback(async () => {
-    setContextMenu(null);
-    contextMenuNodeIdRef.current = null;
     if (!engine || clipboardRef.current.length === 0) return;
     const ids = clipboardRef.current;
     const result = await engine.copyInstances(ids);
@@ -740,47 +714,6 @@ export default function Canvas() {
           }
           onSolveWithLace={onSolveWithLace}
           onDismiss={() => setErrorBannerDismissed(true)}
-        />
-      )}
-
-      {/* Canvas context menu */}
-      {contextMenu && (
-        <div
-          className="fixed z-50 bg-[#1a1a1a] border border-[rgba(206,254,101,0.2)] rounded shadow-[0_4px_12px_rgba(0,0,0,0.5)] py-1"
-          style={{ left: contextMenu.x, top: contextMenu.y, minWidth: 120 }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {(
-            [
-              { label: 'Copy', action: onCopy },
-              { label: 'Cut', action: onCut },
-              { label: 'Paste', action: onPaste },
-            ] as { label: string; action: () => void }[]
-          ).map(({ label, action }) => (
-            <button
-              key={label}
-              className="w-full text-left px-3 py-1 text-xs text-[#CEFE65] hover:bg-[#153238] cursor-pointer"
-              style={{ background: 'none', border: 'none' }}
-              onClick={() => {
-                action();
-                setContextMenu(null);
-                contextMenuNodeIdRef.current = null;
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Dismiss context menu on outside click */}
-      {contextMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => {
-            setContextMenu(null);
-            contextMenuNodeIdRef.current = null;
-          }}
         />
       )}
 
