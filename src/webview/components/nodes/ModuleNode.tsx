@@ -99,8 +99,12 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
   const onClick = useCallback(
     (e: React.MouseEvent) => {
-      e.stopPropagation();
-      window.dispatchEvent(new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }));
+      // Only open config on plain click — shift/meta/ctrl are multi-select modifiers.
+      if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        window.dispatchEvent(
+          new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }),
+        );
+      }
     },
     [data.id],
   );

@@ -5,8 +5,6 @@ import App from './App';
 
 const vscode = acquireVsCodeApi();
 
-console.log('Webview JS loaded');
-
 const root = document.getElementById('root');
 
 if (root) {
