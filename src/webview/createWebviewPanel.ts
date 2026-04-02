@@ -9,7 +9,7 @@ import type { HostToWebview, WebviewToHost, Diagnostic, GeneratePhase } from '..
 import type { CanvasView } from './types/render';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
 import * as terraform from '../utilities/terraform';
-import { findFreePosition } from './utils/layout';
+import { findFreePosition, findFreeGroupPosition } from './utils/layout';
 
 /* ── Constants ── */
 
@@ -361,31 +361,59 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
               latestCanvasView = result;
             }
 
-            // After copy_instances: position the new nodes using findFreePosition,
-            // anchored to the last existing node (same strategy as drop_bundle).
+            // After copy_instances: position the new nodes near the source nodes,
+            // preserving the relative group layout for multi-node copies.
             if (method === 'action/copy_instances' && isCanvasView(result)) {
               const sourceIds = new Set(
                 (params as { instance_ids?: string[] })?.instance_ids ?? [],
               );
-              const preCopyNodes = preCopyView?.nodes.filter((n) => !sourceIds.has(n.id)) ?? [];
+              const sourceNodes = (preCopyView?.nodes ?? []).filter((n) => sourceIds.has(n.id));
+              const preCopyNodes = (preCopyView?.nodes ?? []).filter((n) => !sourceIds.has(n.id));
               const newNodes = result.nodes.filter(
                 (n) => !preCopyNodes.some((p) => p.id === n.id) && !sourceIds.has(n.id),
               );
               if (newNodes.length > 0) {
-                const anchor =
-                  preCopyNodes.length > 0
-                    ? preCopyNodes[preCopyNodes.length - 1].position
-                    : undefined;
                 const syncPositions: Record<string, { x: number; y: number }> = {};
-                const placed = [...preCopyNodes];
-                let currentAnchor = anchor;
-                for (const node of newNodes) {
-                  const pos = findFreePosition(placed, currentAnchor);
-                  syncPositions[node.id] = pos;
-                  placed.push({ ...node, position: pos });
-                  node.position = pos;
-                  currentAnchor = pos;
+
+                if (sourceNodes.length === 0) {
+                  // No source position info — fall back to sequential placement
+                  const placed = [...preCopyNodes];
+                  for (const node of newNodes) {
+                    const anchor =
+                      placed.length > 0 ? placed[placed.length - 1].position : undefined;
+                    const pos = findFreePosition(placed, anchor);
+                    syncPositions[node.id] = pos;
+                    placed.push({ ...node, position: pos });
+                    node.position = pos;
+                  }
+                } else if (newNodes.length === 1) {
+                  // Single-node paste: place near the source node
+                  const pos = findFreePosition(preCopyNodes, sourceNodes[0].position);
+                  syncPositions[newNodes[0].id] = pos;
+                  newNodes[0].position = pos;
+                } else {
+                  // Multi-node paste: preserve the relative group layout
+                  const sortedSrc = [...sourceNodes].sort(
+                    (a, b) => a.position.x - b.position.x || a.position.y - b.position.y,
+                  );
+                  const srcMinX = Math.min(...sortedSrc.map((n) => n.position.x));
+                  const srcMinY = Math.min(...sortedSrc.map((n) => n.position.y));
+                  const relPositions = sortedSrc.map((n) => ({
+                    relX: n.position.x - srcMinX,
+                    relY: n.position.y - srcMinY,
+                  }));
+                  const groupAnchor = findFreeGroupPosition(preCopyNodes, relPositions, {
+                    x: srcMinX,
+                    y: srcMinY,
+                  });
+                  for (let i = 0; i < newNodes.length; i++) {
+                    const rel = relPositions[i] ?? { relX: i * 122, relY: 0 };
+                    const pos = { x: groupAnchor.x + rel.relX, y: groupAnchor.y + rel.relY };
+                    syncPositions[newNodes[i].id] = pos;
+                    newNodes[i].position = pos;
+                  }
                 }
+
                 await client.syncLayout({ positions: syncPositions });
                 latestCanvasView = result;
               }
