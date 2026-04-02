@@ -99,7 +99,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
   const onClick = useCallback(
     (e: React.MouseEvent) => {
-      e.stopPropagation();
       // Only open config on plain click — shift/meta/ctrl are multi-select modifiers.
       if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
         window.dispatchEvent(

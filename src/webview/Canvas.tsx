@@ -6,7 +6,6 @@ import {
   MiniMap,
   MarkerType,
   useReactFlow,
-  useStoreApi,
   applyNodeChanges,
   applyEdgeChanges,
   type Connection,
@@ -100,7 +99,9 @@ function CompositeEditor({
   registerGetSelectedIds,
 }: CompositeEditorProps) {
   const { fitView, fitBounds, getNode } = useReactFlow();
-  const storeApi = useStoreApi();
+
+  // Tracks selected node IDs synchronously — updated in onNodesChange before any React render.
+  const selectedIdsRef = useRef<string[]>([]);
 
   // ── Imperative fitView on initial mount only ──
   useEffect(() => {
@@ -225,19 +226,26 @@ function CompositeEditor({
   }, [rfNodesFromView]);
 
   // ── Handle ALL ReactFlow node changes (position, dimensions, select) ──
+  // Selection changes are applied to selectedIdsRef synchronously here —
+  // triggerNodeChanges → onNodesChange is a direct synchronous call from
+  // handleNodeClick, so the ref is always current before any React render.
   const onNodesChange = useCallback((changes: NodeChange[]) => {
+    for (const change of changes) {
+      if (change.type === 'select') {
+        if (change.selected) {
+          selectedIdsRef.current = [...new Set([...selectedIdsRef.current, change.id])];
+        } else {
+          selectedIdsRef.current = selectedIdsRef.current.filter((id) => id !== change.id);
+        }
+      }
+    }
     setRfNodes((nds) => applyNodeChanges(changes, nds));
   }, []);
 
   // ── Expose selected node IDs to Canvas for copy/cut ──
-  // Read from nodeLookup which is mutated synchronously on click (before any
-  // React render cycle), so Ctrl+C immediately after a click always sees
-  // the correct selection.
   useEffect(() => {
-    registerGetSelectedIds(() =>
-      [...storeApi.getState().nodeLookup.entries()].filter(([, n]) => n.selected).map(([id]) => id),
-    );
-    // registerGetSelectedIds and storeApi are both stable refs
+    registerGetSelectedIds(() => selectedIdsRef.current);
+    // registerGetSelectedIds is stable (useCallback in parent)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -283,8 +291,17 @@ function CompositeEditor({
       }}
       minZoom={0.1}
       maxZoom={4}
+      selectNodesOnDrag={false}
       style={gridStyle}
       proOptions={{ hideAttribution: true }}
+      onNodeContextMenu={(event, node) => {
+        event.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('canvasContextMenu', {
+            detail: { instanceId: node.id, x: event.clientX, y: event.clientY },
+          }),
+        );
+      }}
     >
       <MiniMap
         position="bottom-left"
@@ -354,6 +371,12 @@ export default function Canvas() {
   // ── Clipboard state ──
   const clipboardRef = useRef<string[]>([]);
   const isCutRef = useRef(false);
+
+  // ── Context menu state ──
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(
+    null,
+  );
+  const contextMenuNodeIdRef = useRef<string | null>(null);
 
   // ── Track newly added nodes for "new" (blue border) state ──
   useEffect(() => {
@@ -431,6 +454,17 @@ export default function Canvas() {
     return () => window.removeEventListener('canvasViewUpdated', handler);
   }, [updateView]);
 
+  // ── Listen for canvasContextMenu events from CompositeEditor ──
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { instanceId, x, y } = (e as CustomEvent).detail;
+      contextMenuNodeIdRef.current = instanceId;
+      setContextMenu({ x, y, nodeId: instanceId });
+    };
+    window.addEventListener('canvasContextMenu', handler);
+    return () => window.removeEventListener('canvasContextMenu', handler);
+  }, []);
+
   // ── Undo/Redo via engine ──
   const onUndo = useCallback(async () => {
     if (!engine || !state.view?.can_undo) return;
@@ -469,8 +503,9 @@ export default function Canvas() {
 
   // ── Copy/Cut/Paste handlers ──
   const onCopy = useCallback(() => {
-    const ids = getSelectedIdsRef.current?.() ?? [];
-    console.log('[Canvas] onCopy fired — selected ids:', ids);
+    const selected = getSelectedIdsRef.current?.() ?? [];
+    const ctx = contextMenuNodeIdRef.current;
+    const ids = ctx && !selected.includes(ctx) ? [...selected, ctx] : selected;
     if (ids.length === 0) {
       setToast({ message: 'Nothing selected — click a node first', type: 'error' });
       setTimeout(() => setToast(null), TOAST_BRIEF);
@@ -478,13 +513,16 @@ export default function Canvas() {
     }
     clipboardRef.current = ids;
     isCutRef.current = false;
+    setContextMenu(null);
+    contextMenuNodeIdRef.current = null;
     setToast({ message: `Copied ${ids.length} node${ids.length > 1 ? 's' : ''}`, type: 'success' });
     setTimeout(() => setToast(null), TOAST_BRIEF);
   }, []);
 
   const onCut = useCallback(() => {
-    const ids = getSelectedIdsRef.current?.() ?? [];
-    console.log('[Canvas] onCut fired — selected ids:', ids);
+    const selected = getSelectedIdsRef.current?.() ?? [];
+    const ctx = contextMenuNodeIdRef.current;
+    const ids = ctx && !selected.includes(ctx) ? [...selected, ctx] : selected;
     if (ids.length === 0) {
       setToast({ message: 'Nothing selected — click a node first', type: 'error' });
       setTimeout(() => setToast(null), TOAST_BRIEF);
@@ -492,12 +530,15 @@ export default function Canvas() {
     }
     clipboardRef.current = ids;
     isCutRef.current = true;
+    setContextMenu(null);
+    contextMenuNodeIdRef.current = null;
     setToast({ message: `Cut ${ids.length} node${ids.length > 1 ? 's' : ''}`, type: 'success' });
     setTimeout(() => setToast(null), TOAST_BRIEF);
   }, []);
 
   const onPaste = useCallback(async () => {
-    console.log('[Canvas] onPaste fired — clipboard:', clipboardRef.current);
+    setContextMenu(null);
+    contextMenuNodeIdRef.current = null;
     if (!engine || clipboardRef.current.length === 0) {
       setToast({ message: 'Clipboard empty — copy a node first', type: 'error' });
       setTimeout(() => setToast(null), TOAST_BRIEF);
@@ -718,6 +759,42 @@ export default function Canvas() {
           )}
           {toast.message}
         </div>
+      )}
+
+      {/* Canvas context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-[#1a1a1a] border border-[rgba(206,254,101,0.2)] rounded shadow-[0_4px_12px_rgba(0,0,0,0.5)] py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y, minWidth: 120 }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {(
+            [
+              { label: 'Copy', action: onCopy },
+              { label: 'Cut', action: onCut },
+              { label: 'Paste', action: onPaste },
+            ] as { label: string; action: () => void }[]
+          ).map(({ label, action }) => (
+            <button
+              key={label}
+              className="w-full text-left px-3 py-1 text-xs text-[#CEFE65] hover:bg-[#153238] cursor-pointer"
+              style={{ background: 'none', border: 'none' }}
+              onClick={() => action()}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Dismiss context menu on outside click */}
+      {contextMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => {
+            setContextMenu(null);
+            contextMenuNodeIdRef.current = null;
+          }}
+        />
       )}
 
       {/* Persistent validation error banner */}

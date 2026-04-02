@@ -64,17 +64,14 @@ export function getWebviewContent(
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
         e.preventDefault();
-        console.log('[keydown] Ctrl+C — __canvasCopy exists:', !!window.__canvasCopy);
         if (window.__canvasCopy) window.__canvasCopy();
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'x') {
         e.preventDefault();
-        console.log('[keydown] Ctrl+X — __canvasCut exists:', !!window.__canvasCut);
         if (window.__canvasCut) window.__canvasCut();
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
         e.preventDefault();
-        console.log('[keydown] Ctrl+V — __canvasPaste exists:', !!window.__canvasPaste);
         if (window.__canvasPaste) window.__canvasPaste();
       }
     });
