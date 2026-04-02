@@ -550,7 +550,8 @@ export default function Canvas() {
     isCutRef.current = false;
     setContextMenu(null);
     contextMenuNodeIdRef.current = null;
-    setToast({ message: `Copied ${ids.length} node${ids.length > 1 ? 's' : ''}`, type: 'success' });
+    const copyCount = selected.length > 0 ? selected.length : ids.length;
+    setToast({ message: `Copied ${copyCount} node${copyCount > 1 ? 's' : ''}`, type: 'success' });
     setTimeout(() => setToast(null), TOAST_BRIEF);
   }, []);
 
@@ -567,7 +568,8 @@ export default function Canvas() {
     isCutRef.current = true;
     setContextMenu(null);
     contextMenuNodeIdRef.current = null;
-    setToast({ message: `Cut ${ids.length} node${ids.length > 1 ? 's' : ''}`, type: 'success' });
+    const cutCount = selected.length > 0 ? selected.length : ids.length;
+    setToast({ message: `Cut ${cutCount} node${cutCount > 1 ? 's' : ''}`, type: 'success' });
     setTimeout(() => setToast(null), TOAST_BRIEF);
   }, []);
 
