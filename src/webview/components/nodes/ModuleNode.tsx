@@ -110,19 +110,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [data.id],
   );
 
-  const onContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      window.dispatchEvent(
-        new CustomEvent('canvasContextMenu', {
-          detail: { instanceId: data.id, x: e.clientX, y: e.clientY },
-        }),
-      );
-    },
-    [data.id],
-  );
-
   const onDeleteInstance = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -162,7 +149,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       className="relative cursor-pointer"
       style={{ width: CARD_SIZE, height: CARD_SIZE }}
       onClick={onClick}
-      onContextMenu={onContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={data.has_errors ? data.error_messages?.join('\n') : data.id}
