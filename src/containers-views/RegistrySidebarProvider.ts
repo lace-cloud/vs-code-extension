@@ -950,30 +950,50 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         html += '<div class="result-count">' + filteredGroupCount + ' module' + (filteredGroupCount !== 1 ? 's' : '') + '</div>';
       }
 
-      // When an org is selected, show org-private modules in their own section
+      // When an org is selected, show org-private modules grouped by provider
       const orgModuleIds = new Set(orgModules.map(m => m.id));
       const filteredOrg = filtered.filter(m => orgModuleIds.has(m.id));
       const filteredPublic = filtered.filter(m => !orgModuleIds.has(m.id));
 
       if (filteredOrg.length > 0) {
         const orgLabel = selectedOrg ? selectedOrg.toUpperCase() : 'ORGANIZATION';
-        const isCollapsed = collapsedSystems.has('__org__');
-        const orgGroups = groupModulesByName(filteredOrg);
+        const isOrgCollapsed = collapsedSystems.has('__org__');
+        const orgOuterCount = groupModulesByName(filteredOrg).length;
+        const orgSysGrouped = {};
+        filteredOrg.forEach(m => {
+          const sys = m.system || 'other';
+          if (!orgSysGrouped[sys]) orgSysGrouped[sys] = [];
+          if (!orgSysGrouped[sys].some(x => x.id === m.id)) {
+            orgSysGrouped[sys].push(m);
+          }
+        });
         html += '<div class="module-list">';
-        html += '<div class="system-header' + (isCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
+        html += '<div class="system-header' + (isOrgCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
         html += '<span class="chevron">&#x25BE;</span> ';
         html += escHtml(orgLabel);
-        html += ' <span class="module-count">(' + orgGroups.length + ')</span>';
+        html += ' <span class="module-count">(' + orgOuterCount + ')</span>';
         html += '</div>';
-        html += '<div class="system-body' + (isCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
-        orgGroups.forEach(group => {
-          html += renderModuleGroup(group);
-        });
+        html += '<div class="system-body' + (isOrgCollapsed ? ' collapsed' : '') + '" data-sys="__org__">';
+        for (const sys of Object.keys(orgSysGrouped).sort()) {
+          const sysKey = '__org_' + sys + '__';
+          const isSysCollapsed = collapsedSystems.has(sysKey);
+          const sysGroups = groupModulesByName(orgSysGrouped[sys]);
+          html += '<div class="system-header' + (isSysCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sysKey) + '">';
+          html += '<span class="chevron">&#x25BE;</span> ';
+          html += escHtml(sys.toUpperCase());
+          html += ' <span class="module-count">(' + sysGroups.length + ')</span>';
+          html += '</div>';
+          html += '<div class="system-body' + (isSysCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sysKey) + '">';
+          for (const group of sysGroups) {
+            html += renderModuleGroup(group);
+          }
+          html += '</div>';
+        }
         html += '</div>';
         html += '</div>';
       }
 
-      // Group public modules by system, then by name within each system
+      // Group public modules under a "Public" parent, then by provider within
       const grouped = {};
       filteredPublic.forEach(m => {
         const sys = m.system || 'other';
@@ -983,23 +1003,32 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         }
       });
 
-      html += '<div class="module-list">';
-      const systems = Object.keys(grouped).sort();
-      for (const sys of systems) {
-        const isCollapsed = collapsedSystems.has(sys);
-        const sysGroups = groupModulesByName(grouped[sys]);
-        html += '<div class="system-header' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
-        html += '<span class="chevron">&#x25BE;</span> ';
-        html += escHtml(sys.toUpperCase());
-        html += ' <span class="module-count">(' + sysGroups.length + ')</span>';
+      if (Object.keys(grouped).length > 0) {
+        const isPublicCollapsed = collapsedSystems.has('__public__');
+        const publicOuterCount = groupModulesByName(filteredPublic).length;
+        html += '<div class="module-list">';
+        html += '<div class="system-header' + (isPublicCollapsed ? ' collapsed' : '') + '" data-sys="__public__">';
+        html += '<span class="chevron">&#x25BE;</span> PUBLIC';
+        html += ' <span class="module-count">(' + publicOuterCount + ')</span>';
         html += '</div>';
-        html += '<div class="system-body' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
-        for (const group of sysGroups) {
-          html += renderModuleGroup(group);
+        html += '<div class="system-body' + (isPublicCollapsed ? ' collapsed' : '') + '" data-sys="__public__">';
+        for (const sys of Object.keys(grouped).sort()) {
+          const isCollapsed = collapsedSystems.has(sys);
+          const sysGroups = groupModulesByName(grouped[sys]);
+          html += '<div class="system-header' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
+          html += '<span class="chevron">&#x25BE;</span> ';
+          html += escHtml(sys.toUpperCase());
+          html += ' <span class="module-count">(' + sysGroups.length + ')</span>';
+          html += '</div>';
+          html += '<div class="system-body' + (isCollapsed ? ' collapsed' : '') + '" data-sys="' + escHtml(sys) + '">';
+          for (const group of sysGroups) {
+            html += renderModuleGroup(group);
+          }
+          html += '</div>';
         }
         html += '</div>';
+        html += '</div>';
       }
-      html += '</div>';
 
       content.innerHTML = html;
 
