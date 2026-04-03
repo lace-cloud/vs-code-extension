@@ -398,6 +398,10 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       display: none;
     }
 
+    .system-body .system-header {
+      padding-left: 20px;
+    }
+
     .module-count {
       font-weight: 400;
       color: var(--vscode-descriptionForeground, #888);
