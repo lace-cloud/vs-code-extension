@@ -6,7 +6,8 @@ import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { ToolResult } from '../types';
 
 const ENGINE_NOT_RUNNING: ToolResult = {
-  content: 'Lace engine is not running. Start it first.',
+  content:
+    'Lace engine is not running. Ask the user to start it with **Lace: Start Engine** from the Command Palette, then retry.',
   isError: true,
 };
 
