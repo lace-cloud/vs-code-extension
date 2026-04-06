@@ -95,7 +95,7 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('aws/vpc');
-      expect(result.content).toContain('instance "vpc"');
+      expect(result.content).toContain('instance **"vpc"**');
       expect(mockClient.getRegistryVersion).toHaveBeenCalledWith({
         name: 'aws/vpc',
         system: 'aws',
@@ -263,7 +263,7 @@ describe('generate tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Terraform generated successfully');
-      expect(result.content).toContain('1 file(s) written');
+      expect(result.content).toContain('Files written to');
       expect(mockClient.sessionGenerate).toHaveBeenCalledWith({
         output_dir: '/tmp/test-workspace/.lace',
         options: {
