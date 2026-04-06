@@ -1,6 +1,7 @@
 // src/chat/tools/registry-tools.ts
 //
 // Tool: lace_search_registry — search the module registry.
+// Tool: lace_inspect_module — get full input/output schema for a specific module.
 
 import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { RegistryModule } from '../../types/protocol';
@@ -12,6 +13,8 @@ export type RegistryToolDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
 };
+
+const MAX_SEARCH_LIMIT = 50;
 
 function formatModuleLine(m: {
   name: string;
@@ -30,7 +33,8 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     const query = (params.query as string | undefined) ?? '';
     const system = params.system as string | undefined;
     const category = params.category as string | undefined;
-    const limit = (params.limit as number | undefined) ?? 20;
+    const rawLimit = (params.limit as number | undefined) ?? 20;
+    const limit = Math.min(rawLimit, MAX_SEARCH_LIMIT);
 
     // Try RPC search first (more accurate, server-side filtering)
     const client = deps.getRpcClient();
@@ -45,18 +49,20 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
 
         const modules = result?.modules ?? [];
         if (modules.length === 0) {
-          return { content: 'No modules found matching your search.' };
+          return {
+            content: `No modules found matching your search. Try broader terms, remove the system filter, or check that the Lace engine is running and authenticated.`,
+          };
         }
 
         const lines = modules.map(formatModuleLine);
-
-        return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
+        const limitNote = rawLimit > MAX_SEARCH_LIMIT ? ` (showing top ${MAX_SEARCH_LIMIT})` : '';
+        return { content: `Found ${modules.length} module(s)${limitNote}:\n\n${lines.join('\n')}` };
       } catch {
-        // Fall through to local search
+        // Fall through to local search — note the fallback
       }
     }
 
-    // Fallback: search locally cached modules
+    // Fallback: search locally cached modules (may be stale)
     let modules = deps.getRegistryModules();
     if (query) {
       const q = query.toLowerCase();
@@ -78,12 +84,15 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     modules = modules.slice(0, limit);
 
     if (modules.length === 0) {
-      return { content: 'No modules found matching your search.' };
+      return {
+        content: `No modules found matching your search. Try broader terms, remove the system filter, or check that the Lace engine is running and authenticated.`,
+      };
     }
 
     const lines = modules.map(formatModuleLine);
-
-    return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
+    return {
+      content: `⚠ Showing cached registry (engine not reachable). Results may be stale.\n\nFound ${modules.length} module(s):\n\n${lines.join('\n')}`,
+    };
   });
 
   // ─────────────────────────────────────────────
@@ -154,7 +163,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
 
       if (!versionResponse?.deploy_bundle && !versionResponse?.module_interface) {
         return {
-          content: `**${match.name}** (${match.system}, v${match.version})\nNo deploy bundle available.`,
+          content: `**${match.name}** (${match.system}, v${match.version})\nModule found but schema not available. Add the module to the canvas with lace_add_module, then use lace_inspect_node to see its inputs/outputs.`,
         };
       }
 
