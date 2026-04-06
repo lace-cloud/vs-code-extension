@@ -460,11 +460,6 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
 
     // Get existing variables, update or add the one specified
     try {
-      const currentSettings = await engineResult.client.querySettings();
-      // setVariables replaces all variables, so we must include existing ones
-      // We don't have a current variable list from settings easily, so we call setVariables
-      // with the single variable — the CLI merges or the canvas starts fresh.
-      // Use updateAllInputs pattern — just set this one variable.
       const canvasView = await engineResult.client.setVariables({
         variables: [
           {
