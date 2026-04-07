@@ -307,6 +307,7 @@ function CompositeEditor({
         markerEnd: { type: MarkerType.ArrowClosed, color: '#CEFE65', width: 16, height: 16 },
         style: { stroke: '#CEFE65', strokeWidth: 1.5 },
       }}
+      connectionRadius={25}
       minZoom={0.1}
       maxZoom={4}
       selectNodesOnDrag={false}
@@ -359,6 +360,10 @@ function CompositeEditor({
 
 export default function Canvas() {
   const { state, engine, updateView } = useCanvas();
+
+  // Ref to always read the latest view (avoids stale closures in async callbacks)
+  const viewRef = useRef(state.view);
+  viewRef.current = state.view;
 
   const [configTarget, setConfigTarget] = useState<string | null>(null);
   const [newNodeIds, setNewNodeIds] = useState<Set<string>>(new Set());
@@ -633,22 +638,34 @@ export default function Canvas() {
     async (conn: Connection) => {
       if (!conn.source || !conn.target || !engine) return;
 
-      const edgesBefore = state.view?.edges.length ?? 0;
+      // Snapshot edge IDs between this pair using ref for freshest state.
+      // Using a ref avoids stale closures when edges change between
+      // callback creation and invocation (e.g. concurrent disconnect).
+      const prevPairEdgeIds = new Set(
+        (viewRef.current?.edges ?? [])
+          .filter((e) => e.source === conn.source && e.target === conn.target)
+          .map((e) => e.id),
+      );
 
       try {
         const result = await engine.autoConnect(conn.source, conn.target);
-        const edgesAfter = result.edges?.length ?? 0;
 
-        if (edgesAfter > edgesBefore) {
+        // Check if auto-connect created any NEW edge between these nodes
+        const hasNewEdge = (result.edges ?? []).some(
+          (e) => e.source === conn.source && e.target === conn.target && !prevPairEdgeIds.has(e.id),
+        );
+
+        if (hasNewEdge) {
           updateView(result);
         } else {
           setEdgeConfigState({ source: conn.source, target: conn.target });
         }
-      } catch {
+      } catch (err) {
+        console.error('[Canvas] autoConnect failed:', err);
         setEdgeConfigState({ source: conn.source, target: conn.target });
       }
     },
-    [engine, state.view?.edges.length, updateView, clearNew],
+    [engine, updateView],
   );
 
   // ── Event: edge delete (select edge + Delete/Backspace) ──
@@ -663,7 +680,7 @@ export default function Canvas() {
         }
       }
     },
-    [engine, updateView, clearNew],
+    [engine, updateView],
   );
 
   // ── Event: node delete (select node + Delete/Backspace) ──
@@ -675,7 +692,7 @@ export default function Canvas() {
         updateView(result);
       }
     },
-    [engine, updateView, clearNew],
+    [engine, updateView],
   );
 
   // ── Event: clear all modules from graph ──
@@ -702,7 +719,7 @@ export default function Canvas() {
       updateView(result);
       setEdgeConfigState(null);
     },
-    [engine, updateView, clearNew],
+    [engine, updateView],
   );
 
   useEffect(() => {
