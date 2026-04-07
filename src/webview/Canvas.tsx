@@ -582,22 +582,28 @@ export default function Canvas() {
       return;
     }
     const ids = clipboardRef.current;
-    const prevIds = new Set((state.view?.nodes ?? []).map((n) => n.id));
-    const result = await engine.copyInstances(ids);
-    const newIds = result.nodes
-      .filter((n: { id: string }) => !prevIds.has(n.id) && !ids.includes(n.id))
-      .map((n: { id: string }) => n.id);
-    if (newIds.length > 0) {
-      selectNodesRef.current?.(newIds);
-    }
-    updateView(result);
-    if (isCutRef.current) {
-      for (const id of ids) {
-        const r = await engine.deleteInstance(id);
-        updateView(r);
+    try {
+      const prevIds = new Set((state.view?.nodes ?? []).map((n) => n.id));
+      const result = await engine.copyInstances(ids);
+      const newIds = result.nodes
+        .filter((n: { id: string }) => !prevIds.has(n.id) && !ids.includes(n.id))
+        .map((n: { id: string }) => n.id);
+      if (newIds.length > 0) {
+        selectNodesRef.current?.(newIds);
       }
-      clipboardRef.current = [];
-      isCutRef.current = false;
+      updateView(result);
+      if (isCutRef.current) {
+        for (const id of ids) {
+          const r = await engine.deleteInstance(id);
+          updateView(r);
+        }
+        clipboardRef.current = [];
+        isCutRef.current = false;
+      }
+    } catch (err) {
+      console.error('[Canvas] paste failed:', err);
+      setToast({ message: 'Paste failed — try again', type: 'error' });
+      setTimeout(() => setToast(null), TOAST_BRIEF);
     }
   }, [engine, updateView, state.view]);
 
