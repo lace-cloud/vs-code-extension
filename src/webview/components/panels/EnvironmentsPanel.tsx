@@ -4,6 +4,9 @@ import {
   inputClasses,
   BACKEND_TYPES,
   saveButtonClasses,
+  saveButtonSavingClasses,
+  saveButtonSuccessClasses,
+  saveButtonErrorClasses,
   removeButtonClasses,
   removeButtonSmClasses,
   addButtonClasses,
@@ -90,13 +93,15 @@ function fromBackendRows(rows: BackendRow[]): Record<string, BackendConfigEntry>
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 type ContentProps = {
   environments: Record<string, Record<string, unknown>> | undefined;
   environment_backends: Record<string, BackendConfigEntry> | undefined;
   onSave: (
     environments: Record<string, Record<string, unknown>>,
     backends: Record<string, BackendConfigEntry>,
-  ) => void;
+  ) => void | Promise<void>;
 };
 
 export function EnvironmentsContent({ environments, environment_backends, onSave }: ContentProps) {
@@ -209,8 +214,18 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
 
   // ── Save ──
 
-  const handleSave = () => {
-    onSave(fromEnvRows(envRows), fromBackendRows(backendRows));
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  const handleSave = async () => {
+    setSaveStatus('saving');
+    try {
+      await onSave(fromEnvRows(envRows), fromBackendRows(backendRows));
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }
   };
 
   return (
@@ -340,8 +355,26 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
       )}
 
       {/* Inline save */}
-      <button className={saveButtonClasses} onClick={handleSave}>
-        Save environments
+      <button
+        className={
+          saveStatus === 'saving'
+            ? saveButtonSavingClasses
+            : saveStatus === 'saved'
+              ? saveButtonSuccessClasses
+              : saveStatus === 'error'
+                ? saveButtonErrorClasses
+                : saveButtonClasses
+        }
+        onClick={handleSave}
+        disabled={saveStatus === 'saving'}
+      >
+        {saveStatus === 'saving'
+          ? 'Saving...'
+          : saveStatus === 'saved'
+            ? 'Saved!'
+            : saveStatus === 'error'
+              ? 'Save failed — try again'
+              : 'Save environments'}
       </button>
     </>
   );
@@ -355,7 +388,7 @@ type Props = {
   onSave: (
     environments: Record<string, Record<string, unknown>>,
     backends: Record<string, BackendConfigEntry>,
-  ) => void;
+  ) => void | Promise<void>;
   onClose: () => void;
 };
 

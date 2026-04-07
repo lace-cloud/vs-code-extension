@@ -5,6 +5,9 @@ import {
   inputClasses,
   BACKEND_TYPES,
   saveButtonClasses,
+  saveButtonSavingClasses,
+  saveButtonSuccessClasses,
+  saveButtonErrorClasses,
   removeButtonClasses,
   addButtonClasses,
 } from '../../styles/panel';
@@ -19,9 +22,11 @@ type ProviderRequirementRow = { name: string; source: string; version: string };
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 type ContentProps = {
   terraform: TerraformConfig | undefined;
-  onSave: (terraform: TerraformConfig) => void;
+  onSave: (terraform: TerraformConfig) => void | Promise<void>;
 };
 
 export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
@@ -77,7 +82,9 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
 
   // ── Save ──
 
-  const handleSave = () => {
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  const handleSave = async () => {
     const block: TerraformConfig = {
       required_version: requiredVersion.trim() || '',
       required_providers: providers
@@ -99,7 +106,15 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
       block.backend = { type: backendType, config };
     }
 
-    onSave(block);
+    setSaveStatus('saving');
+    try {
+      await onSave(block);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }
   };
 
   return (
@@ -184,8 +199,26 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
       </button>
 
       {/* Inline save */}
-      <button className={saveButtonClasses} onClick={handleSave}>
-        Save configuration
+      <button
+        className={
+          saveStatus === 'saving'
+            ? saveButtonSavingClasses
+            : saveStatus === 'saved'
+              ? saveButtonSuccessClasses
+              : saveStatus === 'error'
+                ? saveButtonErrorClasses
+                : saveButtonClasses
+        }
+        onClick={handleSave}
+        disabled={saveStatus === 'saving'}
+      >
+        {saveStatus === 'saving'
+          ? 'Saving...'
+          : saveStatus === 'saved'
+            ? 'Saved!'
+            : saveStatus === 'error'
+              ? 'Save failed — try again'
+              : 'Save configuration'}
       </button>
     </>
   );
@@ -195,7 +228,7 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
 
 type Props = {
   terraform: TerraformConfig | undefined;
-  onSave: (terraform: TerraformConfig) => void;
+  onSave: (terraform: TerraformConfig) => void | Promise<void>;
   onClose: () => void;
 };
 
