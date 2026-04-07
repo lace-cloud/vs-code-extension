@@ -107,6 +107,26 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
       return { content: 'Missing required parameter: name', isError: true };
     }
 
+    // Guard: if the name has no "/" and is a plain Terraform identifier (letters/digits/underscores only,
+    // no hyphens, not a known cloud system name), it is likely a canvas instance ID not a module name.
+    // Instance IDs: "vpc", "subnet_1", "my_cluster"
+    // Registry modules: "aws/vpc", "azure/resource-group" (always contain "/")
+    // Allow: "aws", "azure", "gcp" (system names used for fuzzy search)
+    const knownSystems = new Set(['aws', 'azure', 'gcp', 'google', 'kubernetes', 'k8s']);
+    const looksLikeInstanceId =
+      !name.includes('/') &&
+      !name.includes('-') &&
+      !knownSystems.has(name.toLowerCase()) &&
+      /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name) &&
+      name.length < 30;
+
+    if (looksLikeInstanceId) {
+      return {
+        content: `"${name}" looks like a canvas instance ID, not a registry module name. Use lace_inspect_node with instance_id="${name}" to inspect a placed instance. Registry module names follow the pattern "system/name" (e.g., "aws/vpc"). Use lace_search_registry to find module names.`,
+        isError: true,
+      };
+    }
+
     // Find the module in local cache first to get system/version
     const modules = deps.getRegistryModules();
     const nameLower = name.toLowerCase();

@@ -102,12 +102,36 @@ function buildCanvasContextMessage(canvasView: CanvasView | undefined): string {
   return parts.join('\n');
 }
 
+// ── Rebuild prior conversation history from VS Code ChatContext ──
+
+function buildHistoryMessages(
+  history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[],
+): vscode.LanguageModelChatMessage[] {
+  const result: vscode.LanguageModelChatMessage[] = [];
+  for (const turn of history) {
+    if (turn instanceof vscode.ChatRequestTurn) {
+      result.push(vscode.LanguageModelChatMessage.User(turn.prompt));
+    } else if (turn instanceof vscode.ChatResponseTurn) {
+      const parts = (turn.response as vscode.ChatResponsePart[])
+        .filter(
+          (p): p is vscode.ChatResponseMarkdownPart => p instanceof vscode.ChatResponseMarkdownPart,
+        )
+        .map((p) => p.value.value)
+        .join('');
+      if (parts) {
+        result.push(vscode.LanguageModelChatMessage.Assistant(parts));
+      }
+    }
+  }
+  return result;
+}
+
 // ── Request handler factory — captures deps via closure ──
 
 function makeHandleChatRequest(deps: ChatParticipantDeps) {
   return async function handleChatRequest(
     request: vscode.ChatRequest,
-    _context: vscode.ChatContext,
+    context: vscode.ChatContext,
     response: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
   ): Promise<vscode.ChatResult> {
@@ -131,14 +155,24 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
     // Inject canvas state snapshot into conversation so model has ground truth instance IDs
     const canvasSnapshot = buildCanvasContextMessage(deps.getCanvasView?.());
 
+    // Build messages: system prompt + prior conversation history + current turn
+    // History is critical — without it "yes, add them all" has no context
+    const historyMessages = buildHistoryMessages(
+      context.history as readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[],
+    );
+
     const messages: vscode.LanguageModelChatMessage[] = [
       vscode.LanguageModelChatMessage.User(SYSTEM_PROMPT),
       vscode.LanguageModelChatMessage.Assistant(
         'Understood. I am Lace, your Terraform infrastructure assistant. I will use the available tools to help you compose infrastructure on the canvas.',
       ),
-      vscode.LanguageModelChatMessage.User(
-        `Current canvas context:\n${canvasSnapshot}\n\nUser request: ${request.prompt}`,
-      ),
+      // Inject canvas snapshot once, before history, so model always has current state
+      vscode.LanguageModelChatMessage.User(`Current canvas context:\n${canvasSnapshot}`),
+      vscode.LanguageModelChatMessage.Assistant('Got it. I have the current canvas state.'),
+      // Prior turns from this conversation thread
+      ...historyMessages,
+      // Current user message
+      vscode.LanguageModelChatMessage.User(request.prompt),
     ];
 
     // Use the model from the chat request (whatever the user has selected)

@@ -85,7 +85,7 @@
       {
         "name": "lace_describe_graph",
         "displayName": "Describe Graph",
-        "modelDescription": "Get a summary of the current Lace canvas: all module instances, their connections, unbound inputs, variables, and exports. Use this to understand the current state before making changes.",
+        "modelDescription": "Get the current canvas state. Note: a canvas snapshot is already provided at the start of each message — only call this if you need updated state after making changes, or need error details not in the snapshot.",
         "inputSchema": {
           "type": "object",
           "properties": {}
@@ -240,8 +240,8 @@
       },
       {
         "name": "lace_inspect_module",
-        "displayName": "Inspect Module",
-        "modelDescription": "Get full input/output schema details for a specific module from the registry. Shows input types, required/optional, defaults, and output types. Use this to understand what a module needs before adding or connecting it.",
+        "displayName": "Inspect Registry Module",
+        "modelDescription": "Get the input/output schema of a module in the REGISTRY — before it is added to the canvas. The name must follow 'system/name' format (e.g., 'aws/vpc'). Do NOT use this for instances already on the canvas — use lace_inspect_node for that instead.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -307,6 +307,74 @@
         "name": "lace_generate",
         "displayName": "Generate Terraform",
         "modelDescription": "Generate Terraform .tf files from the current canvas state. The canvas validates the graph first, then generates files into the .lace/ directory. This is a fire-and-forget action.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "lace_inspect_node",
+        "displayName": "Inspect Canvas Instance",
+        "modelDescription": "Get the live input bindings and outputs of a module instance that is already placed on the canvas. Use this (NOT lace_inspect_module) when you need to see what values are currently set on a canvas instance like 'vpc' or 'subnet_1'. Shows each input's current binding mode (empty/literal/variable/expression/wired), current value, and all outputs.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "instance_id": {
+              "type": "string",
+              "description": "The canvas instance ID (e.g., 'vpc', 'subnet_1') — NOT a registry module name"
+            }
+          },
+          "required": [
+            "instance_id"
+          ]
+        }
+      },
+      {
+        "name": "lace_get_settings",
+        "displayName": "Get Canvas Settings",
+        "modelDescription": "Read the current canvas-level settings: terraform block (required_version, required_providers, backend), configured providers, and locals. Use this to understand what Terraform infrastructure settings are already configured.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "lace_set_variable",
+        "displayName": "Set Canvas Variable",
+        "modelDescription": "Add or update a canvas-level Terraform input variable (var.NAME). Use this to create configurable parameters that can be referenced by module inputs using lace_set_input with the variable binding type.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Variable name — must be a valid Terraform identifier (e.g., 'vpc_cidr', 'environment')"
+            },
+            "type": {
+              "type": "string",
+              "description": "Terraform type: 'string', 'number', 'bool', 'list(string)', 'map(string)', etc."
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Whether the variable is required (no default) or optional"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of what this variable controls"
+            },
+            "default": {
+              "description": "Default value for the variable (any type matching the declared type)"
+            }
+          },
+          "required": [
+            "name",
+            "type"
+          ]
+        }
+      },
+      {
+        "name": "lace_undo",
+        "displayName": "Undo Last Change",
+        "modelDescription": "Undo the last change made to the canvas. Use this immediately after making a wrong connection, adding a wrong module, or setting an incorrect value. Returns the updated canvas state after undo.",
         "inputSchema": {
           "type": "object",
           "properties": {}
