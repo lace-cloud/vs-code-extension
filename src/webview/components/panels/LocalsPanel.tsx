@@ -8,6 +8,9 @@ import {
   modeButtonActive,
   modeButtonInactive,
   saveButtonClasses,
+  saveButtonSavingClasses,
+  saveButtonSuccessClasses,
+  saveButtonErrorClasses,
   removeButtonClasses,
   addButtonClasses,
   rowCardClasses,
@@ -51,9 +54,11 @@ function fromRows(rows: LocalRow[]): LocalEntry[] {
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 type ContentProps = {
   locals: LocalEntry[] | undefined;
-  onSave: (locals: LocalEntry[]) => void;
+  onSave: (locals: LocalEntry[]) => void | Promise<void>;
 };
 
 export function LocalsContent({ locals, onSave }: ContentProps) {
@@ -83,9 +88,19 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, exprValue } : r)));
   }, []);
 
-  const handleSave = () => {
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  const handleSave = async () => {
     if (hasErrors) return;
-    onSave(fromRows(rows));
+    setSaveStatus('saving');
+    try {
+      await onSave(fromRows(rows));
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }
   };
 
   // ── Validation ──
@@ -173,13 +188,27 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
 
       {/* Inline save */}
       <button
-        className={saveButtonClasses}
+        className={
+          saveStatus === 'saving'
+            ? saveButtonSavingClasses
+            : saveStatus === 'saved'
+              ? saveButtonSuccessClasses
+              : saveStatus === 'error'
+                ? saveButtonErrorClasses
+                : saveButtonClasses
+        }
         onClick={handleSave}
-        disabled={hasErrors}
+        disabled={hasErrors || saveStatus === 'saving'}
         title={hasErrors ? 'Fix errors before saving' : undefined}
         style={hasErrors ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
       >
-        Save locals
+        {saveStatus === 'saving'
+          ? 'Saving...'
+          : saveStatus === 'saved'
+            ? 'Saved!'
+            : saveStatus === 'error'
+              ? 'Save failed — try again'
+              : 'Save locals'}
       </button>
     </>
   );
@@ -189,7 +218,7 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
 
 type Props = {
   locals: LocalEntry[] | undefined;
-  onSave: (locals: LocalEntry[]) => void;
+  onSave: (locals: LocalEntry[]) => void | Promise<void>;
   onClose: () => void;
 };
 

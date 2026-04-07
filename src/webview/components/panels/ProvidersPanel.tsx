@@ -4,6 +4,9 @@ import type { SettingsConfig } from '../../types/render';
 import {
   inputClasses,
   saveButtonClasses,
+  saveButtonSavingClasses,
+  saveButtonSuccessClasses,
+  saveButtonErrorClasses,
   removeButtonClasses,
   removeButtonSmClasses,
   addButtonClasses,
@@ -56,9 +59,11 @@ function fromRows(rows: ProviderRow[]): ProviderEntry[] {
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 type ContentProps = {
   providers: ProviderEntry[] | undefined;
-  onSave: (providers: ProviderEntry[]) => void;
+  onSave: (providers: ProviderEntry[]) => void | Promise<void>;
 };
 
 export function ProvidersContent({ providers, onSave }: ContentProps) {
@@ -114,8 +119,18 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
     [],
   );
 
-  const handleSave = () => {
-    onSave(fromRows(rows));
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  const handleSave = async () => {
+    setSaveStatus('saving');
+    try {
+      await onSave(fromRows(rows));
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }
   };
 
   return (
@@ -171,8 +186,26 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
       </button>
 
       {/* Inline save */}
-      <button className={saveButtonClasses} onClick={handleSave}>
-        Save providers
+      <button
+        className={
+          saveStatus === 'saving'
+            ? saveButtonSavingClasses
+            : saveStatus === 'saved'
+              ? saveButtonSuccessClasses
+              : saveStatus === 'error'
+                ? saveButtonErrorClasses
+                : saveButtonClasses
+        }
+        onClick={handleSave}
+        disabled={saveStatus === 'saving'}
+      >
+        {saveStatus === 'saving'
+          ? 'Saving...'
+          : saveStatus === 'saved'
+            ? 'Saved!'
+            : saveStatus === 'error'
+              ? 'Save failed — try again'
+              : 'Save providers'}
       </button>
     </>
   );
@@ -182,7 +215,7 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
 
 type Props = {
   providers: ProviderEntry[] | undefined;
-  onSave: (providers: ProviderEntry[]) => void;
+  onSave: (providers: ProviderEntry[]) => void | Promise<void>;
   onClose: () => void;
 };
 
