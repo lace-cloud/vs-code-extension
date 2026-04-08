@@ -166,11 +166,13 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
       vscode.LanguageModelChatMessage.Assistant(
         'Understood. I am Lace, your Terraform infrastructure assistant. I will use the available tools to help you compose infrastructure on the canvas.',
       ),
-      // Inject canvas snapshot once, before history, so model always has current state
-      vscode.LanguageModelChatMessage.User(`Current canvas context:\n${canvasSnapshot}`),
-      vscode.LanguageModelChatMessage.Assistant('Got it. I have the current canvas state.'),
       // Prior turns from this conversation thread
       ...historyMessages,
+      // Canvas snapshot injected fresh just before each user message — this is the current state right now
+      vscode.LanguageModelChatMessage.User(
+        `[Current canvas state — refreshed for this message]\n${canvasSnapshot}`,
+      ),
+      vscode.LanguageModelChatMessage.Assistant('Understood, I have the current canvas state.'),
       // Current user message
       vscode.LanguageModelChatMessage.User(request.prompt),
     ];
@@ -184,11 +186,26 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
         if (token.isCancellationRequested) break;
         session.rounds = round + 1;
 
-        const modelResponse = await model.sendRequest(
-          messages,
-          { tools: tools.map(toLanguageModelChatTool) },
-          token,
-        );
+        let modelResponse: Awaited<ReturnType<typeof model.sendRequest>>;
+        try {
+          modelResponse = await model.sendRequest(
+            messages,
+            { tools: tools.map(toLanguageModelChatTool) },
+            token,
+          );
+        } catch (sendErr: unknown) {
+          const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+          const isContextOverflow =
+            msg.toLowerCase().includes('context') ||
+            msg.toLowerCase().includes('token') ||
+            msg.toLowerCase().includes('length');
+          response.markdown(
+            isContextOverflow
+              ? '\n\n_The conversation has grown too long for the model to process. Start a new chat to continue._'
+              : `\n\n_Model request failed: ${msg}_`,
+          );
+          break;
+        }
 
         // Accumulate text and tool calls from the stream
         const textParts: string[] = [];
