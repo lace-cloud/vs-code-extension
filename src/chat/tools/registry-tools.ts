@@ -12,6 +12,7 @@ import { requireEngine, errorMessage } from './helpers';
 export type RegistryToolDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
 };
 
 const MAX_SEARCH_LIMIT = 50;
@@ -36,29 +37,49 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     const rawLimit = (params.limit as number | undefined) ?? 20;
     const limit = Math.min(rawLimit, MAX_SEARCH_LIMIT);
 
-    // Try RPC search first (more accurate, server-side filtering)
+    // Try RPC search — fan out across public registry + all user orgs in parallel
     const client = deps.getRpcClient();
     if (client) {
       try {
-        const result = await client.listRegistryModules({
-          search: query || undefined,
-          system: system || undefined,
-          category: category || undefined,
-          limit,
-        });
+        const orgs = deps.getUserOrgs();
+        const orgSlugs = orgs.map((o) => o.slug);
 
-        const rpcModules = result?.modules ?? [];
+        // Search public registry (org='') + each user org in parallel
+        const searches = ['', ...orgSlugs].map((org) =>
+          client
+            .listRegistryModules({
+              search: query || undefined,
+              system: system || undefined,
+              category: category || undefined,
+              limit,
+              organization: org,
+            })
+            .then((r) => r?.modules ?? [])
+            .catch(() => [] as RegistryModule[]),
+        );
 
-        // RPC search matches on name/id only — augment with local description search
-        // so modules like "endpoint" (description: "SageMaker...") are not missed.
-        const rpcIds = new Set(rpcModules.map((m) => m.id));
+        const results = await Promise.all(searches);
+
+        // Merge, deduplicate by id
+        const seen = new Set<string>();
+        const rpcModules: RegistryModule[] = [];
+        for (const batch of results) {
+          for (const m of batch) {
+            if (!seen.has(m.id)) {
+              seen.add(m.id);
+              rpcModules.push(m);
+            }
+          }
+        }
+
+        // Augment with local description/category matches not returned by server-side name search
         const q = query.toLowerCase();
         const descriptionMatches = q
           ? deps
               .getRegistryModules()
               .filter(
                 (m) =>
-                  !rpcIds.has(m.id) &&
+                  !seen.has(m.id) &&
                   (m.description?.toLowerCase().includes(q) ||
                     m.categories?.some((c) => c.toLowerCase().includes(q))) &&
                   (!system || m.system.toLowerCase() === system.toLowerCase()),
