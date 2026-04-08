@@ -130,13 +130,28 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      // Step 1: Fetch deploy bundle from registry, passing org context if module was found via org search
-      const versionResult = await engineResult.client.getRegistryVersion({
-        name: match.name,
-        system: match.system,
-        version: versionToAdd,
-        organization: matchOrg,
-      });
+      // Step 1: Fetch deploy bundle — try with known org first, then fan out across all orgs on 404
+      let versionResult: Awaited<ReturnType<typeof engineResult.client.getRegistryVersion>> | null =
+        null;
+      const orgsToTry =
+        matchOrg !== undefined ? [matchOrg] : ['', ...deps.getUserOrgs().map((o) => o.slug)];
+
+      for (const org of orgsToTry) {
+        try {
+          versionResult = await engineResult.client.getRegistryVersion({
+            name: match.name,
+            system: match.system,
+            version: versionToAdd,
+            organization: org || undefined,
+          });
+          if (versionResult?.deploy_bundle) break;
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          // Only retry on 404 (version not found in this org) — other errors are fatal
+          if (!msg.includes('404') && !msg.includes('Not Found')) throw e;
+        }
+      }
+
       const deployBundle = versionResult?.deploy_bundle;
       if (!deployBundle) {
         return { content: 'Module has no deploy bundle.', isError: true };
