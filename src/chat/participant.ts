@@ -29,6 +29,7 @@ import {
 export type ChatParticipantDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
   getLaceDir: () => string | undefined;
   getCanvasView?: () => CanvasView | undefined;
   publishCanvasView?: (state: CanvasView) => void;
