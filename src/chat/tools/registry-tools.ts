@@ -47,7 +47,26 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
           limit,
         });
 
-        const modules = result?.modules ?? [];
+        const rpcModules = result?.modules ?? [];
+
+        // RPC search matches on name/id only — augment with local description search
+        // so modules like "endpoint" (description: "SageMaker...") are not missed.
+        const rpcIds = new Set(rpcModules.map((m) => m.id));
+        const q = query.toLowerCase();
+        const descriptionMatches = q
+          ? deps
+              .getRegistryModules()
+              .filter(
+                (m) =>
+                  !rpcIds.has(m.id) &&
+                  (m.description?.toLowerCase().includes(q) ||
+                    m.categories?.some((c) => c.toLowerCase().includes(q))) &&
+                  (!system || m.system.toLowerCase() === system.toLowerCase()),
+              )
+          : [];
+
+        const modules = [...rpcModules, ...descriptionMatches].slice(0, limit);
+
         if (modules.length === 0) {
           return {
             content: `No modules found matching your search. Try broader terms, remove the system filter, or check that the Lace engine is running and authenticated.`,
