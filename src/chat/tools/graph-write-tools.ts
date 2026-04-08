@@ -70,6 +70,27 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       }
     }
 
+    // If not found in local cache, try RPC search as fallback (covers org modules not yet loaded in sidebar)
+    if (!match) {
+      const client = deps.getRpcClient();
+      if (client) {
+        try {
+          const result = await client.listRegistryModules({
+            search: name,
+            system: system || undefined,
+            limit: 10,
+          });
+          const rpcModules = result?.modules ?? [];
+          match = rpcModules.find((m) => m.name.toLowerCase() === nameLower);
+          if (!match && rpcModules.length === 1) {
+            match = rpcModules[0];
+          }
+        } catch {
+          // RPC failed — fall through to error
+        }
+      }
+    }
+
     if (!match) {
       return {
         content: `Module "${name}"${system ? ` (${system})` : ''} not found in the registry. Use lace_search_registry to find available modules.`,
