@@ -166,7 +166,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
       return { content: lines.join('\n') };
     } catch (err: unknown) {
       return {
-        content: `Failed to inspect node "${instanceId}": ${errorMessage(err)}. Use lace_describe_graph to see current instance IDs.`,
+        content: `Failed to inspect node "${instanceId}": ${errorMessage(err)}. Check the canvas snapshot for valid instance IDs.`,
         isError: true,
       };
     }
