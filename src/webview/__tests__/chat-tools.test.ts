@@ -101,7 +101,7 @@ describe('write tools', () => {
         expect.objectContaining({
           name: 'aws/vpc',
           system: 'aws',
-          version: 'v1.0.0',
+          version: '1.0.0',
         }),
       );
       expect(mockClient.dropBundle).toHaveBeenCalledWith({
@@ -123,7 +123,7 @@ describe('write tools', () => {
         expect.objectContaining({
           name: 'azure/resource-group',
           system: 'azure',
-          version: 'v2.0.0',
+          version: '2.0.0',
         }),
       );
     });
