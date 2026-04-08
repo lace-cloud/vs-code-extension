@@ -16,6 +16,7 @@ import { findFreePosition } from '../../webview/utils/layout';
 export type GraphWriteDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
   getCanvasView?: () => CanvasView | undefined;
   publishCanvasView?: (state: CanvasView) => void;
 };
@@ -70,20 +71,28 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       }
     }
 
-    // If not found in local cache, try RPC search as fallback (covers org modules not yet loaded in sidebar)
+    // If not found in local cache, try RPC search across all orgs as fallback
     if (!match) {
       const client = deps.getRpcClient();
       if (client) {
         try {
-          const result = await client.listRegistryModules({
-            search: name,
-            system: system || undefined,
-            limit: 10,
-          });
-          const rpcModules = result?.modules ?? [];
-          match = rpcModules.find((m) => m.name.toLowerCase() === nameLower);
-          if (!match && rpcModules.length === 1) {
-            match = rpcModules[0];
+          const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
+          const searches = ['', ...orgSlugs].map((org) =>
+            client
+              .listRegistryModules({
+                search: name,
+                system: system || undefined,
+                limit: 10,
+                organization: org,
+              })
+              .then((r) => r?.modules ?? [])
+              .catch(() => [] as RegistryModule[]),
+          );
+          const results = await Promise.all(searches);
+          const allRpcModules = results.flat();
+          match = allRpcModules.find((m) => m.name.toLowerCase() === nameLower);
+          if (!match && allRpcModules.length === 1) {
+            match = allRpcModules[0];
           }
         } catch {
           // RPC failed — fall through to error
