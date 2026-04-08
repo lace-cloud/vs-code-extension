@@ -105,6 +105,10 @@
             "system": {
               "type": "string",
               "description": "Cloud system: 'aws', 'azure', or 'gcp'. Helps disambiguate if name exists across systems."
+            },
+            "version": {
+              "type": "string",
+              "description": "Specific version to add (e.g., 'v1.0.8'). If omitted, adds the latest version."
             }
           },
           "required": [
