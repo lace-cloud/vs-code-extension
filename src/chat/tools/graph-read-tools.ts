@@ -84,22 +84,58 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
 
     try {
       const result = await engineResult.client.queryValidate();
-      const errors = result.errors;
+      const cliErrors = result.errors;
 
-      if (errors.length === 0) {
+      // Also check every node for required inputs that are still empty —
+      // the CLI validation may not flag these, but terraform validate will fail on them.
+      const missingInputErrors: Array<{
+        instance_id: string;
+        input_name: string;
+        message: string;
+      }> = [];
+      const view = deps.getCanvasView?.();
+      if (view && view.nodes.length > 0) {
+        for (const node of view.nodes) {
+          try {
+            const config = await engineResult.client.queryNodeConfig({ instance_id: node.id });
+            for (const inp of config.inputs) {
+              if (inp.required && inp.mode === 'empty') {
+                missingInputErrors.push({
+                  instance_id: node.id,
+                  input_name: inp.name,
+                  message: `Required input "${inp.name}" is not set`,
+                });
+              }
+            }
+          } catch {
+            // Node config fetch failed — skip, non-fatal
+          }
+        }
+      }
+
+      const allErrors = [
+        ...cliErrors.map((e) => ({
+          instance_id: e.instance_id ?? '',
+          input_name: e.input_name ?? '',
+          message: e.message,
+        })),
+        ...missingInputErrors,
+      ];
+
+      if (allErrors.length === 0) {
         return { content: 'Validation passed. No errors found.' };
       }
 
       const lines: string[] = [];
-      lines.push(`**Validation: ${errors.length} error(s) found**`);
+      lines.push(`**Validation: ${allErrors.length} error(s) found**`);
       lines.push('');
-      for (const err of errors) {
+      for (const err of allErrors) {
         const loc = [err.instance_id, err.input_name].filter(Boolean).join('.');
         lines.push(`- ${loc ? `[${loc}] ` : ''}${err.message}`);
       }
       lines.push('');
       lines.push(
-        'Call lace_inspect_node on affected instances to see current binding state, then use lace_set_input or lace_connect to fix.',
+        'Use lace_inspect_node on affected instances to see current binding state, then use lace_set_input or lace_connect to fix.',
       );
 
       return { content: lines.join('\n') };
