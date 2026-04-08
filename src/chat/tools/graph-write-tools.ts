@@ -132,10 +132,10 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    // Normalize version: ensure "v" prefix to match registry format (e.g., "1.0.8" → "v1.0.8")
+    // Normalize version to match registry format (no "v" prefix — registry uses "1.0.8" not "v1.0.8")
     let versionToAdd = requestedVersion ?? match.version;
-    if (requestedVersion && !requestedVersion.startsWith('v')) {
-      versionToAdd = `v${requestedVersion}`;
+    if (versionToAdd.startsWith('v')) {
+      versionToAdd = versionToAdd.slice(1);
     }
 
     const engineResult = requireEngine(deps.getRpcClient);
