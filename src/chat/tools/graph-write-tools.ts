@@ -39,20 +39,26 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: 'Missing required parameter: name', isError: true };
     }
 
+    // Normalize: "ec2 instance" / "ec2_instance" / "ec2-instance" all become "ec2-instance"
+    const normalize = (s: string) => s.toLowerCase().replace(/[\s_]+/g, '-');
+    const nameNorm = normalize(name);
+
     const modules = deps.getRegistryModules();
-    const nameLower = name.toLowerCase();
     const systemLower = system?.toLowerCase();
 
+    // 1. Exact normalized match
     let match = modules.find(
       (m) =>
-        m.name.toLowerCase() === nameLower &&
-        (!systemLower || m.system.toLowerCase() === systemLower),
+        normalize(m.name) === nameNorm && (!systemLower || m.system.toLowerCase() === systemLower),
     );
 
+    // 2. Fuzzy: input is a substring of module name/id (or vice versa)
     if (!match) {
       const candidates = modules.filter(
         (m) =>
-          (m.name.toLowerCase().includes(nameLower) || m.id.toLowerCase().includes(nameLower)) &&
+          (normalize(m.name).includes(nameNorm) ||
+            normalize(m.id).includes(nameNorm) ||
+            nameNorm.includes(normalize(m.name))) &&
           (!systemLower || m.system.toLowerCase() === systemLower),
       );
       if (candidates.length === 1) {
@@ -71,8 +77,8 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       }
     }
 
-    // If not found in local cache, try RPC search across all orgs as fallback
-    // Track which org the module was found in so we can pass it to getRegistryVersion
+    // 3. Not in local cache — search across all user orgs via RPC
+    //    The user is a member of these orgs, so they have access to private modules.
     let matchOrg: string | undefined;
     if (!match) {
       const client = deps.getRpcClient();
@@ -93,18 +99,24 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
           );
           const results = await Promise.all(searches);
           for (const { org, modules: mods } of results) {
-            const found = mods.find((m) => m.name.toLowerCase() === nameLower);
+            const found = mods.find((m) => normalize(m.name) === nameNorm);
             if (found) {
               match = found;
-              matchOrg = org || undefined;
+              matchOrg = org;
               break;
             }
           }
+          // Fuzzy fallback on RPC results too
           if (!match) {
-            const flat = results.flatMap((r) => r.modules);
-            if (flat.length === 1) {
-              match = flat[0];
-              matchOrg = results.find((r) => r.modules.length > 0)?.org || undefined;
+            for (const { org, modules: mods } of results) {
+              const found = mods.find(
+                (m) => normalize(m.name).includes(nameNorm) || nameNorm.includes(normalize(m.name)),
+              );
+              if (found) {
+                match = found;
+                matchOrg = org;
+                break;
+              }
             }
           }
         } catch {
@@ -130,33 +142,41 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      // Step 1: Fetch deploy bundle — try with known org first, then fan out across all orgs on 404
+      // Fetch deploy bundle — try each org the user belongs to until one has it.
+      // This mirrors the sidebar "Add to Canvas" button: the user is already a member,
+      // so they have access. We just need to find which org holds the module.
+      const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
+      const orgsToTry = matchOrg !== undefined ? [matchOrg] : ['', ...orgSlugs];
+
       let versionResult: Awaited<ReturnType<typeof engineResult.client.getRegistryVersion>> | null =
         null;
-      const orgsToTry =
-        matchOrg !== undefined ? [matchOrg] : ['', ...deps.getUserOrgs().map((o) => o.slug)];
-
       for (const org of orgsToTry) {
         try {
           versionResult = await engineResult.client.getRegistryVersion({
             name: match.name,
             system: match.system,
             version: versionToAdd,
-            organization: org || undefined,
+            organization: org,
           });
-          // deploy_bundle is a Buffer — check length, not just truthiness (empty Buffer is truthy)
-          if (versionResult?.deploy_bundle && versionResult.deploy_bundle.length > 0) break;
+          if (
+            versionResult?.deploy_bundle &&
+            (!Buffer.isBuffer(versionResult.deploy_bundle) ||
+              versionResult.deploy_bundle.length > 0)
+          ) {
+            break;
+          }
+          versionResult = null; // empty bundle — try next org
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          // Only retry on 404 (version not found in this org) — other errors are fatal
           if (!msg.includes('404') && !msg.includes('Not Found')) throw e;
+          // 404 = not in this org — continue to next
         }
       }
 
       const deployBundle = versionResult?.deploy_bundle;
-      if (!deployBundle || deployBundle.length === 0) {
+      if (!deployBundle || (Buffer.isBuffer(deployBundle) && deployBundle.length === 0)) {
         return {
-          content: `Module "${match.name}" ${versionToAdd} has no deploy bundle — this version may not be published yet. Try a different version or omit the version to use the latest.`,
+          content: `Module "${match.name}" ${versionToAdd} was not found in any of your registries. Check the version exists or omit version to use the latest.`,
           isError: true,
         };
       }
