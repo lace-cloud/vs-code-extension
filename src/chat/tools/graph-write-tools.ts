@@ -265,7 +265,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       const notFound =
         msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('unknown');
       return {
-        content: `Failed to connect: ${msg}${notFound ? '\nUse lace_describe_graph to see current instance IDs — they may differ from what you expected.' : ''}`,
+        content: `Failed to connect: ${msg}${notFound ? '\nUse lace_inspect_node on each instance to see exact output/input names. Instance IDs come from the canvas snapshot.' : ''}`,
         isError: true,
       };
     }
