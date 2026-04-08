@@ -72,19 +72,36 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
           }
         }
 
-        // Augment with local description/category matches not returned by server-side name search
+        // Augment with description/category matches — server only searches by name.
+        // Fetch all modules per org (no query filter) and search descriptions client-side.
         const q = query.toLowerCase();
-        const descriptionMatches = q
-          ? deps
-              .getRegistryModules()
-              .filter(
-                (m) =>
-                  !seen.has(m.id) &&
-                  (m.description?.toLowerCase().includes(q) ||
-                    m.categories?.some((c) => c.toLowerCase().includes(q))) &&
-                  (!system || m.system.toLowerCase() === system.toLowerCase()),
-              )
-          : [];
+        let descriptionMatches: RegistryModule[] = [];
+        if (q) {
+          // Fetch all modules for public + each org with no search query, filter by description
+          const allFetches = ['', ...orgSlugs].map((org) =>
+            client
+              .listRegistryModules({
+                system: system || undefined,
+                limit: MAX_SEARCH_LIMIT,
+                organization: org,
+              })
+              .then((r) => r?.modules ?? [])
+              .catch(() => [] as RegistryModule[]),
+          );
+          const allBatches = await Promise.all(allFetches);
+          for (const batch of allBatches) {
+            for (const m of batch) {
+              if (
+                !seen.has(m.id) &&
+                (m.description?.toLowerCase().includes(q) ||
+                  m.categories?.some((c) => c.toLowerCase().includes(q)))
+              ) {
+                seen.add(m.id);
+                descriptionMatches.push(m);
+              }
+            }
+          }
+        }
 
         const modules = [...rpcModules, ...descriptionMatches].slice(0, limit);
 
