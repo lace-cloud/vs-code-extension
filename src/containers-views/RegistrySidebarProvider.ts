@@ -53,9 +53,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     this.orgChangeCallback = callback;
   }
 
-  /** Get all loaded modules (for command palette quick pick). */
+  /** Get all loaded modules (public + org-private) for command palette and chat tools. */
   getModules(): RegistryModule[] {
-    return this.modules;
+    return [...this.modules, ...this.orgModules];
   }
 
   /** Track a module as recently used (prepend, deduplicate, cap at 5). */
