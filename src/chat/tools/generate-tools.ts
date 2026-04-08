@@ -67,7 +67,7 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
           lines.push('Use lace_connect to wire manually if types are compatible.');
         } catch {
           lines.push(
-            'Use lace_describe_graph to see available outputs and inputs, then connect manually with lace_connect.',
+            'Use lace_inspect_node on each instance to see available outputs and inputs, then connect manually with lace_connect.',
           );
         }
         return { content: lines.join('\n') };
