@@ -308,11 +308,23 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
         // Feed tool results back as a User message
         messages.push(vscode.LanguageModelChatMessage.User(toolResultParts));
 
-        // Break if every tool in this round errored — avoid infinite retry loop
+        // Break if every tool in this round errored — show actual errors to user
         if (allToolsErrored && toolCalls.length > 0) {
-          response.markdown(
-            '\n\n_All tool calls in this round failed. Cannot continue — check errors above._',
-          );
+          const errorDetails = toolResultParts
+            .map((p) => {
+              const text = p.content
+                .filter(
+                  (c): c is vscode.LanguageModelTextPart =>
+                    c instanceof vscode.LanguageModelTextPart,
+                )
+                .map((c) => c.value)
+                .join('');
+              return text;
+            })
+            .filter(Boolean);
+          const errorList =
+            errorDetails.length > 0 ? '\n' + errorDetails.map((e) => `- ${e}`).join('\n') : '';
+          response.markdown(`\n\n_All tool calls failed:${errorList}_`);
           break;
         }
 
