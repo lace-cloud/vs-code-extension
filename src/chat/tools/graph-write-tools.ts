@@ -107,8 +107,11 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    // Use requested version if provided, otherwise use the matched module's version (latest)
-    const versionToAdd = requestedVersion ?? match.version;
+    // Normalize version: ensure "v" prefix to match registry format (e.g., "1.0.8" → "v1.0.8")
+    let versionToAdd = requestedVersion ?? match.version;
+    if (requestedVersion && !requestedVersion.startsWith('v')) {
+      versionToAdd = `v${requestedVersion}`;
+    }
 
     const engineResult = requireEngine(deps.getRpcClient);
     if ('error' in engineResult) return engineResult.error;
@@ -163,11 +166,11 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
 
       if (instanceId) {
         lines.push(
-          `Added **${match.name}** (${match.system}, v${versionToAdd}) to the canvas as instance **"${instanceId}"**.`,
+          `Added **${match.name}** (${match.system}, ${versionToAdd}) to the canvas as instance **"${instanceId}"**.`,
         );
       } else {
         lines.push(
-          `Added **${match.name}** (${match.system}, v${versionToAdd}) to the canvas. Use lace_describe_graph to find the instance ID.`,
+          `Added **${match.name}** (${match.system}, ${versionToAdd}) to the canvas. Use lace_describe_graph to find the instance ID.`,
         );
       }
 
@@ -196,8 +199,15 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
 
       return { content: lines.join('\n') };
     } catch (err: unknown) {
+      const msg = errorMessage(err);
+      const isVersionNotFound =
+        msg.includes('404') || msg.includes('not found') || msg.includes('Not Found');
+      const versionHint =
+        requestedVersion && isVersionNotFound
+          ? ` Version "${versionToAdd}" may not exist. Use lace_inspect_module to check available versions, or omit the version to add the latest.`
+          : '';
       return {
-        content: `Failed to add module: ${errorMessage(err)}`,
+        content: `Failed to add module: ${msg}${versionHint}`,
         isError: true,
       };
     }
