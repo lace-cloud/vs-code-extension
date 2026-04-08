@@ -115,7 +115,7 @@
       {
         "name": "lace_remove_module",
         "displayName": "Remove Module",
-        "modelDescription": "Remove a module instance from the Lace canvas by its instance ID. Use lace_describe_graph first to find the correct instance_id.",
+        "modelDescription": "Remove a module instance from the Lace canvas by its instance ID. The canvas snapshot at the top of each message lists all current instance IDs.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -132,7 +132,7 @@
       {
         "name": "lace_connect",
         "displayName": "Connect Modules",
-        "modelDescription": "Wire a specific output from one module instance to an input on another. Use lace_describe_graph first to see available outputs and inputs.",
+        "modelDescription": "Wire a specific output from one module instance to an input on another. Use lace_inspect_node on each instance first to see their exact output and input names before calling this.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -186,7 +186,7 @@
       {
         "name": "lace_set_input",
         "displayName": "Set Input Value",
-        "modelDescription": "Set the value of an input on a module instance. Provide exactly one of: value (literal), variable (var reference), or expression (HCL). Use lace_describe_graph to see available inputs.",
+        "modelDescription": "Set the value of an input on a module instance. Provide exactly one of: value (literal), variable (var reference), or expression (HCL). Use lace_inspect_node to see available inputs and their current binding state.",
         "inputSchema": {
           "type": "object",
           "properties": {
