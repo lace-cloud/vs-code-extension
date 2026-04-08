@@ -103,13 +103,30 @@ export async function activate(context: vscode.ExtensionContext) {
   engineStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(engineStatusBar);
 
+  let prevState: string | null = null;
   server.on('state', (state) => {
     updateEngineStatus(state);
 
-    if (state === 'running') {
+    if (state === 'stopped') {
+      // Only show "stopping" if it was running — not on first load
+      if (prevState === 'running') {
+        vscode.window.showInformationMessage('Lace engine is stopping…');
+      }
+    } else if (state === 'starting') {
+      // If coming from stopped (auto-restart after a stop cycle), show restarting
+      if (prevState === 'stopped') {
+        vscode.window.showInformationMessage('Lace engine is restarting…');
+      }
+    } else if (state === 'running') {
       registryProvider?.setRpcClient(server?.rpcClient ?? null);
       registryProvider?.refresh();
+      if (prevState === 'starting') {
+        vscode.window.showInformationMessage('Lace engine is running.');
+      }
+    } else if (state === 'error') {
+      vscode.window.showErrorMessage('Lace engine failed to start. Check the Lace output channel.');
     }
+    prevState = state;
   });
 
   server.on('error', (err: Error) =>
@@ -157,9 +174,35 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     // ── Engine ──
-    vscode.commands.registerCommand('lace.startEngine', () => server?.start()),
-    vscode.commands.registerCommand('lace.stopEngine', () => server?.stop()),
-    vscode.commands.registerCommand('lace.restartEngine', () => server?.restart()),
+    vscode.commands.registerCommand('lace.startEngine', async () => {
+      if (server?.currentState === 'running') {
+        vscode.window.showInformationMessage('Lace engine is already running.');
+        return;
+      }
+      try {
+        await server?.start();
+      } catch (err: unknown) {
+        vscode.window.showErrorMessage(
+          `Failed to start Lace engine: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }),
+    vscode.commands.registerCommand('lace.stopEngine', async () => {
+      if (server?.currentState === 'stopped') {
+        vscode.window.showInformationMessage('Lace engine is already stopped.');
+        return;
+      }
+      await server?.stop();
+    }),
+    vscode.commands.registerCommand('lace.restartEngine', async () => {
+      try {
+        await server?.restart();
+      } catch (err: unknown) {
+        vscode.window.showErrorMessage(
+          `Failed to restart Lace engine: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }),
 
     vscode.commands.registerCommand('lace.login', async () => {
       if (!server || server.currentState !== 'running') {
