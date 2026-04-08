@@ -144,7 +144,8 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
             version: versionToAdd,
             organization: org || undefined,
           });
-          if (versionResult?.deploy_bundle) break;
+          // deploy_bundle is a Buffer — check length, not just truthiness (empty Buffer is truthy)
+          if (versionResult?.deploy_bundle && versionResult.deploy_bundle.length > 0) break;
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
           // Only retry on 404 (version not found in this org) — other errors are fatal
@@ -153,8 +154,11 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       }
 
       const deployBundle = versionResult?.deploy_bundle;
-      if (!deployBundle) {
-        return { content: 'Module has no deploy bundle.', isError: true };
+      if (!deployBundle || deployBundle.length === 0) {
+        return {
+          content: `Module "${match.name}" ${versionToAdd} has no deploy bundle — this version may not be published yet. Try a different version or omit the version to use the latest.`,
+          isError: true,
+        };
       }
 
       // Step 2: Apply deploy bundle. CLI ignores the position field, so we
