@@ -222,6 +222,20 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
         lines.push('(none)');
       }
 
+      lines.push('');
+      lines.push('### Environments');
+      const envEntries = Object.entries(settings.environments ?? {});
+      if (envEntries.length > 0) {
+        for (const [envName, vars] of envEntries) {
+          const keys = Object.keys(vars);
+          lines.push(`- **${envName}**: ${keys.length > 0 ? keys.join(', ') : '(no variables)'}`);
+        }
+        lines.push('');
+        lines.push('_Note: environment variable keys are shown; values are not exposed._');
+      } else {
+        lines.push('(none configured)');
+      }
+
       return { content: lines.join('\n') };
     } catch (err: unknown) {
       return { content: `Failed to get settings: ${errorMessage(err)}`, isError: true };
