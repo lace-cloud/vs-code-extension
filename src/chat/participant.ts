@@ -182,6 +182,9 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
     const model = request.model;
 
     // Agentic tool-use loop
+    // Track consecutive identical failing tool calls to detect non-inferable field loops
+    const failSignatureCount = new Map<string, number>();
+
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         if (token.isCancellationRequested) break;
@@ -271,6 +274,13 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
 
             if (!result.isError) {
               allToolsErrored = false;
+              // Reset failure counter for this tool on success
+              const sig = `${tc.name}:${JSON.stringify(tc.input)}`;
+              failSignatureCount.delete(sig);
+            } else {
+              // Track consecutive identical failing calls (same tool + same input)
+              const sig = `${tc.name}:${JSON.stringify(tc.input)}`;
+              failSignatureCount.set(sig, (failSignatureCount.get(sig) ?? 0) + 1);
             }
 
             toolResultParts.push(
@@ -285,6 +295,8 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
             const message = err instanceof Error ? err.message : String(err);
             const result = { content: `Tool error: ${message}`, isError: true };
             logToolInvocation(session, tc.name, tc.input, result, durationMs);
+            const sig = `${tc.name}:${JSON.stringify(tc.input)}`;
+            failSignatureCount.set(sig, (failSignatureCount.get(sig) ?? 0) + 1);
             toolResultParts.push(
               new vscode.LanguageModelToolResultPart(tc.callId, [
                 new vscode.LanguageModelTextPart(`Tool [${tc.name}] failed: ${message}`),
@@ -300,6 +312,16 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
         if (allToolsErrored && toolCalls.length > 0) {
           response.markdown(
             '\n\n_All tool calls in this round failed. Cannot continue — check errors above._',
+          );
+          break;
+        }
+
+        // Break if any tool has been called with identical args and failed 2+ times —
+        // signals non-inferable required fields; prompt the user instead of looping
+        const stuckSig = [...failSignatureCount.entries()].find(([, count]) => count >= 2);
+        if (stuckSig) {
+          response.markdown(
+            "\n\n_I'm unable to proceed — one or more required fields cannot be inferred automatically. Please provide the missing values (e.g., names, types, or IDs) and I'll continue._",
           );
           break;
         }
