@@ -32,6 +32,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   registerTool('lace_add_module', async (params): Promise<ToolResult> => {
     const name = params.name as string | undefined;
     const system = params.system as string | undefined;
+    const requestedVersion = params.version as string | undefined;
 
     if (!name) {
       return { content: 'Missing required parameter: name', isError: true };
@@ -76,6 +77,9 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
+    // Use requested version if provided, otherwise use the matched module's version (latest)
+    const versionToAdd = requestedVersion ?? match.version;
+
     const engineResult = requireEngine(deps.getRpcClient);
     if ('error' in engineResult) return engineResult.error;
 
@@ -84,7 +88,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       const versionResult = await engineResult.client.getRegistryVersion({
         name: match.name,
         system: match.system,
-        version: match.version,
+        version: versionToAdd,
       });
       const deployBundle = versionResult?.deploy_bundle;
       if (!deployBundle) {
@@ -129,11 +133,11 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
 
       if (instanceId) {
         lines.push(
-          `Added **${match.name}** (${match.system}, v${match.version}) to the canvas as instance **"${instanceId}"**.`,
+          `Added **${match.name}** (${match.system}, v${versionToAdd}) to the canvas as instance **"${instanceId}"**.`,
         );
       } else {
         lines.push(
-          `Added **${match.name}** (${match.system}, v${match.version}) to the canvas. Use lace_describe_graph to find the instance ID.`,
+          `Added **${match.name}** (${match.system}, v${versionToAdd}) to the canvas. Use lace_describe_graph to find the instance ID.`,
         );
       }
 
