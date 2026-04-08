@@ -72,12 +72,15 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     }
 
     // If not found in local cache, try RPC search across all orgs as fallback
+    // Track which org the module was found in so we can pass it to getRegistryVersion
+    let matchOrg: string | undefined;
     if (!match) {
       const client = deps.getRpcClient();
       if (client) {
         try {
           const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
-          const searches = ['', ...orgSlugs].map((org) =>
+          const orgKeys = ['', ...orgSlugs];
+          const searches = orgKeys.map((org) =>
             client
               .listRegistryModules({
                 search: name,
@@ -85,14 +88,24 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
                 limit: 10,
                 organization: org,
               })
-              .then((r) => r?.modules ?? [])
-              .catch(() => [] as RegistryModule[]),
+              .then((r) => ({ org, modules: r?.modules ?? [] }))
+              .catch(() => ({ org, modules: [] as RegistryModule[] })),
           );
           const results = await Promise.all(searches);
-          const allRpcModules = results.flat();
-          match = allRpcModules.find((m) => m.name.toLowerCase() === nameLower);
-          if (!match && allRpcModules.length === 1) {
-            match = allRpcModules[0];
+          for (const { org, modules: mods } of results) {
+            const found = mods.find((m) => m.name.toLowerCase() === nameLower);
+            if (found) {
+              match = found;
+              matchOrg = org || undefined;
+              break;
+            }
+          }
+          if (!match) {
+            const flat = results.flatMap((r) => r.modules);
+            if (flat.length === 1) {
+              match = flat[0];
+              matchOrg = results.find((r) => r.modules.length > 0)?.org || undefined;
+            }
           }
         } catch {
           // RPC failed — fall through to error
@@ -117,11 +130,12 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      // Step 1: Fetch deploy bundle from registry
+      // Step 1: Fetch deploy bundle from registry, passing org context if module was found via org search
       const versionResult = await engineResult.client.getRegistryVersion({
         name: match.name,
         system: match.system,
         version: versionToAdd,
+        organization: matchOrg,
       });
       const deployBundle = versionResult?.deploy_bundle;
       if (!deployBundle) {
