@@ -75,6 +75,7 @@ function makeWriteDeps(): GraphWriteDeps {
     getRpcClient: () =>
       mockClient as unknown as import('../../utilities/engine/grpc-client').LaceClient,
     getRegistryModules: () => testModules,
+    getUserOrgs: () => [],
   };
 }
 
