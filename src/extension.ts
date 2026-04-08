@@ -118,6 +118,8 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage('Lace engine is restarting…');
       }
     } else if (state === 'running') {
+      // Re-apply org context on every new client (new client created on each start/restart)
+      server?.rpcClient?.setOrgContext(selectedOrg);
       registryProvider?.setRpcClient(server?.rpcClient ?? null);
       registryProvider?.refresh();
       if (prevState === 'starting') {
@@ -340,6 +342,7 @@ export async function activate(context: vscode.ExtensionContext) {
     registerChatParticipant(context, {
       getRpcClient: () => server?.rpcClient ?? null,
       getRegistryModules: () => registryProvider?.getModules() ?? [],
+      getUserOrgs: () => userOrgs,
       getLaceDir,
       getCanvasView: getLatestCanvasView,
       publishCanvasView: publishCanvasViewToActivePanel,
