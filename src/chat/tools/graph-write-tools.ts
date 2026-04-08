@@ -142,34 +142,50 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      // Fetch deploy bundle — try each org the user belongs to until one has it.
-      // This mirrors the sidebar "Add to Canvas" button: the user is already a member,
-      // so they have access. We just need to find which org holds the module.
-      const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
-      const orgsToTry = matchOrg !== undefined ? [matchOrg] : ['', ...orgSlugs];
+      // Fetch deploy bundle — same path as the sidebar "Add to Canvas" button.
+      // First call: no organization param → client uses resolvedOrg (the selected org).
+      // If that fails, try each user org explicitly.
+      const versionParams = {
+        name: match.name,
+        system: match.system,
+        version: versionToAdd,
+      };
 
       let versionResult: Awaited<ReturnType<typeof engineResult.client.getRegistryVersion>> | null =
         null;
-      for (const org of orgsToTry) {
-        try {
-          versionResult = await engineResult.client.getRegistryVersion({
-            name: match.name,
-            system: match.system,
-            version: versionToAdd,
-            organization: org,
-          });
-          if (
-            versionResult?.deploy_bundle &&
-            (!Buffer.isBuffer(versionResult.deploy_bundle) ||
-              versionResult.deploy_bundle.length > 0)
-          ) {
-            break;
+
+      // First: use client's resolvedOrg (same as sidebar)
+      try {
+        versionResult = await engineResult.client.getRegistryVersion(
+          matchOrg !== undefined ? { ...versionParams, organization: matchOrg } : versionParams,
+        );
+      } catch {
+        // Fall through to org-by-org search
+      }
+
+      // If no deploy bundle, try each org the user is a member of
+      if (
+        !versionResult?.deploy_bundle ||
+        (Buffer.isBuffer(versionResult.deploy_bundle) && versionResult.deploy_bundle.length === 0)
+      ) {
+        const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
+        for (const org of orgSlugs) {
+          try {
+            versionResult = await engineResult.client.getRegistryVersion({
+              ...versionParams,
+              organization: org,
+            });
+            if (
+              versionResult?.deploy_bundle &&
+              (!Buffer.isBuffer(versionResult.deploy_bundle) ||
+                versionResult.deploy_bundle.length > 0)
+            ) {
+              break;
+            }
+            versionResult = null;
+          } catch {
+            // Not in this org — continue
           }
-          versionResult = null; // empty bundle — try next org
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (!msg.includes('404') && !msg.includes('Not Found')) throw e;
-          // 404 = not in this org — continue to next
         }
       }
 
