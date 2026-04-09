@@ -231,11 +231,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
       } else {
         lines.push('- required_providers: (none)');
       }
-      if (settings.terraform.backend) {
-        lines.push(`- backend: type=${settings.terraform.backend.type}`);
-      } else {
-        lines.push('- backend: (not configured)');
-      }
+      lines.push('- backend: managed by Lace Cloud (HTTP)');
 
       lines.push('');
       lines.push('### Providers');

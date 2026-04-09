@@ -3,12 +3,13 @@ import React, { useState, useCallback } from 'react';
 import type { SettingsConfig } from '../../types/render';
 import {
   inputClasses,
-  BACKEND_TYPES,
   saveButtonClasses,
+  saveButtonSavingClasses,
+  saveButtonSuccessClasses,
+  saveButtonErrorClasses,
   removeButtonClasses,
   addButtonClasses,
 } from '../../styles/panel';
-import { parseConfigValue } from '../../utils/parseValue';
 import PanelFrame from '../PanelFrame';
 
 // ── Types derived from SettingsConfig ──
@@ -19,9 +20,11 @@ type ProviderRequirementRow = { name: string; source: string; version: string };
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 type ContentProps = {
   terraform: TerraformConfig | undefined;
-  onSave: (terraform: TerraformConfig) => void;
+  onSave: (terraform: TerraformConfig) => void | Promise<void>;
 };
 
 export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
@@ -32,15 +35,6 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
       name: req.name,
       source: req.source ?? '',
       version: req.version ?? '',
-    }));
-  });
-
-  const [backendType, setBackendType] = useState(terraform?.backend?.type ?? 's3');
-  const [backendConfig, setBackendConfig] = useState<Array<{ key: string; value: string }>>(() => {
-    if (!terraform?.backend?.config) return [];
-    return Object.entries(terraform.backend.config).map(([key, value]) => ({
-      key,
-      value: typeof value === 'boolean' ? String(value) : String(value),
     }));
   });
 
@@ -61,23 +55,11 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
     [],
   );
 
-  // ── Backend config rows ──
-
-  const addBackendKey = useCallback(() => {
-    setBackendConfig((prev) => [...prev, { key: '', value: '' }]);
-  }, []);
-
-  const removeBackendKey = useCallback((index: number) => {
-    setBackendConfig((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const updateBackendKey = useCallback((index: number, field: 'key' | 'value', value: string) => {
-    setBackendConfig((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
-  }, []);
-
   // ── Save ──
 
-  const handleSave = () => {
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  const handleSave = async () => {
     const block: TerraformConfig = {
       required_version: requiredVersion.trim() || '',
       required_providers: providers
@@ -89,17 +71,15 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
         })),
     };
 
-    if (backendConfig.length > 0) {
-      const config: Record<string, unknown> = {};
-      for (const c of backendConfig) {
-        if (c.key.trim()) {
-          config[c.key.trim()] = parseConfigValue(c.value);
-        }
-      }
-      block.backend = { type: backendType, config };
+    setSaveStatus('saving');
+    try {
+      await onSave(block);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
     }
-
-    onSave(block);
   };
 
   return (
@@ -146,46 +126,34 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
         + Add provider
       </button>
 
-      {/* Backend */}
+      {/* Backend — managed by Lace */}
       <SectionTitle label="Backend" />
-      <select
-        value={backendType}
-        onChange={(e) => setBackendType(e.target.value)}
-        className={`${inputClasses} mb-3`}
-      >
-        {BACKEND_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
-
-      {backendConfig.map((c, i) => (
-        <div key={i} className="flex gap-2 mb-2">
-          <input
-            value={c.key}
-            onChange={(e) => updateBackendKey(i, 'key', e.target.value)}
-            placeholder="Key"
-            className={`${inputClasses} flex-1`}
-          />
-          <input
-            value={c.value}
-            onChange={(e) => updateBackendKey(i, 'value', e.target.value)}
-            placeholder="Value"
-            className={`${inputClasses} flex-1`}
-          />
-          <button onClick={() => removeBackendKey(i)} className={removeButtonClasses}>
-            ✕
-          </button>
-        </div>
-      ))}
-      <button onClick={addBackendKey} className={addButtonClasses}>
-        + Add config key
-      </button>
+      <div className="text-xs opacity-60 mb-4">
+        Terraform state is managed by Lace Cloud. The HTTP backend is configured automatically
+        during generation.
+      </div>
 
       {/* Inline save */}
-      <button className={saveButtonClasses} onClick={handleSave}>
-        Save configuration
+      <button
+        className={
+          saveStatus === 'saving'
+            ? saveButtonSavingClasses
+            : saveStatus === 'saved'
+              ? saveButtonSuccessClasses
+              : saveStatus === 'error'
+                ? saveButtonErrorClasses
+                : saveButtonClasses
+        }
+        onClick={handleSave}
+        disabled={saveStatus === 'saving'}
+      >
+        {saveStatus === 'saving'
+          ? 'Saving...'
+          : saveStatus === 'saved'
+            ? 'Saved!'
+            : saveStatus === 'error'
+              ? 'Save failed — try again'
+              : 'Save configuration'}
       </button>
     </>
   );
@@ -195,7 +163,7 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
 
 type Props = {
   terraform: TerraformConfig | undefined;
-  onSave: (terraform: TerraformConfig) => void;
+  onSave: (terraform: TerraformConfig) => void | Promise<void>;
   onClose: () => void;
 };
 

@@ -52,7 +52,12 @@ export function getWebviewContent(
 
   <script nonce="${nonce}">
   window.addEventListener('DOMContentLoaded', () => {
-    // ── Cmd+S / Ctrl+S keyboard shortcut ──
+    function isTextInput(el) {
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+    }
+    // ── Keyboard shortcuts ──
     document.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
@@ -62,6 +67,8 @@ export function getWebviewContent(
         e.preventDefault();
         if (window.__canvasUndo) window.__canvasUndo();
       }
+      // Copy/cut/paste: only intercept when focus is NOT on a text input
+      if (isTextInput(document.activeElement)) return;
       if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
         e.preventDefault();
         if (window.__canvasCopy) window.__canvasCopy();

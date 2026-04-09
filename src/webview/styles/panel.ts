@@ -17,6 +17,15 @@ export const rowCardClasses = 'mb-4 p-3 bg-[#0f0f0f] border border-[#333] rounde
 export const saveButtonClasses =
   'w-full py-2.5 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2';
 
+export const saveButtonSavingClasses =
+  'w-full py-2.5 bg-[#1a4d8f] text-white/70 border-none rounded-[10px] font-bold text-sm cursor-not-allowed mt-2';
+
+export const saveButtonSuccessClasses =
+  'w-full py-2.5 bg-[#1a7f37] text-white border-none rounded-[10px] font-bold text-sm cursor-default mt-2';
+
+export const saveButtonErrorClasses =
+  'w-full py-2.5 bg-[#6e2b2b] text-[#f87171] border-none rounded-[10px] font-bold text-sm cursor-pointer mt-2';
+
 export const footerSaveButtonClasses =
   'w-full py-3 bg-[#1f6feb] text-white border-none rounded-[10px] font-bold text-sm cursor-pointer';
 
@@ -31,5 +40,3 @@ export const addButtonClasses =
 
 export const addButtonSmClasses =
   'text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1';
-
-export const BACKEND_TYPES = ['s3', 'gcs', 'azurerm', 'local', 'remote'];
