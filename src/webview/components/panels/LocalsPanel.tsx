@@ -84,6 +84,7 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
   }, []);
 
   const handleSave = () => {
+    if (hasErrors) return;
     onSave(fromRows(rows));
   };
 
@@ -95,6 +96,21 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
       nameErrors[i] = 'Invalid Terraform identifier';
     }
   });
+
+  // Duplicate local name check
+  const seenNames = new Map<string, number>();
+  rows.forEach((r, i) => {
+    const n = r.name.trim().toLowerCase();
+    if (!n) return;
+    if (seenNames.has(n)) {
+      nameErrors[i] = 'Duplicate local name';
+      const prev = seenNames.get(n)!;
+      if (!nameErrors[prev]) nameErrors[prev] = 'Duplicate local name';
+    }
+    seenNames.set(n, i);
+  });
+
+  const hasErrors = Object.keys(nameErrors).length > 0;
 
   return (
     <>
@@ -156,7 +172,13 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
       </button>
 
       {/* Inline save */}
-      <button className={saveButtonClasses} onClick={handleSave}>
+      <button
+        className={saveButtonClasses}
+        onClick={handleSave}
+        disabled={hasErrors}
+        title={hasErrors ? 'Fix errors before saving' : undefined}
+        style={hasErrors ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+      >
         Save locals
       </button>
     </>
