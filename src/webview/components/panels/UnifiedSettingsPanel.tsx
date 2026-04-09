@@ -12,9 +12,10 @@ import { EnvironmentsContent } from './EnvironmentsPanel';
 type Props = {
   engine: CanvasEngine;
   onClose: () => void;
+  onSaved?: () => void;
 };
 
-export default function UnifiedSettingsPanel({ engine, onClose }: Props) {
+export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props) {
   const [settings, setSettings] = useState<SettingsConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,6 +58,7 @@ export default function UnifiedSettingsPanel({ engine, onClose }: Props) {
                 : undefined,
               terraform.backend,
             );
+            onSaved?.();
           }}
         />
       </AccordionSection>
@@ -72,6 +74,7 @@ export default function UnifiedSettingsPanel({ engine, onClose }: Props) {
                 config: p.config,
               })),
             );
+            onSaved?.();
           }}
         />
       </AccordionSection>
@@ -95,6 +98,7 @@ export default function UnifiedSettingsPanel({ engine, onClose }: Props) {
                 return { name: l.name, mode: l.mode, value };
               }),
             );
+            onSaved?.();
           }}
         />
       </AccordionSection>
@@ -105,6 +109,7 @@ export default function UnifiedSettingsPanel({ engine, onClose }: Props) {
           environment_backends={settings.environment_backends}
           onSave={async (environments, backends) => {
             await engine.setEnvironments(environments, backends);
+            onSaved?.();
           }}
         />
       </AccordionSection>
