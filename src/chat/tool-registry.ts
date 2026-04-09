@@ -10,6 +10,10 @@ export type ToolHandler = (params: Record<string, unknown>) => Promise<ToolResul
 const handlers = new Map<string, ToolHandler>();
 
 export function registerTool(name: string, handler: ToolHandler): void {
+  if (handlers.has(name)) {
+    // Log to console — avoids importing vscode here (unit tests don't mock it at module level)
+    console.warn(`[lace] Warning: tool ${name} re-registered, previous handler replaced.`);
+  }
   handlers.set(name, handler);
 }
 

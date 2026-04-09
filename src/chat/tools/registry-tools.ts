@@ -1,6 +1,7 @@
 // src/chat/tools/registry-tools.ts
 //
 // Tool: lace_search_registry — search the module registry.
+// Tool: lace_inspect_module — get full input/output schema for a specific module.
 
 import type { LaceClient } from '../../utilities/engine/grpc-client';
 import type { RegistryModule } from '../../types/protocol';
@@ -11,7 +12,10 @@ import { requireEngine, errorMessage } from './helpers';
 export type RegistryToolDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
 };
+
+const MAX_SEARCH_LIMIT = 50;
 
 function formatModuleLine(m: {
   name: string;
@@ -30,33 +34,92 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     const query = (params.query as string | undefined) ?? '';
     const system = params.system as string | undefined;
     const category = params.category as string | undefined;
-    const limit = (params.limit as number | undefined) ?? 20;
+    const rawLimit = (params.limit as number | undefined) ?? 20;
+    const limit = Math.min(rawLimit, MAX_SEARCH_LIMIT);
 
-    // Try RPC search first (more accurate, server-side filtering)
+    // Try RPC search — fan out across public registry + all user orgs in parallel
     const client = deps.getRpcClient();
     if (client) {
       try {
-        const result = await client.listRegistryModules({
-          search: query || undefined,
-          system: system || undefined,
-          category: category || undefined,
-          limit,
-        });
+        const orgs = deps.getUserOrgs();
+        const orgSlugs = orgs.map((o) => o.slug);
 
-        const modules = result?.modules ?? [];
+        // Search public registry (org='') + each user org in parallel
+        const searches = ['', ...orgSlugs].map((org) =>
+          client
+            .listRegistryModules({
+              search: query || undefined,
+              system: system || undefined,
+              category: category || undefined,
+              limit,
+              organization: org,
+            })
+            .then((r) => r?.modules ?? [])
+            .catch(() => [] as RegistryModule[]),
+        );
+
+        const results = await Promise.all(searches);
+
+        // Merge, deduplicate by id
+        const seen = new Set<string>();
+        const rpcModules: RegistryModule[] = [];
+        for (const batch of results) {
+          for (const m of batch) {
+            if (!seen.has(m.id)) {
+              seen.add(m.id);
+              rpcModules.push(m);
+            }
+          }
+        }
+
+        // Augment with description/category matches — server only searches by name.
+        // Fetch all modules per org (no query filter) and search descriptions client-side.
+        const q = query.toLowerCase();
+        let descriptionMatches: RegistryModule[] = [];
+        if (q) {
+          // Fetch all modules for public + each org with no search query, filter by description
+          const allFetches = ['', ...orgSlugs].map((org) =>
+            client
+              .listRegistryModules({
+                system: system || undefined,
+                limit: MAX_SEARCH_LIMIT,
+                organization: org,
+              })
+              .then((r) => r?.modules ?? [])
+              .catch(() => [] as RegistryModule[]),
+          );
+          const allBatches = await Promise.all(allFetches);
+          for (const batch of allBatches) {
+            for (const m of batch) {
+              if (
+                !seen.has(m.id) &&
+                (m.description?.toLowerCase().includes(q) ||
+                  m.categories?.some((c) => c.toLowerCase().includes(q)))
+              ) {
+                seen.add(m.id);
+                descriptionMatches.push(m);
+              }
+            }
+          }
+        }
+
+        const modules = [...rpcModules, ...descriptionMatches].slice(0, limit);
+
         if (modules.length === 0) {
-          return { content: 'No modules found matching your search.' };
+          return {
+            content: `No modules found matching your search. Try broader terms, remove the system filter, or check that the Lace engine is running and authenticated.`,
+          };
         }
 
         const lines = modules.map(formatModuleLine);
-
-        return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
+        const limitNote = rawLimit > MAX_SEARCH_LIMIT ? ` (showing top ${MAX_SEARCH_LIMIT})` : '';
+        return { content: `Found ${modules.length} module(s)${limitNote}:\n\n${lines.join('\n')}` };
       } catch {
-        // Fall through to local search
+        // Fall through to local search — note the fallback
       }
     }
 
-    // Fallback: search locally cached modules
+    // Fallback: search locally cached modules (may be stale)
     let modules = deps.getRegistryModules();
     if (query) {
       const q = query.toLowerCase();
@@ -78,12 +141,15 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     modules = modules.slice(0, limit);
 
     if (modules.length === 0) {
-      return { content: 'No modules found matching your search.' };
+      return {
+        content: `No modules found matching your search. Try broader terms, remove the system filter, or check that the Lace engine is running and authenticated.`,
+      };
     }
 
     const lines = modules.map(formatModuleLine);
-
-    return { content: `Found ${modules.length} module(s):\n\n${lines.join('\n')}` };
+    return {
+      content: `⚠ Showing cached registry (engine not reachable). Results may be stale.\n\nFound ${modules.length} module(s):\n\n${lines.join('\n')}`,
+    };
   });
 
   // ─────────────────────────────────────────────
@@ -96,6 +162,26 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
 
     if (!name) {
       return { content: 'Missing required parameter: name', isError: true };
+    }
+
+    // Guard: if the name has no "/" and is a plain Terraform identifier (letters/digits/underscores only,
+    // no hyphens, not a known cloud system name), it is likely a canvas instance ID not a module name.
+    // Instance IDs: "vpc", "subnet_1", "my_cluster"
+    // Registry modules: "aws/vpc", "azure/resource-group" (always contain "/")
+    // Allow: "aws", "azure", "gcp" (system names used for fuzzy search)
+    const knownSystems = new Set(['aws', 'azure', 'gcp', 'google', 'kubernetes', 'k8s']);
+    const looksLikeInstanceId =
+      !name.includes('/') &&
+      !name.includes('-') &&
+      !knownSystems.has(name.toLowerCase()) &&
+      /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name) &&
+      name.length < 30;
+
+    if (looksLikeInstanceId) {
+      return {
+        content: `"${name}" looks like a canvas instance ID, not a registry module name. Use lace_inspect_node with instance_id="${name}" to inspect a placed instance. Registry module names follow the pattern "system/name" (e.g., "aws/vpc"). Use lace_search_registry to find module names.`,
+        isError: true,
+      };
     }
 
     // Find the module in local cache first to get system/version
@@ -154,7 +240,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
 
       if (!versionResponse?.deploy_bundle && !versionResponse?.module_interface) {
         return {
-          content: `**${match.name}** (${match.system}, v${match.version})\nNo deploy bundle available.`,
+          content: `**${match.name}** (${match.system}, v${match.version})\nModule found but schema not available. Add the module to the canvas with lace_add_module, then use lace_inspect_node to see its inputs/outputs.`,
         };
       }
 

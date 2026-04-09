@@ -45,6 +45,9 @@ export type SessionMetadata = {
   endTime?: number;
 };
 
+// Circular buffer — keep only last 100 sessions to avoid memory leak
+const MAX_SESSIONS = 100;
+const sessionBuffer: SessionMetadata[] = [];
 let sessionCounter = 0;
 
 /**
@@ -62,6 +65,12 @@ export function startSession(prompt: string, command?: string): SessionMetadata 
     rounds: 0,
     startTime: Date.now(),
   };
+
+  // Circular buffer eviction
+  if (sessionBuffer.length >= MAX_SESSIONS) {
+    sessionBuffer.shift();
+  }
+  sessionBuffer.push(session);
 
   const ch = getChannel();
   ch.appendLine('');
@@ -83,7 +92,9 @@ export function logToolInvocation(
   result: { content: string; isError?: boolean },
   durationMs: number,
 ): void {
-  const preview = truncate(result.content, 200);
+  // Use longer truncation for errors so diagnostics are readable
+  const maxPreview = result.isError ? 500 : 200;
+  const preview = truncate(result.content, maxPreview);
   const record: ToolInvocationRecord = {
     name,
     params,
@@ -107,7 +118,7 @@ export function logToolInvocation(
 /**
  * End a session and log a summary.
  */
-export function endSession(session: SessionMetadata): void {
+export function endSession(session: SessionMetadata, maxToolRounds?: number): void {
   session.endTime = Date.now();
   const totalMs = session.endTime - session.startTime;
 
@@ -129,6 +140,13 @@ export function endSession(session: SessionMetadata): void {
       .map(([n, c]) => `${n}×${c}`)
       .join(', ');
     ch.appendLine(`  breakdown: ${breakdown}`);
+  }
+
+  // Detect stuck loop: hit max rounds
+  if (maxToolRounds !== undefined && session.rounds >= maxToolRounds) {
+    ch.appendLine(
+      `  ⚠ session hit MAX_TOOL_ROUNDS (${maxToolRounds}) — possible stuck loop. Tool sequence: ${toolNames.join(' → ')}`,
+    );
   }
 
   // Detect unmatched intent: non-trivial prompt but no tools were called

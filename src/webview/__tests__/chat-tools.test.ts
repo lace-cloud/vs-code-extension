@@ -75,6 +75,7 @@ function makeWriteDeps(): GraphWriteDeps {
     getRpcClient: () =>
       mockClient as unknown as import('../../utilities/engine/grpc-client').LaceClient,
     getRegistryModules: () => testModules,
+    getUserOrgs: () => [],
   };
 }
 
@@ -95,12 +96,14 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('aws/vpc');
-      expect(result.content).toContain('instance "vpc"');
-      expect(mockClient.getRegistryVersion).toHaveBeenCalledWith({
-        name: 'aws/vpc',
-        system: 'aws',
-        version: 'v1.0.0',
-      });
+      expect(result.content).toContain('instance **"vpc"**');
+      expect(mockClient.getRegistryVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'aws/vpc',
+          system: 'aws',
+          version: '1.0.0',
+        }),
+      );
       expect(mockClient.dropBundle).toHaveBeenCalledWith({
         deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} },
       });
@@ -116,11 +119,13 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('azure/resource-group');
-      expect(mockClient.getRegistryVersion).toHaveBeenCalledWith({
-        name: 'azure/resource-group',
-        system: 'azure',
-        version: 'v2.0.0',
-      });
+      expect(mockClient.getRegistryVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'azure/resource-group',
+          system: 'azure',
+          version: '2.0.0',
+        }),
+      );
     });
 
     test('disambiguates multiple fuzzy matches', async () => {
@@ -140,7 +145,7 @@ describe('write tools', () => {
       const result = await handler({ name: 'aws/vpc' });
 
       expect(result.isError).toBe(true);
-      expect(result.content).toContain('no deploy bundle');
+      expect(result.content).toContain('was not found in any of your registries');
     });
   });
 
@@ -263,7 +268,7 @@ describe('generate tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Terraform generated successfully');
-      expect(result.content).toContain('1 file(s) written');
+      expect(result.content).toContain('Files written to');
       expect(mockClient.sessionGenerate).toHaveBeenCalledWith({
         output_dir: '/tmp/test-workspace/.lace',
         options: {

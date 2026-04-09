@@ -765,7 +765,7 @@ export default function Canvas() {
       const loc = d.file ? ` (${d.file}${d.line != null ? `:${d.line}` : ''})` : '';
       return `- ${d.message}${loc}`;
     });
-    const prompt = `@lace Fix these Terraform validation errors:\n${lines.join('\n')}`;
+    const prompt = `@lace Fix these Terraform validation errors:\n${lines.join('\n')}\n\nFor any values you cannot determine from the canvas state or wired connections (e.g., DNS names, record types, resource names, AMI IDs), ask me — do not guess or use placeholder values.`;
     window.dispatchEvent(new CustomEvent('solveWithLace', { detail: { prompt } }));
   }, [validationErrors]);
 
@@ -909,7 +909,14 @@ export default function Canvas() {
         {/* Unified settings panel */}
         <SlidePanel open={settingsOpen}>
           {settingsOpen && (
-            <UnifiedSettingsPanel engine={engine} onClose={() => setSettingsOpen(false)} />
+            <UnifiedSettingsPanel
+              engine={engine}
+              onClose={() => setSettingsOpen(false)}
+              onSaved={() => {
+                setToast({ message: 'Settings saved', type: 'success' });
+                setTimeout(() => setToast(null), TOAST_BRIEF);
+              }}
+            />
           )}
         </SlidePanel>
       </div>

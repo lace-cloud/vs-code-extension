@@ -207,9 +207,43 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
     [],
   );
 
+  // ── Validation: duplicate detection ──
+
+  // Duplicate environment names
+  const envNameDupes = new Set<number>();
+  const seenEnvNames = new Map<string, number>();
+  envRows.forEach((env, ei) => {
+    const n = env.name.trim().toLowerCase();
+    if (!n) return;
+    if (seenEnvNames.has(n)) {
+      envNameDupes.add(ei);
+      envNameDupes.add(seenEnvNames.get(n)!);
+    }
+    seenEnvNames.set(n, ei);
+  });
+
+  // Duplicate variable keys within each environment
+  const envVarDupes: Record<number, Set<number>> = {};
+  envRows.forEach((env, ei) => {
+    const seen = new Map<string, number>();
+    env.vars.forEach((v, vi) => {
+      const k = v.key.trim().toLowerCase();
+      if (!k) return;
+      if (seen.has(k)) {
+        if (!envVarDupes[ei]) envVarDupes[ei] = new Set();
+        envVarDupes[ei].add(vi);
+        envVarDupes[ei].add(seen.get(k)!);
+      }
+      seen.set(k, vi);
+    });
+  });
+
+  const hasDuplicates = envNameDupes.size > 0 || Object.keys(envVarDupes).length > 0;
+
   // ── Save ──
 
   const handleSave = () => {
+    if (hasDuplicates) return;
     onSave(fromEnvRows(envRows), fromBackendRows(backendRows));
   };
 
@@ -235,17 +269,20 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
         <>
           {envRows.map((env, ei) => (
             <div key={ei} className={rowCardClasses}>
-              <div className="flex gap-2 mb-2">
+              <div className="flex gap-2 mb-1">
                 <input
                   value={env.name}
                   onChange={(e) => updateEnvName(ei, e.target.value)}
                   placeholder="Environment name (e.g. dev)"
-                  className={`${inputClasses} flex-1 font-bold`}
+                  className={`${inputClasses} flex-1 font-bold ${envNameDupes.has(ei) ? 'border-[#e5484d]' : ''}`}
                 />
                 <button onClick={() => removeEnv(ei)} className={removeButtonClasses}>
                   ✕
                 </button>
               </div>
+              {envNameDupes.has(ei) && (
+                <div className="text-[10px] text-[#e5484d] mb-2">Duplicate environment name</div>
+              )}
 
               <div className="text-[11px] opacity-70 mb-2">Variable overrides</div>
               {env.vars.map((v, vi) => (
@@ -254,7 +291,8 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
                     value={v.key}
                     onChange={(e) => updateEnvVar(ei, vi, 'key', e.target.value)}
                     placeholder="Variable name"
-                    className={`${inputClasses} flex-1`}
+                    className={`${inputClasses} flex-1 ${envVarDupes[ei]?.has(vi) ? 'border-[#e5484d]' : ''}`}
+                    title={envVarDupes[ei]?.has(vi) ? 'Duplicate variable name' : undefined}
                   />
                   <input
                     value={v.value}
@@ -340,9 +378,20 @@ export function EnvironmentsContent({ environments, environment_backends, onSave
       )}
 
       {/* Inline save */}
-      <button className={saveButtonClasses} onClick={handleSave}>
+      <button
+        className={saveButtonClasses}
+        onClick={handleSave}
+        disabled={hasDuplicates}
+        title={hasDuplicates ? 'Fix duplicate names before saving' : undefined}
+        style={hasDuplicates ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+      >
         Save environments
       </button>
+      {hasDuplicates && (
+        <div className="text-[10px] text-[#e5484d] mt-1">
+          Fix duplicate environment or variable names before saving.
+        </div>
+      )}
     </>
   );
 }

@@ -41,6 +41,7 @@ function makeDeps(modules: RegistryModule[] = allModules): RegistryToolDeps {
   return {
     getRpcClient: () => null, // No RPC — use local fallback
     getRegistryModules: () => modules,
+    getUserOrgs: () => [],
   };
 }
 
@@ -136,6 +137,7 @@ describe('lace_inspect_module', () => {
     registerRegistryTools({
       getRpcClient: () => mockClient as any,
       getRegistryModules: () => allModules,
+      getUserOrgs: () => [],
     });
 
     const handler = getToolHandler('lace_inspect_module')!;

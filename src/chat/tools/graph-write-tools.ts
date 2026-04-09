@@ -1,7 +1,7 @@
 // src/chat/tools/graph-write-tools.ts
 //
 // Write tools: lace_add_module, lace_remove_module, lace_connect,
-// lace_disconnect, lace_set_input, lace_rename_instance.
+// lace_disconnect, lace_set_input, lace_rename_instance, lace_set_variable, lace_undo.
 // All operations go through RPC to the CLI.
 
 import type { LaceClient } from '../../utilities/engine/grpc-client';
@@ -16,6 +16,7 @@ import { findFreePosition } from '../../webview/utils/layout';
 export type GraphWriteDeps = {
   getRpcClient: () => LaceClient | null;
   getRegistryModules: () => RegistryModule[];
+  getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
   getCanvasView?: () => CanvasView | undefined;
   publishCanvasView?: (state: CanvasView) => void;
 };
@@ -32,35 +33,95 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   registerTool('lace_add_module', async (params): Promise<ToolResult> => {
     const name = params.name as string | undefined;
     const system = params.system as string | undefined;
+    const requestedVersion = params.version as string | undefined;
 
     if (!name) {
       return { content: 'Missing required parameter: name', isError: true };
     }
 
+    // Normalize: "ec2 instance" / "ec2_instance" / "ec2-instance" all become "ec2-instance"
+    const normalize = (s: string) => s.toLowerCase().replace(/[\s_]+/g, '-');
+    const nameNorm = normalize(name);
+
     const modules = deps.getRegistryModules();
-    const nameLower = name.toLowerCase();
     const systemLower = system?.toLowerCase();
 
+    // 1. Exact normalized match
     let match = modules.find(
       (m) =>
-        m.name.toLowerCase() === nameLower &&
-        (!systemLower || m.system.toLowerCase() === systemLower),
+        normalize(m.name) === nameNorm && (!systemLower || m.system.toLowerCase() === systemLower),
     );
 
+    // 2. Fuzzy: input is a substring of module name/id (or vice versa)
     if (!match) {
       const candidates = modules.filter(
         (m) =>
-          (m.name.toLowerCase().includes(nameLower) || m.id.toLowerCase().includes(nameLower)) &&
+          (normalize(m.name).includes(nameNorm) ||
+            normalize(m.id).includes(nameNorm) ||
+            nameNorm.includes(normalize(m.name))) &&
           (!systemLower || m.system.toLowerCase() === systemLower),
       );
       if (candidates.length === 1) {
         match = candidates[0];
       } else if (candidates.length > 1) {
-        const names = candidates.slice(0, 5).map((m) => `${m.name} (${m.system})`);
+        const names = candidates
+          .slice(0, 5)
+          .map(
+            (m) =>
+              `${m.name} (${m.system}, v${m.version})${m.description ? ` — ${m.description}` : ''}`,
+          );
         return {
           content: `Multiple modules match "${name}". Please be more specific:\n${names.join('\n')}`,
           isError: true,
         };
+      }
+    }
+
+    // 3. Not in local cache — search across all user orgs via RPC
+    //    The user is a member of these orgs, so they have access to private modules.
+    let matchOrg: string | undefined;
+    if (!match) {
+      const client = deps.getRpcClient();
+      if (client) {
+        try {
+          const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
+          const orgKeys = ['', ...orgSlugs];
+          const searches = orgKeys.map((org) =>
+            client
+              .listRegistryModules({
+                search: name,
+                system: system || undefined,
+                limit: 10,
+                organization: org,
+              })
+              .then((r) => ({ org, modules: r?.modules ?? [] }))
+              .catch(() => ({ org, modules: [] as RegistryModule[] })),
+          );
+          const results = await Promise.all(searches);
+          for (const { org, modules: mods } of results) {
+            const found = mods.find((m) => normalize(m.name) === nameNorm);
+            if (found) {
+              match = found;
+              matchOrg = org;
+              break;
+            }
+          }
+          // Fuzzy fallback on RPC results too
+          if (!match) {
+            for (const { org, modules: mods } of results) {
+              const found = mods.find(
+                (m) => normalize(m.name).includes(nameNorm) || nameNorm.includes(normalize(m.name)),
+              );
+              if (found) {
+                match = found;
+                matchOrg = org;
+                break;
+              }
+            }
+          }
+        } catch {
+          // RPC failed — fall through to error
+        }
       }
     }
 
@@ -71,19 +132,69 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
+    // Normalize version to match registry format (no "v" prefix — registry uses "1.0.8" not "v1.0.8")
+    let versionToAdd = requestedVersion ?? match.version;
+    if (versionToAdd.startsWith('v')) {
+      versionToAdd = versionToAdd.slice(1);
+    }
+
     const engineResult = requireEngine(deps.getRpcClient);
     if ('error' in engineResult) return engineResult.error;
 
     try {
-      // Step 1: Fetch deploy bundle from registry
-      const versionResult = await engineResult.client.getRegistryVersion({
+      // Fetch deploy bundle — same path as the sidebar "Add to Canvas" button.
+      // First call: no organization param → client uses resolvedOrg (the selected org).
+      // If that fails, try each user org explicitly.
+      const versionParams = {
         name: match.name,
         system: match.system,
-        version: match.version,
-      });
+        version: versionToAdd,
+      };
+
+      let versionResult: Awaited<ReturnType<typeof engineResult.client.getRegistryVersion>> | null =
+        null;
+
+      // First: use client's resolvedOrg (same as sidebar)
+      try {
+        versionResult = await engineResult.client.getRegistryVersion(
+          matchOrg !== undefined ? { ...versionParams, organization: matchOrg } : versionParams,
+        );
+      } catch {
+        // Fall through to org-by-org search
+      }
+
+      // If no deploy bundle, try each org the user is a member of
+      if (
+        !versionResult?.deploy_bundle ||
+        (Buffer.isBuffer(versionResult.deploy_bundle) && versionResult.deploy_bundle.length === 0)
+      ) {
+        const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
+        for (const org of orgSlugs) {
+          try {
+            versionResult = await engineResult.client.getRegistryVersion({
+              ...versionParams,
+              organization: org,
+            });
+            if (
+              versionResult?.deploy_bundle &&
+              (!Buffer.isBuffer(versionResult.deploy_bundle) ||
+                versionResult.deploy_bundle.length > 0)
+            ) {
+              break;
+            }
+            versionResult = null;
+          } catch {
+            // Not in this org — continue
+          }
+        }
+      }
+
       const deployBundle = versionResult?.deploy_bundle;
-      if (!deployBundle) {
-        return { content: 'Module has no deploy bundle.', isError: true };
+      if (!deployBundle || (Buffer.isBuffer(deployBundle) && deployBundle.length === 0)) {
+        return {
+          content: `Module "${match.name}" ${versionToAdd} was not found in any of your registries. Check the version exists or omit version to use the latest.`,
+          isError: true,
+        };
       }
 
       // Step 2: Apply deploy bundle. CLI ignores the position field, so we
@@ -91,8 +202,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       const existingNodes = getCanvasView()?.nodes ?? [];
       const existingIds = new Set(existingNodes.map((n) => n.id));
 
-      // Anchor to the last node in the current view — reflects where the user
-      // last worked, including any drags that happened before this call.
+      // Anchor to the last node in the current view
       const anchor =
         existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
 
@@ -115,24 +225,58 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
 
       publishCanvasView(canvasView);
 
-      // Find the newly added node from the returned canvas view
-      const addedNode = canvasView.nodes.find(
-        (n) => n.module_key && n.module_key.includes(match!.id),
-      );
-      const instanceId = addedNode?.id;
+      // Find the newly added instance ID — try module_key match first, then new node
+      let instanceId =
+        canvasView.nodes.find((n) => n.module_key && n.module_key.includes(match!.id))?.id ??
+        newNodes[0]?.id;
+
+      // Build response with required inputs so model can set them immediately
+      const lines: string[] = [];
 
       if (instanceId) {
-        return {
-          content: `Added **${match.name}** (${match.system}, v${match.version}) to the canvas as instance "${instanceId}".`,
-        };
+        lines.push(
+          `Added **${match.name}** (${match.system}, ${versionToAdd}) to the canvas as instance **"${instanceId}"**.`,
+        );
+      } else {
+        lines.push(
+          `Added **${match.name}** (${match.system}, ${versionToAdd}) to the canvas. Use lace_describe_graph to find the instance ID.`,
+        );
       }
 
-      return {
-        content: `Added **${match.name}** (${match.system}, v${match.version}) to the canvas. Use lace_describe_graph to find the instance ID.`,
-      };
+      // Fetch and show required inputs so model can fill them
+      if (instanceId) {
+        try {
+          const config = await engineResult.client.queryNodeConfig({ instance_id: instanceId });
+          const required = config.inputs.filter((i) => i.required && i.mode === 'empty');
+          const optional = config.inputs.filter((i) => !i.required && i.mode === 'empty');
+          if (required.length > 0) {
+            lines.push('');
+            lines.push('**Required inputs (must be set before generating):**');
+            for (const inp of required) {
+              const desc = inp.description ? ` — ${inp.description}` : '';
+              lines.push(`- \`${inp.name}\` (${inp.type})${desc}`);
+            }
+          }
+          if (optional.length > 0) {
+            lines.push('');
+            lines.push(`**Optional inputs:** ${optional.map((i) => `\`${i.name}\``).join(', ')}`);
+          }
+        } catch {
+          // Non-fatal — instance was added, just can't fetch config right now
+        }
+      }
+
+      return { content: lines.join('\n') };
     } catch (err: unknown) {
+      const msg = errorMessage(err);
+      const isVersionNotFound =
+        msg.includes('404') || msg.includes('not found') || msg.includes('Not Found');
+      const versionHint =
+        requestedVersion && isVersionNotFound
+          ? ` Version "${versionToAdd}" may not exist. Use lace_inspect_module to check available versions, or omit the version to add the latest.`
+          : '';
       return {
-        content: `Failed to add module: ${errorMessage(err)}`,
+        content: `Failed to add module: ${msg}${versionHint}`,
         isError: true,
       };
     }
@@ -150,10 +294,35 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     const engineResult = requireEngine(deps.getRpcClient);
     if ('error' in engineResult) return engineResult.error;
 
+    // Warn about incoming connections that will be severed
+    let warnLines: string[] = [];
+    try {
+      const view = getCanvasView();
+      if (view) {
+        const affectedEdges = view.edges.filter(
+          (e) => e.source === instanceId || e.target === instanceId,
+        );
+        if (affectedEdges.length > 0) {
+          warnLines = affectedEdges.map(
+            (e) => `- ${e.source}.${e.source_output} → ${e.target}.${e.target_input}`,
+          );
+        }
+      }
+    } catch {
+      // Non-fatal
+    }
+
     try {
       const canvasView = await engineResult.client.deleteInstance({ instance_id: instanceId });
       publishCanvasView(canvasView);
-      return { content: `Removed instance "${instanceId}" from the canvas.` };
+
+      const lines = [`Removed instance "${instanceId}" from the canvas.`];
+      if (warnLines.length > 0) {
+        lines.push('');
+        lines.push('The following connections were also removed:');
+        lines.push(...warnLines);
+      }
+      return { content: lines.join('\n') };
     } catch (err: unknown) {
       return { content: `Failed to remove instance: ${errorMessage(err)}`, isError: true };
     }
@@ -171,7 +340,21 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if (!sourceInstance || !targetInstance || !sourceOutput || !targetInput) {
       return {
         content:
-          'Missing required parameters: source_instance, target_instance, source_output, target_input',
+          'Missing required parameters: source_instance, target_instance, source_output, target_input. Use lace_inspect_node on each instance to see available outputs and inputs.',
+        isError: true,
+      };
+    }
+
+    if (!sourceOutput.trim()) {
+      return {
+        content: `source_output cannot be empty. Use lace_inspect_node on "${sourceInstance}" to see available outputs.`,
+        isError: true,
+      };
+    }
+
+    if (!targetInput.trim()) {
+      return {
+        content: `target_input cannot be empty. Use lace_inspect_node on "${targetInstance}" to see available inputs.`,
         isError: true,
       };
     }
@@ -191,7 +374,13 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
         content: `Connected ${sourceInstance}.${sourceOutput} → ${targetInstance}.${targetInput}`,
       };
     } catch (err: unknown) {
-      return { content: `Failed to connect: ${errorMessage(err)}`, isError: true };
+      const msg = errorMessage(err);
+      const notFound =
+        msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('unknown');
+      return {
+        content: `Failed to connect: ${msg}${notFound ? '\nUse lace_inspect_node on each instance to see exact output/input names. Instance IDs come from the canvas snapshot.' : ''}`,
+        isError: true,
+      };
     }
   });
 
@@ -288,8 +477,14 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
           : mode === 'variable'
             ? `variable "${variable}"`
             : `expression "${expression}"`;
+
+      const note =
+        mode === 'expression'
+          ? '\nHCL expression set. Run lace_validate_graph to check for errors.'
+          : '';
+
       return {
-        content: `Set ${instanceId}.${inputName} to ${desc}.`,
+        content: `Set ${instanceId}.${inputName} to ${desc}.${note}`,
       };
     } catch (err: unknown) {
       return { content: `Failed to set input: ${errorMessage(err)}`, isError: true };
@@ -323,9 +518,100 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     try {
       const canvasView = await engineResult.client.renameInstance({ old_id: oldId, new_id: newId });
       publishCanvasView(canvasView);
-      return { content: `Renamed instance "${oldId}" to "${newId}".` };
+
+      const lines = [`Renamed instance "${oldId}" to "${newId}".`];
+
+      // Auto-validate after rename to catch dangling references
+      try {
+        const validation = await engineResult.client.queryValidate();
+        if (validation.errors.length > 0) {
+          lines.push('');
+          lines.push(`⚠ Validation found ${validation.errors.length} error(s) after rename:`);
+          for (const err of validation.errors) {
+            const loc = [err.instance_id, err.input_name].filter(Boolean).join('.');
+            lines.push(`- ${loc ? `[${loc}] ` : ''}${err.message}`);
+          }
+          lines.push('Fix with lace_set_input or lace_connect.');
+        }
+      } catch {
+        // Non-fatal
+      }
+
+      return { content: lines.join('\n') };
     } catch (err: unknown) {
       return { content: `Failed to rename instance: ${errorMessage(err)}`, isError: true };
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // lace_set_variable — add/update a canvas-level variable
+  // ─────────────────────────────────────────────
+  registerTool('lace_set_variable', async (params): Promise<ToolResult> => {
+    const varName = params.name as string | undefined;
+    const varType = params.type as string | undefined;
+
+    if (!varName || !varType) {
+      return {
+        content: 'Missing required parameters: name, type',
+        isError: true,
+      };
+    }
+
+    if (!isValidTerraformIdentifier(varName)) {
+      return {
+        content: `"${varName}" is not a valid Terraform identifier for a variable name.`,
+        isError: true,
+      };
+    }
+
+    const required = typeof params.required === 'boolean' ? params.required : true;
+    const description = typeof params.description === 'string' ? params.description : undefined;
+    const defaultValue = params.default !== undefined ? params.default : undefined;
+
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
+
+    // Get existing variables, update or add the one specified
+    try {
+      const canvasView = await engineResult.client.setVariables({
+        variables: [
+          {
+            name: varName,
+            type: varType,
+            required,
+            description,
+            default: defaultValue,
+          },
+        ],
+      });
+      publishCanvasView(canvasView);
+
+      const reqLabel = required ? 'required' : 'optional';
+      const defLabel =
+        defaultValue !== undefined ? `, default: ${JSON.stringify(defaultValue)}` : '';
+      return {
+        content: `Variable \`${varName}\` (${varType}, ${reqLabel}${defLabel}) added to canvas. Use lace_set_input with variable: "${varName}" to bind it to an input.`,
+      };
+    } catch (err: unknown) {
+      return { content: `Failed to set variable: ${errorMessage(err)}`, isError: true };
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // lace_undo — undo last canvas change
+  // ─────────────────────────────────────────────
+  registerTool('lace_undo', async (): Promise<ToolResult> => {
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
+
+    try {
+      const canvasView = await engineResult.client.undo();
+      publishCanvasView(canvasView);
+      return {
+        content: `Undone. Canvas now has ${canvasView.nodes.length} instance(s) and ${canvasView.edges.length} connection(s).`,
+      };
+    } catch (err: unknown) {
+      return { content: `Failed to undo: ${errorMessage(err)}`, isError: true };
     }
   });
 }

@@ -31,6 +31,7 @@ const CONTEXT_FILES = [
 ];
 
 const MAX_FILE_BYTES = 4096;
+const MAX_CONTEXT_FILES = 8;
 
 export function registerWorkspaceTools(): void {
   registerTool('lace_workspace_context', async (): Promise<ToolResult> => {
@@ -61,30 +62,53 @@ export function registerWorkspaceTools(): void {
       // Ignore directory listing errors
     }
 
-    // Read context files
+    // Read project context files
     const found: string[] = [];
     for (const filename of CONTEXT_FILES) {
       const filePath = path.join(root, filename);
       try {
-        if (!fs.existsSync(filePath)) continue;
-        const stat = fs.statSync(filePath);
-        if (!stat.isFile()) continue;
-
-        const content = fs.readFileSync(filePath, 'utf-8').slice(0, MAX_FILE_BYTES);
-        const truncated = content.length >= MAX_FILE_BYTES ? ' (truncated)' : '';
-
-        lines.push(`### ${filename}${truncated}`);
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const truncated = raw.length > MAX_FILE_BYTES;
+        const content = truncated ? raw.slice(0, MAX_FILE_BYTES) : raw;
+        lines.push(`### ${filename}${truncated ? ' (truncated at 4096 bytes)' : ''}`);
         lines.push('```');
         lines.push(content);
         lines.push('```');
         lines.push('');
         found.push(filename);
       } catch {
-        // Skip unreadable files
+        // File does not exist or is not readable — skip
       }
 
-      // Limit total context
-      if (found.length >= 5) break;
+      if (found.length >= MAX_CONTEXT_FILES) break;
+    }
+
+    // Read existing generated Terraform from .lace/
+    const laceDir = path.join(root, '.lace');
+    try {
+      const laceEntries = fs.readdirSync(laceDir, { withFileTypes: true });
+      const tfFiles = laceEntries.filter((e) => e.isFile() && e.name.endsWith('.tf')).slice(0, 3);
+
+      if (tfFiles.length > 0) {
+        lines.push('### Existing generated Terraform (.lace/)');
+        for (const entry of tfFiles) {
+          const filePath = path.join(laceDir, entry.name);
+          try {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const truncated = raw.length > MAX_FILE_BYTES;
+            const content = truncated ? raw.slice(0, MAX_FILE_BYTES) : raw;
+            lines.push(`#### ${entry.name}${truncated ? ' (truncated)' : ''}`);
+            lines.push('```hcl');
+            lines.push(content);
+            lines.push('```');
+            lines.push('');
+          } catch {
+            // Skip unreadable .lace tf files
+          }
+        }
+      }
+    } catch {
+      // .lace dir doesn't exist yet — that's fine
     }
 
     if (found.length === 0) {

@@ -53,9 +53,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     this.orgChangeCallback = callback;
   }
 
-  /** Get all loaded modules (for command palette quick pick). */
+  /** Get all loaded modules (public + org-private) for command palette and chat tools. */
   getModules(): RegistryModule[] {
-    return this.modules;
+    return [...this.modules, ...this.orgModules];
   }
 
   /** Track a module as recently used (prepend, deduplicate, cap at 5). */
@@ -166,7 +166,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     if (failCount === results.length) {
-      this.errorMessage = 'Lace engine is not available. Start it with "Lace: Start Engine".';
+      if (!this.authenticated) {
+        this.errorMessage = 'Please log in to access the module registry.';
+      } else {
+        this.errorMessage = 'Lace engine is not available. Start it with "Lace: Start Engine".';
+      }
       console.warn('All registry fetches failed');
     } else if (failCount > 0) {
       console.warn(`${failCount} registry system(s) failed to load`);
@@ -881,13 +885,13 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       }
 
       if (allModules.length === 0) {
-        if (!hasEngine) {
-          content.innerHTML = '<div class="empty-state">No modules available.<br/>Is the Lace engine running?</div>';
-        } else if (!authenticated) {
-          content.innerHTML = '<div class="empty-state">No modules available.<br/><button class="retry-btn" id="loginBtn">Login with GitHub</button></div>';
+        if (!authenticated) {
+          content.innerHTML = '<div class="empty-state">Please log in to access the module registry.<br/><button class="retry-btn" id="loginBtn">Login with GitHub</button></div>';
           document.getElementById('loginBtn').addEventListener('click', () => {
             vscode.postMessage({ command: 'login' });
           });
+        } else if (!hasEngine) {
+          content.innerHTML = '<div class="empty-state">No modules available.<br/>Is the Lace engine running?</div>';
         } else {
           content.innerHTML = '<div class="empty-state">No modules available.</div>';
         }
