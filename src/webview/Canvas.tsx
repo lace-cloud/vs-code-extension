@@ -305,7 +305,7 @@ function CompositeEditor({
       defaultEdgeOptions={{
         animated: false,
         markerEnd: { type: MarkerType.ArrowClosed, color: '#CEFE65', width: 16, height: 16 },
-        style: { stroke: '#CEFE65', strokeWidth: 1.5 },
+        /* stroke & width handled by CSS (.react-flow__edge path) for selection support */
       }}
       connectionRadius={25}
       minZoom={0.1}
@@ -313,7 +313,7 @@ function CompositeEditor({
       selectNodesOnDrag={false}
       style={gridStyle}
       proOptions={{ hideAttribution: true }}
-      deleteKeyCode={['Delete']}
+      deleteKeyCode={['Delete', 'Backspace']}
       onNodeContextMenu={(event, node) => {
         event.preventDefault();
         window.dispatchEvent(

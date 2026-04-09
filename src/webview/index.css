@@ -113,6 +113,28 @@
   border: 1px solid rgba(206, 254, 101, 0.15);
 }
 
+/* ── Edges ──
+ * Default edges use the brand green. Selected edges get a brighter
+ * stroke + glow so the user can see what will be deleted on keypress.
+ */
+
+.react-flow__edge path {
+  stroke: #CEFE65;
+  stroke-width: 1.5;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease;
+}
+
+.react-flow__edge.selected path {
+  stroke: #e0ff8a;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px rgba(206, 254, 101, 0.6));
+}
+
+.react-flow__edge:hover path {
+  stroke: #e0ff8a;
+  stroke-width: 2;
+}
+
 /* ── Slide panel ── */
 
 .slide-panel {
