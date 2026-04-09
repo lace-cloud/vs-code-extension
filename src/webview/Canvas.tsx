@@ -909,7 +909,14 @@ export default function Canvas() {
         {/* Unified settings panel */}
         <SlidePanel open={settingsOpen}>
           {settingsOpen && (
-            <UnifiedSettingsPanel engine={engine} onClose={() => setSettingsOpen(false)} />
+            <UnifiedSettingsPanel
+              engine={engine}
+              onClose={() => setSettingsOpen(false)}
+              onSaved={() => {
+                setToast({ message: 'Settings saved', type: 'success' });
+                setTimeout(() => setToast(null), TOAST_BRIEF);
+              }}
+            />
           )}
         </SlidePanel>
       </div>
