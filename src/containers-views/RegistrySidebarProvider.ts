@@ -166,7 +166,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     if (failCount === results.length) {
-      this.errorMessage = 'Lace engine is not available. Start it with "Lace: Start Engine".';
+      if (!this.authenticated) {
+        this.errorMessage = 'Please log in to access the module registry.';
+      } else {
+        this.errorMessage = 'Lace engine is not available. Start it with "Lace: Start Engine".';
+      }
       console.warn('All registry fetches failed');
     } else if (failCount > 0) {
       console.warn(`${failCount} registry system(s) failed to load`);
