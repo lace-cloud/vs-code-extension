@@ -114,7 +114,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     if (!this.rpcClient) {
       this.modules = [];
       this.orgModules = [];
-      this.errorMessage = null;
+      this.errorMessage = !this.authenticated
+        ? 'Please log in to access the module registry.'
+        : null;
       this.updateWebview();
       return;
     }
@@ -877,10 +879,17 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       }
 
       if (errorMessage) {
-        content.innerHTML = '<div class="empty-state">' + escHtml(errorMessage) + '<br/><button class="retry-btn" id="retryBtn">Retry</button></div>';
-        document.getElementById('retryBtn').addEventListener('click', () => {
-          vscode.postMessage({ command: 'refresh' });
-        });
+        if (!authenticated) {
+          content.innerHTML = '<div class="empty-state">' + escHtml(errorMessage) + '<br/><button class="retry-btn" id="loginBtn">Login with GitHub</button></div>';
+          document.getElementById('loginBtn').addEventListener('click', () => {
+            vscode.postMessage({ command: 'login' });
+          });
+        } else {
+          content.innerHTML = '<div class="empty-state">' + escHtml(errorMessage) + '<br/><button class="retry-btn" id="retryBtn">Retry</button></div>';
+          document.getElementById('retryBtn').addEventListener('click', () => {
+            vscode.postMessage({ command: 'refresh' });
+          });
+        }
         return;
       }
 
