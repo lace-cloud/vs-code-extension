@@ -336,7 +336,7 @@
       {
         "name": "lace_get_settings",
         "displayName": "Get Canvas Settings",
-        "modelDescription": "Read the current canvas-level settings: terraform block (required_version, required_providers, backend), configured providers, and locals. Use this to understand what Terraform infrastructure settings are already configured.",
+        "modelDescription": "Read the current canvas-level settings: terraform block, providers, locals, and environment variables. Use this when the user asks about settings, locals, or environment variables, or when you need to reference local/env values for module configuration.",
         "inputSchema": {
           "type": "object",
           "properties": {}
