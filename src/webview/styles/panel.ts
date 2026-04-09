@@ -31,5 +31,3 @@ export const addButtonClasses =
 
 export const addButtonSmClasses =
   'text-[10px] text-[#1f6feb] cursor-pointer bg-transparent border-none mt-1';
-
-export const BACKEND_TYPES = ['s3', 'gcs', 'azurerm', 'local', 'remote'];

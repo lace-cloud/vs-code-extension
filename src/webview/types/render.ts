@@ -71,12 +71,10 @@ export type SettingsConfig = {
   terraform: {
     required_version: string;
     required_providers: Array<{ name: string; source: string; version: string }>;
-    backend?: { type: string; config: Record<string, unknown> };
   };
   providers: Array<{ name: string; alias: string; config: Record<string, unknown> }>;
   locals: Array<{ name: string; mode: string; value_display: string }>;
   environments: Record<string, Record<string, unknown>>;
-  environment_backends: Record<string, { type: string; config: Record<string, unknown> }>;
 };
 
 export type RenderError = {

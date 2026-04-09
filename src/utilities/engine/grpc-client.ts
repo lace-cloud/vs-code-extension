@@ -253,9 +253,6 @@ function convertSettingsConfig(proto: ProtoSettingsConfig): SettingsConfig {
         source: p.source,
         version: p.version,
       })),
-      backend: proto.terraform?.backend
-        ? { type: proto.terraform.backend.type, config: proto.terraform.backend.config ?? {} }
-        : undefined,
     },
     providers: proto.providers.map((p) => ({
       name: p.name,
@@ -268,12 +265,6 @@ function convertSettingsConfig(proto: ProtoSettingsConfig): SettingsConfig {
       value_display: l.value_display,
     })),
     environments: (proto.environments ?? {}) as Record<string, Record<string, unknown>>,
-    environment_backends: Object.fromEntries(
-      Object.entries(proto.environment_backends ?? {}).map(([k, v]) => [
-        k,
-        { type: v.type, config: v.config ?? {} },
-      ]),
-    ),
   };
 }
 
@@ -751,7 +742,6 @@ export class LaceClient {
   async setTerraform(params: {
     required_version?: string;
     required_providers?: Array<{ name: string; source: string; version: string }>;
-    backend?: { type: string; config: Record<string, unknown> };
   }): Promise<Record<string, never>> {
     const requiredProviders: ProviderReqView[] = (params.required_providers ?? []).map((p) => ({
       name: p.name,
@@ -768,9 +758,7 @@ export class LaceClient {
     >(this.inner.setTerraform, {
       required_version: params.required_version ?? '',
       required_providers: requiredProviders,
-      backend: params.backend
-        ? { type: params.backend.type, config: params.backend.config }
-        : undefined,
+      backend: undefined,
     });
     return {};
   }
@@ -820,9 +808,14 @@ export class LaceClient {
 
   async setEnvironments(params: {
     environments: Record<string, Record<string, unknown>>;
-    environment_backends: Record<string, { type: string; config: Record<string, unknown> }>;
   }): Promise<Record<string, never>> {
-    await this.unary<typeof params, Empty>(this.inner.setEnvironments, params);
+    await this.unary<
+      {
+        environments: Record<string, Record<string, unknown>>;
+        environment_backends: Record<string, never>;
+      },
+      Empty
+    >(this.inner.setEnvironments, { environments: params.environments, environment_backends: {} });
     return {};
   }
 
@@ -978,7 +971,6 @@ export class LaceClient {
           params as {
             required_version?: string;
             required_providers?: Array<{ name: string; source: string; version: string }>;
-            backend?: { type: string; config: Record<string, unknown> };
           },
         );
       case 'action/set_providers':
@@ -1005,7 +997,6 @@ export class LaceClient {
         return this.setEnvironments(
           params as {
             environments: Record<string, Record<string, unknown>>;
-            environment_backends: Record<string, { type: string; config: Record<string, unknown> }>;
           },
         );
       case 'action/undo':

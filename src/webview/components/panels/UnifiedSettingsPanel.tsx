@@ -56,7 +56,6 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
                     version: p.version,
                   }))
                 : undefined,
-              terraform.backend,
             );
             onSaved?.();
           }}
@@ -106,9 +105,8 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
       <AccordionSection title="Environments">
         <EnvironmentsContent
           environments={settings.environments}
-          environment_backends={settings.environment_backends}
-          onSave={async (environments, backends) => {
-            await engine.setEnvironments(environments, backends);
+          onSave={async (environments) => {
+            await engine.setEnvironments(environments);
             onSaved?.();
           }}
         />

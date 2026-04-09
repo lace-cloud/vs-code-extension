@@ -112,18 +112,11 @@ export interface CanvasEngine {
   syncLayout(positions: Record<string, { x: number; y: number }>): Promise<void>;
   setVariables(variables: VariableDef[]): Promise<CanvasView>;
   setExports(outputs: OutputExportDef[], outputDefs: OutputDefEntry[]): Promise<CanvasView>;
-  setTerraform(
-    requiredVersion?: string,
-    requiredProviders?: ProviderDef[],
-    backend?: { type: string; config: Record<string, unknown> },
-  ): Promise<void>;
+  setTerraform(requiredVersion?: string, requiredProviders?: ProviderDef[]): Promise<void>;
   setProviders(providers: ProviderConfigDef[]): Promise<void>;
   setLocals(locals: LocalDef[]): Promise<CanvasView>;
   setDependsOn(instanceId: string, dependsOn: string[]): Promise<void>;
-  setEnvironments(
-    environments: Record<string, Record<string, unknown>>,
-    environmentBackends: Record<string, { type: string; config: Record<string, unknown> }>,
-  ): Promise<void>;
+  setEnvironments(environments: Record<string, Record<string, unknown>>): Promise<void>;
   undo(): Promise<CanvasView>;
   redo(): Promise<CanvasView>;
 

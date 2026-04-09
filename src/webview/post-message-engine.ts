@@ -180,15 +180,10 @@ export class PostMessageEngine implements CanvasEngine {
     return this.call('action/set_exports', { outputs, output_defs: outputDefs });
   }
 
-  setTerraform(
-    requiredVersion?: string,
-    requiredProviders?: ProviderDef[],
-    backend?: { type: string; config: Record<string, unknown> },
-  ): Promise<void> {
+  setTerraform(requiredVersion?: string, requiredProviders?: ProviderDef[]): Promise<void> {
     return this.call('action/set_terraform', {
       required_version: requiredVersion,
       required_providers: requiredProviders,
-      backend,
     });
   }
 
@@ -204,13 +199,9 @@ export class PostMessageEngine implements CanvasEngine {
     return this.call('action/set_depends_on', { instance_id: instanceId, depends_on: dependsOn });
   }
 
-  setEnvironments(
-    environments: Record<string, Record<string, unknown>>,
-    environmentBackends: Record<string, { type: string; config: Record<string, unknown> }>,
-  ): Promise<void> {
+  setEnvironments(environments: Record<string, Record<string, unknown>>): Promise<void> {
     return this.call('action/set_environments', {
       environments,
-      environment_backends: environmentBackends,
     });
   }
 
