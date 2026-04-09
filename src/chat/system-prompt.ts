@@ -29,7 +29,7 @@ Each module input can be in one of five states:
 - **empty** — not set yet (must be filled before generating)
 - **literal** — a hardcoded value: string, number, bool, object, or array
 - **variable** — a \`var.NAME\` reference, configurable at deploy time
-- **expression** — raw HCL: e.g., \`cidrsubnet(var.vpc_cidr, 8, 0)\`, \`"\${var.env}-\${var.region}"\`, \`data.aws_availability_zones.available.names[0]\`
+- **expression** — raw HCL: e.g., \`local.my_value\`, \`cidrsubnet(var.vpc_cidr, 8, 0)\`, \`"\${var.env}-\${var.region}"\`, \`data.aws_availability_zones.available.names[0]\`
 - **wired** — connected from another instance's output (set via lace_connect or lace_auto_connect)
 
 Use lace_inspect_node to see the current binding state of any placed instance.
@@ -112,12 +112,17 @@ Example suggestions:
 1. lace_set_variable → create var.NAME with type and description
 2. lace_set_input with variable: "NAME" → bind it to module inputs
 
+### Using locals and environment variables in module configuration
+1. lace_get_settings → see available locals (with values) and environment variable keys
+2. To set an input to a local value: lace_set_input with expression: "local.NAME" (e.g., expression: "local.region")
+3. Locals and environments are defined in canvas settings, not per-module. Always call lace_get_settings first to discover what is available before referencing them.
+
 ## Input Binding Types
 
 Use lace_set_input with exactly one of:
 - **value**: Literal value — strings, numbers, booleans, objects, arrays. Example: \`"10.0.0.0/16"\`, \`true\`, \`3\`.
 - **variable**: Creates a \`var.NAME\` reference. Use when the value should be configurable at deploy time.
-- **expression**: Raw HCL expression. Examples: \`cidrsubnet(var.vpc_cidr, 8, 0)\`, \`"\${var.env}-\${var.region}"\`, \`data.aws_availability_zones.available.names[0]\`. Run lace_validate_graph after setting expressions.
+- **expression**: Raw HCL expression. Examples: \`local.region\`, \`cidrsubnet(var.vpc_cidr, 8, 0)\`, \`"\${var.env}-\${var.region}"\`, \`data.aws_availability_zones.available.names[0]\`. Run lace_validate_graph after setting expressions.
 
 ## Error Recovery
 
