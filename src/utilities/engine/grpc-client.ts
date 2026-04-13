@@ -182,6 +182,20 @@ function convertRenderNode(node: ProtoRenderNode): RenderNode {
     position: node.position ?? { x: 0, y: 0 },
     has_errors: node.has_errors,
     error_messages: node.error_messages,
+    inputs: node.inputs.map((p) => ({
+      name: p.name,
+      type: p.type,
+      required: p.required || undefined,
+      wired: p.wired || undefined,
+      description: p.description || undefined,
+    })),
+    outputs: node.outputs.map((p) => ({
+      name: p.name,
+      type: p.type,
+      wired: p.wired || undefined,
+      description: p.description || undefined,
+      sensitive: p.sensitive || undefined,
+    })),
   };
 }
 

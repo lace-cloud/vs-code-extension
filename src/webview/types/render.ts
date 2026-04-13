@@ -20,6 +20,19 @@ export type RenderNode = {
   position: { x: number; y: number };
   has_errors: boolean;
   error_messages: string[];
+  inputs: NodePin[];
+  outputs: NodePin[];
+};
+
+// NodePin is one input or output handle on a canvas node, rendered as a
+// Blender-style connection point. Emitted directly by the CLI render layer.
+export type NodePin = {
+  name: string;
+  type: string;
+  required?: boolean;
+  wired?: boolean;
+  description?: string;
+  sensitive?: boolean;
 };
 
 export type RenderEdge = {

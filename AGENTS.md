@@ -22,6 +22,96 @@ Always run `npm run test:unit` after any change. All 26 unit tests must pass. Ty
 
 E2E tests spawn a real `lace module serve` process and exercise the full gRPC transport. They require the `lace` binary and `terraform` to be installed. Set `LACE_BINARY=/path/to/lace` to override the default PATH lookup.
 
+## Release Process
+
+This project uses **developer-initiated versioning with automated publishing**. The developer decides when and what to release; CI handles the rest.
+
+### Quick Release
+
+```bash
+# From main branch, after your feature PR is merged
+npm run release patch    # or: minor, major, or specific version like 0.1.0
+# Follow prompts → pushes release branch
+# Create PR → Merge → CI auto-publishes
+```
+
+### Release Steps (Detailed)
+
+**1. Ensure you're on main with latest changes**
+```bash
+git checkout main
+git pull origin main
+```
+
+**2. Create release branch with version bump**
+```bash
+npm run release patch
+# This script will:
+# - Check working directory is clean
+# - Create branch: release/vX.X.X
+# - Update package.json and package-lock.json
+# - Commit with version as message
+# - Push branch
+```
+
+**3. Create Pull Request**
+```bash
+# The script outputs the PR URL, or create manually:
+# https://github.com/lace-cloud/vs-code-extension/compare/main...release/vX.X.X
+```
+
+**4. Merge and CI takes over**
+On merge to `main`, CI automatically:
+- Detects the version change in `package.json`
+- Creates git tag `vX.X.X`
+- Publishes to VS Code Marketplace
+- Creates GitHub Release with auto-generated notes
+
+### Version Guidelines
+
+| Change Type | Example | Version Bump |
+|-------------|---------|--------------|
+| Bug fix | Fix wiring bug | `patch` (0.0.1 → 0.0.2) |
+| New feature | Add new panel | `minor` (0.0.1 → 0.1.0) |
+| Breaking change | Remove command | `major` (0.0.1 → 1.0.0) |
+
+### Release Checklist
+
+Before creating a release PR:
+- [ ] All tests pass (`npm run test:unit && npm run test:e2e`)
+- [ ] TypeScript compiles (`npx tsc --noEmit`)
+- [ ] `package.json` and `package-lock.json` versions are synced (CI will verify)
+- [ ] CHANGELOG.md is updated (if manual notes needed)
+
+### Troubleshooting
+
+**CI fails with "Version mismatch"**
+```bash
+npm version $(jq -r .version package.json) --no-git-tag-version
+# This syncs package-lock.json to package.json
+```
+
+**Tag already exists**
+```bash
+git tag -d vX.X.X
+git push --delete origin vX.X.X
+# Then re-trigger CI or re-tag
+```
+
+**Manual release (emergency only)**
+```bash
+npm run compile
+npx @vscode/vsce package   # Creates .vsix file
+npx @vscode/vsce publish   # Publishes to marketplace
+```
+
+### CI/CD Workflows
+
+| Workflow | File | Trigger | Purpose |
+|----------|------|---------|---------|
+| CI | `.github/workflows/ci.yml` | PRs, branch pushes | Run tests, verify version sync |
+| Release | `.github/workflows/release.yml` | Push to main with version change | Tag, publish to marketplace, create GitHub release |
+
 ## Architecture Overview
 
 ### Host side (Node.js, VS Code API)

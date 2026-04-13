@@ -416,6 +416,20 @@ message RenderNode {
   Position position = 6;
   bool has_errors = 7;
   repeated string error_messages = 8;
+  repeated NodePin inputs = 9;
+  repeated NodePin outputs = 10;
+}
+
+// NodePin is a compact handle descriptor rendered on the canvas. One pin is
+// emitted per input variable (left rail) and per output (right rail) so the
+// webview can draw Blender-style per-variable connection handles.
+message NodePin {
+  string name = 1;
+  string type = 2;          // HCL type string, e.g. "string", "list(object)"
+  bool required = 3;        // inputs only; always false for outputs
+  bool wired = 4;           // input has an Out binding, or output feeds >=1 edge
+  string description = 5;
+  bool sensitive = 6;       // outputs only
 }
 
 message RenderEdge {

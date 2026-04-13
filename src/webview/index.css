@@ -18,35 +18,26 @@
 @import 'tailwindcss';
 @import '@xyflow/react/dist/style.css' layer(components);
 
-/* ── Handles ──
- * Hidden at rest. Visible on node hover (connection cues) or when
- * connected (persistent indicator). Composite nodes use blue accent.
+/* ── Pin handles (Blender/Fusion-style) ──
+ * One handle per input variable and per output. Always visible so wiring
+ * is unambiguous. Colors are set inline per pin by pinColor.ts.
  */
 
-.lace-handle {
-  width: 8px;
-  height: 8px;
-  background: rgba(206, 254, 101, 0.7);
-  border: none;
+.lace-pin-handle {
   border-radius: 50%;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  opacity: 0.9;
+  transition: opacity 0.15s ease, transform 0.1s ease;
 }
 
-.react-flow__node:hover .lace-handle {
+.lace-pin-handle:hover {
   opacity: 1;
+  transform: scale(1.25);
 }
 
-.lace-handle--connected {
-  opacity: 0.7;
-}
-
-.react-flow__node:hover .lace-handle--connected {
+.react-flow__handle.lace-pin-handle.connectingfrom,
+.react-flow__handle.lace-pin-handle.connectingto {
   opacity: 1;
-}
-
-.lace-handle--composite {
-  background: rgba(149, 231, 255, 0.7);
+  transform: scale(1.35);
 }
 
 /* ── Controls ──

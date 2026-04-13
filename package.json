@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "publisher": "LaceCloudInc",
   "repository": {
     "type": "git",
@@ -513,7 +513,8 @@
     "build": "rspack --config rspack.config.js",
     "watch": "rspack --watch --config rspack.config.js",
     "package": "vsce package",
-    "prepare": "husky"
+    "prepare": "husky",
+    "release": "./scripts/release.sh"
   },
   "devDependencies": {
     "@rspack/cli": "^1.1.8",

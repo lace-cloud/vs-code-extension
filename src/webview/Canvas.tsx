@@ -19,7 +19,7 @@ import ModuleNode from './components/nodes/ModuleNode';
 import SlidePanel from './components/SlidePanel';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
-import EdgeConfigPanel from './components/panels/EdgeConfigPanel';
+import EdgeInspectorPanel from './components/panels/EdgeInspectorPanel';
 import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
 import ActionBar from './components/ActionBar';
 import { ValidationErrorBanner } from './components/ValidationErrorBanner';
@@ -47,6 +47,17 @@ const PHASE_LABELS: Record<GeneratePhase, string> = {
   validating: 'Validating...',
 };
 
+// parseHandleId extracts the variable name from a handle ID of the form
+// "in:<name>" or "out:<name>". Returns null if the handle is missing or
+// doesn't match the expected prefix (e.g. a legacy cardinal handle).
+function parseHandleId(handleId: string | null | undefined, prefix: 'in' | 'out'): string | null {
+  if (!handleId) return null;
+  const marker = `${prefix}:`;
+  if (!handleId.startsWith(marker)) return null;
+  const name = handleId.slice(marker.length);
+  return name.length > 0 ? name : null;
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // CompositeEditor — renders the ReactFlow viewport for a valid graph.
 //
@@ -65,6 +76,7 @@ type CompositeEditorProps = {
   forcePositionsRef: React.MutableRefObject<boolean>;
   onDragStop: (positions: Record<string, { x: number; y: number }>) => void;
   onConnect: (conn: Connection) => void;
+  onEdgeClick: (e: React.MouseEvent, edge: Edge) => void;
   onEdgesDelete: (edges: Edge[]) => void;
   onNodesDelete: (nodes: Node[]) => void;
   onSave: () => void;
@@ -87,6 +99,7 @@ function CompositeEditor({
   forcePositionsRef,
   onDragStop,
   onConnect,
+  onEdgeClick,
   onEdgesDelete,
   onNodesDelete,
   onSave,
@@ -146,18 +159,15 @@ function CompositeEditor({
   }, []);
 
   // ── Derive ReactFlow edges from CanvasView ──
+  // Per-variable handles: each edge anchors to the exact input/output pin,
+  // so the wiring is visually unambiguous and we no longer need an edge label.
   const rfEdgesFromView: Edge[] = useMemo(() => {
     return view.edges.map((e: RenderEdge) => ({
       id: e.id,
       source: e.source,
-      sourceHandle: 'out-right',
+      sourceHandle: `out:${e.source_output}`,
       target: e.target,
-      targetHandle: 'in-left',
-      label: `${e.source_output} → ${e.target_input}`,
-      labelStyle: { fill: '#ECEFED', fontSize: 10, fontFamily: 'monospace', opacity: 0.85 },
-      labelBgStyle: { fill: '#153238', opacity: 0.9 },
-      labelBgPadding: [6, 3] as [number, number],
-      labelBgBorderRadius: 4,
+      targetHandle: `in:${e.target_input}`,
       data: { source_output: e.source_output, target_input: e.target_input },
     }));
   }, [view.edges]);
@@ -172,23 +182,10 @@ function CompositeEditor({
     setRfEdges((eds) => applyEdgeChanges(changes, eds));
   }, []);
 
-  // ── Derive connected handles per node (for handle visibility) ──
-  const connectedHandlesMap: Record<string, string[]> = useMemo(() => {
-    const map: Record<string, Set<string>> = {};
-    for (const edge of rfEdgesFromView) {
-      if (!map[edge.source]) map[edge.source] = new Set();
-      if (!map[edge.target]) map[edge.target] = new Set();
-      map[edge.source].add(edge.sourceHandle ?? 'out-right');
-      map[edge.target].add(edge.targetHandle ?? 'in-left');
-    }
-    const result: Record<string, string[]> = {};
-    for (const [id, set] of Object.entries(map)) {
-      result[id] = [...set];
-    }
-    return result;
-  }, [rfEdgesFromView]);
-
   // ── Derive ReactFlow nodes from CanvasView ──
+  // Per-variable handles: each NodePin carries its own `wired` flag from the
+  // CLI, so the node component no longer needs a derived map of connected
+  // handle IDs — it reads pin.wired directly.
   const rfNodesFromView: Node[] = useMemo(
     () =>
       view.nodes.map((node: RenderNode) => ({
@@ -197,12 +194,11 @@ function CompositeEditor({
         position: node.position,
         data: {
           ...node,
-          connectedHandles: connectedHandlesMap[node.id] ?? [],
           hasValidationError: erroredNodeIds.has(node.id),
           isNew: newNodeIds.has(node.id),
         },
       })),
-    [view.nodes, connectedHandlesMap, erroredNodeIds, newNodeIds],
+    [view.nodes, erroredNodeIds, newNodeIds],
   );
 
   // ── Local ReactFlow node state ──
@@ -298,6 +294,7 @@ function CompositeEditor({
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
+      onEdgeClick={onEdgeClick}
       onEdgesDelete={onEdgesDelete}
       onNodesDelete={onNodesDelete}
       onNodeDragStop={onNodeDragStop}
@@ -369,9 +366,12 @@ export default function Canvas() {
   const [newNodeIds, setNewNodeIds] = useState<Set<string>>(new Set());
   const prevNodeIdsRef = useRef<Set<string>>(new Set());
   const sessionLoadedRef = useRef(false);
-  const [edgeConfigState, setEdgeConfigState] = useState<{
+  const [selectedEdge, setSelectedEdge] = useState<{
+    id: string;
     source: string;
     target: string;
+    sourceOutput: string;
+    targetInput: string;
   } | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [generating, setGenerating] = useState(false);
@@ -634,35 +634,52 @@ export default function Canvas() {
   );
 
   // ── Event: new connection ──
+  // Per-variable handles encode the mapping in their IDs ("out:<name>" →
+  // "in:<name>"), so we call engine.connect directly with the resolved pair
+  // and skip the old autoConnect/EdgeConfigPanel disambiguation dance.
+  // Already-wired targets and type mismatches surface via a toast.
   const onConnect = useCallback(
     async (conn: Connection) => {
       if (!conn.source || !conn.target || !engine) return;
 
-      // Snapshot edge IDs between this pair using ref for freshest state.
-      // Using a ref avoids stale closures when edges change between
-      // callback creation and invocation (e.g. concurrent disconnect).
-      const prevPairEdgeIds = new Set(
-        (viewRef.current?.edges ?? [])
-          .filter((e) => e.source === conn.source && e.target === conn.target)
-          .map((e) => e.id),
+      const srcName = parseHandleId(conn.sourceHandle, 'out');
+      const tgtName = parseHandleId(conn.targetHandle, 'in');
+      if (!srcName || !tgtName) {
+        // Defensive fallback: should never happen with the new node layout,
+        // but if a legacy handle ID slips through, let autoConnect try.
+        try {
+          const result = await engine.autoConnect(conn.source, conn.target);
+          updateView(result);
+        } catch (err) {
+          console.error('[Canvas] autoConnect fallback failed:', err);
+        }
+        return;
+      }
+
+      // Reject if the target input is already wired — a variable can only
+      // have one upstream binding. Users must delete the existing edge first.
+      const alreadyWired = (viewRef.current?.edges ?? []).some(
+        (e) => e.target === conn.target && e.target_input === tgtName,
       );
+      if (alreadyWired) {
+        setToast({
+          message: `${conn.target}.${tgtName} is already wired — delete the existing connection first.`,
+          type: 'error',
+        });
+        setTimeout(() => setToast(null), TOAST_INFO);
+        return;
+      }
 
       try {
-        const result = await engine.autoConnect(conn.source, conn.target);
-
-        // Check if auto-connect created any NEW edge between these nodes
-        const hasNewEdge = (result.edges ?? []).some(
-          (e) => e.source === conn.source && e.target === conn.target && !prevPairEdgeIds.has(e.id),
-        );
-
-        if (hasNewEdge) {
-          updateView(result);
-        } else {
-          setEdgeConfigState({ source: conn.source, target: conn.target });
-        }
+        const result = await engine.connect(conn.source, conn.target, srcName, tgtName);
+        updateView(result);
       } catch (err) {
-        console.error('[Canvas] autoConnect failed:', err);
-        setEdgeConfigState({ source: conn.source, target: conn.target });
+        console.error('[Canvas] connect failed:', err);
+        setToast({
+          message: `Could not connect ${conn.source}.${srcName} → ${conn.target}.${tgtName}: ${(err as Error).message}`,
+          type: 'error',
+        });
+        setTimeout(() => setToast(null), TOAST_INFO);
       }
     },
     [engine, updateView],
@@ -711,16 +728,27 @@ export default function Canvas() {
     setConfigTarget(null);
   }, []);
 
-  // ── Handle edge config connect ──
-  const handleEdgeConnect = useCallback(
-    async (source: string, target: string, outputName: string, inputName: string) => {
-      if (!engine) return;
-      const result = await engine.connect(source, target, outputName, inputName);
-      updateView(result);
-      setEdgeConfigState(null);
-    },
-    [engine, updateView],
-  );
+  // ── Open edge inspector when an existing edge is clicked ──
+  const onEdgeClick = useCallback((_e: React.MouseEvent, edge: Edge) => {
+    const sourceOutput = (edge.data?.source_output as string | undefined) ?? '';
+    const targetInput = (edge.data?.target_input as string | undefined) ?? '';
+    if (!sourceOutput || !targetInput) return;
+    setSelectedEdge({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceOutput,
+      targetInput,
+    });
+  }, []);
+
+  // ── Delete the currently selected edge from the inspector ──
+  const onDeleteSelectedEdge = useCallback(async () => {
+    if (!engine || !selectedEdge) return;
+    const result = await engine.disconnect(selectedEdge.target, selectedEdge.targetInput);
+    updateView(result);
+    setSelectedEdge(null);
+  }, [engine, selectedEdge, updateView]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -890,6 +918,7 @@ export default function Canvas() {
           forcePositionsRef={forcePositionsRef}
           onDragStop={onDragStop}
           onConnect={onConnect}
+          onEdgeClick={onEdgeClick}
           onEdgesDelete={onEdgesDelete}
           onNodesDelete={onNodesDelete}
           onSave={onSave}
@@ -916,15 +945,16 @@ export default function Canvas() {
           )}
         </SlidePanel>
 
-        {/* Edge config panel */}
-        <SlidePanel open={!!edgeConfigState} zIndex={40}>
-          {edgeConfigState && (
-            <EdgeConfigPanel
-              source_instance={edgeConfigState.source}
-              target_instance={edgeConfigState.target}
-              engine={engine}
-              onConnect={handleEdgeConnect}
-              onClose={() => setEdgeConfigState(null)}
+        {/* Edge inspector */}
+        <SlidePanel open={!!selectedEdge} zIndex={40}>
+          {selectedEdge && (
+            <EdgeInspectorPanel
+              source={selectedEdge.source}
+              target={selectedEdge.target}
+              sourceOutput={selectedEdge.sourceOutput}
+              targetInput={selectedEdge.targetInput}
+              onDelete={onDeleteSelectedEdge}
+              onClose={() => setSelectedEdge(null)}
             />
           )}
         </SlidePanel>

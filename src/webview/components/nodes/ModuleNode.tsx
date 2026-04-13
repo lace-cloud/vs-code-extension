@@ -1,23 +1,25 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import type { RenderNode } from '../../types/render';
+import type { NodePin, RenderNode } from '../../types/render';
 import { isValidTerraformIdentifier } from '../../utils/identifiers';
 import { useEngine } from '../../state/engine-context';
+import { pinColor } from './pinColor';
 
 // ── Node data contract (serializable — no callbacks) ──
 
 export type ModuleNodeData = RenderNode & {
-  connectedHandles?: string[];
   hasValidationError?: boolean;
   isNew?: boolean;
 };
 
 type ModuleNodeNode = Node<ModuleNodeData, 'moduleNode'>;
 
-// ── Sizes ──
+// ── Layout constants ──
 
-const CARD_SIZE = 42;
-const ICON_SIZE = 36;
+const NODE_WIDTH = 200;
+const HEADER_HEIGHT = 28;
+const ROW_HEIGHT = 22;
+const ICON_SIZE = 18;
 
 // ── Broken icon fallback ──
 
@@ -28,7 +30,7 @@ function BrokenIcon() {
       height={ICON_SIZE}
       viewBox="0 0 24 24"
       fill="none"
-      stroke="rgba(206, 254, 101, 0.4)"
+      stroke="rgba(206, 254, 101, 0.5)"
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -36,10 +38,69 @@ function BrokenIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <polyline points="21 15 16 10 5 21" />
-      <line x1="2" y1="2" x2="22" y2="22" stroke="rgba(206, 254, 101, 0.3)" strokeWidth="1.5" />
     </svg>
   );
 }
+
+// ── Pin row ──
+
+type PinRowProps = {
+  pin: NodePin;
+  side: 'input' | 'output';
+  top: number; // vertical offset inside the node body
+  isError?: boolean;
+};
+
+const PinRow: React.FC<PinRowProps> = ({ pin, side, top, isError }) => {
+  const color = pinColor(pin.type);
+  const isInput = side === 'input';
+  const handleStyle: React.CSSProperties = {
+    background: color.fill,
+    borderColor: isError ? '#e5484d' : color.stroke,
+    borderWidth: isError ? 2 : 1,
+    borderStyle: 'solid',
+    width: 10,
+    height: 10,
+    [isInput ? 'left' : 'right']: -5,
+    top: ROW_HEIGHT / 2,
+  };
+  return (
+    <div
+      className="lace-pin-row"
+      style={{
+        position: 'absolute',
+        top,
+        left: 0,
+        right: 0,
+        height: ROW_HEIGHT,
+        paddingLeft: isInput ? 12 : 8,
+        paddingRight: isInput ? 8 : 12,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: isInput ? 'flex-start' : 'flex-end',
+      }}
+      title={`${pin.name}: ${pin.type}${pin.description ? ` — ${pin.description}` : ''}`}
+    >
+      <Handle
+        id={`${isInput ? 'in' : 'out'}:${pin.name}`}
+        type={isInput ? 'target' : 'source'}
+        position={isInput ? Position.Left : Position.Right}
+        className="lace-pin-handle"
+        style={handleStyle}
+      />
+      <span
+        className="truncate"
+        style={{
+          fontSize: 10,
+          color: isError ? '#e5484d' : 'rgba(236, 239, 237, 0.85)',
+          maxWidth: NODE_WIDTH - 28,
+        }}
+      >
+        {pin.name}
+      </span>
+    </div>
+  );
+};
 
 // ── Component ──
 
@@ -49,6 +110,8 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const [editValue, setEditValue] = useState(id);
   const [hovered, setHovered] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [showAllInputs, setShowAllInputs] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef(false);
 
@@ -59,7 +122,21 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     }
   }, [editing]);
 
-  const connected = data.connectedHandles ?? [];
+  // ── Pin filtering ──
+
+  const inputs = data.inputs ?? [];
+  const outputs = data.outputs ?? [];
+
+  const { visibleInputs, hiddenInputCount } = useMemo(() => {
+    if (showAllInputs) {
+      return { visibleInputs: inputs, hiddenInputCount: 0 };
+    }
+    const visible = inputs.filter((p) => p.required || p.wired);
+    return {
+      visibleInputs: visible,
+      hiddenInputCount: inputs.length - visible.length,
+    };
+  }, [inputs, showAllInputs]);
 
   // ── Callbacks ──
 
@@ -97,9 +174,8 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [commitRename],
   );
 
-  const onClick = useCallback(
+  const onHeaderClick = useCallback(
     (e: React.MouseEvent) => {
-      // Only open config on plain click — shift/meta/ctrl are multi-select modifiers.
       if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
         window.dispatchEvent(
           new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }),
@@ -122,110 +198,105 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     [data.id, engine],
   );
 
-  // ── Helpers ──
+  const toggleCollapsed = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsed((v) => !v);
+  }, []);
+
+  const toggleShowAllInputs = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowAllInputs((v) => !v);
+  }, []);
+
+  // ── Styling ──
 
   const showIcon = data.icon_url && !imgFailed;
-
-  function handleClass(handleId: string): string {
-    return connected.includes(handleId) ? 'lace-handle lace-handle--connected' : 'lace-handle';
-  }
-
   const hasAnyError = data.has_errors || data.hasValidationError;
   const isNew = data.isNew && !hasAnyError;
-  const borderStyle = hasAnyError
-    ? '1.5px solid #e5484d'
+
+  const borderColor = hasAnyError ? '#e5484d' : isNew ? '#3b82f6' : 'rgba(206, 254, 101, 0.18)';
+  const shadow = hasAnyError
+    ? '0 0 10px rgba(229, 72, 77, 0.3)'
     : isNew
-      ? '1.5px solid #3b82f6'
-      : '1px solid transparent';
-  const shadowStyle = hasAnyError
-    ? '0 0 8px rgba(229, 72, 77, 0.3)'
-    : isNew
-      ? '0 0 8px rgba(59, 130, 246, 0.3)'
-      : 'none';
+      ? '0 0 10px rgba(59, 130, 246, 0.3)'
+      : '0 2px 6px rgba(0,0,0,0.35)';
+
+  // Body height — when collapsed, header only. Otherwise, whichever rail is
+  // taller dictates the height. The "Show N more" toggle on the left counts
+  // as an extra input row.
+  const leftRows = visibleInputs.length + (hiddenInputCount > 0 ? 1 : 0);
+  const rowCount = collapsed ? 0 : Math.max(leftRows, outputs.length);
+  const bodyHeight = rowCount * ROW_HEIGHT;
+  const nodeHeight = HEADER_HEIGHT + bodyHeight;
 
   return (
     <div
-      className="relative cursor-pointer"
-      style={{ width: CARD_SIZE, height: CARD_SIZE }}
-      onClick={onClick}
+      className="relative"
+      style={{
+        width: NODE_WIDTH,
+        height: nodeHeight,
+        background: '#161616',
+        border: `1px solid ${borderColor}`,
+        borderRadius: 4,
+        boxShadow: shadow,
+        fontFamily: 'inherit',
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={data.has_errors ? data.error_messages?.join('\n') : data.id}
     >
-      {/* ── Card (invisible unless error) ── */}
+      {/* ── Header ── */}
       <div
-        className="w-full h-full rounded-sm flex items-center justify-center"
-        style={{ border: borderStyle, boxShadow: shadowStyle }}
+        className="relative cursor-pointer"
+        style={{
+          height: HEADER_HEIGHT,
+          background: '#153238',
+          borderTopLeftRadius: 4,
+          borderTopRightRadius: 4,
+          borderBottom: collapsed ? 'none' : '1px solid rgba(206,254,101,0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          paddingLeft: 8,
+          paddingRight: 6,
+        }}
+        onClick={onHeaderClick}
+        title={hasAnyError ? data.error_messages?.join('\n') : data.id}
       >
+        <button
+          onClick={toggleCollapsed}
+          className="leading-none cursor-pointer"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'rgba(206,254,101,0.7)',
+            padding: 0,
+            width: 12,
+            height: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          title={collapsed ? 'Expand' : 'Collapse'}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10">
+            {collapsed ? <path d="M8 5l8 7-8 7V5z" /> : <path d="M5 8l7 8 7-8H5z" />}
+          </svg>
+        </button>
+
         {showIcon ? (
           <img
             src={data.icon_url}
-            alt={data.id}
-            className="rounded object-contain"
+            alt=""
+            className="rounded object-contain flex-shrink-0"
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <BrokenIcon />
+          <div className="flex-shrink-0">
+            <BrokenIcon />
+          </div>
         )}
-      </div>
 
-      {/* ── Hover action buttons ── */}
-      {hovered && data.kind === 'module' && (
-        <button
-          onClick={(e) => e.stopPropagation()}
-          className="absolute rounded-full bg-[#153238] border border-[rgba(206,254,101,0.3)] border-solid text-[#CEFE65] leading-none cursor-pointer flex items-center justify-center z-10"
-          style={{ top: -4, left: -4, width: 8, height: 8, padding: 0 }}
-          title="Refresh from registry"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="6" height="6">
-            <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-          </svg>
-        </button>
-      )}
-      {hovered && (
-        <button
-          onClick={onDeleteInstance}
-          className="absolute rounded-full bg-[#153238] border border-solid text-[#e5484d] leading-none cursor-pointer flex items-center justify-center z-10"
-          style={{
-            top: -4,
-            right: -4,
-            width: 8,
-            height: 8,
-            padding: 0,
-            borderColor: 'rgba(229,72,77,0.4)',
-          }}
-          title="Delete instance"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="6" height="6">
-            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-          </svg>
-        </button>
-      )}
-
-      {/* ── Handles (CSS controls visibility) ── */}
-      <Handle id="in-top" type="target" position={Position.Top} className={handleClass('in-top')} />
-      <Handle
-        id="in-left"
-        type="target"
-        position={Position.Left}
-        className={handleClass('in-left')}
-      />
-      <Handle
-        id="out-right"
-        type="source"
-        position={Position.Right}
-        className={handleClass('out-right')}
-      />
-      <Handle
-        id="out-bottom"
-        type="source"
-        position={Position.Bottom}
-        className={handleClass('out-bottom')}
-      />
-
-      {/* ── Label ── */}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 flex flex-col items-center pointer-events-auto">
         {editing ? (
           <input
             ref={inputRef}
@@ -233,27 +304,133 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitRename}
             onKeyDown={onKeyDown}
-            className="bg-[#161616] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] rounded px-1 py-px text-center w-24"
-            style={{ fontSize: 12 }}
+            className="bg-[#161616] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] rounded px-1 py-px flex-1"
+            style={{ fontSize: 11 }}
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
           <span
-            className="whitespace-nowrap max-w-[100px] truncate"
-            style={{ fontSize: 12, color: 'rgba(206, 254, 101, 0.65)' }}
+            className="truncate flex-1"
+            style={{ fontSize: 11, color: '#CEFE65', fontWeight: 500 }}
             onDoubleClick={onDoubleClick}
           >
             {data.label}
           </span>
         )}
 
-        {/* Validation error */}
-        {data.has_errors && (
-          <span className="mt-px text-[#e5484d] whitespace-nowrap" style={{ fontSize: 7 }}>
-            {data.error_messages?.[0] ?? 'Error'}
-          </span>
+        {hovered && (
+          <button
+            onClick={onDeleteInstance}
+            className="rounded-full leading-none cursor-pointer flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'rgba(229,72,77,0.15)',
+              border: '1px solid rgba(229,72,77,0.4)',
+              color: '#e5484d',
+              width: 14,
+              height: 14,
+              padding: 0,
+            }}
+            title="Delete instance"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width="8" height="8">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+            </svg>
+          </button>
         )}
       </div>
+
+      {/* ── Body: input rail (left) + output rail (right), absolutely positioned rows ── */}
+      {!collapsed && (
+        <div style={{ position: 'relative', height: bodyHeight }}>
+          {visibleInputs.map((pin, i) => {
+            const errored = !!pin.required && !pin.wired;
+            return (
+              <PinRow
+                key={`in:${pin.name}`}
+                pin={pin}
+                side="input"
+                top={i * ROW_HEIGHT}
+                isError={errored}
+              />
+            );
+          })}
+          {outputs.map((pin, i) => (
+            <PinRow key={`out:${pin.name}`} pin={pin} side="output" top={i * ROW_HEIGHT} />
+          ))}
+
+          {hiddenInputCount > 0 && (
+            <div
+              onClick={toggleShowAllInputs}
+              className="cursor-pointer"
+              style={{
+                position: 'absolute',
+                top: visibleInputs.length * ROW_HEIGHT,
+                left: 12,
+                right: 12,
+                height: ROW_HEIGHT,
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: 9,
+                color: 'rgba(206,254,101,0.55)',
+                fontStyle: 'italic',
+              }}
+              title="Show all inputs"
+            >
+              + {hiddenInputCount} more
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Collapsed: stack all input handles on the left edge, outputs on right ── */}
+      {collapsed && (
+        <>
+          {inputs.map((pin, i) => {
+            const color = pinColor(pin.type);
+            return (
+              <Handle
+                key={`in:${pin.name}`}
+                id={`in:${pin.name}`}
+                type="target"
+                position={Position.Left}
+                className="lace-pin-handle"
+                style={{
+                  background: color.fill,
+                  borderColor: color.stroke,
+                  borderWidth: 1,
+                  borderStyle: 'solid',
+                  width: 8,
+                  height: 8,
+                  top: HEADER_HEIGHT / 2 - 4 + (i - (inputs.length - 1) / 2) * 3,
+                  left: -4,
+                }}
+              />
+            );
+          })}
+          {outputs.map((pin, i) => {
+            const color = pinColor(pin.type);
+            return (
+              <Handle
+                key={`out:${pin.name}`}
+                id={`out:${pin.name}`}
+                type="source"
+                position={Position.Right}
+                className="lace-pin-handle"
+                style={{
+                  background: color.fill,
+                  borderColor: color.stroke,
+                  borderWidth: 1,
+                  borderStyle: 'solid',
+                  width: 8,
+                  height: 8,
+                  top: HEADER_HEIGHT / 2 - 4 + (i - (outputs.length - 1) / 2) * 3,
+                  right: -4,
+                }}
+              />
+            );
+          })}
+        </>
+      )}
     </div>
   );
 };
