@@ -83,11 +83,27 @@ git commit -m "$NEW_VERSION"
 echo ""
 echo -e "${GREEN}✅ Release branch created and committed${NC}"
 echo ""
+
+# Push the branch
+echo "Pushing to origin..."
+git push -u origin "$RELEASE_BRANCH"
+
+# Get repo URL for PR link
+REPO_URL=$(git remote get-url origin 2>/dev/null | sed 's/git@github.com:/https:\/\/github.com\//' | sed 's/\.git$//')
+if [ -n "$REPO_URL" ]; then
+    PR_URL="$REPO_URL/compare/main...$RELEASE_BRANCH?expand=1"
+    echo ""
+    echo -e "${GREEN}🚀 Release branch pushed!${NC}"
+    echo ""
+    echo "Create PR: $PR_URL"
+fi
+
+echo ""
 echo "Next steps:"
-echo "  1. Push the branch: git push -u origin $RELEASE_BRANCH"
-echo "  2. Create a PR to main"
-echo "  3. Merge the PR"
-echo "  4. CI will automatically:"
+echo "  1. Create a PR to main (link above ↑)"
+echo "  2. Get review and merge the PR"
+echo "  3. CI will automatically:"
 echo "     - Create tag v$NEW_VERSION"
 echo "     - Publish to VS Code Marketplace"
 echo "     - Create GitHub Release"
+echo ""
