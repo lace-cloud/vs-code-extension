@@ -1,4 +1,4 @@
-import type { CanvasView, RenderNode, RenderEdge } from '../types/render';
+import type { CanvasView, NodePin, RenderNode, RenderEdge } from '../types/render';
 
 // ── CanvasView builders for tests ──
 
@@ -23,6 +23,7 @@ export function makeNode(
   id: string,
   kind: 'module' | 'resource' | 'data' = 'module',
   moduleKey?: string,
+  pins: { inputs?: NodePin[]; outputs?: NodePin[] } = {},
 ): RenderNode {
   return {
     id,
@@ -32,7 +33,13 @@ export function makeNode(
     position: { x: 0, y: 0 },
     has_errors: false,
     error_messages: [],
+    inputs: pins.inputs ?? [],
+    outputs: pins.outputs ?? [],
   };
+}
+
+export function makePin(name: string, type = 'string', opts: Partial<NodePin> = {}): NodePin {
+  return { name, type, ...opts };
 }
 
 export function makeEdge(

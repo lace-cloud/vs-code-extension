@@ -452,7 +452,10 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
           {config.sibling_ids.map((sibId) => {
             const depKey = `module.${sibId}`;
             return (
-              <label key={sibId} className="flex items-center gap-2 mb-1.5 text-xs cursor-pointer">
+              <label
+                key={sibId}
+                className="flex items-start gap-2 mb-1.5 text-xs text-[#e6e6e6] cursor-pointer"
+              >
                 <input
                   type="checkbox"
                   checked={localDependsOn.has(depKey)}
@@ -464,9 +467,11 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
                       return next;
                     });
                   }}
-                  className="accent-[#1f6feb]"
+                  className="accent-[#1f6feb] shrink-0 mt-0.5"
                 />
-                <span className="font-mono opacity-90">{depKey}</span>
+                <span className="font-mono text-[#e6e6e6] opacity-90 break-all leading-4">
+                  {depKey}
+                </span>
               </label>
             );
           })}
