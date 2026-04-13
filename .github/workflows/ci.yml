@@ -32,11 +32,19 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Verify Terraform
-        run: terraform version
-
       - name: Run unit tests
         run: npm run test:unit
 
       - name: Run E2E tests
         run: npm run test:e2e
+
+      - name: Verify version sync
+        run: |
+          PKG_VERSION=$(jq -r .version package.json)
+          LOCK_VERSION=$(jq -r .version package-lock.json)
+          if [ "$PKG_VERSION" != "$LOCK_VERSION" ]; then
+            echo "❌ Version mismatch: package.json ($PKG_VERSION) != package-lock.json ($LOCK_VERSION)"
+            echo "Run: npm version $PKG_VERSION --no-git-tag-version"
+            exit 1
+          fi
+          echo "✅ Versions synced: $PKG_VERSION"
