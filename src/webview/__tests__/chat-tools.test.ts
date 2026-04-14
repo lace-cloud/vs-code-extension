@@ -114,6 +114,7 @@ describe('write tools', () => {
       );
       expect(mockClient.dropBundle).toHaveBeenCalledWith({
         deploy_bundle: { entry: 'vpc@v1.0.0', modules: {} },
+        organization: undefined,
       });
       // New node "vpc" is repositioned via syncLayout (empty canvas → x:100, y:100)
       expect(mockClient.syncLayout).toHaveBeenCalledWith({
@@ -145,6 +146,49 @@ describe('write tools', () => {
       expect(result.content).toContain('aws/vpc');
       expect(result.content).toContain('aws/subnet');
       expect(mockClient.getRegistryVersion).not.toHaveBeenCalled();
+    });
+
+    test('passes org provenance when module found in user org', async () => {
+      // Simulate: private module not in local cache, found via RPC in org
+      mockClient = makeMockClient({
+        listRegistryModules: vi
+          .fn()
+          .mockResolvedValueOnce({ modules: [] }) // public: not found
+          .mockResolvedValueOnce({
+            modules: [
+              {
+                // acme-corp: found
+                id: 'aws/custom-networking',
+                name: 'aws/custom-networking',
+                version: 'v1.0.0',
+                system: 'aws',
+              },
+            ],
+          }),
+        getRegistryVersion: vi.fn().mockResolvedValue({
+          deploy_bundle: { entry: 'custom-networking@v1.0.0', modules: {} },
+        }),
+      });
+
+      const deps: GraphWriteDeps = {
+        getRpcClient: () =>
+          mockClient as unknown as import('../../utilities/engine/grpc-client').LaceClient,
+        getRegistryModules: () => [], // empty local cache — forces RPC search
+        getUserOrgs: () => [{ slug: 'acme-corp', name: 'Acme Corp', role: 'member' }],
+      };
+      registerGraphWriteTools(deps);
+      registerGraphReadTools({
+        getRpcClient: () =>
+          mockClient as unknown as import('../../utilities/engine/grpc-client').LaceClient,
+      });
+
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws/custom-networking' });
+
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.dropBundle).toHaveBeenCalledWith(
+        expect.objectContaining({ organization: 'acme-corp' }),
+      );
     });
 
     test('returns error when deploy bundle is null', async () => {
