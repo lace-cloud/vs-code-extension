@@ -21,12 +21,20 @@ export default function App({ vscode }: AppProps) {
     loading: true,
     error: null,
     generation: 0,
+    viewportIntent: null,
+    viewportIntentSeq: 0,
   });
 
   const [engine] = useState(() => new PostMessageEngine(vscode));
 
   const updateView = useCallback((view: CanvasView) => {
-    setState((prev) => ({ view, loading: false, error: null, generation: prev.generation + 1 }));
+    setState((prev) => ({
+      ...prev,
+      view,
+      loading: false,
+      error: null,
+      generation: prev.generation + 1,
+    }));
   }, []);
 
   // ── Central message listener: host → webview ──
@@ -41,6 +49,9 @@ export default function App({ vscode }: AppProps) {
             loading: false,
             error: null,
             generation: prev.generation + 1,
+            viewportIntent: msg.viewportIntent ?? null,
+            viewportIntentSeq:
+              prev.viewportIntentSeq + (msg.viewportIntent ? 1 : 0),
           }));
           break;
 
