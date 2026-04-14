@@ -120,6 +120,14 @@ export interface CanvasEngine {
   undo(): Promise<CanvasView>;
   redo(): Promise<CanvasView>;
 
+  // Groups
+  createGroup(label: string, nodeIds: string[]): Promise<CanvasView>;
+  updateGroup(
+    groupId: string,
+    updates: { label?: string; node_ids?: string[]; collapsed?: boolean },
+  ): Promise<CanvasView>;
+  deleteGroup(groupId: string): Promise<CanvasView>;
+
   // Queries
   queryNodeConfig(instanceId: string): Promise<NodeConfig>;
   queryEdgeConfig(source: string, target: string): Promise<EdgeConfig>;

@@ -278,6 +278,178 @@ describe('E2E: Canvas workflows', () => {
     }
   });
 
+  // ── Groups ──
+
+  test('create group → collapse → expand → ungroup', async () => {
+    const srv = await spawnServer(binary);
+    proc = srv.process;
+    client = srv.client;
+
+    await client.initialize('0.1.0');
+    const tmpDir = mkdtempSync(join(tmpdir(), 'lace-e2e-'));
+    try {
+      await client.sessionOpen({ file_path: tmpDir, workspace_name: 'group-test' });
+
+      // Drop composite → 3 nodes
+      const cv = await client.dropBundle({ deploy_bundle: loadFixture('iam-stack.bundle') });
+      expect(cv.nodes).toHaveLength(3);
+      expect(cv.groups).toHaveLength(0);
+
+      // Create group from 2 nodes
+      const nodeIds = cv.nodes.slice(0, 2).map((n) => n.id);
+      const cv2 = await client.createGroup({ label: 'IAM Core', node_ids: nodeIds });
+      expect(cv2.groups).toHaveLength(1);
+      expect(cv2.groups[0].label).toBe('IAM Core');
+      expect(cv2.groups[0].node_ids).toHaveLength(2);
+      expect(cv2.groups[0].collapsed).toBe(false);
+
+      // Collapse
+      const cv3 = await client.updateGroup({
+        group_id: cv2.groups[0].id,
+        collapsed: true,
+        has_collapsed: true,
+        label: '',
+        node_ids: [],
+        has_label: false,
+        has_node_ids: false,
+      });
+      expect(cv3.groups[0].collapsed).toBe(true);
+
+      // Expand
+      const cv4 = await client.updateGroup({
+        group_id: cv3.groups[0].id,
+        collapsed: false,
+        has_collapsed: true,
+        label: '',
+        node_ids: [],
+        has_label: false,
+        has_node_ids: false,
+      });
+      expect(cv4.groups[0].collapsed).toBe(false);
+
+      // Ungroup
+      const cv5 = await client.deleteGroup({ group_id: cv4.groups[0].id });
+      expect(cv5.groups).toHaveLength(0);
+      expect(cv5.nodes).toHaveLength(3); // nodes preserved
+
+      await client.shutdown();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('group persists across save → close → reopen', async () => {
+    const srv = await spawnServer(binary);
+    proc = srv.process;
+    client = srv.client;
+
+    await client.initialize('0.1.0');
+    const tmpDir = mkdtempSync(join(tmpdir(), 'lace-e2e-'));
+    try {
+      await client.sessionOpen({ file_path: tmpDir, workspace_name: 'group-persist' });
+
+      const cv = await client.dropBundle({ deploy_bundle: loadFixture('iam-stack.bundle') });
+      const nodeIds = cv.nodes.map((n) => n.id);
+
+      const cv2 = await client.createGroup({ label: 'Full Stack', node_ids: nodeIds });
+      const groupId = cv2.groups[0].id;
+
+      // Collapse it
+      await client.updateGroup({
+        group_id: groupId,
+        collapsed: true,
+        has_collapsed: true,
+        label: '',
+        node_ids: [],
+        has_label: false,
+        has_node_ids: false,
+      });
+
+      // Save and reopen
+      await client.sessionSave();
+      await client.sessionClose();
+
+      const reopened = await client.sessionOpen({
+        file_path: tmpDir,
+        workspace_name: 'group-persist',
+      });
+
+      expect(reopened.groups).toHaveLength(1);
+      expect(reopened.groups[0].label).toBe('Full Stack');
+      expect(reopened.groups[0].collapsed).toBe(true);
+      expect(reopened.groups[0].node_ids).toHaveLength(3);
+      expect(reopened.nodes).toHaveLength(3);
+
+      await client.shutdown();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('deleting instance removes it from group', async () => {
+    const srv = await spawnServer(binary);
+    proc = srv.process;
+    client = srv.client;
+
+    await client.initialize('0.1.0');
+    const tmpDir = mkdtempSync(join(tmpdir(), 'lace-e2e-'));
+    try {
+      await client.sessionOpen({ file_path: tmpDir, workspace_name: 'group-delete' });
+
+      const cv = await client.dropBundle({ deploy_bundle: loadFixture('iam-stack.bundle') });
+      const nodeIds = cv.nodes.map((n) => n.id);
+
+      const cv2 = await client.createGroup({ label: 'Stack', node_ids: nodeIds });
+      expect(cv2.groups[0].node_ids).toHaveLength(3);
+
+      // Delete one instance
+      const cv3 = await client.deleteInstance({ instance_id: nodeIds[0] });
+      expect(cv3.nodes).toHaveLength(2);
+      expect(cv3.groups[0].node_ids).toHaveLength(2);
+      expect(cv3.groups[0].node_ids).not.toContain(nodeIds[0]);
+
+      await client.shutdown();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('renaming instance updates group membership', async () => {
+    const srv = await spawnServer(binary);
+    proc = srv.process;
+    client = srv.client;
+
+    await client.initialize('0.1.0');
+    const tmpDir = mkdtempSync(join(tmpdir(), 'lace-e2e-'));
+    try {
+      await client.sessionOpen({ file_path: tmpDir, workspace_name: 'group-rename' });
+
+      const cv = await client.dropBundle({ deploy_bundle: loadFixture('iam-stack.bundle') });
+      const firstId = cv.nodes[0].id;
+      const secondId = cv.nodes[1].id;
+
+      const cv2 = await client.createGroup({
+        label: 'IAM',
+        node_ids: [firstId, secondId],
+      });
+      expect(cv2.groups[0].node_ids).toContain(firstId);
+
+      // Rename the first node
+      const cv3 = await client.renameInstance({
+        old_id: firstId,
+        new_id: 'renamed_node',
+      });
+
+      expect(cv3.groups[0].node_ids).toContain('renamed_node');
+      expect(cv3.groups[0].node_ids).not.toContain(firstId);
+      expect(cv3.groups[0].node_ids).toContain(secondId);
+
+      await client.shutdown();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   // ── Generate ──
 
   test('generate dry-run on composed canvas', async () => {

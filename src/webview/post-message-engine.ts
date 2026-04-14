@@ -213,6 +213,31 @@ export class PostMessageEngine implements CanvasEngine {
     return this.call('action/redo');
   }
 
+  // ── Groups ──
+
+  createGroup(label: string, nodeIds: string[]): Promise<CanvasView> {
+    return this.call('action/create_group', { label, node_ids: nodeIds });
+  }
+
+  updateGroup(
+    groupId: string,
+    updates: { label?: string; node_ids?: string[]; collapsed?: boolean },
+  ): Promise<CanvasView> {
+    return this.call('action/update_group', {
+      group_id: groupId,
+      has_label: updates.label !== undefined,
+      label: updates.label ?? '',
+      has_node_ids: updates.node_ids !== undefined,
+      node_ids: updates.node_ids ?? [],
+      has_collapsed: updates.collapsed !== undefined,
+      collapsed: updates.collapsed ?? false,
+    });
+  }
+
+  deleteGroup(groupId: string): Promise<CanvasView> {
+    return this.call('action/delete_group', { group_id: groupId });
+  }
+
   // ── Queries ──
 
   queryNodeConfig(instanceId: string): Promise<NodeConfig> {

@@ -9,6 +9,14 @@ export type CanvasView = {
   can_undo: boolean;
   can_redo: boolean;
   is_dirty: boolean;
+  groups: RenderGroup[];
+};
+
+export type RenderGroup = {
+  id: string;
+  label: string;
+  node_ids: string[];
+  collapsed: boolean;
 };
 
 export type RenderNode = {

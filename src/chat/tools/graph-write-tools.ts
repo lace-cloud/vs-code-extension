@@ -685,4 +685,64 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       return { content: `Failed to set environment: ${errorMessage(err)}`, isError: true };
     }
   });
+
+  // ─────────────────────────────────────────────
+  // lace_create_group
+  // ─────────────────────────────────────────────
+  registerTool('lace_create_group', async (params): Promise<ToolResult> => {
+    const label = params.label as string | undefined;
+    const instanceIds = params.instance_ids as string[] | undefined;
+
+    if (!label) {
+      return { content: 'Missing required parameter: label', isError: true };
+    }
+    if (!instanceIds || instanceIds.length < 2) {
+      return {
+        content: 'Missing required parameter: instance_ids (at least 2 instance IDs)',
+        isError: true,
+      };
+    }
+
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
+
+    try {
+      const existingGroupIds = new Set((getCanvasView()?.groups ?? []).map((g) => g.id));
+      const canvasView = await engineResult.client.createGroup({
+        label,
+        node_ids: instanceIds,
+      });
+      publishCanvasView(canvasView);
+
+      const newGroup = canvasView.groups.find((g) => !existingGroupIds.has(g.id));
+      const groupId = newGroup?.id ?? 'unknown';
+      return {
+        content: `Created group "${label}" (id: ${groupId}) with ${instanceIds.length} instances: ${instanceIds.join(', ')}.`,
+      };
+    } catch (err: unknown) {
+      return { content: `Failed to create group: ${errorMessage(err)}`, isError: true };
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // lace_ungroup
+  // ─────────────────────────────────────────────
+  registerTool('lace_ungroup', async (params): Promise<ToolResult> => {
+    const groupId = params.group_id as string | undefined;
+
+    if (!groupId) {
+      return { content: 'Missing required parameter: group_id', isError: true };
+    }
+
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
+
+    try {
+      const canvasView = await engineResult.client.deleteGroup({ group_id: groupId });
+      publishCanvasView(canvasView);
+      return { content: `Removed group "${groupId}". All instances remain on the canvas.` };
+    } catch (err: unknown) {
+      return { content: `Failed to ungroup: ${errorMessage(err)}`, isError: true };
+    }
+  });
 }

@@ -6,11 +6,39 @@ type Props = {
   onCopy: () => void;
   onCut: () => void;
   onPaste: () => void;
+  onGroupSelected: () => void;
+  onUngroup: (groupId: string) => void;
   onDismiss: () => void;
 };
 
-export default function ContextMenu({ contextMenu, onCopy, onCut, onPaste, onDismiss }: Props) {
+export default function ContextMenu({
+  contextMenu,
+  onCopy,
+  onCut,
+  onPaste,
+  onGroupSelected,
+  onUngroup,
+  onDismiss,
+}: Props) {
   if (!contextMenu) return null;
+
+  const items: { label: string; shortcut?: string; action: () => void }[] = [];
+
+  if (contextMenu.groupId) {
+    // Right-clicked on a group node
+    items.push({ label: 'Ungroup', action: () => onUngroup(contextMenu.groupId!) });
+  } else {
+    // Standard items
+    items.push(
+      { label: 'Cut', shortcut: 'Ctrl+X', action: onCut },
+      { label: 'Copy', shortcut: 'Ctrl+C', action: onCopy },
+      { label: 'Paste', shortcut: 'Ctrl+V', action: onPaste },
+    );
+    if (contextMenu.selectedCount >= 2) {
+      items.push({ label: 'Group Selected', action: onGroupSelected });
+    }
+  }
+
   return (
     <>
       <div
@@ -18,13 +46,7 @@ export default function ContextMenu({ contextMenu, onCopy, onCut, onPaste, onDis
         style={{ left: contextMenu.x, top: contextMenu.y, minWidth: 120 }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {(
-          [
-            { label: 'Cut', shortcut: 'Ctrl+X', action: onCut },
-            { label: 'Copy', shortcut: 'Ctrl+C', action: onCopy },
-            { label: 'Paste', shortcut: 'Ctrl+V', action: onPaste },
-          ] as { label: string; shortcut: string; action: () => void }[]
-        ).map(({ label, shortcut, action }) => (
+        {items.map(({ label, shortcut, action }) => (
           <button
             key={label}
             className="w-full text-left px-3 py-1.5 text-xs text-[#CEFE65] hover:bg-[#153238] cursor-pointer flex items-center justify-between gap-4"
@@ -32,7 +54,7 @@ export default function ContextMenu({ contextMenu, onCopy, onCut, onPaste, onDis
             onClick={() => action()}
           >
             <span>{label}</span>
-            <span className="text-[#5a7060] text-[10px]">{shortcut}</span>
+            {shortcut && <span className="text-[#5a7060] text-[10px]">{shortcut}</span>}
           </button>
         ))}
       </div>

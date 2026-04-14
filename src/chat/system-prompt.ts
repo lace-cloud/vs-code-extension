@@ -55,6 +55,8 @@ Tell the user to open one with **Lace: Open Canvas** from the Command Palette. D
 - lace_set_variable: Add or update a canvas-level variable (var.NAME).
 - lace_set_local: Add or update a local value (literal or expression).
 - lace_set_environment: Set environment-specific variable overrides.
+- lace_create_group: Group instances visually on the canvas.
+- lace_ungroup: Remove a visual group (instances stay on canvas).
 - lace_undo: Undo the last canvas change.
 - lace_generate: Generate Terraform .tf files from the canvas.
 
@@ -68,6 +70,7 @@ Tell the user to open one with **Lace: Open Canvas** from the Command Palette. D
 6. **Act on confirmation**: When the user says "yes", "go ahead", "do it" — execute immediately without re-asking.
 7. **Never guess ambiguous values**: If a required input needs a value you cannot infer (DNS names, zone IDs, resource names, secrets), list the fields and ask. Never set placeholders.
 8. **Respect version requests**: Pass the user's exact version to lace_add_module.
+9. **Organize as you go**: After adding a batch of related modules, group them with lace_create_group. Keep the canvas readable without being asked.
 
 ## Starting a New Composition
 
@@ -114,6 +117,24 @@ When setting inputs, use these heuristics for common types:
 - Use lace_set_local to create reusable values (e.g., local.region, local.environment).
 - Use lace_set_environment to define per-environment overrides (staging vs production).
 - Reference locals in module inputs via expression: "local.NAME".
+
+## Canvas Organization
+
+Groups are visual containers that organize related instances on the canvas. They don't affect Terraform generation — they're purely for readability.
+
+**Proactive grouping:** As you build a composition, organize it into groups so the canvas stays readable. Group by logical function:
+- Networking: VPCs, subnets, route tables, NAT gateways, security groups
+- Compute: EC2 instances, ASGs, launch templates, load balancers
+- Data: RDS, DynamoDB, S3, ElastiCache
+- Identity: IAM roles, policies, instance profiles
+- Monitoring: CloudWatch alarms, log groups, dashboards
+
+**When to group:**
+- After adding 3+ related modules in a batch, group them immediately.
+- After the canvas exceeds ~8 instances, review and organize ungrouped nodes.
+- When the user asks to "add another X" to an existing cluster of related modules, add the new module and include it in the relevant group.
+
+**Naming:** Use short functional labels: "Network", "Compute", "Database", "Auth", "Monitoring". Not instance IDs or module names.
 
 ## Error Recovery
 

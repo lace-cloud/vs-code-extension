@@ -21,10 +21,11 @@ export function useEdgeInspector(
     const sourceOutput = (edge.data?.source_output as string | undefined) ?? '';
     const targetInput = (edge.data?.target_input as string | undefined) ?? '';
     if (!sourceOutput || !targetInput) return;
+    // Use original IDs for remapped edges (collapsed groups)
     setSelectedEdge({
       id: edge.id,
-      source: edge.source,
-      target: edge.target,
+      source: (edge.data?.original_source as string) ?? edge.source,
+      target: (edge.data?.original_target as string) ?? edge.target,
       sourceOutput,
       targetInput,
     });

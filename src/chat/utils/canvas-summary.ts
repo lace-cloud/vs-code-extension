@@ -25,9 +25,21 @@ export function formatCanvasState(view: CanvasView | undefined, opts: FormatOpti
 }
 
 function formatCompact(view: CanvasView): string {
+  const groupCount = view.groups.length ?? 0;
+  const groupSuffix = groupCount > 0 ? `, ${groupCount} group(s)` : '';
   const parts: string[] = [
-    `Canvas snapshot: ${view.nodes.length} instance(s), ${view.edges.length} connection(s).`,
+    `Canvas snapshot: ${view.nodes.length} instance(s), ${view.edges.length} connection(s)${groupSuffix}.`,
   ];
+
+  if (groupCount > 0) {
+    const groupList = view.groups
+      .map((g) => {
+        const collapsed = g.collapsed ? ' (collapsed)' : '';
+        return `${g.label} [${g.node_ids.join(', ')}]${collapsed}`;
+      })
+      .join(', ');
+    parts.push(`Groups: ${groupList}`);
+  }
 
   const nodeList = view.nodes
     .map((n) => `${n.id} (${n.label})${n.has_errors ? ' \u26a0' : ''}`)
@@ -52,6 +64,16 @@ function formatDetailed(view: CanvasView): string {
   const lines: string[] = [];
 
   lines.push(`**Canvas: ${view.nodes.length} instance(s), ${view.edges.length} connection(s)**`);
+
+  if (view.groups.length > 0) {
+    lines.push('');
+    lines.push('### Groups');
+    for (const g of view.groups) {
+      const collapsed = g.collapsed ? ' (collapsed)' : '';
+      lines.push(`- **${g.label}** \u2014 ${g.node_ids.join(', ')}${collapsed}`);
+    }
+  }
+
   lines.push('');
   lines.push('### Instances');
   for (const node of view.nodes) {

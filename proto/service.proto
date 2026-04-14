@@ -41,6 +41,9 @@ service LaceEngine {
   rpc DeleteInstance(DeleteInstanceRequest) returns (CanvasView);
   rpc CopyInstances(CopyInstancesRequest) returns (CanvasView);
   rpc SyncLayout(SyncLayoutRequest) returns (google.protobuf.Empty);
+  rpc CreateGroup(CreateGroupRequest) returns (CanvasView);
+  rpc UpdateGroup(UpdateGroupRequest) returns (CanvasView);
+  rpc DeleteGroup(DeleteGroupRequest) returns (CanvasView);
   rpc SetVariables(SetVariablesRequest) returns (CanvasView);
   rpc SetExports(SetExportsRequest) returns (CanvasView);
   rpc SetTerraform(SetTerraformRequest) returns (google.protobuf.Empty);
@@ -326,6 +329,25 @@ message SyncLayoutRequest {
   map<string, Position> positions = 1;
 }
 
+message CreateGroupRequest {
+  string label = 1;
+  repeated string node_ids = 2;
+}
+
+message UpdateGroupRequest {
+  string group_id = 1;
+  string label = 2;
+  repeated string node_ids = 3;
+  bool collapsed = 4;
+  bool has_label = 5;
+  bool has_collapsed = 6;
+  bool has_node_ids = 7;
+}
+
+message DeleteGroupRequest {
+  string group_id = 1;
+}
+
 message SetVariablesRequest {
   repeated InputDef variables = 1;
 }
@@ -406,6 +428,14 @@ message CanvasView {
   bool can_undo = 5;
   bool can_redo = 6;
   bool is_dirty = 7;
+  repeated RenderGroup groups = 8;
+}
+
+message RenderGroup {
+  string id = 1;
+  string label = 2;
+  repeated string node_ids = 3;
+  bool collapsed = 4;
 }
 
 message RenderNode {

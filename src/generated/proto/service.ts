@@ -402,6 +402,25 @@ export interface SyncLayoutRequest_PositionsEntry {
   value: Position | undefined;
 }
 
+export interface CreateGroupRequest {
+  label: string;
+  node_ids: string[];
+}
+
+export interface UpdateGroupRequest {
+  group_id: string;
+  label: string;
+  node_ids: string[];
+  collapsed: boolean;
+  has_label: boolean;
+  has_collapsed: boolean;
+  has_node_ids: boolean;
+}
+
+export interface DeleteGroupRequest {
+  group_id: string;
+}
+
 export interface SetVariablesRequest {
   variables: InputDef[];
 }
@@ -484,6 +503,14 @@ export interface CanvasView {
   can_undo: boolean;
   can_redo: boolean;
   is_dirty: boolean;
+  groups: RenderGroup[];
+}
+
+export interface RenderGroup {
+  id: string;
+  label: string;
+  node_ids: string[];
+  collapsed: boolean;
 }
 
 export interface RenderNode {
@@ -4359,6 +4386,334 @@ export const SyncLayoutRequest_PositionsEntry: MessageFns<SyncLayoutRequest_Posi
   },
 };
 
+function createBaseCreateGroupRequest(): CreateGroupRequest {
+  return { label: "", node_ids: [] };
+}
+
+export const CreateGroupRequest: MessageFns<CreateGroupRequest> = {
+  encode(message: CreateGroupRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.label !== "") {
+      writer.uint32(10).string(message.label);
+    }
+    for (const v of message.node_ids) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateGroupRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCreateGroupRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.label = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.node_ids.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CreateGroupRequest {
+    return {
+      label: isSet(object.label) ? globalThis.String(object.label) : "",
+      node_ids: globalThis.Array.isArray(object?.nodeIds)
+        ? object.nodeIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.node_ids)
+        ? object.node_ids.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: CreateGroupRequest): unknown {
+    const obj: any = {};
+    if (message.label !== "") {
+      obj.label = message.label;
+    }
+    if (message.node_ids?.length) {
+      obj.nodeIds = message.node_ids;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CreateGroupRequest>, I>>(base?: I): CreateGroupRequest {
+    return CreateGroupRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateGroupRequest>, I>>(object: I): CreateGroupRequest {
+    const message = createBaseCreateGroupRequest();
+    message.label = object.label ?? "";
+    message.node_ids = object.node_ids?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseUpdateGroupRequest(): UpdateGroupRequest {
+  return {
+    group_id: "",
+    label: "",
+    node_ids: [],
+    collapsed: false,
+    has_label: false,
+    has_collapsed: false,
+    has_node_ids: false,
+  };
+}
+
+export const UpdateGroupRequest: MessageFns<UpdateGroupRequest> = {
+  encode(message: UpdateGroupRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.group_id !== "") {
+      writer.uint32(10).string(message.group_id);
+    }
+    if (message.label !== "") {
+      writer.uint32(18).string(message.label);
+    }
+    for (const v of message.node_ids) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.collapsed !== false) {
+      writer.uint32(32).bool(message.collapsed);
+    }
+    if (message.has_label !== false) {
+      writer.uint32(40).bool(message.has_label);
+    }
+    if (message.has_collapsed !== false) {
+      writer.uint32(48).bool(message.has_collapsed);
+    }
+    if (message.has_node_ids !== false) {
+      writer.uint32(56).bool(message.has_node_ids);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateGroupRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateGroupRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.group_id = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.label = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.node_ids.push(reader.string());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.collapsed = reader.bool();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.has_label = reader.bool();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.has_collapsed = reader.bool();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.has_node_ids = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateGroupRequest {
+    return {
+      group_id: isSet(object.groupId)
+        ? globalThis.String(object.groupId)
+        : isSet(object.group_id)
+        ? globalThis.String(object.group_id)
+        : "",
+      label: isSet(object.label) ? globalThis.String(object.label) : "",
+      node_ids: globalThis.Array.isArray(object?.nodeIds)
+        ? object.nodeIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.node_ids)
+        ? object.node_ids.map((e: any) => globalThis.String(e))
+        : [],
+      collapsed: isSet(object.collapsed) ? globalThis.Boolean(object.collapsed) : false,
+      has_label: isSet(object.hasLabel)
+        ? globalThis.Boolean(object.hasLabel)
+        : isSet(object.has_label)
+        ? globalThis.Boolean(object.has_label)
+        : false,
+      has_collapsed: isSet(object.hasCollapsed)
+        ? globalThis.Boolean(object.hasCollapsed)
+        : isSet(object.has_collapsed)
+        ? globalThis.Boolean(object.has_collapsed)
+        : false,
+      has_node_ids: isSet(object.hasNodeIds)
+        ? globalThis.Boolean(object.hasNodeIds)
+        : isSet(object.has_node_ids)
+        ? globalThis.Boolean(object.has_node_ids)
+        : false,
+    };
+  },
+
+  toJSON(message: UpdateGroupRequest): unknown {
+    const obj: any = {};
+    if (message.group_id !== "") {
+      obj.groupId = message.group_id;
+    }
+    if (message.label !== "") {
+      obj.label = message.label;
+    }
+    if (message.node_ids?.length) {
+      obj.nodeIds = message.node_ids;
+    }
+    if (message.collapsed !== false) {
+      obj.collapsed = message.collapsed;
+    }
+    if (message.has_label !== false) {
+      obj.hasLabel = message.has_label;
+    }
+    if (message.has_collapsed !== false) {
+      obj.hasCollapsed = message.has_collapsed;
+    }
+    if (message.has_node_ids !== false) {
+      obj.hasNodeIds = message.has_node_ids;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateGroupRequest>, I>>(base?: I): UpdateGroupRequest {
+    return UpdateGroupRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateGroupRequest>, I>>(object: I): UpdateGroupRequest {
+    const message = createBaseUpdateGroupRequest();
+    message.group_id = object.group_id ?? "";
+    message.label = object.label ?? "";
+    message.node_ids = object.node_ids?.map((e) => e) || [];
+    message.collapsed = object.collapsed ?? false;
+    message.has_label = object.has_label ?? false;
+    message.has_collapsed = object.has_collapsed ?? false;
+    message.has_node_ids = object.has_node_ids ?? false;
+    return message;
+  },
+};
+
+function createBaseDeleteGroupRequest(): DeleteGroupRequest {
+  return { group_id: "" };
+}
+
+export const DeleteGroupRequest: MessageFns<DeleteGroupRequest> = {
+  encode(message: DeleteGroupRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.group_id !== "") {
+      writer.uint32(10).string(message.group_id);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteGroupRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteGroupRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.group_id = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteGroupRequest {
+    return {
+      group_id: isSet(object.groupId)
+        ? globalThis.String(object.groupId)
+        : isSet(object.group_id)
+        ? globalThis.String(object.group_id)
+        : "",
+    };
+  },
+
+  toJSON(message: DeleteGroupRequest): unknown {
+    const obj: any = {};
+    if (message.group_id !== "") {
+      obj.groupId = message.group_id;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteGroupRequest>, I>>(base?: I): DeleteGroupRequest {
+    return DeleteGroupRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteGroupRequest>, I>>(object: I): DeleteGroupRequest {
+    const message = createBaseDeleteGroupRequest();
+    message.group_id = object.group_id ?? "";
+    return message;
+  },
+};
+
 function createBaseSetVariablesRequest(): SetVariablesRequest {
   return { variables: [] };
 }
@@ -5605,7 +5960,16 @@ export const ValidateResponse: MessageFns<ValidateResponse> = {
 };
 
 function createBaseCanvasView(): CanvasView {
-  return { module_name: "", nodes: [], edges: [], errors: [], can_undo: false, can_redo: false, is_dirty: false };
+  return {
+    module_name: "",
+    nodes: [],
+    edges: [],
+    errors: [],
+    can_undo: false,
+    can_redo: false,
+    is_dirty: false,
+    groups: [],
+  };
 }
 
 export const CanvasView: MessageFns<CanvasView> = {
@@ -5630,6 +5994,9 @@ export const CanvasView: MessageFns<CanvasView> = {
     }
     if (message.is_dirty !== false) {
       writer.uint32(56).bool(message.is_dirty);
+    }
+    for (const v of message.groups) {
+      RenderGroup.encode(v!, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -5697,6 +6064,14 @@ export const CanvasView: MessageFns<CanvasView> = {
           message.is_dirty = reader.bool();
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.groups.push(RenderGroup.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5731,6 +6106,9 @@ export const CanvasView: MessageFns<CanvasView> = {
         : isSet(object.is_dirty)
         ? globalThis.Boolean(object.is_dirty)
         : false,
+      groups: globalThis.Array.isArray(object?.groups)
+        ? object.groups.map((e: any) => RenderGroup.fromJSON(e))
+        : [],
     };
   },
 
@@ -5757,6 +6135,9 @@ export const CanvasView: MessageFns<CanvasView> = {
     if (message.is_dirty !== false) {
       obj.isDirty = message.is_dirty;
     }
+    if (message.groups?.length) {
+      obj.groups = message.groups.map((e) => RenderGroup.toJSON(e));
+    }
     return obj;
   },
 
@@ -5772,6 +6153,119 @@ export const CanvasView: MessageFns<CanvasView> = {
     message.can_undo = object.can_undo ?? false;
     message.can_redo = object.can_redo ?? false;
     message.is_dirty = object.is_dirty ?? false;
+    message.groups = object.groups?.map((e) => RenderGroup.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRenderGroup(): RenderGroup {
+  return { id: "", label: "", node_ids: [], collapsed: false };
+}
+
+export const RenderGroup: MessageFns<RenderGroup> = {
+  encode(message: RenderGroup, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.label !== "") {
+      writer.uint32(18).string(message.label);
+    }
+    for (const v of message.node_ids) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.collapsed !== false) {
+      writer.uint32(32).bool(message.collapsed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RenderGroup {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRenderGroup();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.label = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.node_ids.push(reader.string());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.collapsed = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RenderGroup {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      label: isSet(object.label) ? globalThis.String(object.label) : "",
+      node_ids: globalThis.Array.isArray(object?.nodeIds)
+        ? object.nodeIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.node_ids)
+        ? object.node_ids.map((e: any) => globalThis.String(e))
+        : [],
+      collapsed: isSet(object.collapsed) ? globalThis.Boolean(object.collapsed) : false,
+    };
+  },
+
+  toJSON(message: RenderGroup): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.label !== "") {
+      obj.label = message.label;
+    }
+    if (message.node_ids?.length) {
+      obj.nodeIds = message.node_ids;
+    }
+    if (message.collapsed !== false) {
+      obj.collapsed = message.collapsed;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RenderGroup>, I>>(base?: I): RenderGroup {
+    return RenderGroup.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RenderGroup>, I>>(object: I): RenderGroup {
+    const message = createBaseRenderGroup();
+    message.id = object.id ?? "";
+    message.label = object.label ?? "";
+    message.node_ids = object.node_ids?.map((e) => e) || [];
+    message.collapsed = object.collapsed ?? false;
     return message;
   },
 };
@@ -8734,6 +9228,33 @@ export const LaceEngineService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+  createGroup: {
+    path: "/lace.engine.LaceEngine/CreateGroup",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: CreateGroupRequest): Buffer => Buffer.from(CreateGroupRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateGroupRequest => CreateGroupRequest.decode(value),
+    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
+  },
+  updateGroup: {
+    path: "/lace.engine.LaceEngine/UpdateGroup",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: UpdateGroupRequest): Buffer => Buffer.from(UpdateGroupRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateGroupRequest => UpdateGroupRequest.decode(value),
+    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
+  },
+  deleteGroup: {
+    path: "/lace.engine.LaceEngine/DeleteGroup",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: DeleteGroupRequest): Buffer => Buffer.from(DeleteGroupRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteGroupRequest => DeleteGroupRequest.decode(value),
+    responseSerialize: (value: CanvasView): Buffer => Buffer.from(CanvasView.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CanvasView => CanvasView.decode(value),
+  },
   setVariables: {
     path: "/lace.engine.LaceEngine/SetVariables",
     requestStream: false,
@@ -8893,6 +9414,9 @@ export interface LaceEngineServer extends UntypedServiceImplementation {
   deleteInstance: handleUnaryCall<DeleteInstanceRequest, CanvasView>;
   copyInstances: handleUnaryCall<CopyInstancesRequest, CanvasView>;
   syncLayout: handleUnaryCall<SyncLayoutRequest, Empty>;
+  createGroup: handleUnaryCall<CreateGroupRequest, CanvasView>;
+  updateGroup: handleUnaryCall<UpdateGroupRequest, CanvasView>;
+  deleteGroup: handleUnaryCall<DeleteGroupRequest, CanvasView>;
   setVariables: handleUnaryCall<SetVariablesRequest, CanvasView>;
   setExports: handleUnaryCall<SetExportsRequest, CanvasView>;
   setTerraform: handleUnaryCall<SetTerraformRequest, Empty>;
@@ -9242,6 +9766,51 @@ export interface LaceEngineClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  createGroup(
+    request: CreateGroupRequest,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  createGroup(
+    request: CreateGroupRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  createGroup(
+    request: CreateGroupRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  updateGroup(
+    request: UpdateGroupRequest,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  updateGroup(
+    request: UpdateGroupRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  updateGroup(
+    request: UpdateGroupRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  deleteGroup(
+    request: DeleteGroupRequest,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  deleteGroup(
+    request: DeleteGroupRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
+  ): ClientUnaryCall;
+  deleteGroup(
+    request: DeleteGroupRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CanvasView) => void,
   ): ClientUnaryCall;
   setVariables(
     request: SetVariablesRequest,

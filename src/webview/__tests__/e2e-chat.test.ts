@@ -214,6 +214,77 @@ describe('E2E: Chat-driven workflows', () => {
     }
   });
 
+  // ── Groups ──
+
+  test('create group → describe includes groups → ungroup', { timeout: 30000 }, async () => {
+    const { tmpDir, canvasViewRef } = await setupSession('chat-groups');
+    try {
+      // Add 2 modules (second vpc gets auto-renamed to vpc_1)
+      await callToolExpectSuccess('lace_add_module', { name: 'aws/vpc' });
+      await callToolExpectSuccess('lace_add_module', { name: 'aws/vpc' });
+      const nodeIds = canvasViewRef.current!.nodes.map((n) => n.id);
+      expect(nodeIds.length).toBeGreaterThanOrEqual(2);
+
+      // Create group via chat tool
+      const groupResult = await callToolExpectSuccess('lace_create_group', {
+        label: 'Network',
+        instance_ids: nodeIds.slice(0, 2),
+      });
+      expect(groupResult.content).toContain('Network');
+      expect(canvasViewRef.current!.groups).toHaveLength(1);
+      expect(canvasViewRef.current!.groups[0].label).toBe('Network');
+
+      // Describe graph should include groups
+      const descResult = await callToolExpectSuccess('lace_describe_graph', {});
+      expect(descResult.content).toContain('Network');
+
+      // Ungroup via chat tool
+      const groupId = canvasViewRef.current!.groups[0].id;
+      const ungroupResult = await callToolExpectSuccess('lace_ungroup', { group_id: groupId });
+      expect(ungroupResult.content).toContain('Removed');
+      expect(canvasViewRef.current!.groups).toHaveLength(0);
+      expect(canvasViewRef.current!.nodes.length).toBeGreaterThanOrEqual(2);
+
+      await cleanup(tmpDir);
+    } catch (err) {
+      rmSync(tmpDir, { recursive: true, force: true });
+      throw err;
+    }
+  });
+
+  test('create group with already-grouped node → error', { timeout: 30000 }, async () => {
+    const { tmpDir, canvasViewRef } = await setupSession('chat-group-dup');
+    try {
+      await callToolExpectSuccess('lace_add_module', { name: 'aws/vpc' });
+      await callToolExpectSuccess('lace_add_module', { name: 'aws/vpc' });
+      const nodeIds = canvasViewRef.current!.nodes.map((n) => n.id);
+
+      // Create first group
+      await callToolExpectSuccess('lace_create_group', {
+        label: 'Network',
+        instance_ids: nodeIds.slice(0, 2),
+      });
+
+      // Try to group an already-grouped node with another
+      // Need a third module so we have an ungrouped node to pair with
+      await callToolExpectSuccess('lace_add_module', { name: 'aws/vpc' });
+      const allIds = canvasViewRef.current!.nodes.map((n) => n.id);
+      const thirdId = allIds.find((id) => !nodeIds.slice(0, 2).includes(id))!;
+
+      const result = await callTool('lace_create_group', {
+        label: 'Other',
+        instance_ids: [nodeIds[0], thirdId],
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('already in group');
+
+      await cleanup(tmpDir);
+    } catch (err) {
+      rmSync(tmpDir, { recursive: true, force: true });
+      throw err;
+    }
+  });
+
   // ── Describe graph ──
 
   test('describe graph reflects canvas state', { timeout: 30000 }, async () => {

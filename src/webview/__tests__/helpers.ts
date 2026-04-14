@@ -14,6 +14,7 @@ export function makeCanvasView(nodes: RenderNode[] = [], edges: RenderEdge[] = [
     can_undo: false,
     can_redo: false,
     is_dirty: false,
+    groups: [],
   };
 }
 

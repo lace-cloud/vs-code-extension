@@ -1,5 +1,5 @@
 // src/webview/Canvas.tsx
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -16,6 +16,7 @@ import {
 } from '@xyflow/react';
 
 import ModuleNode from './components/nodes/ModuleNode';
+import GroupNode from './components/nodes/GroupNode';
 import SlidePanel from './components/SlidePanel';
 import { ErrorState } from './components/ErrorBoundary';
 import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
@@ -38,11 +39,13 @@ import { useGenerationStatus } from './hooks/useGenerationStatus';
 import { useNewNodeTracking } from './hooks/useNewNodeTracking';
 import { useClipboard } from './hooks/useClipboard';
 import { CANVAS_EVENTS } from './events';
+import { useGroupLogic, toAbsolutePositions } from './hooks/useGroupLogic';
 
 // ── Node types registration ──
 
 const nodeTypes = {
   moduleNode: ModuleNode,
+  groupNode: GroupNode,
 };
 
 // ══════════════════════════════════════════════════════════════════════
@@ -152,20 +155,10 @@ function CompositeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Edges ──
-  const rfEdgesFromView = useMemo<Edge[]>(
-    () =>
-      view.edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        sourceHandle: `out:${e.source_output}`,
-        targetHandle: `in:${e.target_input}`,
-        data: { source_output: e.source_output, target_input: e.target_input },
-        type: 'default',
-      })),
-    [view.edges],
-  );
+  // ── Nodes + Edges (group-aware) ──
+  const groupLogic = useGroupLogic(view.nodes, view.edges, view.groups, newNodeIds, erroredNodeIds);
+
+  const rfEdgesFromView = groupLogic.rfEdges;
 
   const [rfEdges, setRfEdges] = useState<Edge[]>(rfEdgesFromView);
   useEffect(() => {
@@ -176,19 +169,12 @@ function CompositeEditor({
     setRfEdges((prev) => applyEdgeChanges(changes, prev));
   }, []);
 
-  // ── Nodes ──
-  const rfNodesFromView = useMemo<Node[]>(
-    () =>
-      view.nodes.map((n) => ({
-        id: n.id,
-        type: 'moduleNode',
-        position: n.position,
-        data: { ...n, isNew: newNodeIds.has(n.id), hasError: erroredNodeIds.has(n.id) },
-      })),
-    [view.nodes, erroredNodeIds, newNodeIds],
-  );
+  const rfNodesFromView = groupLogic.rfNodes;
 
   const [rfNodes, setRfNodes] = useState<Node[]>(rfNodesFromView);
+
+  // Track group membership to detect when coordinate spaces change
+  const prevGroupKeyRef = useRef('');
 
   useEffect(() => {
     const force = forcePositionsRef.current;
@@ -196,8 +182,14 @@ function CompositeEditor({
     const pending = pendingSelectIdsRef.current;
     pendingSelectIdsRef.current = null;
 
+    // Force positions when group membership changes (parentId shifts coordinate space)
+    const groups = view.groups;
+    const groupKey = groups.map((g) => `${g.id}:${g.collapsed}:${g.node_ids.join(',')}`).join('|');
+    const groupsChanged = groupKey !== prevGroupKeyRef.current;
+    prevGroupKeyRef.current = groupKey;
+
     setRfNodes((prev) => {
-      if (force) return rfNodesFromView;
+      if (force || groupsChanged) return rfNodesFromView;
       return rfNodesFromView.map((n) => {
         const existing = prev.find((p) => p.id === n.id);
         const selected = pending?.includes(n.id) ?? existing?.selected ?? false;
@@ -208,7 +200,7 @@ function CompositeEditor({
         };
       });
     });
-  }, [rfNodesFromView, forcePositionsRef]);
+  }, [rfNodesFromView, forcePositionsRef, view.groups]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setRfNodes((prev) => {
@@ -231,14 +223,13 @@ function CompositeEditor({
   }, []);
 
   const onNodeDragStop = useCallback(
-    (_e: React.MouseEvent, _node: Node, nodes: Node[]) => {
-      const positions: Record<string, { x: number; y: number }> = {};
-      for (const n of nodes) {
-        positions[n.id] = n.position;
+    (_e: React.MouseEvent, draggedNode: Node, draggedNodes: Node[]) => {
+      const positions = toAbsolutePositions(draggedNode, draggedNodes, rfNodes, view.groups);
+      if (Object.keys(positions).length > 0) {
+        onDragStop(positions);
       }
-      onDragStop(positions);
     },
-    [onDragStop],
+    [onDragStop, rfNodes, view.groups],
   );
 
   // ── Grid background styling ──
@@ -263,17 +254,31 @@ function CompositeEditor({
       onNodeDragStop={onNodeDragStop}
       onNodeContextMenu={(e, node) => {
         e.preventDefault();
+        const selCount = selectedIdsRef.current.length;
         window.dispatchEvent(
           new CustomEvent(CANVAS_EVENTS.CONTEXT_MENU, {
-            detail: { instanceId: node.id, x: e.clientX, y: e.clientY },
+            detail: {
+              instanceId: node.type === 'groupNode' ? null : node.id,
+              groupId: node.type === 'groupNode' ? node.id : null,
+              selectedCount: selCount,
+              x: e.clientX,
+              y: e.clientY,
+            },
           }),
         );
       }}
       onPaneContextMenu={(e) => {
         e.preventDefault();
+        const selCount = selectedIdsRef.current.length;
         window.dispatchEvent(
           new CustomEvent(CANVAS_EVENTS.CONTEXT_MENU, {
-            detail: { instanceId: null, x: e.clientX, y: e.clientY },
+            detail: {
+              instanceId: null,
+              groupId: null,
+              selectedCount: selCount,
+              x: e.clientX,
+              y: e.clientY,
+            },
           }),
         );
       }}
@@ -481,8 +486,10 @@ export default function Canvas() {
       if (!engine) return;
       for (const edge of edges) {
         const targetInput = edge.data?.target_input as string | undefined;
+        // Use original target for remapped edges (collapsed groups)
+        const target = (edge.data?.original_target as string) ?? edge.target;
         if (targetInput) {
-          const result = await engine.disconnect(edge.target, targetInput);
+          const result = await engine.disconnect(target, targetInput);
           updateView(result);
         }
       }
@@ -495,8 +502,14 @@ export default function Canvas() {
     async (nodes: Node[]) => {
       if (!engine) return;
       for (const node of nodes) {
-        const result = await engine.deleteInstance(node.id);
-        updateView(result);
+        if (node.type === 'groupNode') {
+          // Delete on a group node → ungroup (remove container, keep instances)
+          const result = await engine.deleteGroup(node.id);
+          updateView(result);
+        } else {
+          const result = await engine.deleteInstance(node.id);
+          updateView(result);
+        }
       }
     },
     [engine, updateView],
@@ -516,6 +529,34 @@ export default function Canvas() {
     setSettingsOpen(true);
     setConfigTarget(null);
   }, []);
+
+  // ── Group actions ──
+  const onGroupSelected = useCallback(async () => {
+    const ids = getSelectedIdsRef.current?.() ?? [];
+    if (ids.length < 2 || !engine) return;
+    try {
+      const label = `Group ${ids.length}`;
+      const result = await engine.createGroup(label, ids);
+      updateView(result);
+      dismissContextMenu();
+    } catch (err) {
+      showToast(`Failed to create group: ${(err as Error).message}`, 'error');
+    }
+  }, [engine, updateView, dismissContextMenu, showToast]);
+
+  const onUngroup = useCallback(
+    async (groupId: string) => {
+      if (!engine) return;
+      try {
+        const result = await engine.deleteGroup(groupId);
+        updateView(result);
+        dismissContextMenu();
+      } catch (err) {
+        showToast(`Failed to ungroup: ${(err as Error).message}`, 'error');
+      }
+    },
+    [engine, updateView, dismissContextMenu, showToast],
+  );
 
   // ── Guard: need a view to render ──
   if (state.loading || !state.view) {
@@ -544,6 +585,8 @@ export default function Canvas() {
         onCopy={onCopy}
         onCut={onCut}
         onPaste={onPaste}
+        onGroupSelected={onGroupSelected}
+        onUngroup={onUngroup}
         onDismiss={dismissContextMenu}
       />
 

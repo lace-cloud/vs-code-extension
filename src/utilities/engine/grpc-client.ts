@@ -213,6 +213,12 @@ function convertCanvasView(proto: ProtoCanvasView): CanvasView {
     can_undo: proto.can_undo,
     can_redo: proto.can_redo,
     is_dirty: proto.is_dirty,
+    groups: proto.groups.map((g) => ({
+      id: g.id,
+      label: g.label,
+      node_ids: g.node_ids,
+      collapsed: g.collapsed,
+    })),
   };
 }
 
@@ -684,6 +690,29 @@ export class LaceClient {
     return {};
   }
 
+  async createGroup(params: { label: string; node_ids: string[] }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.createGroup, params);
+    return convertCanvasView(res);
+  }
+
+  async updateGroup(params: {
+    group_id: string;
+    label: string;
+    node_ids: string[];
+    collapsed: boolean;
+    has_label: boolean;
+    has_node_ids: boolean;
+    has_collapsed: boolean;
+  }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.updateGroup, params);
+    return convertCanvasView(res);
+  }
+
+  async deleteGroup(params: { group_id: string }): Promise<CanvasView> {
+    const res = await this.unary<typeof params, ProtoCanvasView>(this.inner.deleteGroup, params);
+    return convertCanvasView(res);
+  }
+
   async setVariables(params: {
     variables: Array<{
       name: string;
@@ -1014,6 +1043,22 @@ export class LaceClient {
             environments: Record<string, Record<string, unknown>>;
           },
         );
+      case 'action/create_group':
+        return this.createGroup(params as { label: string; node_ids: string[] });
+      case 'action/update_group':
+        return this.updateGroup(
+          params as {
+            group_id: string;
+            label: string;
+            node_ids: string[];
+            collapsed: boolean;
+            has_label: boolean;
+            has_node_ids: boolean;
+            has_collapsed: boolean;
+          },
+        );
+      case 'action/delete_group':
+        return this.deleteGroup(params as { group_id: string });
       case 'action/undo':
         return this.undo();
       case 'action/redo':

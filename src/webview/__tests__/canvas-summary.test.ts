@@ -35,4 +35,35 @@ describe('formatCanvasState', () => {
     expect(result).toContain('### Connections');
     expect(result).toContain('**vpc**');
   });
+
+  test('compact mode includes groups', () => {
+    const view = makeCanvasView([makeNode('vpc'), makeNode('subnet'), makeNode('ec2')], []);
+    view.groups = [{ id: 'g1', label: 'Network', node_ids: ['vpc', 'subnet'], collapsed: false }];
+    const result = formatCanvasState(view, { compact: true });
+    expect(result).toContain('1 group(s)');
+    expect(result).toContain('Network [vpc, subnet]');
+  });
+
+  test('compact mode shows collapsed state', () => {
+    const view = makeCanvasView([makeNode('vpc'), makeNode('subnet')], []);
+    view.groups = [{ id: 'g1', label: 'Network', node_ids: ['vpc', 'subnet'], collapsed: true }];
+    const result = formatCanvasState(view, { compact: true });
+    expect(result).toContain('(collapsed)');
+  });
+
+  test('detailed mode includes groups section', () => {
+    const view = makeCanvasView([makeNode('vpc'), makeNode('subnet')], []);
+    view.groups = [{ id: 'g1', label: 'Network', node_ids: ['vpc', 'subnet'], collapsed: false }];
+    const result = formatCanvasState(view);
+    expect(result).toContain('### Groups');
+    expect(result).toContain('**Network**');
+    expect(result).toContain('vpc, subnet');
+  });
+
+  test('no groups section when groups is empty', () => {
+    const view = makeCanvasView([makeNode('vpc')], []);
+    const result = formatCanvasState(view, { compact: true });
+    expect(result).not.toContain('group');
+    expect(result).not.toContain('Groups');
+  });
 });
