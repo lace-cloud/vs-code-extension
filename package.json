@@ -383,6 +383,52 @@
           "type": "object",
           "properties": {}
         }
+      },
+      {
+        "name": "lace_set_local",
+        "displayName": "Set Local Value",
+        "modelDescription": "Add or update a Terraform local value on the canvas. Locals are computed values available to all modules via local.NAME expressions. Provide exactly one of: value (literal) or expression (HCL).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Local name (e.g., 'region', 'environment')"
+            },
+            "value": {
+              "description": "Literal value (string, number, boolean, object, or array)"
+            },
+            "expression": {
+              "type": "string",
+              "description": "HCL expression (e.g., 'var.region')"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      },
+      {
+        "name": "lace_set_environment",
+        "displayName": "Set Environment Variables",
+        "modelDescription": "Define or update environment-specific variable overrides. Environments let users deploy the same canvas with different values per environment (e.g., staging vs production).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "environment": {
+              "type": "string",
+              "description": "Environment name (e.g., 'staging', 'production')"
+            },
+            "variables": {
+              "type": "object",
+              "description": "Key-value pairs for this environment"
+            }
+          },
+          "required": [
+            "environment",
+            "variables"
+          ]
+        }
       }
     ],
     "viewsContainers": {
@@ -532,6 +578,7 @@
     "file-loader": "^6.2.0",
     "happy-dom": "^20.7.0",
     "husky": "^9.1.7",
+    "jsdom": "^29.0.2",
     "lint-staged": "^16.2.7",
     "postcss": "^8.5.6",
     "postcss-loader": "^8.2.1",
@@ -539,8 +586,8 @@
     "style-loader": "^4.0.0",
     "tailwindcss": "^4.1.18",
     "ts-loader": "^9.5.1",
-    "typescript": "^5.6.3",
     "ts-proto": "^2.6.1",
+    "typescript": "^5.6.3",
     "vitest": "~3.1.0"
   },
   "lint-staged": {

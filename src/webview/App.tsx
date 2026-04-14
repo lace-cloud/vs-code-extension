@@ -6,6 +6,8 @@ import { CanvasContext, type CanvasState } from './state/engine-context';
 import { PostMessageEngine } from './post-message-engine';
 import type { CanvasView } from './types/render';
 import type { HostToWebview } from '../types/protocol';
+import { useWindowEvent } from './hooks/useWindowEvent';
+import { CANVAS_EVENTS } from './events';
 
 type VsCodeApi = { postMessage(msg: unknown): void };
 
@@ -49,7 +51,7 @@ export default function App({ vscode }: AppProps) {
         case 'generateProgress':
         case 'generateSuccess':
         case 'generateError':
-          window.dispatchEvent(new CustomEvent('hostMessage', { detail: msg }));
+          window.dispatchEvent(new CustomEvent(CANVAS_EVENTS.HOST_MESSAGE, { detail: msg }));
           break;
       }
     };
@@ -63,43 +65,24 @@ export default function App({ vscode }: AppProps) {
     vscode.postMessage({ command: state.view.is_dirty ? 'markDirty' : 'markClean' });
   }, [state.view?.is_dirty, vscode]);
 
-  useEffect(() => {
-    const handler = async () => {
-      await engine.sessionSave();
-    };
-    window.addEventListener('canvasSave', handler);
-    return () => window.removeEventListener('canvasSave', handler);
-  }, [engine]);
+  useWindowEvent(CANVAS_EVENTS.SAVE, () => engine.sessionSave(), [engine]);
 
-  useEffect(() => {
-    const handler = () => {
-      vscode.postMessage({ command: 'generate' });
-    };
-    window.addEventListener('canvasGenerate', handler);
-    return () => window.removeEventListener('canvasGenerate', handler);
-  }, [vscode]);
+  useWindowEvent(CANVAS_EVENTS.GENERATE, () => vscode.postMessage({ command: 'generate' }), [
+    vscode,
+  ]);
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { prompt } = (e as CustomEvent).detail as { prompt: string };
-      vscode.postMessage({ command: 'openChat', prompt });
-    };
-    window.addEventListener('solveWithLace', handler);
-    return () => window.removeEventListener('solveWithLace', handler);
-  }, [vscode]);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
+  useWindowEvent(
+    CANVAS_EVENTS.OPEN_FILE,
+    (e) => {
       const { relativePath, line, column } = (e as CustomEvent).detail as {
         relativePath: string;
         line?: number;
         column?: number;
       };
       vscode.postMessage({ command: 'openFile', relativePath, line, column });
-    };
-    window.addEventListener('openFile', handler);
-    return () => window.removeEventListener('openFile', handler);
-  }, [vscode]);
+    },
+    [vscode],
+  );
 
   // ── Signal readiness to host ──
   useEffect(() => {

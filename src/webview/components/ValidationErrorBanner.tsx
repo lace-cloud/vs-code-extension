@@ -8,7 +8,6 @@ type DialogProps = {
   nodeIds: Set<string>;
   onGoToNode: (nodeId: string) => void;
   onOpenFile: (relativePath: string, line?: number, column?: number) => void;
-  onSolveWithLace: () => void;
   onClose: () => void;
 };
 
@@ -17,7 +16,6 @@ function ValidationErrorDialog({
   nodeIds,
   onGoToNode,
   onOpenFile,
-  onSolveWithLace,
   onClose,
 }: DialogProps) {
   return (
@@ -124,28 +122,6 @@ function ValidationErrorDialog({
             );
           })}
         </div>
-
-        {/* Footer — Solve with Lace (progressive disclosure: only visible here) */}
-        <div
-          className="px-4 py-3 flex justify-end"
-          style={{ borderTop: '1px solid rgba(229,72,77,0.2)' }}
-        >
-          <button
-            onClick={onSolveWithLace}
-            style={{
-              fontSize: 12,
-              color: '#CEFE65',
-              background: 'rgba(206,254,101,0.1)',
-              border: '1px solid rgba(206,254,101,0.3)',
-              borderRadius: 5,
-              padding: '5px 14px',
-              cursor: 'pointer',
-              fontWeight: 500,
-            }}
-          >
-            Solve with Lace
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -158,7 +134,6 @@ type BannerProps = {
   nodeIds: Set<string>;
   onGoToNode: (nodeId: string) => void;
   onOpenFile: (relativePath: string, line?: number, column?: number) => void;
-  onSolveWithLace: () => void;
   onDismiss: () => void;
 };
 
@@ -167,7 +142,6 @@ export function ValidationErrorBanner({
   nodeIds,
   onGoToNode,
   onOpenFile,
-  onSolveWithLace,
   onDismiss,
 }: BannerProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -233,10 +207,6 @@ export function ValidationErrorBanner({
             setDialogOpen(false);
             onOpenFile(relativePath, line, column);
           }}
-          onSolveWithLace={() => {
-            setDialogOpen(false);
-            onSolveWithLace();
-          }}
           onClose={() => setDialogOpen(false)}
         />
       )}
@@ -248,13 +218,13 @@ export function ValidationErrorBanner({
 
 /**
  * Extract a canvas node ID from a Terraform diagnostic.
- * Tries address field first ("module.cluster.aws_ecs_cluster.this" → "cluster"),
- * then falls back to the file path ("modules/cluster/main.tf" → "cluster").
+ * Tries instance_id first, then address field, then file path.
  */
 function extractNodeId(
-  d: { address?: string; file?: string },
+  d: { instance_id?: string; address?: string; file?: string },
   nodeIds: Set<string>,
 ): string | null {
+  if (d.instance_id && nodeIds.has(d.instance_id)) return d.instance_id;
   if (d.address) {
     const m = d.address.match(/^module\.([^.]+)/);
     if (m && nodeIds.has(m[1])) return m[1];

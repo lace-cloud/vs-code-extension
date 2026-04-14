@@ -29,6 +29,7 @@ export type RenderNode = {
 export type NodePin = {
   name: string;
   type: string;
+  type_family?: string;
   required?: boolean;
   wired?: boolean;
   description?: string;

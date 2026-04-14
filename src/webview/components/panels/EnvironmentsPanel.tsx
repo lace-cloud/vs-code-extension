@@ -2,10 +2,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   inputClasses,
-  saveButtonClasses,
-  saveButtonSavingClasses,
-  saveButtonSuccessClasses,
-  saveButtonErrorClasses,
   removeButtonClasses,
   removeButtonSmClasses,
   addButtonClasses,
@@ -13,6 +9,9 @@ import {
   rowCardClasses,
 } from '../../styles/panel';
 import PanelFrame from '../PanelFrame';
+import { useSaveState } from '../../hooks/useSaveState';
+import SaveButton from '../SaveButton';
+import { findDuplicateIndices } from '../../utils/duplicates';
 
 // ── Local editing state ──
 
@@ -40,8 +39,7 @@ function fromEnvRows(rows: EnvRow[]): Record<string, Record<string, unknown>> {
       try {
         vars[v.key.trim()] = JSON.parse(v.value);
       } catch {
-        if (/^\d+$/.test(v.value)) vars[v.key.trim()] = Number(v.value);
-        else vars[v.key.trim()] = v.value;
+        vars[v.key.trim()] = v.value;
       }
     }
     result[row.name.trim()] = vars;
@@ -50,8 +48,6 @@ function fromEnvRows(rows: EnvRow[]): Record<string, Record<string, unknown>> {
 }
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
-
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 type ContentProps = {
   environments: Record<string, Record<string, unknown>> | undefined;
@@ -109,53 +105,24 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
 
   // ── Validation: duplicate detection ──
 
-  // Duplicate environment names
-  const envNameDupes = new Set<number>();
-  const seenEnvNames = new Map<string, number>();
-  envRows.forEach((env, ei) => {
-    const n = env.name.trim().toLowerCase();
-    if (!n) return;
-    if (seenEnvNames.has(n)) {
-      envNameDupes.add(ei);
-      envNameDupes.add(seenEnvNames.get(n)!);
-    }
-    seenEnvNames.set(n, ei);
-  });
+  const envNameDupes = findDuplicateIndices(envRows, (r) => r.name);
 
-  // Duplicate variable keys within each environment
   const envVarDupes: Record<number, Set<number>> = {};
   envRows.forEach((env, ei) => {
-    const seen = new Map<string, number>();
-    env.vars.forEach((v, vi) => {
-      const k = v.key.trim().toLowerCase();
-      if (!k) return;
-      if (seen.has(k)) {
-        if (!envVarDupes[ei]) envVarDupes[ei] = new Set();
-        envVarDupes[ei].add(vi);
-        envVarDupes[ei].add(seen.get(k)!);
-      }
-      seen.set(k, vi);
-    });
+    const dupes = findDuplicateIndices(env.vars, (v) => v.key);
+    if (dupes.size > 0) envVarDupes[ei] = dupes;
   });
 
   const hasDuplicates = envNameDupes.size > 0 || Object.keys(envVarDupes).length > 0;
 
   // ── Save ──
 
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
-
-  const handleSave = async () => {
-    if (hasDuplicates) return;
-    setSaveStatus('saving');
-    try {
+  const { status: saveStatus, handleSave } = useSaveState(
+    useCallback(async () => {
+      if (hasDuplicates) return;
       await onSave(fromEnvRows(envRows));
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch {
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }
-  };
+    }, [onSave, envRows, hasDuplicates]),
+  );
 
   return (
     <>
@@ -206,30 +173,13 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
         + Add environment
       </button>
 
-      {/* Inline save */}
-      <button
-        className={
-          saveStatus === 'saving'
-            ? saveButtonSavingClasses
-            : saveStatus === 'saved'
-              ? saveButtonSuccessClasses
-              : saveStatus === 'error'
-                ? saveButtonErrorClasses
-                : saveButtonClasses
-        }
+      <SaveButton
+        status={saveStatus}
+        label="Save environments"
         onClick={handleSave}
-        disabled={hasDuplicates || saveStatus === 'saving'}
-        title={hasDuplicates ? 'Fix duplicate names before saving' : undefined}
-        style={hasDuplicates ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-      >
-        {saveStatus === 'saving'
-          ? 'Saving...'
-          : saveStatus === 'saved'
-            ? 'Saved!'
-            : saveStatus === 'error'
-              ? 'Save failed — try again'
-              : 'Save environments'}
-      </button>
+        disabled={hasDuplicates}
+        disabledTitle="Fix duplicate names before saving"
+      />
       {hasDuplicates && (
         <div className="text-[10px] text-[#e5484d] mt-1">
           Fix duplicate environment or variable names before saving.

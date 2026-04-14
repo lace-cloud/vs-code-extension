@@ -3,10 +3,6 @@ import React, { useState, useCallback } from 'react';
 import type { SettingsConfig } from '../../types/render';
 import {
   inputClasses,
-  saveButtonClasses,
-  saveButtonSavingClasses,
-  saveButtonSuccessClasses,
-  saveButtonErrorClasses,
   removeButtonClasses,
   removeButtonSmClasses,
   addButtonClasses,
@@ -14,6 +10,8 @@ import {
   rowCardClasses,
 } from '../../styles/panel';
 import PanelFrame from '../PanelFrame';
+import { useSaveState } from '../../hooks/useSaveState';
+import SaveButton from '../SaveButton';
 
 // ── Types derived from SettingsConfig ──
 
@@ -58,8 +56,6 @@ function fromRows(rows: ProviderRow[]): ProviderEntry[] {
 }
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
-
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 type ContentProps = {
   providers: ProviderEntry[] | undefined;
@@ -119,19 +115,11 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
     [],
   );
 
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
-
-  const handleSave = async () => {
-    setSaveStatus('saving');
-    try {
+  const { status: saveStatus, handleSave } = useSaveState(
+    useCallback(async () => {
       await onSave(fromRows(rows));
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch {
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }
-  };
+    }, [onSave, rows]),
+  );
 
   return (
     <>
@@ -185,28 +173,7 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
         + Add provider
       </button>
 
-      {/* Inline save */}
-      <button
-        className={
-          saveStatus === 'saving'
-            ? saveButtonSavingClasses
-            : saveStatus === 'saved'
-              ? saveButtonSuccessClasses
-              : saveStatus === 'error'
-                ? saveButtonErrorClasses
-                : saveButtonClasses
-        }
-        onClick={handleSave}
-        disabled={saveStatus === 'saving'}
-      >
-        {saveStatus === 'saving'
-          ? 'Saving...'
-          : saveStatus === 'saved'
-            ? 'Saved!'
-            : saveStatus === 'error'
-              ? 'Save failed — try again'
-              : 'Save providers'}
-      </button>
+      <SaveButton status={saveStatus} label="Save providers" onClick={handleSave} />
     </>
   );
 }

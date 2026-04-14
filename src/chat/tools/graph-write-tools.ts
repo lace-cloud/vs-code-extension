@@ -9,7 +9,6 @@ import type { RegistryModule } from '../../types/protocol';
 import type { CanvasView } from '../../webview/types/render';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { isValidTerraformIdentifier } from '../../webview/utils/identifiers';
 import { requireEngine, errorMessage } from './helpers';
 import { findFreePosition } from '../../webview/utils/layout';
 
@@ -132,11 +131,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    // Normalize version to match registry format (no "v" prefix — registry uses "1.0.8" not "v1.0.8")
-    let versionToAdd = requestedVersion ?? match.version;
-    if (versionToAdd.startsWith('v')) {
-      versionToAdd = versionToAdd.slice(1);
-    }
+    const versionToAdd = requestedVersion ?? match.version;
 
     const engineResult = requireEngine(deps.getRpcClient);
     if ('error' in engineResult) return engineResult.error;
@@ -505,13 +500,6 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     }
 
-    if (!isValidTerraformIdentifier(newId)) {
-      return {
-        content: `"${newId}" is not a valid Terraform identifier. Use only letters, digits, underscores, and hyphens (must start with a letter or underscore).`,
-        isError: true,
-      };
-    }
-
     const engineResult = requireEngine(deps.getRpcClient);
     if ('error' in engineResult) return engineResult.error;
 
@@ -553,13 +541,6 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
     if (!varName || !varType) {
       return {
         content: 'Missing required parameters: name, type',
-        isError: true,
-      };
-    }
-
-    if (!isValidTerraformIdentifier(varName)) {
-      return {
-        content: `"${varName}" is not a valid Terraform identifier for a variable name.`,
         isError: true,
       };
     }
@@ -612,6 +593,93 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       };
     } catch (err: unknown) {
       return { content: `Failed to undo: ${errorMessage(err)}`, isError: true };
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // lace_set_local
+  // ─────────────────────────────────────────────
+  registerTool('lace_set_local', async (params): Promise<ToolResult> => {
+    const name = params.name as string | undefined;
+    const value = params.value;
+    const expression = params.expression as string | undefined;
+
+    if (!name) {
+      return { content: 'Missing required parameter: name', isError: true };
+    }
+
+    const hasValue = value !== undefined;
+    const hasExpression = typeof expression === 'string';
+    if (!hasValue && !hasExpression) {
+      return {
+        content: 'Must provide exactly one of: value (literal) or expression (HCL expression).',
+        isError: true,
+      };
+    }
+
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
+    const client = engineResult.client;
+
+    try {
+      // Read existing locals, merge, then write back (setLocals replaces the full array)
+      const settings = await client.querySettings();
+      const existingLocals = (settings.locals ?? []).filter((l) => l.name !== name);
+      const newLocal = {
+        name,
+        mode: hasExpression ? 'expression' : 'literal',
+        value: hasValue ? value : undefined,
+        expression: hasExpression ? expression : undefined,
+      };
+      const canvasView = await client.setLocals({ locals: [...existingLocals, newLocal] });
+      publishCanvasView(canvasView);
+
+      const display = hasExpression
+        ? `expression \`${expression}\``
+        : `value ${JSON.stringify(value)}`;
+      return { content: `Set local "${name}" to ${display}.` };
+    } catch (err: unknown) {
+      return { content: `Failed to set local: ${errorMessage(err)}`, isError: true };
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // lace_set_environment
+  // ─────────────────────────────────────────────
+  registerTool('lace_set_environment', async (params): Promise<ToolResult> => {
+    const environment = params.environment as string | undefined;
+    const variables = params.variables as Record<string, unknown> | undefined;
+
+    if (!environment) {
+      return { content: 'Missing required parameter: environment', isError: true };
+    }
+    if (!variables || typeof variables !== 'object') {
+      return {
+        content: 'Missing required parameter: variables (object of key-value pairs)',
+        isError: true,
+      };
+    }
+
+    const engineResult = requireEngine(deps.getRpcClient);
+    if ('error' in engineResult) return engineResult.error;
+    const client = engineResult.client;
+
+    try {
+      // Read existing environments, merge variables into target environment
+      const settings = await client.querySettings();
+      const existingEnvs = settings.environments ?? {};
+      const mergedEnvs = {
+        ...existingEnvs,
+        [environment]: { ...(existingEnvs[environment] ?? {}), ...variables },
+      };
+      await client.setEnvironments({ environments: mergedEnvs });
+
+      const keys = Object.keys(variables).join(', ');
+      return {
+        content: `Set ${Object.keys(variables).length} variable(s) in environment "${environment}": ${keys}.`,
+      };
+    } catch (err: unknown) {
+      return { content: `Failed to set environment: ${errorMessage(err)}`, isError: true };
     }
   });
 }

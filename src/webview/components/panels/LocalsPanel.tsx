@@ -1,21 +1,19 @@
 // src/webview/components/panels/LocalsPanel.tsx
 import React, { useState, useCallback } from 'react';
 import type { SettingsConfig } from '../../types/render';
-import { isValidTerraformIdentifier } from '../../utils/identifiers';
 import {
   inputClasses,
   modeButtonBase,
   modeButtonActive,
   modeButtonInactive,
-  saveButtonClasses,
-  saveButtonSavingClasses,
-  saveButtonSuccessClasses,
-  saveButtonErrorClasses,
   removeButtonClasses,
   addButtonClasses,
   rowCardClasses,
 } from '../../styles/panel';
 import PanelFrame from '../PanelFrame';
+import { useSaveState } from '../../hooks/useSaveState';
+import SaveButton from '../SaveButton';
+import { findDuplicateIndices } from '../../utils/duplicates';
 
 // ── Types derived from SettingsConfig ──
 
@@ -54,8 +52,6 @@ function fromRows(rows: LocalRow[]): LocalEntry[] {
 
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
-
 type ContentProps = {
   locals: LocalEntry[] | undefined;
   onSave: (locals: LocalEntry[]) => void | Promise<void>;
@@ -88,44 +84,17 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, exprValue } : r)));
   }, []);
 
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  // ── Validation: duplicate name detection ──
 
-  const handleSave = async () => {
-    if (hasErrors) return;
-    setSaveStatus('saving');
-    try {
+  const nameDupes = findDuplicateIndices(rows, (r) => r.name);
+  const hasErrors = nameDupes.size > 0;
+
+  const { status: saveStatus, handleSave } = useSaveState(
+    useCallback(async () => {
+      if (hasErrors) return;
       await onSave(fromRows(rows));
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch {
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }
-  };
-
-  // ── Validation ──
-
-  const nameErrors: Record<number, string> = {};
-  rows.forEach((r, i) => {
-    if (r.name.trim() && !isValidTerraformIdentifier(r.name.trim())) {
-      nameErrors[i] = 'Invalid Terraform identifier';
-    }
-  });
-
-  // Duplicate local name check
-  const seenNames = new Map<string, number>();
-  rows.forEach((r, i) => {
-    const n = r.name.trim().toLowerCase();
-    if (!n) return;
-    if (seenNames.has(n)) {
-      nameErrors[i] = 'Duplicate local name';
-      const prev = seenNames.get(n)!;
-      if (!nameErrors[prev]) nameErrors[prev] = 'Duplicate local name';
-    }
-    seenNames.set(n, i);
-  });
-
-  const hasErrors = Object.keys(nameErrors).length > 0;
+    }, [onSave, rows, hasErrors]),
+  );
 
   return (
     <>
@@ -137,13 +106,15 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
               value={row.name}
               onChange={(e) => updateName(i, e.target.value)}
               placeholder="Local name"
-              className={`${inputClasses} flex-1 font-mono ${nameErrors[i] ? 'border-[#e5484d]' : ''}`}
+              className={`${inputClasses} flex-1 font-mono ${nameDupes.has(i) ? 'border-[#e5484d]' : ''}`}
             />
             <button onClick={() => removeLocal(i)} className={removeButtonClasses}>
               ✕
             </button>
           </div>
-          {nameErrors[i] && <div className="text-[10px] text-[#e5484d] mb-2">{nameErrors[i]}</div>}
+          {nameDupes.has(i) && (
+            <div className="text-[10px] text-[#e5484d] mb-2">Duplicate local name</div>
+          )}
 
           {/* Mode selector */}
           <div className="flex gap-1 mb-2">
@@ -186,30 +157,13 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
         + Add local
       </button>
 
-      {/* Inline save */}
-      <button
-        className={
-          saveStatus === 'saving'
-            ? saveButtonSavingClasses
-            : saveStatus === 'saved'
-              ? saveButtonSuccessClasses
-              : saveStatus === 'error'
-                ? saveButtonErrorClasses
-                : saveButtonClasses
-        }
+      <SaveButton
+        status={saveStatus}
+        label="Save locals"
         onClick={handleSave}
-        disabled={hasErrors || saveStatus === 'saving'}
-        title={hasErrors ? 'Fix errors before saving' : undefined}
-        style={hasErrors ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-      >
-        {saveStatus === 'saving'
-          ? 'Saving...'
-          : saveStatus === 'saved'
-            ? 'Saved!'
-            : saveStatus === 'error'
-              ? 'Save failed — try again'
-              : 'Save locals'}
-      </button>
+        disabled={hasErrors}
+        disabledTitle="Fix errors before saving"
+      />
     </>
   );
 }

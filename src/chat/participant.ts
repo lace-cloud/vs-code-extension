@@ -9,7 +9,8 @@ import type { LaceClient } from '../utilities/engine/grpc-client';
 import type { RegistryModule } from '../types/protocol';
 import type { CanvasView } from '../webview/types/render';
 
-import { SYSTEM_PROMPT } from './system-prompt';
+import { buildSystemPrompt } from './system-prompt';
+import { formatCanvasState } from './utils/canvas-summary';
 import { getToolHandler, getRegisteredToolNames } from './tool-registry';
 import { registerRegistryTools } from './tools/registry-tools';
 import { registerGraphReadTools } from './tools/graph-read-tools';
@@ -37,7 +38,7 @@ export type ChatParticipantDeps = {
 
 // ── Max iterations for the agentic loop ──
 
-const MAX_TOOL_ROUNDS = 15;
+const MAX_TOOL_ROUNDS = 25;
 
 // ── Chat result metadata key ──
 
@@ -67,40 +68,6 @@ export function registerChatParticipant(
   });
 
   return participant;
-}
-
-// ── Canvas state snapshot for injection into conversation ──
-
-function buildCanvasContextMessage(canvasView: CanvasView | undefined): string {
-  if (!canvasView) {
-    return 'No canvas is open. Tell the user to open one with **Lace: Open Canvas** from the Command Palette before making any canvas changes.';
-  }
-
-  if (canvasView.nodes.length === 0) {
-    return 'Canvas is open but empty — no modules added yet.';
-  }
-
-  const parts: string[] = [
-    `Canvas snapshot: ${canvasView.nodes.length} instance(s), ${canvasView.edges.length} connection(s).`,
-  ];
-
-  const nodeList = canvasView.nodes
-    .map((n) => `${n.id} (${n.label})${n.has_errors ? ' ⚠' : ''}`)
-    .join(', ');
-  parts.push(`Instances: ${nodeList}`);
-
-  if (canvasView.edges.length > 0) {
-    const edgeList = canvasView.edges
-      .map((e) => `${e.source}.${e.source_output}→${e.target}.${e.target_input}`)
-      .join(', ');
-    parts.push(`Connections: ${edgeList}`);
-  }
-
-  if (canvasView.errors.length > 0) {
-    parts.push(`Errors: ${canvasView.errors.length} validation error(s) present.`);
-  }
-
-  return parts.join('\n');
 }
 
 // ── Rebuild prior conversation history from VS Code ChatContext ──
@@ -153,8 +120,24 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
       (tool) => tool.name.startsWith('lace_') && registeredNames.has(tool.name),
     );
 
-    // Inject canvas state snapshot into conversation so model has ground truth instance IDs
-    const canvasSnapshot = buildCanvasContextMessage(deps.getCanvasView?.());
+    // Inject canvas state snapshot — try in-memory view first, fall back to RPC
+    let canvasSnapshot: string;
+    const cachedView = deps.getCanvasView?.();
+    if (cachedView) {
+      canvasSnapshot = formatCanvasState(cachedView, { compact: true });
+    } else {
+      const client = deps.getRpcClient();
+      if (client) {
+        try {
+          const summary = await client.queryGraphSummary();
+          canvasSnapshot = summary.text;
+        } catch {
+          canvasSnapshot = formatCanvasState(undefined, { compact: true });
+        }
+      } else {
+        canvasSnapshot = formatCanvasState(undefined, { compact: true });
+      }
+    }
 
     // Build messages: system prompt + prior conversation history + current turn
     // History is critical — without it "yes, add them all" has no context
@@ -163,7 +146,9 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
     );
 
     const messages: vscode.LanguageModelChatMessage[] = [
-      vscode.LanguageModelChatMessage.User(SYSTEM_PROMPT),
+      vscode.LanguageModelChatMessage.User(
+        buildSystemPrompt([...new Set(deps.getRegistryModules().map((m) => m.system))]),
+      ),
       vscode.LanguageModelChatMessage.Assistant(
         'Understood. I am Lace, your Terraform infrastructure assistant. I will use the available tools to help you compose infrastructure on the canvas.',
       ),
@@ -330,11 +315,30 @@ function makeHandleChatRequest(deps: ChatParticipantDeps) {
 
         // Break if any tool has been called with identical args and failed 2+ times —
         // signals non-inferable required fields; prompt the user instead of looping
-        const stuckSig = [...failSignatureCount.entries()].find(([, count]) => count >= 2);
-        if (stuckSig) {
-          response.markdown(
-            "\n\n_I'm unable to proceed — one or more required fields cannot be inferred automatically. Please provide the missing values (e.g., names, types, or IDs) and I'll continue._",
-          );
+        const stuckEntry = [...failSignatureCount.entries()].find(([, count]) => count >= 2);
+        if (stuckEntry) {
+          const sig = stuckEntry[0];
+          const colonIdx = sig.indexOf(':');
+          const toolName = sig.slice(0, colonIdx);
+          let guidance: string;
+          try {
+            const stuckParams = JSON.parse(sig.slice(colonIdx + 1));
+            if (
+              toolName === 'lace_set_input' &&
+              stuckParams.instance_id &&
+              stuckParams.input_name
+            ) {
+              guidance = `I cannot determine the value for "${stuckParams.input_name}" on instance "${stuckParams.instance_id}". Please provide this value.`;
+            } else if (toolName === 'lace_connect') {
+              guidance = `I cannot find a valid connection between "${stuckParams.source ?? '?'}" and "${stuckParams.target ?? '?'}". Please verify the output/input names.`;
+            } else {
+              guidance = `I'm stuck on "${toolName}". Please provide the missing information.`;
+            }
+          } catch {
+            guidance =
+              "I'm unable to proceed \u2014 one or more required fields cannot be inferred. Please provide the missing values.";
+          }
+          response.markdown(`\n\n_${guidance}_`);
           break;
         }
 

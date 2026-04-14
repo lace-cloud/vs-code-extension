@@ -8,49 +8,12 @@ import type { CanvasView } from '../../webview/types/render';
 import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
 import { requireEngine, errorMessage } from './helpers';
+import { formatCanvasState } from '../utils/canvas-summary';
 
 export type GraphReadDeps = {
   getRpcClient: () => LaceClient | null;
   getCanvasView?: () => CanvasView | undefined;
 };
-
-// ── Structured canvas summary from in-memory CanvasView ──
-
-function buildCanvasSummary(view: CanvasView): string {
-  const lines: string[] = [];
-
-  if (view.nodes.length === 0) {
-    lines.push('Canvas is empty — no modules added yet.');
-    return lines.join('\n');
-  }
-
-  lines.push(`**Canvas: ${view.nodes.length} instance(s), ${view.edges.length} connection(s)**`);
-  lines.push('');
-  lines.push('### Instances');
-  for (const node of view.nodes) {
-    const errFlag = node.has_errors ? ' ⚠ has errors' : '';
-    lines.push(`- **${node.id}** (${node.label})${errFlag}`);
-  }
-
-  if (view.edges.length > 0) {
-    lines.push('');
-    lines.push('### Connections');
-    for (const edge of view.edges) {
-      lines.push(`- ${edge.source}.${edge.source_output} → ${edge.target}.${edge.target_input}`);
-    }
-  }
-
-  if (view.errors.length > 0) {
-    lines.push('');
-    lines.push('### Errors');
-    for (const err of view.errors) {
-      const loc = [err.instance_id, err.input_name].filter(Boolean).join('.');
-      lines.push(`- ${loc ? `[${loc}] ` : ''}${err.message}`);
-    }
-  }
-
-  return lines.join('\n');
-}
 
 export function registerGraphReadTools(deps: GraphReadDeps): void {
   // ─────────────────────────────────────────────
@@ -60,7 +23,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
     // Prefer structured in-memory view — deterministic instance IDs
     const view = deps.getCanvasView?.();
     if (view) {
-      return { content: buildCanvasSummary(view) };
+      return { content: formatCanvasState(view) };
     }
 
     // Fallback: RPC text summary
@@ -86,29 +49,29 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
       const result = await engineResult.client.queryValidate();
       const cliErrors = result.errors;
 
-      // Also check every node for required inputs that are still empty —
-      // the CLI validation may not flag these, but terraform validate will fail on them.
-      const missingInputErrors: Array<{
-        instance_id: string;
-        input_name: string;
-        message: string;
-      }> = [];
+      // Check every node for required inputs that are still empty.
+      // Parallelized: all queryNodeConfig calls fire at once.
+      type MissingInput = { instance_id: string; input_name: string; input_type: string };
+      const missingInputErrors: MissingInput[] = [];
       const view = deps.getCanvasView?.();
+
       if (view && view.nodes.length > 0) {
-        for (const node of view.nodes) {
-          try {
-            const config = await engineResult.client.queryNodeConfig({ instance_id: node.id });
-            for (const inp of config.inputs) {
-              if (inp.required && inp.mode === 'empty') {
-                missingInputErrors.push({
-                  instance_id: node.id,
-                  input_name: inp.name,
-                  message: `Required input "${inp.name}" is not set`,
-                });
-              }
+        const configs = await Promise.all(
+          view.nodes.map((n) =>
+            engineResult.client.queryNodeConfig({ instance_id: n.id }).catch(() => null),
+          ),
+        );
+
+        for (const config of configs) {
+          if (!config) continue;
+          for (const inp of config.inputs) {
+            if (inp.required && inp.mode === 'empty') {
+              missingInputErrors.push({
+                instance_id: config.instance_id,
+                input_name: inp.name,
+                input_type: inp.type,
+              });
             }
-          } catch {
-            // Node config fetch failed — skip, non-fatal
           }
         }
       }
@@ -119,7 +82,11 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
           input_name: e.input_name ?? '',
           message: e.message,
         })),
-        ...missingInputErrors,
+        ...missingInputErrors.map((e) => ({
+          instance_id: e.instance_id,
+          input_name: e.input_name,
+          message: `Required input "${e.input_name}" (${e.input_type}) is not set`,
+        })),
       ];
 
       if (allErrors.length === 0) {
@@ -135,7 +102,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
       }
       lines.push('');
       lines.push(
-        'Use lace_inspect_node on affected instances to see current binding state, then use lace_set_input or lace_connect to fix.',
+        'Use lace_inspect_node on affected instances to see current bindings, then fix with lace_set_input, lace_connect, or lace_auto_connect.',
       );
 
       return { content: lines.join('\n') };

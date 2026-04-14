@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { NodePin, RenderNode } from '../../types/render';
-import { isValidTerraformIdentifier } from '../../utils/identifiers';
 import { useEngine } from '../../state/engine-context';
 import { pinColor } from './pinColor';
+import { CANVAS_EVENTS } from '../../events';
 
 // ── Node data contract (serializable — no callbacks) ──
 
@@ -20,6 +20,19 @@ const NODE_WIDTH = 200;
 const HEADER_HEIGHT = 28;
 const ROW_HEIGHT = 22;
 const ICON_SIZE = 18;
+
+// ── Node border/shadow by state ──
+
+const NODE_COLORS = {
+  error: { border: '#e5484d', shadow: '0 0 10px rgba(229, 72, 77, 0.3)' },
+  new: { border: '#3b82f6', shadow: '0 0 10px rgba(59, 130, 246, 0.3)' },
+  default: { border: 'rgba(206, 254, 101, 0.18)', shadow: '0 2px 6px rgba(0,0,0,0.35)' },
+} as const;
+
+function getNodeStyling(hasError: boolean, isNew: boolean) {
+  const key = hasError ? 'error' : isNew ? 'new' : 'default';
+  return { borderColor: NODE_COLORS[key].border, shadow: NODE_COLORS[key].shadow };
+}
 
 // ── Broken icon fallback ──
 
@@ -52,7 +65,7 @@ type PinRowProps = {
 };
 
 const PinRow: React.FC<PinRowProps> = ({ pin, side, top, isError }) => {
-  const color = pinColor(pin.type);
+  const color = pinColor(pin);
   const isInput = side === 'input';
   const handleStyle: React.CSSProperties = {
     background: color.fill,
@@ -154,10 +167,10 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     renamingRef.current = true;
     setEditing(false);
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== id && isValidTerraformIdentifier(trimmed)) {
+    if (trimmed && trimmed !== id) {
       try {
         const result = await engine.renameInstance(id, trimmed);
-        window.dispatchEvent(new CustomEvent('canvasViewUpdated', { detail: result }));
+        window.dispatchEvent(new CustomEvent(CANVAS_EVENTS.VIEW_UPDATED, { detail: result }));
       } catch (err) {
         console.error(`[ModuleNode] rename failed:`, err);
       }
@@ -178,7 +191,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
     (e: React.MouseEvent) => {
       if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
         window.dispatchEvent(
-          new CustomEvent('openNodeConfig', { detail: { instanceId: data.id } }),
+          new CustomEvent(CANVAS_EVENTS.OPEN_NODE_CONFIG, { detail: { instanceId: data.id } }),
         );
       }
     },
@@ -190,7 +203,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       e.stopPropagation();
       try {
         const result = await engine.deleteInstance(data.id);
-        window.dispatchEvent(new CustomEvent('canvasViewUpdated', { detail: result }));
+        window.dispatchEvent(new CustomEvent(CANVAS_EVENTS.VIEW_UPDATED, { detail: result }));
       } catch (err) {
         console.error(`[ModuleNode] delete failed:`, err);
       }
@@ -211,15 +224,10 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   // ── Styling ──
 
   const showIcon = data.icon_url && !imgFailed;
-  const hasAnyError = data.has_errors || data.hasValidationError;
-  const isNew = data.isNew && !hasAnyError;
+  const hasAnyError = !!(data.has_errors || data.hasValidationError);
+  const isNew = !!data.isNew && !hasAnyError;
 
-  const borderColor = hasAnyError ? '#e5484d' : isNew ? '#3b82f6' : 'rgba(206, 254, 101, 0.18)';
-  const shadow = hasAnyError
-    ? '0 0 10px rgba(229, 72, 77, 0.3)'
-    : isNew
-      ? '0 0 10px rgba(59, 130, 246, 0.3)'
-      : '0 2px 6px rgba(0,0,0,0.35)';
+  const { borderColor, shadow } = getNodeStyling(hasAnyError, isNew);
 
   // Body height — when collapsed, header only. Otherwise, whichever rail is
   // taller dictates the height. The "Show N more" toggle on the left counts
@@ -386,7 +394,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
       {collapsed && (
         <>
           {inputs.map((pin, i) => {
-            const color = pinColor(pin.type);
+            const color = pinColor(pin);
             return (
               <Handle
                 key={`in:${pin.name}`}
@@ -408,7 +416,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
             );
           })}
           {outputs.map((pin, i) => {
-            const color = pinColor(pin.type);
+            const color = pinColor(pin);
             return (
               <Handle
                 key={`out:${pin.name}`}

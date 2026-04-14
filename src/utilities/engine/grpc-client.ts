@@ -108,50 +108,41 @@ type RegistryModuleResult = {
 
 // ── Enum conversion helpers ──
 
-function convertNodeKind(kind: NodeKind): 'module' | 'resource' | 'data' {
-  switch (kind) {
-    case NodeKind.NODE_KIND_MODULE:
-      return 'module';
-    case NodeKind.NODE_KIND_RESOURCE:
-      return 'resource';
-    case NodeKind.NODE_KIND_DATA:
-      return 'data';
-    default:
-      return 'module';
-  }
+function createEnumConverter<E extends number, S extends string>(
+  mapping: ReadonlyMap<E, S>,
+  defaultValue: S,
+): (value: E) => S {
+  return (value) => mapping.get(value) ?? defaultValue;
 }
 
-function convertInputMode(
-  mode: InputMode,
-): 'empty' | 'literal' | 'variable' | 'expression' | 'wired' {
-  switch (mode) {
-    case InputMode.INPUT_MODE_EMPTY:
-      return 'empty';
-    case InputMode.INPUT_MODE_LITERAL:
-      return 'literal';
-    case InputMode.INPUT_MODE_VARIABLE:
-      return 'variable';
-    case InputMode.INPUT_MODE_EXPRESSION:
-      return 'expression';
-    case InputMode.INPUT_MODE_WIRED:
-      return 'wired';
-    default:
-      return 'empty';
-  }
-}
+const convertNodeKind = createEnumConverter(
+  new Map<NodeKind, 'module' | 'resource' | 'data'>([
+    [NodeKind.NODE_KIND_MODULE, 'module'],
+    [NodeKind.NODE_KIND_RESOURCE, 'resource'],
+    [NodeKind.NODE_KIND_DATA, 'data'],
+  ]),
+  'module',
+);
 
-function convertDiagnosticSeverity(severity: DiagnosticSeverity): 'error' | 'warning' | 'info' {
-  switch (severity) {
-    case DiagnosticSeverity.DIAGNOSTIC_SEVERITY_ERROR:
-      return 'error';
-    case DiagnosticSeverity.DIAGNOSTIC_SEVERITY_WARNING:
-      return 'warning';
-    case DiagnosticSeverity.DIAGNOSTIC_SEVERITY_INFO:
-      return 'info';
-    default:
-      return 'error';
-  }
-}
+const convertInputMode = createEnumConverter(
+  new Map<InputMode, 'empty' | 'literal' | 'variable' | 'expression' | 'wired'>([
+    [InputMode.INPUT_MODE_EMPTY, 'empty'],
+    [InputMode.INPUT_MODE_LITERAL, 'literal'],
+    [InputMode.INPUT_MODE_VARIABLE, 'variable'],
+    [InputMode.INPUT_MODE_EXPRESSION, 'expression'],
+    [InputMode.INPUT_MODE_WIRED, 'wired'],
+  ]),
+  'empty',
+);
+
+const convertDiagnosticSeverity = createEnumConverter(
+  new Map<DiagnosticSeverity, 'error' | 'warning' | 'info'>([
+    [DiagnosticSeverity.DIAGNOSTIC_SEVERITY_ERROR, 'error'],
+    [DiagnosticSeverity.DIAGNOSTIC_SEVERITY_WARNING, 'warning'],
+    [DiagnosticSeverity.DIAGNOSTIC_SEVERITY_INFO, 'info'],
+  ]),
+  'error',
+);
 
 // ── Proto → extension type converters ──
 

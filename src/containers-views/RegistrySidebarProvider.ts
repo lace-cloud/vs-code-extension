@@ -7,6 +7,7 @@ import type { RegistryModule } from '../types/protocol';
 
 const MAX_PAGES_PER_SYSTEM = 10;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_SYSTEMS = ['aws', 'azure', 'gcp'] as const;
 
 // ── Provider ──
 
@@ -128,13 +129,9 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const org = this.selectedOrg ?? undefined;
 
     // Always fetch public modules (org='')
-    const [aws, azure, gcp] = await Promise.allSettled([
-      this.fetchAllModules('aws', force, ''),
-      this.fetchAllModules('azure', force, ''),
-      this.fetchAllModules('gcp', force, ''),
-    ]);
-
-    const results = [aws, azure, gcp];
+    const results = await Promise.allSettled(
+      DEFAULT_SYSTEMS.map((system) => this.fetchAllModules(system, force, '')),
+    );
     const failCount = results.filter((r) => r.status === 'rejected').length;
 
     this.modules = [];
@@ -146,13 +143,11 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     // When an org is selected, also fetch org-private modules separately
     if (org) {
-      const [orgAws, orgAzure, orgGcp] = await Promise.allSettled([
-        this.fetchAllModules('aws', force, org),
-        this.fetchAllModules('azure', force, org),
-        this.fetchAllModules('gcp', force, org),
-      ]);
+      const orgResults = await Promise.allSettled(
+        DEFAULT_SYSTEMS.map((system) => this.fetchAllModules(system, force, org)),
+      );
       this.orgModules = [];
-      for (const result of [orgAws, orgAzure, orgGcp]) {
+      for (const result of orgResults) {
         if (result.status === 'fulfilled') {
           // Only include modules not already in public registry (deduplicate by id)
           const publicIds = new Set(this.modules.map((m) => m.id));

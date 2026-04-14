@@ -83,6 +83,29 @@ export function findFreePosition(
 }
 
 /**
+ * Place nodes sequentially, finding a free position for each one relative to
+ * the previous. Returns a map of node ID → position. Mutates `nodes` in place
+ * to set their positions (so the webview renders correctly immediately).
+ */
+export function placeNodesSequentially(
+  nodes: RenderNode[],
+  existingNodes: RenderNode[],
+  anchor?: { x: number; y: number },
+): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {};
+  const placed = [...existingNodes];
+  let currentAnchor = anchor;
+  for (const node of nodes) {
+    const pos = findFreePosition(placed, currentAnchor);
+    positions[node.id] = pos;
+    placed.push({ ...node, position: pos });
+    node.position = pos;
+    currentAnchor = pos;
+  }
+  return positions;
+}
+
+/**
  * Given existing nodes (to check against), the relative positions of a group
  * of nodes to be placed (e.g. [{relX: 0, relY: 0}, {relX: 122, relY: 0}]),
  * and the source group anchor (top-left corner of the source bounding box),

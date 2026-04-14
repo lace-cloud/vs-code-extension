@@ -28,6 +28,14 @@ function makeMockClient(overrides: Record<string, unknown> = {}) {
       ),
     syncLayout: vi.fn().mockResolvedValue({}),
     queryValidate: vi.fn().mockResolvedValue({ errors: [] as RenderError[] }),
+    querySettings: vi.fn().mockResolvedValue({
+      terraform: { required_version: '', required_providers: [] },
+      providers: [],
+      locals: [],
+      environments: {},
+    }),
+    setLocals: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
+    setEnvironments: vi.fn().mockResolvedValue({}),
     sessionGenerate: vi.fn().mockResolvedValue({
       files_written: ['main.tf'],
       diagnostics: [],
@@ -101,7 +109,7 @@ describe('write tools', () => {
         expect.objectContaining({
           name: 'aws/vpc',
           system: 'aws',
-          version: '1.0.0',
+          version: 'v1.0.0',
         }),
       );
       expect(mockClient.dropBundle).toHaveBeenCalledWith({
@@ -123,7 +131,7 @@ describe('write tools', () => {
         expect.objectContaining({
           name: 'azure/resource-group',
           system: 'azure',
-          version: '2.0.0',
+          version: 'v2.0.0',
         }),
       );
     });
@@ -305,6 +313,75 @@ describe('generate tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content).toContain('No workspace folder');
+    });
+  });
+});
+
+describe('settings tools', () => {
+  beforeEach(() => {
+    const deps = makeWriteDeps();
+    registerGraphWriteTools(deps);
+  });
+
+  describe('lace_set_local', () => {
+    test('sets literal local value', async () => {
+      const handler = getToolHandler('lace_set_local')!;
+      const result = await handler({ name: 'region', value: 'us-east-1' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('region');
+      expect(result.content).toContain('us-east-1');
+      expect(mockClient.querySettings).toHaveBeenCalled();
+      expect(mockClient.setLocals).toHaveBeenCalledWith({
+        locals: [{ name: 'region', mode: 'literal', value: 'us-east-1', expression: undefined }],
+      });
+    });
+
+    test('sets expression local', async () => {
+      const handler = getToolHandler('lace_set_local')!;
+      const result = await handler({ name: 'prefix', expression: 'var.project' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('expression');
+      expect(mockClient.setLocals).toHaveBeenCalledWith({
+        locals: [
+          { name: 'prefix', mode: 'expression', value: undefined, expression: 'var.project' },
+        ],
+      });
+    });
+
+    test('returns error when neither value nor expression provided', async () => {
+      const handler = getToolHandler('lace_set_local')!;
+      const result = await handler({ name: 'region' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Must provide exactly one of');
+    });
+  });
+
+  describe('lace_set_environment', () => {
+    test('sets environment variables', async () => {
+      const handler = getToolHandler('lace_set_environment')!;
+      const result = await handler({
+        environment: 'staging',
+        variables: { region: 'us-west-2', instance_type: 't3.small' },
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('staging');
+      expect(result.content).toContain('region');
+      expect(mockClient.querySettings).toHaveBeenCalled();
+      expect(mockClient.setEnvironments).toHaveBeenCalledWith({
+        environments: { staging: { region: 'us-west-2', instance_type: 't3.small' } },
+      });
+    });
+
+    test('returns error when environment name missing', async () => {
+      const handler = getToolHandler('lace_set_environment')!;
+      const result = await handler({ variables: { region: 'us-east-1' } });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Missing required parameter: environment');
     });
   });
 });

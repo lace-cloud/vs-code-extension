@@ -169,7 +169,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     // Instance IDs: "vpc", "subnet_1", "my_cluster"
     // Registry modules: "aws/vpc", "azure/resource-group" (always contain "/")
     // Allow: "aws", "azure", "gcp" (system names used for fuzzy search)
-    const knownSystems = new Set(['aws', 'azure', 'gcp', 'google', 'kubernetes', 'k8s']);
+    const knownSystems = new Set(deps.getRegistryModules().map((m) => m.system.toLowerCase()));
     const looksLikeInstanceId =
       !name.includes('/') &&
       !name.includes('-') &&
@@ -232,11 +232,32 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     const client = engineResult.client;
 
     try {
-      const versionResponse = await client.getRegistryVersion({
+      // Search across all user orgs (parallel fan-out) to find private modules
+      const orgSlugs = deps.getUserOrgs().map((o) => o.slug);
+      let versionResponse = await client.getRegistryVersion({
         name: match.name,
         system: match.system,
         version: match.version,
       });
+
+      if (!versionResponse?.module_interface && orgSlugs.length > 0) {
+        for (const org of orgSlugs) {
+          try {
+            const result = await client.getRegistryVersion({
+              name: match.name,
+              system: match.system,
+              version: match.version,
+              organization: org,
+            });
+            if (result?.module_interface) {
+              versionResponse = result;
+              break;
+            }
+          } catch {
+            // Continue to next org
+          }
+        }
+      }
 
       if (!versionResponse?.deploy_bundle && !versionResponse?.module_interface) {
         return {

@@ -7,6 +7,9 @@ declare global {
 
   interface Window {
     __canvasUndo?: () => void;
+    __canvasCopy?: () => void;
+    __canvasCut?: () => void;
+    __canvasPaste?: () => void;
   }
 }
 

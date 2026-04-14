@@ -33,11 +33,37 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Local state: tracks changes per input name
-  const [localModes, setLocalModes] = useState<Record<string, BindingMode>>({});
-  const [localValues, setLocalValues] = useState<Record<string, unknown>>({});
-  const [localVariables, setLocalVariables] = useState<Record<string, string>>({});
-  const [localExpressions, setLocalExpressions] = useState<Record<string, string>>({});
+  // Local state: tracks per-input binding changes as a single object
+  type InputState = {
+    modes: Record<string, BindingMode>;
+    values: Record<string, unknown>;
+    variables: Record<string, string>;
+    expressions: Record<string, string>;
+  };
+  const [inputState, setInputState] = useState<InputState>({
+    modes: {},
+    values: {},
+    variables: {},
+    expressions: {},
+  });
+
+  // Destructured aliases for read access
+  const {
+    modes: localModes,
+    values: localValues,
+    variables: localVariables,
+    expressions: localExpressions,
+  } = inputState;
+
+  // Convenience setters
+  const setLocalModes = (fn: (prev: Record<string, BindingMode>) => Record<string, BindingMode>) =>
+    setInputState((s) => ({ ...s, modes: fn(s.modes) }));
+  const setLocalValues = (fn: (prev: Record<string, unknown>) => Record<string, unknown>) =>
+    setInputState((s) => ({ ...s, values: fn(s.values) }));
+  const setLocalVariables = (fn: (prev: Record<string, string>) => Record<string, string>) =>
+    setInputState((s) => ({ ...s, variables: fn(s.variables) }));
+  const setLocalExpressions = (fn: (prev: Record<string, string>) => Record<string, string>) =>
+    setInputState((s) => ({ ...s, expressions: fn(s.expressions) }));
 
   // depends_on local state
   const [localDependsOn, setLocalDependsOn] = useState<Set<string>>(new Set());
@@ -68,10 +94,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
           if (input.expression) expressions[input.name] = input.expression;
         }
 
-        setLocalModes(modes);
-        setLocalValues(values);
-        setLocalVariables(variables);
-        setLocalExpressions(expressions);
+        setInputState({ modes, values, variables, expressions });
         setLocalDependsOn(new Set(result.depends_on));
       })
       .catch((err) => {

@@ -1,15 +1,13 @@
 // src/webview/createWebviewPanel.ts
 import * as vscode from 'vscode';
 import path from 'path';
-import * as fs from 'fs';
 
 import { getWebviewContent } from './getWebviewContent';
 import { ServerManager } from '../utilities/engine/server-manager';
-import type { HostToWebview, WebviewToHost, Diagnostic, GeneratePhase } from '../types/protocol';
+import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol';
 import type { CanvasView } from './types/render';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
-import * as terraform from '../utilities/terraform';
-import { findFreePosition, findFreeGroupPosition } from './utils/layout';
+import { findFreePosition, findFreeGroupPosition, placeNodesSequentially } from './utils/layout';
 
 /* ── Constants ── */
 
@@ -90,16 +88,7 @@ export async function addModuleToActiveCanvas(
         // Find newly added nodes and assign non-overlapping positions.
         const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
         if (newNodes.length > 0) {
-          const syncPositions: Record<string, { x: number; y: number }> = {};
-          const placed = [...existingNodes];
-          let currentAnchor = anchor;
-          for (const node of newNodes) {
-            const pos = findFreePosition(placed, currentAnchor);
-            syncPositions[node.id] = pos;
-            placed.push({ ...node, position: pos });
-            node.position = pos; // patch local view so webview renders correctly immediately
-            currentAnchor = pos;
-          }
+          const syncPositions = placeNodesSequentially(newNodes, existingNodes, anchor);
           await client.syncLayout({ positions: syncPositions });
         }
 
@@ -111,7 +100,7 @@ export async function addModuleToActiveCanvas(
   );
 }
 
-/** Trigger generate on the active canvas via RPC, then format + validate locally. */
+/** Trigger generate on the active canvas via RPC. Format + validate are handled by the CLI. */
 export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
   if (!canvasPanel || isGenerating) return;
   const panel = canvasPanel;
@@ -120,58 +109,26 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
 
   isGenerating = true;
 
-  function postProgress(phase: GeneratePhase) {
-    postToWebview(panel, { command: 'generateProgress', phase });
-  }
-
   try {
-    // Phase 1: Generate files (no fmt/validate — we do that locally)
-    postProgress('generating');
+    postToWebview(panel, { command: 'generateProgress', phase: 'generating' });
     const client = requireClient(server.rpcClient, 'session/generate');
     const result = await client.sessionGenerate({
       output_dir: laceDir,
-      options: { dry_run: false, format: false, validate: false, overwrite: true },
+      options: { dry_run: false, format: true, validate: true, overwrite: true },
     });
 
     const filesWritten = result?.files_written ?? [];
+    const errors = (result?.diagnostics ?? []).filter(
+      (d: { severity: string }) => d.severity === 'error',
+    );
 
-    // Check if terraform is available for fmt/validate phases
-    const hasTerraform = await terraform.isAvailable();
-
-    if (hasTerraform && filesWritten.length > 0) {
-      // Phase 2: Format
-      postProgress('formatting');
-      await terraform.format(filesWritten);
-
-      // Phase 3: Validate
-      postProgress('validating');
-      const validation = await terraform.validate(laceDir);
-
-      if (validation === null) {
-        // validate produced no output at all — treat as unknown, not clean
-        postToWebview(panel, {
-          command: 'generateError',
-          message: 'Validation could not run — terraform validate produced no output.',
-        });
-        return;
-      }
-
-      if (!validation.valid) {
-        const errors = validation.diagnostics.filter((d) => d.severity === 'error');
-        if (errors.length > 0) {
-          const enriched = enrichDiagnosticsWithAddress(errors as Diagnostic[], laceDir);
-          postToWebview(panel, {
-            command: 'generateError',
-            message: `Validation: ${errors.length} error(s)`,
-            diagnostics: enriched,
-          });
-          return;
-        }
-      }
-    } else if (!hasTerraform) {
-      vscode.window.showInformationMessage(
-        'Terraform not found — files generated, but formatting/validation skipped.',
-      );
+    if (errors.length > 0) {
+      postToWebview(panel, {
+        command: 'generateError',
+        message: `Validation: ${errors.length} error(s)`,
+        diagnostics: errors as Diagnostic[],
+      });
+      return;
     }
 
     postToWebview(panel, { command: 'generateSuccess', files: filesWritten });
@@ -184,59 +141,6 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
   } finally {
     isGenerating = false;
   }
-}
-
-/* ── Diagnostic enrichment ── */
-
-/**
- * For diagnostics pointing at the root main.tf with no address, resolve the
- * module name by finding which `module "X" {` block the error line falls in.
- */
-function enrichDiagnosticsWithAddress(diags: Diagnostic[], laceDir: string): Diagnostic[] {
-  // Build a line→moduleName map lazily from main.tf
-  let moduleRanges: Array<{ name: string; start: number; end: number }> | null = null;
-
-  function getModuleRanges() {
-    if (moduleRanges !== null) return moduleRanges;
-    moduleRanges = [];
-    try {
-      const mainTf = fs.readFileSync(path.join(laceDir, 'main.tf'), 'utf8');
-      const lines = mainTf.split('\n');
-      let current: { name: string; start: number } | null = null;
-      let depth = 0;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!current) {
-          const m = line.match(/^\s*module\s+"([^"]+)"\s*\{/);
-          if (m) {
-            current = { name: m[1], start: i + 1 };
-            depth = 1;
-          }
-        } else {
-          for (const ch of line) {
-            if (ch === '{') depth++;
-            else if (ch === '}') depth--;
-          }
-          if (depth <= 0) {
-            moduleRanges.push({ name: current.name, start: current.start, end: i + 1 });
-            current = null;
-            depth = 0;
-          }
-        }
-      }
-    } catch {
-      /* main.tf unreadable — leave ranges empty */
-    }
-    return moduleRanges;
-  }
-
-  return diags.map((d) => {
-    if (d.address || !d.file?.endsWith('main.tf') || d.line == null) return d;
-    const ranges = getModuleRanges();
-    const match = ranges.find((r) => d.line! >= r.start && d.line! <= r.end);
-    if (!match) return d;
-    return { ...d, address: `module.${match.name}` };
-  });
 }
 
 /* ── Typed message helpers ── */
@@ -377,15 +281,14 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
 
                 if (sourceNodes.length === 0) {
                   // No source position info — fall back to sequential placement
-                  const placed = [...preCopyNodes];
-                  for (const node of newNodes) {
-                    const anchor =
-                      placed.length > 0 ? placed[placed.length - 1].position : undefined;
-                    const pos = findFreePosition(placed, anchor);
-                    syncPositions[node.id] = pos;
-                    placed.push({ ...node, position: pos });
-                    node.position = pos;
-                  }
+                  const lastAnchor =
+                    preCopyNodes.length > 0
+                      ? preCopyNodes[preCopyNodes.length - 1].position
+                      : undefined;
+                  Object.assign(
+                    syncPositions,
+                    placeNodesSequentially(newNodes, preCopyNodes, lastAnchor),
+                  );
                 } else if (newNodes.length === 1) {
                   // Single-node paste: place near the source node
                   const pos = findFreePosition(preCopyNodes, sourceNodes[0].position);
@@ -462,15 +365,6 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           break;
         }
 
-        // ── openChat: open @lace chat with prefilled prompt ──
-        case 'openChat': {
-          const { prompt } = msg as { command: string; prompt: string };
-          await vscode.commands.executeCommand('workbench.action.chat.open', {
-            query: prompt,
-          });
-          break;
-        }
-
         // ── openFile: open a generated .tf file at a specific line ──
         case 'openFile': {
           const { relativePath, line } = msg as {
@@ -530,7 +424,8 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
     }
 
     canvasPanel = undefined;
-    latestCanvasView = undefined;
+    // Keep latestCanvasView so the chat can reference last-known state
+    // even after the canvas panel is closed. It's replaced on next session open.
   });
 
   return sessionReady;
