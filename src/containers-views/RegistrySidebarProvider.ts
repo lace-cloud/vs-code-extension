@@ -115,6 +115,20 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     return allModules;
   }
 
+  private async resolveAuthenticationState(): Promise<boolean> {
+    if (!this.rpcClient?.authStatus) {
+      return this.authenticated;
+    }
+
+    try {
+      const status = await this.rpcClient.authStatus();
+      this.authenticated = status.authenticated;
+      return status.authenticated;
+    } catch {
+      return this.authenticated;
+    }
+  }
+
   async refresh(force = false) {
     if (!this.rpcClient) {
       this.modules = [];
@@ -174,7 +188,8 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     if (failCount === results.length) {
-      if (!this.authenticated) {
+      const authenticated = await this.resolveAuthenticationState();
+      if (!authenticated) {
         this.errorMessage = 'Please log in to access the module registry.';
       } else {
         this.errorMessage = 'Lace engine is not available. Start it with "Lace: Start Engine".';

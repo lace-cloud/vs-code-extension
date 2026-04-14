@@ -44,4 +44,46 @@ describe('RegistrySidebarProvider', () => {
     );
     expect(provider.getModules()).toEqual([GOOGLE_STORAGE_BUCKET]);
   });
+
+  test('shows login message when registry fetch fails and auth status is false', async () => {
+    const authStatus = vi.fn(async () => ({ authenticated: false }));
+    const listRegistryModules = vi.fn(async () => {
+      throw new Error('registry not configured');
+    });
+
+    const provider = new RegistrySidebarProvider(
+      undefined,
+      { appendLine: vi.fn() } as unknown as never,
+    );
+    provider.setAuthenticated(true);
+    provider.setRpcClient({ authStatus, listRegistryModules } as never);
+
+    await provider.refresh(true);
+
+    expect(authStatus).toHaveBeenCalledOnce();
+    expect(
+      (provider as unknown as { errorMessage: string | null }).errorMessage,
+    ).toBe('Please log in to access the module registry.');
+  });
+
+  test('keeps engine unavailable message when registry fetch fails and auth status is true', async () => {
+    const authStatus = vi.fn(async () => ({ authenticated: true }));
+    const listRegistryModules = vi.fn(async () => {
+      throw new Error('registry not configured');
+    });
+
+    const provider = new RegistrySidebarProvider(
+      undefined,
+      { appendLine: vi.fn() } as unknown as never,
+    );
+    provider.setAuthenticated(true);
+    provider.setRpcClient({ authStatus, listRegistryModules } as never);
+
+    await provider.refresh(true);
+
+    expect(authStatus).toHaveBeenCalledOnce();
+    expect(
+      (provider as unknown as { errorMessage: string | null }).errorMessage,
+    ).toBe('Lace engine is not available. Start it with "Lace: Start Engine".');
+  });
 });
