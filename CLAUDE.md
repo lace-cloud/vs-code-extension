@@ -45,17 +45,18 @@ npm run proto:gen        # Regenerate TypeScript proto from proto/service.proto
 
 `Canvas.tsx` contains `CompositeEditor` (ReactFlow viewport) and the `Canvas` orchestrator. Most logic is extracted into focused hooks:
 
-| Hook                  | Responsibility                                |
-| --------------------- | --------------------------------------------- |
-| `useToast`            | Toast notifications with auto-dismiss timing  |
-| `useContextMenu`      | Right-click context menu state                |
-| `useUndoRedo`         | Undo/redo with position forcing               |
-| `useEdgeInspector`    | Edge selection and deletion                   |
-| `useGenerationStatus` | Generate progress, validation errors          |
-| `useNewNodeTracking`  | Blue border for newly added nodes, auto-zoom  |
-| `useClipboard`        | Copy/cut/paste with engine integration        |
-| `useSaveState`        | Shared save state machine for settings panels |
-| `useWindowEvent`      | Window event listener with cleanup            |
+| Hook                  | Responsibility                                        |
+| --------------------- | ----------------------------------------------------- |
+| `useToast`            | Toast notifications with auto-dismiss timing          |
+| `useContextMenu`      | Right-click context menu state                        |
+| `useUndoRedo`         | Undo/redo with position forcing                       |
+| `useEdgeInspector`    | Edge selection and deletion                           |
+| `useGenerationStatus` | Generate progress, validation errors                  |
+| `useNewNodeTracking`  | Blue border for newly added nodes, auto-zoom          |
+| `useClipboard`        | Copy/cut/paste with engine integration                |
+| `useGroupLogic`       | Visual groups: parent/child, collapse, edge remapping |
+| `useSaveState`        | Shared save state machine for settings panels         |
+| `useWindowEvent`      | Window event listener with cleanup                    |
 
 ### Chat Tools
 
@@ -77,6 +78,8 @@ npm run proto:gen        # Regenerate TypeScript proto from proto/service.proto
 | `lace_set_variable`                  | Canvas-level var.NAME                             |
 | `lace_set_local`                     | Add/update local value (read-merge-write)         |
 | `lace_set_environment`               | Per-environment variable overrides                |
+| `lace_create_group`                  | Group instances visually on the canvas            |
+| `lace_ungroup`                       | Remove a visual group (instances stay)            |
 | `lace_undo`                          | Undo last change                                  |
 | `lace_generate`                      | Generate .tf files                                |
 

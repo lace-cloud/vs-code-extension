@@ -74,9 +74,9 @@ git push origin main
 
 - **`App.tsx`** -- root component, creates `PostMessageEngine`, listens for `HostToWebview` messages, uses `useWindowEvent` for custom event listeners
 - **`Canvas.tsx`** -- contains `CompositeEditor` (ReactFlow viewport) and `Canvas` (orchestrator). Most logic extracted into focused hooks.
-- **`hooks/`** -- `useToast`, `useContextMenu`, `useUndoRedo`, `useEdgeInspector`, `useGenerationStatus`, `useNewNodeTracking`, `useClipboard`, `useSaveState`, `useWindowEvent`
+- **`hooks/`** -- `useToast`, `useContextMenu`, `useUndoRedo`, `useEdgeInspector`, `useGenerationStatus`, `useNewNodeTracking`, `useClipboard`, `useGroupLogic`, `useSaveState`, `useWindowEvent`
 - **`events.ts`** -- centralized `CANVAS_EVENTS` constants for all window custom events
-- **`components/`** -- `ModuleNode`, `ActionBar`, `SlidePanel`, `Toast`, `ContextMenu`, `SaveButton`, `ValidationErrorBanner`, `ErrorBoundary`, settings panels
+- **`components/`** -- `ModuleNode`, `GroupNode`, `ActionBar`, `SlidePanel`, `Toast`, `ContextMenu`, `SaveButton`, `ValidationErrorBanner`, `ErrorBoundary`, settings panels
 - **`engine-context.ts`** -- React context providing `CanvasState` + `CanvasEngine` + `updateView`
 - **`post-message-engine.ts`** -- implements `CanvasEngine` by sending postMessages to the host
 
@@ -117,7 +117,7 @@ Defined in `src/types/protocol.ts`. Messages are discriminated unions on `comman
 
 **Session methods:** `sessionOpen`, `sessionSave`, `sessionClose`, `sessionGenerate`
 
-**Action methods (return updated `CanvasView`):** `dropBundle`, `connect`, `autoConnect`, `disconnect`, `updateInput`, `updateAllInputs`, `renameInstance`, `deleteInstance`, `copyInstances`, `setVariables`, `setExports`, `setLocals`, `undo`, `redo`
+**Action methods (return updated `CanvasView`):** `dropBundle`, `connect`, `autoConnect`, `disconnect`, `updateInput`, `updateAllInputs`, `renameInstance`, `deleteInstance`, `copyInstances`, `createGroup`, `updateGroup`, `deleteGroup`, `setVariables`, `setExports`, `setLocals`, `undo`, `redo`
 
 **Action methods (void):** `syncLayout`, `setTerraform`, `setProviders`, `setDependsOn`, `setEnvironments`
 
@@ -130,9 +130,10 @@ Defined in `src/types/protocol.ts`. Messages are discriminated unions on `comman
 ### `CanvasView` (render.ts) -- the view model
 
 ```
-CanvasView { module_name, nodes: RenderNode[], edges: RenderEdge[], errors: RenderError[], can_undo, can_redo, is_dirty }
+CanvasView { module_name, nodes: RenderNode[], edges: RenderEdge[], errors: RenderError[], groups: RenderGroup[], can_undo, can_redo, is_dirty }
 RenderNode { id, label, kind, module_key?, icon_url?, position, has_errors, error_messages, inputs: NodePin[], outputs: NodePin[] }
 RenderEdge { id, source, target, source_output, target_input }
+RenderGroup { id, label, node_ids: string[], collapsed }
 NodePin { name, type, type_family?, required?, wired?, description?, sensitive? }
 ```
 
@@ -157,33 +158,33 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 
 ## File Organization
 
-| Layer           | Path                                          | Purpose                                                       |
-| --------------- | --------------------------------------------- | ------------------------------------------------------------- |
-| Entry point     | `extension.ts`                                | Activation, command registration                              |
-| Host: canvas    | `webview/createWebviewPanel.ts`               | Panel lifecycle, PostMessage routing, auto-save               |
-| Host: HTML      | `webview/getWebviewContent.ts`                | Webview HTML shell, keyboard handlers                         |
-| Host: detail    | `webview/ModuleDetailPanel.ts`                | Registry module detail tab                                    |
-| Host: sidebar   | `containers-views/RegistrySidebarProvider.ts` | Registry sidebar provider                                     |
-| Host: engine    | `utilities/engine/server-manager.ts`          | CLI process lifecycle                                         |
-| Host: RPC       | `utilities/engine/grpc-client.ts`             | gRPC client (LaceClient)                                      |
-| Host: errors    | `utilities/engine/rpc-errors.ts`              | RPC error handling helpers                                    |
-| Webview: root   | `webview/App.tsx`                             | Message listener, engine creation, context                    |
-| Webview: canvas | `webview/Canvas.tsx`                          | CompositeEditor + Canvas orchestrator                         |
-| Webview: hooks  | `webview/hooks/`                              | useToast, useClipboard, useUndoRedo, etc.                     |
-| Webview: events | `webview/events.ts`                           | CANVAS_EVENTS constants                                       |
-| Webview: engine | `webview/engine.ts`                           | CanvasEngine interface                                        |
-| Webview: impl   | `webview/post-message-engine.ts`              | PostMessageEngine (CanvasEngine over postMessage)             |
-| Webview: state  | `webview/state/engine-context.ts`             | React context (CanvasState + engine)                          |
-| Webview: types  | `webview/types/render.ts`                     | CanvasView, RenderNode, RenderEdge, configs                   |
-| Shared types    | `types/protocol.ts`                           | HostToWebview, WebviewToHost, Diagnostic                      |
-| Components      | `webview/components/`                         | ModuleNode, panels, ActionBar, Toast, ContextMenu, SaveButton |
-| Utilities       | `webview/utils/`                              | duplicates, handleId, layout                                  |
-| Styles          | `webview/styles/panel.ts`                     | Shared panel style constants                                  |
-| Chat            | `chat/`                                       | @lace chat participant, tools, system prompt, utils           |
-| Chat utils      | `chat/utils/canvas-summary.ts`                | Shared canvas state formatter                                 |
-| Proto           | `proto/service.proto`                         | gRPC service definition (source of truth)                     |
-| Generated       | `src/generated/proto/service.ts`              | Generated TS proto (via `npm run proto:gen`)                  |
-| Tests           | `webview/__tests__/`                          | Unit + E2E tests                                              |
+| Layer           | Path                                          | Purpose                                                                  |
+| --------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
+| Entry point     | `extension.ts`                                | Activation, command registration                                         |
+| Host: canvas    | `webview/createWebviewPanel.ts`               | Panel lifecycle, PostMessage routing, auto-save                          |
+| Host: HTML      | `webview/getWebviewContent.ts`                | Webview HTML shell, keyboard handlers                                    |
+| Host: detail    | `webview/ModuleDetailPanel.ts`                | Registry module detail tab                                               |
+| Host: sidebar   | `containers-views/RegistrySidebarProvider.ts` | Registry sidebar provider                                                |
+| Host: engine    | `utilities/engine/server-manager.ts`          | CLI process lifecycle                                                    |
+| Host: RPC       | `utilities/engine/grpc-client.ts`             | gRPC client (LaceClient)                                                 |
+| Host: errors    | `utilities/engine/rpc-errors.ts`              | RPC error handling helpers                                               |
+| Webview: root   | `webview/App.tsx`                             | Message listener, engine creation, context                               |
+| Webview: canvas | `webview/Canvas.tsx`                          | CompositeEditor + Canvas orchestrator                                    |
+| Webview: hooks  | `webview/hooks/`                              | useToast, useClipboard, useUndoRedo, etc.                                |
+| Webview: events | `webview/events.ts`                           | CANVAS_EVENTS constants                                                  |
+| Webview: engine | `webview/engine.ts`                           | CanvasEngine interface                                                   |
+| Webview: impl   | `webview/post-message-engine.ts`              | PostMessageEngine (CanvasEngine over postMessage)                        |
+| Webview: state  | `webview/state/engine-context.ts`             | React context (CanvasState + engine)                                     |
+| Webview: types  | `webview/types/render.ts`                     | CanvasView, RenderNode, RenderEdge, configs                              |
+| Shared types    | `types/protocol.ts`                           | HostToWebview, WebviewToHost, Diagnostic                                 |
+| Components      | `webview/components/`                         | ModuleNode, GroupNode, panels, ActionBar, Toast, ContextMenu, SaveButton |
+| Utilities       | `webview/utils/`                              | duplicates, handleId, layout                                             |
+| Styles          | `webview/styles/panel.ts`                     | Shared panel style constants                                             |
+| Chat            | `chat/`                                       | @lace chat participant, tools, system prompt, utils                      |
+| Chat utils      | `chat/utils/canvas-summary.ts`                | Shared canvas state formatter                                            |
+| Proto           | `proto/service.proto`                         | gRPC service definition (source of truth)                                |
+| Generated       | `src/generated/proto/service.ts`              | Generated TS proto (via `npm run proto:gen`)                             |
+| Tests           | `webview/__tests__/`                          | Unit + E2E tests                                                         |
 
 ## Testing
 
