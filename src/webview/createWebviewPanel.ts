@@ -8,6 +8,7 @@ import type { HostToWebview, WebviewToHost, Diagnostic } from '../types/protocol
 import type { CanvasView } from './types/render';
 import { requireClient, handleRpcError } from '../utilities/engine/rpc-errors';
 import { findFreePosition, findFreeGroupPosition, placeNodesSequentially } from './utils/layout';
+import { applyPositionsToCanvasView } from './utils/view-state';
 
 /* ── Constants ── */
 
@@ -84,16 +85,23 @@ export async function addModuleToActiveCanvas(
           existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
 
         const canvasView = await client.dropBundle({ deploy_bundle: deployBundle, organization });
-        latestCanvasView = canvasView;
+        let nextCanvasView = canvasView;
 
         // Find newly added nodes and assign non-overlapping positions.
         const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
         if (newNodes.length > 0) {
           const syncPositions = placeNodesSequentially(newNodes, existingNodes, anchor);
           await client.syncLayout({ positions: syncPositions });
+          nextCanvasView = applyPositionsToCanvasView(canvasView, syncPositions);
         }
 
-        postToWebview(panel, { command: 'loadState', state: canvasView });
+        latestCanvasView = nextCanvasView;
+        postToWebview(panel, {
+          command: 'loadState',
+          state: nextCanvasView,
+          viewportIntent:
+            newNodes.length > 0 ? { kind: 'fit-all', padding: 0.2, duration: 300 } : undefined,
+        });
       } catch (err: unknown) {
         handleRpcError(err, 'action/drop_bundle', 'add module to canvas');
       }
@@ -329,12 +337,7 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
               const positions = (params as { positions?: Record<string, { x: number; y: number }> })
                 ?.positions;
               if (positions) {
-                latestCanvasView = {
-                  ...latestCanvasView,
-                  nodes: latestCanvasView.nodes.map((n) =>
-                    positions[n.id] ? { ...n, position: positions[n.id] } : n,
-                  ),
-                };
+                latestCanvasView = applyPositionsToCanvasView(latestCanvasView, positions);
               }
             }
             postToWebview(panel, { command: 'engineResult', requestId, result });

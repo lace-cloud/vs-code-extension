@@ -1,12 +1,15 @@
 import { createContext, useContext } from 'react';
 import type { CanvasEngine } from '../engine';
 import type { CanvasView } from '../types/render';
+import type { ViewportIntent } from '../../types/protocol';
 
 export type CanvasState = {
   view: CanvasView | null;
   loading: boolean;
   error: string | null;
   generation: number;
+  viewportIntent: ViewportIntent | null;
+  viewportIntentSeq: number;
 };
 
 export type CanvasContextValue = {
@@ -16,7 +19,14 @@ export type CanvasContextValue = {
 };
 
 export const CanvasContext = createContext<CanvasContextValue>({
-  state: { view: null, loading: true, error: null, generation: 0 },
+  state: {
+    view: null,
+    loading: true,
+    error: null,
+    generation: 0,
+    viewportIntent: null,
+    viewportIntentSeq: 0,
+  },
   engine: null,
   updateView: () => {},
 });
