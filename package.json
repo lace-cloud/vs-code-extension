@@ -59,7 +59,7 @@
       {
         "name": "lace_search_registry",
         "displayName": "Search Registry",
-        "modelDescription": "Search the Lace module registry for Terraform modules by keyword, cloud system (aws/azure/gcp), or category. Returns module names, versions, and descriptions. Always use this before adding a module.",
+        "modelDescription": "Search the Lace module registry for Terraform modules by keyword, cloud system (aws/azure/google), or category. Returns module names, versions, and descriptions. Always use this before adding a module.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -69,7 +69,7 @@
             },
             "system": {
               "type": "string",
-              "description": "Cloud system filter: 'aws', 'azure', or 'gcp'"
+              "description": "Cloud system filter: 'aws', 'azure', or 'google'"
             },
             "category": {
               "type": "string",
@@ -104,7 +104,7 @@
             },
             "system": {
               "type": "string",
-              "description": "Cloud system: 'aws', 'azure', or 'gcp'. Helps disambiguate if name exists across systems."
+              "description": "Cloud system: 'aws', 'azure', or 'google'. Helps disambiguate if name exists across systems."
             },
             "version": {
               "type": "string",
@@ -255,7 +255,7 @@
             },
             "system": {
               "type": "string",
-              "description": "Cloud system: 'aws', 'azure', or 'gcp'"
+              "description": "Cloud system: 'aws', 'azure', or 'google'"
             },
             "version": {
               "type": "string",

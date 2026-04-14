@@ -168,7 +168,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
     // no hyphens, not a known cloud system name), it is likely a canvas instance ID not a module name.
     // Instance IDs: "vpc", "subnet_1", "my_cluster"
     // Registry modules: "aws/vpc", "azure/resource-group" (always contain "/")
-    // Allow: "aws", "azure", "gcp" (system names used for fuzzy search)
+    // Allow: "aws", "azure", "google" (system names used for fuzzy search)
     const knownSystems = new Set(deps.getRegistryModules().map((m) => m.system.toLowerCase()));
     const looksLikeInstanceId =
       !name.includes('/') &&
