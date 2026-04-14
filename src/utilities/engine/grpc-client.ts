@@ -566,13 +566,19 @@ export class LaceClient {
   async dropBundle(params: {
     deploy_bundle: Buffer;
     position?: { x: number; y: number };
+    organization?: string;
   }): Promise<CanvasView> {
     const res = await this.unary<
-      { deploy_bundle: Buffer; position: { x: number; y: number } | undefined },
+      {
+        deploy_bundle: Buffer;
+        position: { x: number; y: number } | undefined;
+        organization: string;
+      },
       ProtoCanvasView
     >(this.inner.dropBundle, {
       deploy_bundle: params.deploy_bundle,
       position: params.position,
+      organization: params.organization ?? '',
     });
     return convertCanvasView(res);
   }
@@ -900,7 +906,11 @@ export class LaceClient {
         );
       case 'action/drop_bundle':
         return this.dropBundle(
-          params as { deploy_bundle: Buffer; position?: { x: number; y: number } },
+          params as {
+            deploy_bundle: Buffer;
+            position?: { x: number; y: number };
+            organization?: string;
+          },
         );
       case 'action/connect':
         return this.connect(

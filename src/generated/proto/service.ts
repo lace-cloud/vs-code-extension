@@ -338,6 +338,7 @@ export interface Diagnostic {
 export interface DropBundleRequest {
   deploy_bundle: Buffer;
   position: Position | undefined;
+  organization: string;
 }
 
 export interface ConnectRequest {
@@ -3258,7 +3259,7 @@ export const Diagnostic: MessageFns<Diagnostic> = {
 };
 
 function createBaseDropBundleRequest(): DropBundleRequest {
-  return { deploy_bundle: Buffer.alloc(0), position: undefined };
+  return { deploy_bundle: Buffer.alloc(0), position: undefined, organization: "" };
 }
 
 export const DropBundleRequest: MessageFns<DropBundleRequest> = {
@@ -3268,6 +3269,9 @@ export const DropBundleRequest: MessageFns<DropBundleRequest> = {
     }
     if (message.position !== undefined) {
       Position.encode(message.position, writer.uint32(18).fork()).join();
+    }
+    if (message.organization !== "") {
+      writer.uint32(26).string(message.organization);
     }
     return writer;
   },
@@ -3295,6 +3299,14 @@ export const DropBundleRequest: MessageFns<DropBundleRequest> = {
           message.position = Position.decode(reader, reader.uint32());
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.organization = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3312,6 +3324,7 @@ export const DropBundleRequest: MessageFns<DropBundleRequest> = {
         ? Buffer.from(bytesFromBase64(object.deploy_bundle))
         : Buffer.alloc(0),
       position: isSet(object.position) ? Position.fromJSON(object.position) : undefined,
+      organization: isSet(object.organization) ? globalThis.String(object.organization) : "",
     };
   },
 
@@ -3322,6 +3335,9 @@ export const DropBundleRequest: MessageFns<DropBundleRequest> = {
     }
     if (message.position !== undefined) {
       obj.position = Position.toJSON(message.position);
+    }
+    if (message.organization !== "") {
+      obj.organization = message.organization;
     }
     return obj;
   },
@@ -3335,6 +3351,7 @@ export const DropBundleRequest: MessageFns<DropBundleRequest> = {
     message.position = (object.position !== undefined && object.position !== null)
       ? Position.fromPartial(object.position)
       : undefined;
+    message.organization = object.organization ?? "";
     return message;
   },
 };

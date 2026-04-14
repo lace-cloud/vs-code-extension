@@ -201,7 +201,10 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
       const anchor =
         existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
 
-      const canvasView = await engineResult.client.dropBundle({ deploy_bundle: deployBundle });
+      const canvasView = await engineResult.client.dropBundle({
+        deploy_bundle: deployBundle,
+        organization: matchOrg,
+      });
 
       const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
       if (newNodes.length > 0) {

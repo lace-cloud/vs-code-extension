@@ -167,9 +167,14 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   /** Open canvas (if needed) then drop a module onto it. */
-  async function openCanvasAndAddModule(name: string, system: string, version: string) {
+  async function openCanvasAndAddModule(
+    name: string,
+    system: string,
+    version: string,
+    organization?: string,
+  ) {
     await openCanvas(context, server!);
-    await addModuleToActiveCanvas(server!, name, system, version);
+    await addModuleToActiveCanvas(server!, name, system, version, organization);
   }
 
   /* ---------- Commands ---------- */
@@ -269,7 +274,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.showModuleDetail', (mod: RegistryModule) => {
       showModuleDetail(mod, server?.rpcClient ?? null, (name, system, version) => {
         if (server) {
-          openCanvasAndAddModule(name, system, version);
+          openCanvasAndAddModule(name, system, version, selectedOrg ?? undefined);
         }
       });
     }),
@@ -280,7 +285,7 @@ export async function activate(context: vscode.ExtensionContext) {
       async (node: { module?: RegistryModule }) => {
         if (!node?.module || !server) return;
         const mod = node.module;
-        await openCanvasAndAddModule(mod.name, mod.system, mod.version);
+        await openCanvasAndAddModule(mod.name, mod.system, mod.version, selectedOrg ?? undefined);
         registryProvider?.trackRecentlyUsed(node.module.id);
       },
     ),
@@ -308,7 +313,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
       if (pick && server) {
         const mod = pick.module;
-        await openCanvasAndAddModule(mod.name, mod.system, mod.version);
+        await openCanvasAndAddModule(mod.name, mod.system, mod.version, selectedOrg ?? undefined);
         registryProvider?.trackRecentlyUsed(pick.module.id);
       }
     }),

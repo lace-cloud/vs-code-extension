@@ -49,6 +49,7 @@ export async function addModuleToActiveCanvas(
   name: string,
   system: string,
   version: string,
+  organization?: string,
 ) {
   if (!canvasPanel) {
     vscode.window.showWarningMessage('No canvas open.');
@@ -82,7 +83,7 @@ export async function addModuleToActiveCanvas(
         const anchor =
           existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].position : undefined;
 
-        const canvasView = await client.dropBundle({ deploy_bundle: deployBundle });
+        const canvasView = await client.dropBundle({ deploy_bundle: deployBundle, organization });
         latestCanvasView = canvasView;
 
         // Find newly added nodes and assign non-overlapping positions.

@@ -267,6 +267,7 @@ message Diagnostic {
 message DropBundleRequest {
   bytes deploy_bundle = 1;
   Position position = 2;
+  string organization = 3;
 }
 
 message ConnectRequest {
