@@ -7,7 +7,7 @@ import type { RegistryModule } from '../types/protocol';
 
 const MAX_PAGES_PER_SYSTEM = 10;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const DEFAULT_SYSTEMS = ['aws', 'azure', 'gcp', 'google'] as const;
+const DEFAULT_SYSTEMS = ['aws', 'azure', 'google'] as const;
 
 function getModuleCacheKey(module: RegistryModule): string {
   return `${module.id}:${module.version}`;

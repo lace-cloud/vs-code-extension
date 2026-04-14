@@ -123,7 +123,7 @@ function detectCloudHints(fileContents: Map<string, string>): string[] {
   const allContent = [...fileContents.values()].join('\n');
   if (/aws-sdk|@aws-sdk|amazonaws\.com|aws_/i.test(allContent)) hints.push('aws');
   if (/azure|@azure\//i.test(allContent)) hints.push('azure');
-  if (/google-cloud|@google-cloud\//i.test(allContent)) hints.push('gcp');
+  if (/google-cloud|@google-cloud\//i.test(allContent)) hints.push('google');
   return [...new Set(hints)];
 }
 

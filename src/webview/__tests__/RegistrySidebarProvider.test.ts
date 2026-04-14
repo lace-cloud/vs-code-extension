@@ -14,7 +14,7 @@ const GOOGLE_STORAGE_BUCKET: RegistryModule = {
 };
 
 describe('RegistrySidebarProvider', () => {
-  test('fetches org-scoped google modules and keeps overlapping alias results deduplicated', async () => {
+  test('fetches org-scoped google modules', async () => {
     const listRegistryModules = vi.fn(
       async ({
         system,
@@ -23,7 +23,7 @@ describe('RegistrySidebarProvider', () => {
         system?: string;
         organization?: string;
       }) => {
-        if (organization === 'qxf2' && (system === 'google' || system === 'gcp')) {
+        if (organization === 'qxf2' && system === 'google') {
           return { modules: [GOOGLE_STORAGE_BUCKET] };
         }
         return { modules: [] };

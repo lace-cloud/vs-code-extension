@@ -3,7 +3,7 @@
 // System prompt factory for the Lace chat participant.
 // Dynamic context (canvas state, engine status) is injected per-request in participant.ts.
 
-export function buildSystemPrompt(systems: string[] = ['aws', 'azure', 'gcp']): string {
+export function buildSystemPrompt(systems: string[] = ['aws', 'azure', 'google']): string {
   const systemList = systems.join('/');
   return PROMPT_TEMPLATE.replace('{{SYSTEMS}}', systemList);
 }
