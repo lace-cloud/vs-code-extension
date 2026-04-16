@@ -1,11 +1,11 @@
-// @lace/proto — shared render-model POJOs + generated proto messages.
-// Generated files (./generated) are rebuilt via `pnpm proto:gen` — do not hand-edit.
-// Render types (./render) are the UI-facing POJO shapes produced by converters.
+// @lace/proto — shared render-model POJOs, structural proto shapes, and
+// proto→render converters. Proto message types are generated separately
+// per package (host: gRPC-JS, canvas: browser + JSON codecs, proto: shared
+// messages only) — see scripts/proto-gen.sh.
 //
-// Note: proto message interfaces and render interfaces share some names
-// (CanvasView, RenderNode, etc.). Render types are re-exported here; proto
-// messages stay accessible via `./generated/service` imports (each consumer
-// already has a local ./generated/service copy with package-specific service
-// stubs, and ts-proto emits nominally distinct enums per output — so proto
-// messages are NOT re-exported from this index).
+// The converters here accept structural aliases (see ./proto-shapes) so one
+// set of converters handles all three generated outputs, sidestepping the
+// nominal enum identity issue ts-proto's `export enum` introduces.
 export * from './render';
+export * from './proto-shapes';
+export * from './converters';

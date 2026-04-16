@@ -1,22 +1,10 @@
-// Proto → render-model converters for ConnectWebEngine (browser-side).
-// Uses canvas's local generated service (browser-safe, outputJsonMethods=true)
-// so message classes have the `.fromJSON()` we need for Connect-JSON parsing.
+// Proto → render-model converters.
 //
-// Note: host/src/transport.ts has its own equivalent converters against the
-// grpc-js generated output. Render shapes are shared via @lace/proto — enums
-// differ nominally across codegen outputs, which prevents reusing one converter.
+// Shared by LaceTransport (host, gRPC-JS) and ConnectWebEngine (canvas,
+// Connect-JSON). Accepts the structural shape aliases from `./proto-shapes`
+// — this sidesteps the nominal enum identity problem between ts-proto's
+// per-package outputs. See proto-shapes.ts for the full explanation.
 
-import { NodeKind, InputMode, DiagnosticSeverity } from './generated/service';
-import type {
-  CanvasView as ProtoCanvasView,
-  NodeConfig as ProtoNodeConfig,
-  EdgeConfig as ProtoEdgeConfig,
-  SettingsConfig as ProtoSettingsConfig,
-  RenderNode as ProtoRenderNode,
-  RenderInput as ProtoRenderInput,
-  RenderError as ProtoRenderError,
-  Diagnostic as ProtoDiagnostic,
-} from './generated/service';
 import type {
   CanvasView,
   NodeConfig,
@@ -26,17 +14,42 @@ import type {
   RenderInput,
   RenderError,
   Diagnostic,
-} from '@lace/proto';
+} from './render';
+import type {
+  ProtoDiagnosticLike,
+  ProtoRenderInputLike,
+  ProtoRenderNodeLike,
+  ProtoRenderErrorLike,
+  ProtoCanvasViewLike,
+  ProtoNodeConfigLike,
+  ProtoEdgeConfigLike,
+  ProtoSettingsConfigLike,
+} from './proto-shapes';
+
+// Wire values match ts-proto's `snakeToCamel=false, numeric enum` output.
+// Source of truth: the proto definition.
+const NODE_KIND_MODULE = 1;
+const NODE_KIND_RESOURCE = 2;
+const NODE_KIND_DATA = 3;
+
+const INPUT_MODE_EMPTY = 1;
+const INPUT_MODE_LITERAL = 2;
+const INPUT_MODE_VARIABLE = 3;
+const INPUT_MODE_EXPRESSION = 4;
+const INPUT_MODE_WIRED = 5;
+
+const DIAGNOSTIC_SEVERITY_WARNING = 2;
+const DIAGNOSTIC_SEVERITY_INFO = 3;
 
 // ── Enum converters ──
 
-export function convertNodeKind(value: NodeKind): 'module' | 'resource' | 'data' {
+export function convertNodeKind(value: number): 'module' | 'resource' | 'data' {
   switch (value) {
-    case NodeKind.NODE_KIND_MODULE:
+    case NODE_KIND_MODULE:
       return 'module';
-    case NodeKind.NODE_KIND_RESOURCE:
+    case NODE_KIND_RESOURCE:
       return 'resource';
-    case NodeKind.NODE_KIND_DATA:
+    case NODE_KIND_DATA:
       return 'data';
     default:
       return 'module';
@@ -44,49 +57,51 @@ export function convertNodeKind(value: NodeKind): 'module' | 'resource' | 'data'
 }
 
 export function convertInputMode(
-  value: InputMode,
+  value: number,
 ): 'empty' | 'literal' | 'variable' | 'expression' | 'wired' {
   switch (value) {
-    case InputMode.INPUT_MODE_LITERAL:
+    case INPUT_MODE_LITERAL:
       return 'literal';
-    case InputMode.INPUT_MODE_VARIABLE:
+    case INPUT_MODE_VARIABLE:
       return 'variable';
-    case InputMode.INPUT_MODE_EXPRESSION:
+    case INPUT_MODE_EXPRESSION:
       return 'expression';
-    case InputMode.INPUT_MODE_WIRED:
+    case INPUT_MODE_WIRED:
       return 'wired';
     default:
       return 'empty';
   }
 }
 
-export function convertDiagnosticSeverity(value: DiagnosticSeverity): 'error' | 'warning' | 'info' {
+export function convertDiagnosticSeverity(value: number): 'error' | 'warning' | 'info' {
   switch (value) {
-    case DiagnosticSeverity.DIAGNOSTIC_SEVERITY_WARNING:
+    case DIAGNOSTIC_SEVERITY_WARNING:
       return 'warning';
-    case DiagnosticSeverity.DIAGNOSTIC_SEVERITY_INFO:
+    case DIAGNOSTIC_SEVERITY_INFO:
       return 'info';
     default:
       return 'error';
   }
 }
 
-export function modeToInputMode(mode: string): InputMode {
+export function modeToInputMode(mode: string): number {
   switch (mode) {
     case 'literal':
-      return InputMode.INPUT_MODE_LITERAL;
+      return INPUT_MODE_LITERAL;
     case 'variable':
-      return InputMode.INPUT_MODE_VARIABLE;
+      return INPUT_MODE_VARIABLE;
     case 'expression':
-      return InputMode.INPUT_MODE_EXPRESSION;
+      return INPUT_MODE_EXPRESSION;
+    case 'wired':
+      return INPUT_MODE_WIRED;
     default:
-      return InputMode.INPUT_MODE_EMPTY;
+      return INPUT_MODE_EMPTY;
   }
 }
 
-// ── Proto → render ──
+// ── Proto → render model ──
 
-export function convertRenderInput(input: ProtoRenderInput): RenderInput {
+export function convertRenderInput(input: ProtoRenderInputLike): RenderInput {
   return {
     name: input.name,
     type: input.type,
@@ -104,7 +119,7 @@ export function convertRenderInput(input: ProtoRenderInput): RenderInput {
   };
 }
 
-export function convertRenderNode(node: ProtoRenderNode): RenderNode {
+export function convertRenderNode(node: ProtoRenderNodeLike): RenderNode {
   return {
     id: node.id,
     label: node.label,
@@ -130,7 +145,7 @@ export function convertRenderNode(node: ProtoRenderNode): RenderNode {
   };
 }
 
-export function convertRenderError(error: ProtoRenderError): RenderError {
+export function convertRenderError(error: ProtoRenderErrorLike): RenderError {
   return {
     instance_id: error.instance_id || undefined,
     input_name: error.input_name || undefined,
@@ -138,7 +153,7 @@ export function convertRenderError(error: ProtoRenderError): RenderError {
   };
 }
 
-export function convertCanvasView(proto: ProtoCanvasView): CanvasView {
+export function convertCanvasView(proto: ProtoCanvasViewLike): CanvasView {
   return {
     module_name: proto.module_name,
     nodes: proto.nodes.map(convertRenderNode),
@@ -162,7 +177,7 @@ export function convertCanvasView(proto: ProtoCanvasView): CanvasView {
   };
 }
 
-export function convertNodeConfig(proto: ProtoNodeConfig): NodeConfig {
+export function convertNodeConfig(proto: ProtoNodeConfigLike): NodeConfig {
   return {
     instance_id: proto.instance_id,
     inputs: proto.inputs.map(convertRenderInput),
@@ -178,7 +193,7 @@ export function convertNodeConfig(proto: ProtoNodeConfig): NodeConfig {
   };
 }
 
-export function convertEdgeConfig(proto: ProtoEdgeConfig): EdgeConfig {
+export function convertEdgeConfig(proto: ProtoEdgeConfigLike): EdgeConfig {
   return {
     source_instance: proto.source_instance,
     target_instance: proto.target_instance,
@@ -192,7 +207,7 @@ export function convertEdgeConfig(proto: ProtoEdgeConfig): EdgeConfig {
   };
 }
 
-export function convertSettingsConfig(proto: ProtoSettingsConfig): SettingsConfig {
+export function convertSettingsConfig(proto: ProtoSettingsConfigLike): SettingsConfig {
   return {
     terraform: {
       required_version: proto.terraform?.required_version ?? '',
@@ -216,7 +231,7 @@ export function convertSettingsConfig(proto: ProtoSettingsConfig): SettingsConfi
   };
 }
 
-export function convertDiagnostic(d: ProtoDiagnostic): Diagnostic {
+export function convertDiagnostic(d: ProtoDiagnosticLike): Diagnostic {
   return {
     severity: convertDiagnosticSeverity(d.severity),
     message: d.message,

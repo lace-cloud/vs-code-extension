@@ -45,7 +45,7 @@ Rspack produces three bundles:
 ```bash
 pnpm install
 pnpm run build                # rspack build (all three bundles)
-pnpm run test:unit            # 113 unit tests via vitest
+pnpm run test:unit            # 114 unit tests via vitest
 npx tsc --noEmit              # type-check — must be zero errors
 pnpm run proto:gen            # regenerate three TS proto outputs
 
@@ -93,16 +93,15 @@ as a prop and works with either.
 
 ### Webview: Canvas (React, Browser)
 
-- **`App.tsx`** — root. Takes `engine: CanvasEngine` + `vscode: VsCodeApi`. Handles host→webview messages, routes Canvas events.
-- **`index.tsx`** — VS Code entry. Constructs `PostMessageEngine(acquireVsCodeApi())` and renders `<App>`.
+- **`App.tsx`** — root. Takes `engine: CanvasEngine` + `hostBridge: HostBridge`. Subscribes to `engine.onEvent` for state updates; routes Canvas events through hostBridge.
+- **`index.tsx`** — VS Code entry. Constructs `PostMessageEngine(acquireVsCodeApi())` + a `HostBridge` wrapping `vscode.postMessage`, renders `<App>`.
 - **`Canvas.tsx`** — `CompositeEditor` (ReactFlow viewport) + `Canvas` orchestrator. Most logic in focused hooks.
-- **`engine.ts`** — `CanvasEngine` interface (SessionOpen, PlaceModule, Connect, SessionGenerate, Subscribe, ...)
-- **`post-message-engine.ts`** — PostMessage-based `CanvasEngine` implementation
-- **`connect-web-engine.ts`** — Connect-JSON fetch-based `CanvasEngine`
-- **`converters.ts`** — canvas-local proto→render converters (browser-safe; uses local `./generated/service`)
-- **`hooks/`** — `useToast`, `useContextMenu`, `useUndoRedo`, `useEdgeInspector`, `useGenerationStatus`, `useNewNodeTracking`, `useClipboard`, `useGroupLogic`, `useSaveState`, `useWindowEvent`
+- **`engine.ts`** — `CanvasEngine` interface + `EngineEvent` union (`stateUpdated` / `generateProgress` / `generateSuccess` / `generateError`).
+- **`post-message-engine.ts`** — PostMessage-based `CanvasEngine`. Translates host `loadState` / `generate*` messages into EngineEvents.
+- **`connect-web-engine.ts`** — Connect-JSON fetch-based `CanvasEngine`. Parses Subscribe stream frames into EngineEvents.
+- **`hooks/`** — `useToast`, `useContextMenu`, `useUndoRedo`, `useEdgeInspector`, `useGenerationStatus` (subscribes to `engine.onEvent`), `useNewNodeTracking`, `useClipboard`, `useGroupLogic`, `useSaveState`, `useWindowEvent`
 - **`components/`** — `ModuleNode`, `GroupNode`, `ActionBar`, `SlidePanel`, `Toast`, `ContextMenu`, settings panels, `ErrorBoundary`
-- **`events.ts`** — centralized `CANVAS_EVENTS` for window custom events
+- **`events.ts`** — centralized `CANVAS_EVENTS` for in-canvas window events (`SAVE`, `GENERATE`, `OPEN_FILE`, `CONTEXT_MENU`, etc.)
 
 ### Webview: Chat Sidebar
 
@@ -149,7 +148,8 @@ Defined in `packages/canvas/src/engine.ts`. Both transport implementations confo
 - **Actions (void):** `syncLayout`, `setTerraform`, `setProviders`, `setDependsOn`, `setEnvironments`
 - **Groups:** `createGroup`, `updateGroup`, `deleteGroup`
 - **Queries:** `queryNodeConfig`, `queryEdgeConfig`, `querySettings`, `queryGraphSummary`, `queryValidate`
-- **Streaming (ConnectWebEngine only):** `startSubscribe()` — opens Subscribe and dispatches StateUpdated/GenerateProgress/Success/Error via `window.postMessage`
+- **Events:** `onEvent(listener)` — subscribes to `EngineEvent` (`stateUpdated` / `generateProgress` / `generateSuccess` / `generateError`). Both engines implement this; consumers (App, `useGenerationStatus`) use a single API regardless of transport.
+- **Streaming (ConnectWebEngine only):** `startSubscribe()` — opens the Subscribe stream and emits StateUpdated/GenerateProgress/Success/Error as EngineEvents.
 
 Auth is handled implicitly by the CLI process. The extension does not expose auth methods.
 
@@ -167,12 +167,21 @@ NodePin { name, type, type_family?, required?, wired?, description?, sensitive? 
 
 Query response types: `NodeConfig`, `EdgeConfig`, `SettingsConfig`, `RenderError`, `Diagnostic`, `GeneratePhase`.
 
-### Proto message types
+### Proto message types and converters
 
-Each package has its own `./generated/service.ts`. Message interfaces are
-structurally identical across outputs; enums (`NodeKind`, `InputMode`, `DiagnosticSeverity`)
-are nominally distinct per output, which is why converters live per-package
-(host converters in `transport.ts`, canvas converters in `converters.ts`).
+Each package has its own `./generated/service.ts` because ts-proto emits
+service stubs differently per output (gRPC-JS for host, generic-definitions
+
+- JSON codecs for canvas). Message interfaces are structurally identical
+  across outputs; enums (`NodeKind`, `InputMode`, `DiagnosticSeverity`) are
+  nominally distinct per output.
+
+A single set of proto→render converters lives in `@lace/proto/converters`.
+It accepts structural input aliases (`@lace/proto/proto-shapes`) that widen
+the enum fields to `number`, so host-generated and canvas-generated proto
+messages are both assignable via TypeScript's structural + numeric-enum-
+widening rules. Both `LaceTransport` (host) and `ConnectWebEngine` (canvas)
+import converters from `@lace/proto` — no duplication.
 
 ### Context state (canvas)
 
@@ -196,19 +205,19 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 
 ## Testing
 
-### Unit Tests (vitest, 113 tests)
+### Unit Tests (vitest, 114 tests)
 
-Canvas:
+Canvas (`packages/canvas/src/__tests__/`):
 
 - `handleId.test.ts`, `duplicates.test.ts` — utility functions
-- `useSaveState`, `useToast`, `useClipboard`, `useGenerationStatus`, `useGroupLogic` — hook tests (happy-dom)
+- `useSaveState`, `useToast`, `useClipboard`, `useGenerationStatus`, `useGroupLogic` — hook tests (jsdom/happy-dom)
 - `connect-web-engine.test.ts` — Connect-JSON unary + streaming frame parser
 
-Chat sidebar:
+Chat sidebar (`packages/chat-sidebar/src/__tests__/`):
 
-- `registry-tools.test.ts`, `graph-tools.test.ts`, `workspace-tools.test.ts` — tool contract tests
+- `chat-tools.test.ts`, `registry-tools.test.ts` — tool contract tests
 - `history-codec.test.ts` — persistence round-trip
-- `canvas-summary.test.ts` — formatting
+- `canvas-summary.test.ts` — canvas state formatter
 - `proactivity-rules.test.ts` — pure rule matchers
 
 ### Storybook

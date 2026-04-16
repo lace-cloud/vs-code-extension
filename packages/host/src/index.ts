@@ -1,7 +1,8 @@
 // @lace/host — public API
 
 export { ServerManager } from './server-manager';
-export { LaceTransport, convertCanvasView } from './transport';
+export { LaceTransport } from './transport';
+export { convertCanvasView } from '@lace/proto';
 export { SubscribeHandler } from './subscribe';
 export type { SubscribeCallbacks } from './subscribe';
 export { spawnEngine } from './engine-process';

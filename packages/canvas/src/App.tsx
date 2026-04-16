@@ -4,23 +4,30 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Canvas from './Canvas';
 import { CanvasContext, type CanvasState } from './state/engine-context';
 import type { CanvasEngine } from './engine';
-import type { CanvasView, HostToWebview } from './types/render';
+import type { CanvasView } from './types/render';
 import { useWindowEvent } from './hooks/useWindowEvent';
 import { CANVAS_EVENTS } from './events';
 
-// VsCodeApi is the surface the webview uses to signal the host. In VS Code
-// mode, `acquireVsCodeApi()` supplies the real one. In Storybook flow mode,
-// FlowDecorator supplies a fake that routes signals to the engine directly,
-// then re-dispatches host→webview messages via window.postMessage. This keeps
-// App transport-agnostic: it only knows about an engine and a postMessage sink.
-type VsCodeApi = { postMessage(msg: unknown): void };
+/**
+ * HostBridge is the narrow, typed surface for outbound signals to whatever is
+ * hosting the canvas. In VS Code mode this wraps `acquireVsCodeApi()`; in
+ * Storybook flow mode the decorator supplies a bridge that routes signals to
+ * the engine directly (e.g. triggerGenerate → engine.sessionGenerate).
+ */
+export type HostBridge = {
+  signalReady(): void;
+  markDirty(): void;
+  markClean(): void;
+  triggerGenerate(): void;
+  openFile(relativePath: string, line?: number, column?: number): void;
+};
 
 type AppProps = {
   engine: CanvasEngine;
-  vscode: VsCodeApi;
+  hostBridge: HostBridge;
 };
 
-export default function App({ engine, vscode }: AppProps) {
+export default function App({ engine, hostBridge }: AppProps) {
   const [state, setState] = useState<CanvasState>({
     view: null,
     loading: true,
@@ -32,45 +39,32 @@ export default function App({ engine, vscode }: AppProps) {
     setState((prev) => ({ view, loading: false, error: null, generation: prev.generation + 1 }));
   }, []);
 
-  // ── Host → webview: state + generate events ──
-  // engineResult is NOT handled here — PostMessageEngine manages its own
-  // listener for that, which keeps App agnostic of the concrete engine.
+  // ── Engine events → state updates ──
+  // Both PostMessageEngine and ConnectWebEngine emit the same EngineEvent
+  // shape through onEvent. Generate* events flow through hooks (useEngine)
+  // so App stays engine-agnostic.
   useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      const msg = e.data as HostToWebview;
-
-      switch (msg.command) {
-        case 'loadState':
-          setState((prev) => ({
-            view: msg.state,
-            loading: false,
-            error: null,
-            generation: prev.generation + 1,
-          }));
-          break;
-
-        case 'generateProgress':
-        case 'generateSuccess':
-        case 'generateError':
-          window.dispatchEvent(new CustomEvent(CANVAS_EVENTS.HOST_MESSAGE, { detail: msg }));
-          break;
+    return engine.onEvent((event) => {
+      if (event.type === 'stateUpdated') {
+        setState((prev) => ({
+          view: event.view,
+          loading: false,
+          error: null,
+          generation: prev.generation + 1,
+        }));
       }
-    };
-
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []);
+    });
+  }, [engine]);
 
   useEffect(() => {
     if (state.view === null) return;
-    vscode.postMessage({ command: state.view.is_dirty ? 'markDirty' : 'markClean' });
-  }, [state.view?.is_dirty, vscode]);
+    if (state.view.is_dirty) hostBridge.markDirty();
+    else hostBridge.markClean();
+  }, [state.view?.is_dirty, hostBridge]);
 
   useWindowEvent(CANVAS_EVENTS.SAVE, () => engine.sessionSave(), [engine]);
 
-  useWindowEvent(CANVAS_EVENTS.GENERATE, () => vscode.postMessage({ command: 'generate' }), [
-    vscode,
-  ]);
+  useWindowEvent(CANVAS_EVENTS.GENERATE, () => hostBridge.triggerGenerate(), [hostBridge]);
 
   useWindowEvent(
     CANVAS_EVENTS.OPEN_FILE,
@@ -80,15 +74,15 @@ export default function App({ engine, vscode }: AppProps) {
         line?: number;
         column?: number;
       };
-      vscode.postMessage({ command: 'openFile', relativePath, line, column });
+      hostBridge.openFile(relativePath, line, column);
     },
-    [vscode],
+    [hostBridge],
   );
 
   // ── Signal readiness to host ──
   useEffect(() => {
-    vscode.postMessage({ command: 'webviewReady' });
-  }, [vscode]);
+    hostBridge.signalReady();
+  }, [hostBridge]);
 
   return (
     <ErrorBoundary>

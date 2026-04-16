@@ -34,7 +34,7 @@ Rspack builds three bundles from the workspace:
 ```
 pnpm install              # install workspace
 pnpm run build            # rspack build (all three bundles)
-pnpm run test:unit        # vitest (113 unit tests)
+pnpm run test:unit        # vitest (114 unit tests)
 pnpm run proto:gen        # regenerate TS proto outputs (3 per-package variants)
 npx tsc --noEmit          # typecheck — must be zero errors
 
@@ -56,19 +56,19 @@ pnpm run storybook:build        # static storybook build
 
 ## Architecture
 
-| Package / Layer                 | Purpose                                                                               | Environment       |
-| ------------------------------- | ------------------------------------------------------------------------------------- | ----------------- |
-| `host/extension.ts`             | Activation, command registration, view provider wiring                                | Node              |
-| `host/transport.ts`             | `LaceTransport` — gRPC-JS client; bearer auth; proto→render converters                | Node              |
-| `host/server-manager`           | Spawns/watches `lace engine`, routes the handshake into a transport                   | Node              |
-| `host/canvas-panel.ts`          | Canvas webview panel + Subscribe stream bridge                                        | Node (mounts DOM) |
-| `host/webview-html.ts`          | Shared HTML scaffold (CSP, nonce) used by canvas + chat sidebar                       | Node              |
-| `chat-sidebar/host/`            | `ChatController` (agentic loop, tool dispatch, proactivity), `ChatViewProvider`       | Node              |
-| `chat-sidebar/webview`          | React chat UI                                                                         | Browser           |
-| `canvas/App.tsx`                | Transport-agnostic canvas root; takes `engine: CanvasEngine` + `vscode: VsCodeApi`    | Browser           |
-| `canvas/Canvas.tsx`             | ReactFlow viewport + orchestrator; focused hooks for toasts, context menu, undo, etc. | Browser           |
-| `canvas/post-message-engine.ts` | `CanvasEngine` over VS Code postMessage (host relays to LaceTransport)                | Browser           |
-| `canvas/connect-web-engine.ts`  | `CanvasEngine` over Connect-JSON fetch; used by Storybook flow stories                | Browser           |
+| Package / Layer                 | Purpose                                                                                 | Environment       |
+| ------------------------------- | --------------------------------------------------------------------------------------- | ----------------- |
+| `host/extension.ts`             | Activation, command registration, view provider wiring                                  | Node              |
+| `host/transport.ts`             | `LaceTransport` — gRPC-JS client; bearer auth; proto→render converters                  | Node              |
+| `host/server-manager`           | Spawns/watches `lace engine`, routes the handshake into a transport                     | Node              |
+| `host/canvas-panel.ts`          | Canvas webview panel + Subscribe stream bridge                                          | Node (mounts DOM) |
+| `host/webview-html.ts`          | Shared HTML scaffold (CSP, nonce) used by canvas + chat sidebar                         | Node              |
+| `chat-sidebar/host/`            | `ChatController` (agentic loop, tool dispatch, proactivity), `ChatViewProvider`         | Node              |
+| `chat-sidebar/webview`          | React chat UI                                                                           | Browser           |
+| `canvas/App.tsx`                | Transport-agnostic canvas root; takes `engine: CanvasEngine` + `hostBridge: HostBridge` | Browser           |
+| `canvas/Canvas.tsx`             | ReactFlow viewport + orchestrator; focused hooks for toasts, context menu, undo, etc.   | Browser           |
+| `canvas/post-message-engine.ts` | `CanvasEngine` over VS Code postMessage (host relays to LaceTransport)                  | Browser           |
+| `canvas/connect-web-engine.ts`  | `CanvasEngine` over Connect-JSON fetch; used by Storybook flow stories                  | Browser           |
 
 ### Canvas Hooks (extracted from Canvas.tsx)
 

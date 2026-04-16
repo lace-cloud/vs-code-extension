@@ -8,5 +8,4 @@ export const CANVAS_EVENTS = {
   SAVE: 'canvasSave',
   GENERATE: 'canvasGenerate',
   OPEN_FILE: 'openFile',
-  HOST_MESSAGE: 'hostMessage',
 } as const;

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { ConnectWebEngine, ConnectError } from '../connect-web-engine';
+import type { EngineEvent } from '../engine';
 
 // Connect-JSON wire format uses camelCase on the wire (Connect default), even
 // though our ts-proto interfaces keep snake_case field names (snakeToCamel=false).
@@ -10,12 +11,13 @@ const BASE_URL = 'http://127.0.0.1:12345';
 const TOKEN = 'test-token-abc';
 
 function mockJsonFetch(status: number, body: unknown): typeof fetch {
-  return vi.fn().mockResolvedValue({
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: status === 200 ? 'OK' : 'Error',
-    text: async () => JSON.stringify(body),
-  } as unknown as Response) as unknown as typeof fetch;
+  return vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(body), {
+      status,
+      statusText: status === 200 ? 'OK' : 'Error',
+      headers: { 'content-type': 'application/json' },
+    }),
+  ) as unknown as typeof fetch;
 }
 
 describe('ConnectWebEngine — URL shape and headers', () => {
@@ -142,12 +144,11 @@ describe('ConnectWebEngine — error mapping', () => {
   });
 
   test('non-JSON error body falls back to HTTP code', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-      statusText: 'Service Unavailable',
-      text: async () => 'not json',
-    } as unknown as Response) as unknown as typeof fetch;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('not json', { status: 503, statusText: 'Service Unavailable' }),
+      ) as unknown as typeof fetch;
     const engine = new ConnectWebEngine({
       baseUrl: BASE_URL,
       token: TOKEN,
@@ -232,18 +233,7 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
 }
 
 describe('ConnectWebEngine — Subscribe stream', () => {
-  let messages: unknown[] = [];
-  let originalPostMessage: typeof window.postMessage;
-
-  beforeEach(() => {
-    messages = [];
-    originalPostMessage = window.postMessage.bind(window);
-    window.postMessage = ((msg: unknown) => {
-      messages.push(msg);
-    }) as typeof window.postMessage;
-  });
-
-  test('dispatches loadState from state_updated event', async () => {
+  test('emits stateUpdated event from state_updated frame', async () => {
     const eventFrame = buildFrame({
       stateUpdated: {
         view: {
@@ -265,12 +255,11 @@ describe('ConnectWebEngine — Subscribe stream', () => {
         controller.close();
       },
     });
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      body: stream,
-    } as unknown as Response) as unknown as typeof fetch;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(stream, { status: 200, statusText: 'OK' }),
+      ) as unknown as typeof fetch;
 
     const engine = new ConnectWebEngine({
       baseUrl: BASE_URL,
@@ -278,19 +267,55 @@ describe('ConnectWebEngine — Subscribe stream', () => {
       sessionId: 'stream-sess',
       fetch: fetchImpl,
     });
+
+    const events: EngineEvent[] = [];
+    engine.onEvent((e) => events.push(e));
+
     const unsubscribe = engine.startSubscribe();
     // Let the async loop drain.
     await new Promise((resolve) => setTimeout(resolve, 20));
     unsubscribe();
 
-    window.postMessage = originalPostMessage;
+    const stateUpdated = events.find((e) => e.type === 'stateUpdated');
+    expect(stateUpdated).toBeDefined();
+    expect(stateUpdated?.type === 'stateUpdated' && stateUpdated.view.module_name).toBe(
+      'flow-story',
+    );
+  });
 
-    expect(messages.length).toBeGreaterThan(0);
-    const loadState = messages.find(
-      (m) =>
-        typeof m === 'object' && m !== null && (m as { command?: string }).command === 'loadState',
-    ) as { command: string; state: { module_name: string } } | undefined;
-    expect(loadState).toBeDefined();
-    expect(loadState?.state.module_name).toBe('flow-story');
+  test('emits generateSuccess event from generate_success frame', async () => {
+    const eventFrame = buildFrame({
+      generateSuccess: { filesWritten: ['main.tf'], files: {} },
+    });
+    const endFrame = buildFrame({}, true);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(concatBytes(eventFrame, endFrame));
+        controller.close();
+      },
+    });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(stream, { status: 200, statusText: 'OK' }),
+      ) as unknown as typeof fetch;
+
+    const engine = new ConnectWebEngine({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      sessionId: 'stream-sess',
+      fetch: fetchImpl,
+    });
+
+    const events: EngineEvent[] = [];
+    engine.onEvent((e) => events.push(e));
+
+    const unsubscribe = engine.startSubscribe();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    unsubscribe();
+
+    const success = events.find((e) => e.type === 'generateSuccess');
+    expect(success).toBeDefined();
+    expect(success?.type === 'generateSuccess' && success.files).toEqual(['main.tf']);
   });
 });

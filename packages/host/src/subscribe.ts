@@ -1,6 +1,6 @@
 import type { ClientReadableStream } from '@grpc/grpc-js';
 import type { EngineEvent } from './generated/service';
-import { convertCanvasView } from './transport';
+import { convertCanvasView, convertDiagnosticSeverity } from '@lace/proto';
 import type { CanvasView, Diagnostic } from './types';
 
 export type SubscribeCallbacks = {
@@ -38,7 +38,7 @@ export class SubscribeHandler {
 
       if (event.generate_error) {
         const diagnostics: Diagnostic[] = event.generate_error.diagnostics.map((d) => ({
-          severity: severityToString(d.severity),
+          severity: convertDiagnosticSeverity(d.severity),
           message: d.message,
           file: d.file || undefined,
           line: d.line || undefined,
@@ -64,19 +64,5 @@ export class SubscribeHandler {
       this.stream.cancel();
       this.stream = null;
     }
-  }
-}
-
-/** Map proto DiagnosticSeverity enum (numeric) to string literal. */
-function severityToString(value: number): 'error' | 'warning' | 'info' {
-  switch (value) {
-    case 1:
-      return 'error';
-    case 2:
-      return 'warning';
-    case 3:
-      return 'info';
-    default:
-      return 'error';
   }
 }

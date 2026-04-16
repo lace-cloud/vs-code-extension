@@ -19,6 +19,8 @@
 
 import type {
   CanvasEngine,
+  EngineEvent,
+  EngineEventListener,
   GenerateResult,
   GraphSummary,
   InputUpdate,
@@ -133,7 +135,7 @@ import {
   convertRenderError,
   convertDiagnostic,
   modeToInputMode,
-} from './converters';
+} from '@lace/proto';
 
 const SERVICE_PATH = '/lace.engine.LaceEngine';
 
@@ -160,6 +162,7 @@ export class ConnectWebEngine implements CanvasEngine {
   private _sessionId: string | null;
   private readonly fetchImpl: typeof fetch;
   private subscribeAbort: AbortController | null = null;
+  private readonly listeners = new Set<EngineEventListener>();
 
   constructor(options: ConnectWebEngineOptions) {
     // Strip trailing slash so path concatenation doesn't double up.
@@ -167,6 +170,17 @@ export class ConnectWebEngine implements CanvasEngine {
     this.token = options.token;
     this._sessionId = options.sessionId ?? null;
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  onEvent(listener: EngineEventListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emit(event: EngineEvent): void {
+    for (const listener of this.listeners) listener(event);
   }
 
   get sessionId(): string | null {
@@ -795,13 +809,12 @@ export class ConnectWebEngine implements CanvasEngine {
 
   private dispatchSubscribeEvent(event: ProtoEngineEvent): void {
     if (event.state_updated?.view) {
-      const view = convertCanvasView(event.state_updated.view);
-      window.postMessage({ command: 'loadState', state: view }, '*');
+      this.emit({ type: 'stateUpdated', view: convertCanvasView(event.state_updated.view) });
       return;
     }
     if (event.generate_progress) {
       const phase = event.generate_progress.stage as 'generating' | 'formatting' | 'validating';
-      window.postMessage({ command: 'generateProgress', phase }, '*');
+      this.emit({ type: 'generateProgress', phase });
       return;
     }
     if (event.generate_success) {
@@ -809,15 +822,16 @@ export class ConnectWebEngine implements CanvasEngine {
         event.generate_success.files_written.length > 0
           ? event.generate_success.files_written
           : undefined;
-      window.postMessage({ command: 'generateSuccess', files }, '*');
+      this.emit({ type: 'generateSuccess', files });
       return;
     }
     if (event.generate_error) {
       const diagnostics: Diagnostic[] = event.generate_error.diagnostics.map(convertDiagnostic);
-      window.postMessage(
-        { command: 'generateError', message: event.generate_error.message, diagnostics },
-        '*',
-      );
+      this.emit({
+        type: 'generateError',
+        message: event.generate_error.message,
+        diagnostics,
+      });
     }
   }
 }

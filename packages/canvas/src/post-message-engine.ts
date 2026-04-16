@@ -5,6 +5,8 @@
 
 import type {
   CanvasEngine,
+  EngineEvent,
+  EngineEventListener,
   GenerateResult,
   GraphSummary,
   InputUpdate,
@@ -21,6 +23,7 @@ import type {
   EdgeConfig,
   SettingsConfig,
   RenderError,
+  HostToWebview,
 } from './types/render';
 
 type VsCodeApi = { postMessage(msg: unknown): void };
@@ -35,20 +38,42 @@ const CALL_TIMEOUT_MS = 30_000;
 
 export class PostMessageEngine implements CanvasEngine {
   private pending = new Map<string, PendingCall>();
+  private readonly listeners = new Set<EngineEventListener>();
   private readonly messageListener: (e: MessageEvent) => void;
 
   constructor(private vscode: VsCodeApi) {
-    // Self-manage the engineResult listener so App stays engine-agnostic.
-    // ConnectWebEngine uses fetch and never emits engineResult.
+    // Internalize all host→webview message handling. App subscribes via
+    // onEvent(); it never needs to install its own `message` listener.
+    // engineResult resolves pending RPC calls; other commands emit EngineEvents.
     this.messageListener = (e: MessageEvent) => {
-      const msg = e.data as {
-        command?: string;
-        requestId?: string;
-        result?: unknown;
-        error?: string;
-      } | null;
-      if (!msg || msg.command !== 'engineResult' || typeof msg.requestId !== 'string') return;
-      this.resolvePending(msg.requestId, msg.result, msg.error);
+      const msg = e.data as
+        | HostToWebview
+        | { command: 'engineResult'; requestId?: unknown; result?: unknown; error?: string }
+        | null;
+      if (!msg || typeof msg !== 'object' || typeof msg.command !== 'string') return;
+      switch (msg.command) {
+        case 'engineResult': {
+          if (typeof msg.requestId !== 'string') return;
+          this.resolvePending(msg.requestId, msg.result, msg.error);
+          return;
+        }
+        case 'loadState':
+          this.emit({ type: 'stateUpdated', view: msg.state });
+          return;
+        case 'generateProgress':
+          this.emit({ type: 'generateProgress', phase: msg.phase });
+          return;
+        case 'generateSuccess':
+          this.emit({ type: 'generateSuccess', files: msg.files });
+          return;
+        case 'generateError':
+          this.emit({
+            type: 'generateError',
+            message: msg.message,
+            diagnostics: msg.diagnostics,
+          });
+          return;
+      }
     };
     window.addEventListener('message', this.messageListener);
   }
@@ -56,11 +81,23 @@ export class PostMessageEngine implements CanvasEngine {
   /** Disposes the message listener. Called when the webview unmounts. */
   dispose(): void {
     window.removeEventListener('message', this.messageListener);
+    this.listeners.clear();
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
       entry.reject(new Error('PostMessageEngine disposed'));
     }
     this.pending.clear();
+  }
+
+  onEvent(listener: EngineEventListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emit(event: EngineEvent): void {
+    for (const listener of this.listeners) listener(event);
   }
 
   private resolvePending(requestId: string, result?: unknown, error?: string): void {

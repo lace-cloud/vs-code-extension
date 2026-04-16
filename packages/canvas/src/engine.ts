@@ -5,10 +5,23 @@ import type {
   SettingsConfig,
   RenderError,
   Diagnostic,
+  GeneratePhase,
 } from './types/render';
 
 // Engine is the interface to the CLI session. All canvas operations go through here.
 // The webview holds no IR state — everything is projected by the CLI.
+
+/**
+ * Engine-emitted events. Both PostMessageEngine and ConnectWebEngine publish
+ * these through `onEvent` so UI layers subscribe once regardless of transport.
+ */
+export type EngineEvent =
+  | { type: 'stateUpdated'; view: CanvasView }
+  | { type: 'generateProgress'; phase: GeneratePhase }
+  | { type: 'generateSuccess'; files?: string[] }
+  | { type: 'generateError'; message: string; diagnostics?: Diagnostic[] };
+
+export type EngineEventListener = (event: EngineEvent) => void;
 
 export type GenerateResult = {
   files_written?: string[];
@@ -133,4 +146,10 @@ export interface CanvasEngine {
   querySettings(): Promise<SettingsConfig>;
   queryGraphSummary(): Promise<GraphSummary>;
   queryValidate(): Promise<{ errors: RenderError[] }>;
+
+  /**
+   * Subscribe to engine events. Returns an unsubscribe function. Called from
+   * App (for state updates) and useGenerationStatus (for generate progress).
+   */
+  onEvent(listener: EngineEventListener): () => void;
 }

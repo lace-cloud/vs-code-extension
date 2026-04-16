@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { App, ConnectWebEngine } from '@lace/canvas';
+import type { HostBridge } from '@lace/canvas';
 
 // Storybook exposes env vars prefixed with STORYBOOK_ to the client bundle via
 // Rsbuild's DefinePlugin when declared in `.storybook/main.ts > env`. We read
@@ -14,6 +15,7 @@ const ENGINE_TOKEN =
 // the path and serves an in-memory session, but a non-empty value is required.
 const DEFAULT_FILE_PATH = '/tmp/lace-storybook';
 const DEFAULT_WORKSPACE_NAME = 'storybook-flow';
+const DEFAULT_OUTPUT_DIR = '/tmp/lace-storybook-out';
 
 /**
  * Story prologue runs after session open; lets each flow story pre-populate
@@ -45,12 +47,40 @@ export function FlowDecorator({ prologue }: FlowDecoratorProps) {
     return new ConnectWebEngine({ baseUrl: ENGINE_URL, token: ENGINE_TOKEN });
   }, []);
 
-  // Fake VS Code bridge: routes App's host signals back to the engine and
-  // re-broadcasts state via window.postMessage so App's normal message listener
-  // picks them up. This lets App stay transport-agnostic.
-  const vscode = useMemo(() => {
+  // Story-mode HostBridge: no window chrome to manage, so most signals are
+  // no-ops. `triggerGenerate` delegates to the engine directly — the Subscribe
+  // stream then emits GenerateProgress/Success/Error events through onEvent,
+  // which App and useGenerationStatus already consume uniformly.
+  const hostBridge = useMemo<HostBridge | null>(() => {
     if (!engine) return null;
-    return createFlowVsCodeBridge(engine);
+    return {
+      signalReady: () => {
+        // No-op: FlowDecorator already owns session lifecycle below.
+      },
+      markDirty: () => {
+        // No window title to decorate in Storybook.
+      },
+      markClean: () => {
+        // No window title to decorate in Storybook.
+      },
+      triggerGenerate: () => {
+        void engine
+          .sessionGenerate(DEFAULT_OUTPUT_DIR, {
+            format: true,
+            validate: true,
+            overwrite: true,
+          })
+          .catch((err) => {
+            // Errors surface to App via the Subscribe stream's GenerateError
+            // event; log here so dev console also shows it if the stream
+            // hasn't opened yet (e.g. immediate network failure).
+            console.error('[FlowDecorator] sessionGenerate failed:', err);
+          });
+      },
+      openFile: () => {
+        // No editor to open in Storybook.
+      },
+    };
   }, [engine]);
 
   // Open session + run prologue + start Subscribe stream.
@@ -63,13 +93,11 @@ export function FlowDecorator({ prologue }: FlowDecoratorProps) {
       if (!engine) return;
       setStatus('connecting');
       try {
-        const view = await engine.sessionOpen(DEFAULT_FILE_PATH, DEFAULT_WORKSPACE_NAME);
+        await engine.sessionOpen(DEFAULT_FILE_PATH, DEFAULT_WORKSPACE_NAME);
         if (cancelled) return;
-        // Publish initial state to App via window.postMessage.
-        window.postMessage({ command: 'loadState', state: view }, '*');
-        // Start streaming so mutation-driven updates reach App.
+        // Start streaming BEFORE prologue so its mutation-driven state
+        // updates reach App via the Subscribe StateUpdated events.
         stopSubscribe = engine.startSubscribe();
-        // Run the story's prologue (placeModule, etc.) after subscribe is live.
         if (prologue) await prologue(engine);
         if (cancelled) return;
         setStatus('ready');
@@ -90,55 +118,16 @@ export function FlowDecorator({ prologue }: FlowDecoratorProps) {
     };
   }, [engine, prologue]);
 
-  if (!engine || !vscode) {
+  if (!engine || !hostBridge) {
     return <CliMissingBanner />;
   }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
       {status === 'error' && errorMessage ? <ConnectionErrorBanner message={errorMessage} /> : null}
-      <App engine={engine} vscode={vscode} />
+      <App engine={engine} hostBridge={hostBridge} />
     </div>
   );
-}
-
-function createFlowVsCodeBridge(engine: ConnectWebEngine): { postMessage(msg: unknown): void } {
-  return {
-    postMessage(msg) {
-      const message = msg as { command: string; [k: string]: unknown };
-      switch (message.command) {
-        case 'webviewReady':
-          // FlowDecorator already opens the session; nothing to do.
-          break;
-        case 'markDirty':
-        case 'markClean':
-        case 'openFile':
-          // No window title / no file picker in Storybook.
-          break;
-        case 'generate': {
-          // Delegate to engine; Subscribe stream will emit progress/success/error.
-          void engine
-            .sessionGenerate('/tmp/lace-storybook-out', {
-              format: true,
-              validate: true,
-              overwrite: true,
-            })
-            .catch((err) => {
-              window.postMessage(
-                {
-                  command: 'generateError',
-                  message: err instanceof Error ? err.message : String(err),
-                },
-                '*',
-              );
-            });
-          break;
-        }
-        default:
-          break;
-      }
-    },
-  };
 }
 
 function CliMissingBanner() {

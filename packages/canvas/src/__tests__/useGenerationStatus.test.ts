@@ -1,11 +1,37 @@
 // @vitest-environment jsdom
+import React from 'react';
 import { test, expect, describe, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useGenerationStatus } from '../hooks/useGenerationStatus';
-import { CANVAS_EVENTS } from '../events';
+import { CanvasContext, type CanvasState } from '../state/engine-context';
+import type { CanvasEngine, EngineEvent, EngineEventListener } from '../engine';
 
-function fireHostMessage(detail: Record<string, unknown>) {
-  window.dispatchEvent(new CustomEvent(CANVAS_EVENTS.HOST_MESSAGE, { detail }));
+// Minimal engine stub: the hook only uses onEvent, so stub just that method.
+// Tests fire events by invoking the captured listener directly.
+function makeStubEngine(): { engine: CanvasEngine; fire: (event: EngineEvent) => void } {
+  const listeners = new Set<EngineEventListener>();
+  const engine = {
+    onEvent(listener: EngineEventListener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  } as unknown as CanvasEngine;
+  const fire = (event: EngineEvent) => {
+    for (const l of listeners) l(event);
+  };
+  return { engine, fire };
+}
+
+function wrapper(engine: CanvasEngine) {
+  const state: CanvasState = { view: null, loading: true, error: null, generation: 0 };
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(
+      CanvasContext.Provider,
+      { value: { state, engine, updateView: () => {} } },
+      children,
+    );
 }
 
 describe('useGenerationStatus', () => {
@@ -18,18 +44,24 @@ describe('useGenerationStatus', () => {
   });
 
   test('starts not generating with no errors', () => {
+    const { engine } = makeStubEngine();
     const showToast = vi.fn();
-    const { result } = renderHook(() => useGenerationStatus(showToast));
+    const { result } = renderHook(() => useGenerationStatus(showToast), {
+      wrapper: wrapper(engine),
+    });
     expect(result.current.generating).toBe(false);
     expect(result.current.validationErrors).toEqual([]);
   });
 
   test('generateProgress sets generating to true', () => {
+    const { engine, fire } = makeStubEngine();
     const showToast = vi.fn();
-    const { result } = renderHook(() => useGenerationStatus(showToast));
+    const { result } = renderHook(() => useGenerationStatus(showToast), {
+      wrapper: wrapper(engine),
+    });
 
     act(() => {
-      fireHostMessage({ command: 'generateProgress', phase: 'generating' });
+      fire({ type: 'generateProgress', phase: 'generating' });
     });
 
     expect(result.current.generating).toBe(true);
@@ -37,15 +69,18 @@ describe('useGenerationStatus', () => {
   });
 
   test('generateSuccess resets generating and clears errors', () => {
+    const { engine, fire } = makeStubEngine();
     const showToast = vi.fn();
-    const { result } = renderHook(() => useGenerationStatus(showToast));
-
-    act(() => {
-      fireHostMessage({ command: 'generateProgress', phase: 'generating' });
+    const { result } = renderHook(() => useGenerationStatus(showToast), {
+      wrapper: wrapper(engine),
     });
 
     act(() => {
-      fireHostMessage({ command: 'generateSuccess' });
+      fire({ type: 'generateProgress', phase: 'generating' });
+    });
+
+    act(() => {
+      fire({ type: 'generateSuccess' });
     });
 
     expect(result.current.generating).toBe(false);
@@ -54,13 +89,18 @@ describe('useGenerationStatus', () => {
   });
 
   test('generateError populates validation errors', () => {
+    const { engine, fire } = makeStubEngine();
     const showToast = vi.fn();
-    const { result } = renderHook(() => useGenerationStatus(showToast));
-
-    const diagnostics = [{ severity: 'error', message: 'Missing required input' }];
+    const { result } = renderHook(() => useGenerationStatus(showToast), {
+      wrapper: wrapper(engine),
+    });
 
     act(() => {
-      fireHostMessage({ command: 'generateError', diagnostics });
+      fire({
+        type: 'generateError',
+        message: 'bad',
+        diagnostics: [{ severity: 'error', message: 'Missing required input' }],
+      });
     });
 
     expect(result.current.generating).toBe(false);
@@ -70,12 +110,16 @@ describe('useGenerationStatus', () => {
   });
 
   test('erroredNodeIds extracts instance_id from diagnostics', () => {
+    const { engine, fire } = makeStubEngine();
     const showToast = vi.fn();
-    const { result } = renderHook(() => useGenerationStatus(showToast));
+    const { result } = renderHook(() => useGenerationStatus(showToast), {
+      wrapper: wrapper(engine),
+    });
 
     act(() => {
-      fireHostMessage({
-        command: 'generateError',
+      fire({
+        type: 'generateError',
+        message: 'bad',
         diagnostics: [
           { severity: 'error', message: 'bad', instance_id: 'vpc' },
           { severity: 'error', message: 'bad', instance_id: 'subnet' },
