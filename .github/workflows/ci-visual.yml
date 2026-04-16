@@ -1,11 +1,23 @@
 name: CI Visual
 
-# Heavy visual regression — Storybook + Playwright golden paths + Chromatic.
-# Runs only on push to develop (i.e., after a PR merges). Feature-branch PRs
-# get fast correctness checks via ci.yml; visual churn stays off the per-PR
-# critical path. The `visual-summary` job below is the required status check
-# on `main` — its absence on non-develop commits is what prevents PRs to main
-# from any branch other than develop.
+# Two jobs running in parallel on every push to develop:
+#
+#   flow-tests — Playwright integration + contract tests. Spawns the real
+#                lace-engine (via R2 test bundle), renders flow stories in
+#                the pinned container, asserts DOM invariants. No visual
+#                upload — catches regressions in the CLI↔extension wire
+#                format, the engine handshake, Subscribe streaming, and
+#                ReactFlow rendering against real fixture data.
+#   chromatic —  Storybook-mode Chromatic upload. Captures every component
+#                story as a visual-regression snapshot. Flow stories are
+#                `disableSnapshot: true` here (Chromatic cloud can't spawn
+#                the CLI); future sessions will add MSW-mocked flow
+#                stories so their visuals also flow through this pipeline.
+#
+# Feature-branch PRs get fast correctness checks via ci.yml; this heavier
+# suite runs only after a PR merges to develop. The `visual-summary` job
+# is the required status check on `main` — its absence on non-develop
+# commits prevents PRs to main from any branch other than develop.
 
 on:
   push:
@@ -52,28 +64,7 @@ jobs:
           # .sha256 canaries live under internal/module/server/testdata/seeds/
           # within the tarball (same path as in lace-cli).
           LACE_CLI_REPO: /tmp/lace-test
-          # takeSnapshot() from @chromatic-com/playwright captures archives
-          # under test-results/; chromatic:playwright below uploads them.
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
         run: pnpm flow-tests
-
-      - name: Upload flow-test screenshots to Chromatic
-        if: always()
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        # Workspace inside the container has a UID mismatch with the
-        # shell; git's `safe.directory` check blocks Chromatic's git log
-        # call. Whitelist the workspace before uploading.
-        #
-        # --parallel-nonce + --parallel-total merge this shard (Playwright
-        # flow-test snapshots) with the chromatic job's shard (Storybook
-        # component snapshots) into ONE Chromatic build per develop push,
-        # so reviewers see a single approval surface.
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          pnpm chromatic:playwright -- \
-            --parallel-nonce=${{ github.run_id }} \
-            --parallel-total=2
 
       - name: Upload Playwright report
         if: always()
@@ -93,9 +84,20 @@ jobs:
 
   chromatic:
     # Storybook-mode Chromatic: builds the canvas-stories Storybook and
-    # uploads every component story as a visual test. Flow stories are
-    # tagged `disableSnapshot` — their visuals go through the flow-tests
-    # job above via @chromatic-com/playwright.
+    # uploads every component story as a visual test. Flow stories carry
+    # `chromatic: { disableSnapshot: true }` because Chromatic's cloud
+    # can't spawn `lace engine`. Flow-level visual regression is an
+    # explicit gap today — see the plan for adding MSW-mocked flow
+    # stories to Storybook in a later session so they flow through this
+    # same pipeline.
+    #
+    # The Playwright flow-tests job above exists for integration /
+    # contract verification (real CLI, real canvas, DOM assertions). It
+    # deliberately does not upload to Chromatic — that would create a
+    # second Chromatic build per CI run (Chromatic's Storybook-mode and
+    # Playwright-mode use different capture pipelines and produce
+    # separate build entries), and the later build would supersede and
+    # block review of the earlier one.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -113,16 +115,7 @@ jobs:
       - name: Publish to Chromatic
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        # --parallel-nonce + --parallel-total merge this shard (Storybook
-        # component snapshots) with the flow-tests job's shard (Playwright
-        # snapshots) into ONE Chromatic build per develop push. Shared
-        # nonce is github.run_id — stable across the run's jobs, unique
-        # per push.
-        run: |
-          pnpm chromatic \
-            --storybook-build-dir=packages/canvas-stories/storybook-static \
-            --parallel-nonce=${{ github.run_id }} \
-            --parallel-total=2
+        run: pnpm chromatic --storybook-build-dir=packages/canvas-stories/storybook-static
 
   visual-summary:
     # Single aggregator job that main's ruleset can require. Succeeds

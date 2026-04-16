@@ -1,27 +1,35 @@
 /**
- * Canvas golden-path tests.
+ * Canvas integration / contract tests.
  *
- * One test per flow story. Each navigates to Storybook's iframe URL for
- * the story, waits for the `[data-flow-ready]` marker the FlowDecorator
- * renders once boot completes (TestSessionOpen + Subscribe + initial
- * StateUpdated), asserts a small shape-level DOM invariant, and captures
- * a Chromatic snapshot via `takeSnapshot`.
+ * One test per flow story. Each:
+ *   1. Navigates to the Storybook iframe URL for the story
+ *   2. Waits for the `[data-flow-ready]` marker — the FlowDecorator
+ *      renders this once TestSessionOpen + Subscribe + initial
+ *      StateUpdated have completed against the real `lace engine`
+ *      (spawned in CI via the R2 test bundle)
+ *   3. Asserts shape-level DOM invariants (node counts, data attributes,
+ *      pin counts) that prove the engine → canvas pipeline is wired
+ *      correctly end-to-end
  *
- * Baselines live in Chromatic, not git. CI passes CHROMATIC_PROJECT_TOKEN
- * to the `flow-tests` job; `chromatic:playwright` uploads after the test
- * run. Visual diffs surface as PR comments from the Chromatic bot;
- * approve/reject in the Chromatic UI.
+ * These are NOT visual regression tests. Visual regression for
+ * components lives in Chromatic via Storybook mode; flow-level visual
+ * regression is a gap today (planned to be filled by adding
+ * MSW-mocked flow stories to Storybook in a later session, so those
+ * visuals flow through the same Chromatic pipeline).
  *
- * `drift-badge` is intentionally absent: lace-cli's `pb.RenderNode` has no
- * drift metadata yet. Followup once the proto extends.
+ * What this suite catches that nothing else does:
+ *   - CLI↔extension wire-format regressions (proto fields, Action
+ *     oneof shapes, Subscribe event types)
+ *   - Engine handshake / auth / Subscribe stream bugs
+ *   - ReactFlow / xyflow upgrades that break real-DOM rendering
+ *   - Fixture-to-render drift (amplified by the seed-drift canary
+ *     in tests/flow/seed-manifest.spec.ts)
+ *
+ * `drift-badge` is intentionally absent: lace-cli's `pb.RenderNode` has
+ * no drift metadata yet. Followup once the proto extends.
  */
 
-// `test` and `expect` MUST come from @chromatic-com/playwright — those
-// wrap Playwright's equivalents with hooks that capture Chromatic
-// archives under test-results/chromatic-archives/. Without the wrapped
-// test, `takeSnapshot` is a silent no-op and `chromatic:playwright`
-// fails the upload with "archives directory cannot be found."
-import { expect, takeSnapshot, test } from '@chromatic-com/playwright';
+import { expect, test } from '@playwright/test';
 
 // Shared story URL helper — Storybook serves each story in an iframe at
 // /iframe.html?id=<kebab-title>--<kebab-name>&viewMode=story.
@@ -56,27 +64,23 @@ async function gotoStory(page: import('@playwright/test').Page, storyId: string)
 }
 
 test.describe('flow story golden paths', () => {
-  test('empty-state: empty canvas, no nodes, no errors', async ({ page }, testInfo) => {
+  test('empty-state: empty canvas, no nodes, no errors', async ({ page }) => {
     await gotoStory(page, 'flows-emptycanvas--default');
     // Canvas mounts but no ReactFlow nodes render.
     const nodeCount = await page.locator('.react-flow__node').count();
     expect(nodeCount).toBe(0);
-    await takeSnapshot(page, 'empty-state', testInfo);
   });
 
-  test('drop-module: single iam-role node placed', async ({ page }, testInfo) => {
+  test('drop-module: single iam-role node placed', async ({ page }) => {
     await gotoStory(page, 'flows-iamrole--default');
     // Exactly one node from the iam-role seed.
     await expect(page.locator('.react-flow__node')).toHaveCount(1);
     // The node's label should mention "role" — coarse, but catches
     // schema-shape regressions without pinning to an exact label.
     await expect(page.locator('.react-flow__node').first()).toContainText(/role/i);
-    await takeSnapshot(page, 'drop-module', testInfo);
   });
 
-  test('composite-hierarchy: iam-stack fixture renders a collapsed composite', async ({
-    page,
-  }, testInfo) => {
+  test('composite-hierarchy: iam-stack fixture renders a collapsed composite', async ({ page }) => {
     await gotoStory(page, 'flows-iamstack--default');
     // Post composite preservation: iam-stack drops as ONE top-level
     // collapsed composite group. Its internal tree (iam_role leaf +
@@ -96,27 +100,19 @@ test.describe('flow story golden paths', () => {
     // proxy for "the Interface was carried end-to-end".
     const pinCount = await page.locator('[data-group="iam_stack"] .react-flow__handle').count();
     expect(pinCount).toBeGreaterThanOrEqual(6);
-    await takeSnapshot(page, 'composite-hierarchy', testInfo);
   });
 
-  test('collapse-group: group renders collapsed', async ({ page }, testInfo) => {
+  test('collapse-group: group renders collapsed', async ({ page }) => {
     await gotoStory(page, 'flows-collapsedgroup--default');
     // GroupNode tags its root div with `data-group` (= groupId) and
     // `data-collapsed` (= "true" | "false"). The collapsed-group fixture
     // has exactly one group in collapsed state.
     await expect(page.locator('[data-collapsed="true"]')).toHaveCount(1);
-    await takeSnapshot(page, 'collapse-group', testInfo);
   });
 
-  test('generate-flow: wired-stack fixture renders 3 pre-wired nodes', async ({
-    page,
-  }, testInfo) => {
+  test('generate-flow: wired-stack fixture renders 3 pre-wired nodes', async ({ page }) => {
     await gotoStory(page, 'flows-wiredstack--default');
     // wired-stack seed: 3 leaf bundles + 2 cross-bundle wires (per Plan 1 Phase F fixtures).
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    // Baseline capture of the wired stack BEFORE any generate click —
-    // post-generate state has transient toasts that are harder to snapshot
-    // deterministically. Clicking generate lives in a followup interaction test.
-    await takeSnapshot(page, 'generate-flow', testInfo);
   });
 });
