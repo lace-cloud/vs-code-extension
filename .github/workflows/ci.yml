@@ -1,5 +1,16 @@
 name: CI
 
+# Plan 2 Phase G — matrix of the four extension-side suites:
+#   - lint        → ESLint workspace rules
+#   - unit-tests  → Vitest across every package with unit tests
+#   - host-e2e    → @vscode/test-electron smoke + command tests
+#   - flow-tests  → Playwright golden-path screenshots (delegated to
+#                   the dedicated flow-tests.yml workflow via
+#                   workflow_call)
+#
+# Each job is isolated — they install their own dependencies + build
+# their own artefacts so one failing job doesn't mask others.
+
 on:
   push:
     branches: [develop, main]
@@ -7,11 +18,68 @@ on:
     branches: [main, develop]
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate proto
+        run: pnpm proto:gen
+      - name: Lint
+        run: pnpm run lint
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate proto
+        run: pnpm proto:gen
+      - name: Run unit tests
+        run: pnpm run test:unit
+
+  host-e2e:
+    # VS Code Electron tests need a display; xvfb-run wraps the test
+    # command to provide one on the headless CI host.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout vs-code-extension
+        uses: actions/checkout@v6
+        with:
+          path: vs-code-extension
+
+      - name: Checkout lace-cli (for test-tag CLI build)
+        uses: actions/checkout@v6
+        with:
+          repository: lace-cloud/lace-cli
+          path: lace-cli
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build lace CLI with -tags=test
+        working-directory: lace-cli
+        run: |
+          make build-test
+          sudo install -m 0755 lace /usr/local/bin/lace
+          lace version
 
       - uses: pnpm/action-setup@v4
         with:
@@ -21,32 +89,34 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: vs-code-extension/pnpm-lock.yaml
 
       - name: Install dependencies
+        working-directory: vs-code-extension
         run: pnpm install --frozen-lockfile
 
       - name: Generate proto
+        working-directory: vs-code-extension
         run: pnpm proto:gen
 
-      - name: Build all packages
-        run: pnpm -r run build
-
-      - name: Build extension
+      - name: Build extension bundles
+        working-directory: vs-code-extension
         run: pnpm run build
 
-      - name: Install Lace CLI
+      - name: Install xvfb + platform packages for VS Code
         run: |
-          wget -q https://releases.lace.cloud/lace-cli-linux-amd64 -O lace
-          chmod +x lace
-          sudo mv lace /usr/local/bin/
-          lace version
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libgbm1 libasound2t64
 
-      - uses: hashicorp/setup-terraform@v4
+      - name: Cache VS Code test download
+        uses: actions/cache@v4
         with:
-          terraform_wrapper: false
+          path: vs-code-extension/packages/host-e2e/.vscode-test
+          key: vscode-test-${{ runner.os }}-stable-v1
 
-      - name: Run unit tests
-        run: pnpm run test:unit
+      - name: Run host-e2e tests
+        working-directory: vs-code-extension
+        run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm run test:host-e2e
 
-      - name: Run E2E tests
-        run: pnpm run test:e2e
+  flow-tests:
+    uses: ./.github/workflows/flow-tests.yml
