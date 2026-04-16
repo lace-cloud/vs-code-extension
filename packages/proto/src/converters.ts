@@ -173,6 +173,9 @@ export function convertCanvasView(proto: ProtoCanvasViewLike): CanvasView {
       label: g.label,
       node_ids: g.node_ids,
       collapsed: g.collapsed,
+      module_key: g.module_key || undefined,
+      inputs: g.inputs && g.inputs.length > 0 ? g.inputs : undefined,
+      outputs: g.outputs && g.outputs.length > 0 ? g.outputs : undefined,
     })),
   };
 }

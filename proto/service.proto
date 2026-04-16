@@ -680,11 +680,34 @@ message CanvasView {
   repeated RenderGroup groups = 8;
 }
 
+// RenderGroup represents a composite module instance on the canvas.
+// A group IS a composite IS a Terraform module — one concept, three names.
+//
+// Every composite instance projects as a RenderGroup:
+//   - Registry-dropped composites (e.g. iam_stack): module_key points at the
+//     bundle source; inputs/outputs mirror the composite's published interface.
+//   - User-created composites (via "Group" canvas action): module_key is empty
+//     (local source); inputs/outputs computed from crossing edges.
+//
+// Groups arrive collapsed (collapsed=true) across all creation paths for
+// consistency. Expand/collapse is a pure view toggle that never changes the
+// IR or generated .tf — ungroup is the destructive dissolve action.
 message RenderGroup {
   string id = 1;
   string label = 2;
   repeated string node_ids = 3;
   bool collapsed = 4;
+  // Bundle source identifier (e.g. "aws/examples/iam_stack@v1.0.0") for
+  // composites dropped from the registry; empty for user-created locals.
+  string module_key = 5;
+  // Boundary input pins — what the composite accepts from its parent scope.
+  // Rendered on the left rail when collapsed; derived from the composite's
+  // Interface.Inputs or the crossing edges for user-created groups.
+  repeated NodePin inputs = 6;
+  // Boundary output pins — what the composite exposes to its parent scope.
+  // Rendered on the right rail when collapsed; derived from the composite's
+  // Exports or outgoing crossing edges.
+  repeated NodePin outputs = 7;
 }
 
 message RenderNode {

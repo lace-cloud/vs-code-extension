@@ -127,13 +127,42 @@ export function useGroupLogic(
       };
     }
 
-    // Build lookup: nodeId → group
+    // Build lookup: nodeId → group, and parent-of-group for nested
+    // composite groups. Composite preservation landed nested RenderGroups
+    // — iam_stack contains cloudwatch_logs_policy — so a collapsed
+    // ancestor must hide every descendant group + leaf.
     const nodeToGroup = new Map<string, RenderGroup>();
+    const groupById = new Map<string, RenderGroup>();
+    const parentOfGroup = new Map<string, string>(); // childGroupId → parentGroupId
+    for (const g of groups) {
+      groupById.set(g.id, g);
+    }
     for (const g of groups) {
       for (const nid of g.node_ids) {
-        nodeToGroup.set(nid, g);
+        if (groupById.has(nid)) {
+          parentOfGroup.set(nid, g.id);
+        } else {
+          nodeToGroup.set(nid, g);
+        }
       }
     }
+
+    const ancestorCollapsedCache = new Map<string, boolean>();
+    const isAncestorCollapsed = (groupId: string): boolean => {
+      if (ancestorCollapsedCache.has(groupId))
+        return ancestorCollapsedCache.get(groupId) as boolean;
+      let cursor = parentOfGroup.get(groupId);
+      while (cursor) {
+        const parent = groupById.get(cursor);
+        if (parent?.collapsed) {
+          ancestorCollapsedCache.set(groupId, true);
+          return true;
+        }
+        cursor = parentOfGroup.get(cursor);
+      }
+      ancestorCollapsedCache.set(groupId, false);
+      return false;
+    };
 
     // Build node map for quick lookups
     const nodeMap = new Map<string, RenderNode>();
@@ -146,6 +175,7 @@ export function useGroupLogic(
 
     // ── Process each group ──
     for (const group of groups) {
+      const hiddenByAncestor = isAncestorCollapsed(group.id);
       const memberNodes = group.node_ids
         .map((id) => nodeMap.get(id))
         .filter((n): n is RenderNode => n !== undefined);
@@ -165,6 +195,7 @@ export function useGroupLogic(
           id: group.id,
           type: 'groupNode',
           position: computeGroupOrigin(memberNodes),
+          hidden: hiddenByAncestor,
           data: {
             groupId: group.id,
             label: group.label,
@@ -196,6 +227,7 @@ export function useGroupLogic(
           id: group.id,
           type: 'groupNode',
           position: origin,
+          hidden: hiddenByAncestor,
           style: {
             width: bounds.width,
             height: bounds.height,
@@ -220,6 +252,7 @@ export function useGroupLogic(
             },
             parentId: group.id,
             extent: 'parent' as const,
+            hidden: hiddenByAncestor,
             data: { ...n, isNew: newNodeIds.has(n.id), hasError: erroredNodeIds.has(n.id) },
           });
         }
@@ -312,6 +345,36 @@ function computeCollapsedGroup(
   const externalOutputs = new Map<string, ExternalPin>(); // handleId → pin
   const externalInputs = new Map<string, ExternalPin>();
   const remappedEdges: Edge[] = [];
+
+  // Composite groups carry their declared Interface as boundary pins:
+  // registry-dropped composites publish inputs/outputs straight from the
+  // CLI's ProjectCanvasView. When present, these are the authoritative
+  // boundary surface — we seed externalInputs/Outputs from them before
+  // scanning edges, so the UI renders pins regardless of whether any
+  // edge actually crosses the boundary. User-created groups (today
+  // empty inputs/outputs) fall back to edge-derived pin discovery.
+  if (group.inputs) {
+    for (const pin of group.inputs) {
+      const handleId = `in:${pin.name}`;
+      externalInputs.set(handleId, {
+        handleId,
+        label: pin.name,
+        side: 'input',
+        color: pinColor(pin),
+      });
+    }
+  }
+  if (group.outputs) {
+    for (const pin of group.outputs) {
+      const handleId = `out:${pin.name}`;
+      externalOutputs.set(handleId, {
+        handleId,
+        label: pin.name,
+        side: 'output',
+        color: pinColor(pin),
+      });
+    }
+  }
 
   for (const e of allEdges) {
     const srcInside = memberSet.has(e.source);

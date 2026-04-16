@@ -14,11 +14,22 @@ export type CanvasView = {
   groups: RenderGroup[];
 };
 
+// RenderGroup represents a composite module instance on the canvas.
+// A group IS a composite IS a Terraform module — one concept, three names.
+//   - Registry-dropped composites (iam_stack, etc.) carry a non-empty
+//     `module_key` pointing at the bundle source and publish their
+//     declared Interface as `inputs`/`outputs` boundary pins.
+//   - User-created groups (from the "Group" canvas action) leave
+//     `module_key` empty and carry pins derived from crossing edges
+//     (empty in commit 3 — crossing edges are rejected there).
 export type RenderGroup = {
   id: string;
   label: string;
   node_ids: string[];
   collapsed: boolean;
+  module_key?: string;
+  inputs?: NodePin[];
+  outputs?: NodePin[];
 };
 
 export type RenderNode = {

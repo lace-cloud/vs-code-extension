@@ -53,11 +53,23 @@ test.describe('flow story golden paths', () => {
     await expect(page).toHaveScreenshot('drop-module.png');
   });
 
-  test('wire-modules: iam-stack fixture renders 3 nodes', async ({ page }) => {
+  test('composite-hierarchy: iam-stack fixture renders a collapsed composite', async ({ page }) => {
     await gotoStory(page, 'flows-iamstack--default');
-    // iam-stack seed loads the full composite: role + policy + policy-attachment.
-    await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    await expect(page).toHaveScreenshot('wire-modules.png');
+    // Post composite preservation: iam-stack drops as ONE top-level
+    // collapsed composite group. Its internal tree (iam_role leaf +
+    // nested cloudwatch_logs_policy composite) lives inside and stays
+    // hidden until the user expands the parent. Only the top-level
+    // collapsed group is visible at canvas level.
+    await expect(page.locator('[data-group="iam-stack"][data-collapsed="true"]')).toHaveCount(1);
+    // The collapsed composite carries its Interface as boundary pins —
+    // every declared input (role_name, assume_role_policy, tags) plus
+    // every declared output (role_name, role_arn, policy_arn). With
+    // three inputs + three outputs rendered as aggregated pin rows,
+    // the group has at least six Handle elements — a coarse-but-robust
+    // proxy for "the Interface was carried end-to-end".
+    const pinCount = await page.locator('[data-group="iam-stack"] .react-flow__handle').count();
+    expect(pinCount).toBeGreaterThanOrEqual(6);
+    await expect(page).toHaveScreenshot('composite-hierarchy.png');
   });
 
   test('collapse-group: group renders collapsed', async ({ page }) => {
