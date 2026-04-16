@@ -20,6 +20,12 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Supersede in-flight runs when a newer commit lands on the same ref —
+# the most recent commit is the only one worth learning from.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
