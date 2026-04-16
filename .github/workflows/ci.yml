@@ -13,13 +13,26 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate proto
+        run: pnpm proto:gen
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+      - name: Build extension
+        run: pnpm run build
 
       - name: Install Lace CLI
         run: |
@@ -33,18 +46,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Run unit tests
-        run: npm run test:unit
+        run: pnpm run test:unit
 
       - name: Run E2E tests
-        run: npm run test:e2e
-
-      - name: Verify version sync
-        run: |
-          PKG_VERSION=$(jq -r .version package.json)
-          LOCK_VERSION=$(jq -r .version package-lock.json)
-          if [ "$PKG_VERSION" != "$LOCK_VERSION" ]; then
-            echo "❌ Version mismatch: package.json ($PKG_VERSION) != package-lock.json ($LOCK_VERSION)"
-            echo "Run: npm version $PKG_VERSION --no-git-tag-version"
-            exit 1
-          fi
-          echo "✅ Versions synced: $PKG_VERSION"
+        run: pnpm run test:e2e

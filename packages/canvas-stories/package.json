@@ -1,0 +1,8 @@
+{
+  "name": "@lace/canvas-stories",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'no build step — populated in Phase E'"
+  }
+}

@@ -20,3 +20,8 @@ vsc-extension-quickstart.md
 **/.vscode-test.*
 AGENTS.md
 CLAUDE.md
+packages/**
+scripts/**
+pnpm-workspace.yaml
+tsconfig.base.json
+.npmrc

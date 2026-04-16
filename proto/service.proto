@@ -10,28 +10,31 @@ import "google/protobuf/empty.proto";
 // ============================================================================
 
 service LaceEngine {
-  // Lifecycle
+  // Lifecycle (global; no session_id)
   rpc Initialize(InitializeRequest) returns (InitializeResponse);
   rpc Shutdown(google.protobuf.Empty) returns (ShutdownResponse);
 
-  // Auth
+  // Auth (global; no session_id)
   rpc AuthStatus(google.protobuf.Empty) returns (AuthStatusResponse);
   rpc AuthLogin(AuthLoginRequest) returns (AuthLoginResponse);
   rpc AuthLogout(google.protobuf.Empty) returns (AuthLogoutResponse);
 
-  // Registry
+  // Registry (global)
   rpc RegistryList(RegistryListRequest) returns (RegistryListResponse);
-  rpc RegistryGet(RegistryGetRequest) returns (RegistryGetResponse);
-  rpc RegistryVersion(RegistryVersionRequest) returns (RegistryVersionResponse);
+  rpc RegistryGetVersions(RegistryGetVersionsRequest) returns (RegistryGetVersionsResponse);
 
-  // Session
-  rpc SessionOpen(SessionOpenRequest) returns (CanvasView);
-  rpc SessionSave(google.protobuf.Empty) returns (SessionSaveResponse);
-  rpc SessionClose(google.protobuf.Empty) returns (SessionCloseResponse);
+  // Module surface (server-side orchestration; replaces DropBundle + RegistryVersion)
+  rpc InspectModule(InspectModuleRequest) returns (InspectModuleResponse);
+  rpc PlaceModule(PlaceModuleRequest) returns (CanvasView);
+
+  // Session lifecycle
+  rpc SessionOpen(SessionOpenRequest) returns (SessionOpenResponse);
+  rpc TestSessionOpen(TestSessionOpenRequest) returns (SessionOpenResponse);
+  rpc SessionSave(SessionSaveRequest) returns (SessionSaveResponse);
+  rpc SessionClose(SessionCloseRequest) returns (SessionCloseResponse);
   rpc SessionGenerate(SessionGenerateRequest) returns (SessionGenerateResponse);
 
-  // Actions (mutate workspace, return new canvas view)
-  rpc DropBundle(DropBundleRequest) returns (CanvasView);
+  // Mutations (each wraps its *Action message; response is the canvas view)
   rpc Connect(ConnectRequest) returns (CanvasView);
   rpc AutoConnect(AutoConnectRequest) returns (CanvasView);
   rpc Disconnect(DisconnectRequest) returns (CanvasView);
@@ -40,26 +43,39 @@ service LaceEngine {
   rpc RenameInstance(RenameInstanceRequest) returns (CanvasView);
   rpc DeleteInstance(DeleteInstanceRequest) returns (CanvasView);
   rpc CopyInstances(CopyInstancesRequest) returns (CanvasView);
-  rpc SyncLayout(SyncLayoutRequest) returns (google.protobuf.Empty);
+  rpc SyncLayout(SyncLayoutRequest) returns (CanvasView);
   rpc CreateGroup(CreateGroupRequest) returns (CanvasView);
   rpc UpdateGroup(UpdateGroupRequest) returns (CanvasView);
   rpc DeleteGroup(DeleteGroupRequest) returns (CanvasView);
   rpc SetVariables(SetVariablesRequest) returns (CanvasView);
   rpc SetExports(SetExportsRequest) returns (CanvasView);
-  rpc SetTerraform(SetTerraformRequest) returns (google.protobuf.Empty);
-  rpc SetProviders(SetProvidersRequest) returns (google.protobuf.Empty);
+  rpc SetTerraform(SetTerraformRequest) returns (CanvasView);
+  rpc SetProviders(SetProvidersRequest) returns (CanvasView);
   rpc SetLocals(SetLocalsRequest) returns (CanvasView);
-  rpc SetDependsOn(SetDependsOnRequest) returns (google.protobuf.Empty);
-  rpc SetEnvironments(SetEnvironmentsRequest) returns (google.protobuf.Empty);
-  rpc Undo(google.protobuf.Empty) returns (CanvasView);
-  rpc Redo(google.protobuf.Empty) returns (CanvasView);
+  rpc SetDependsOn(SetDependsOnRequest) returns (CanvasView);
+  rpc SetEnvironments(SetEnvironmentsRequest) returns (CanvasView);
+  rpc Undo(UndoRequest) returns (CanvasView);
+  rpc Redo(RedoRequest) returns (CanvasView);
+
+  // Batch dispatch — atomic multi-action, one undo entry, one CanvasView.
+  rpc Dispatch(DispatchRequest) returns (CanvasView);
 
   // Queries (read-only projections)
   rpc QueryNodeConfig(NodeConfigRequest) returns (NodeConfig);
   rpc QueryEdgeConfig(EdgeConfigRequest) returns (EdgeConfig);
-  rpc QuerySettings(google.protobuf.Empty) returns (SettingsConfig);
-  rpc QueryGraphSummary(google.protobuf.Empty) returns (GraphSummaryResponse);
-  rpc QueryValidate(google.protobuf.Empty) returns (ValidateResponse);
+  rpc QuerySettings(QuerySettingsRequest) returns (SettingsConfig);
+  rpc QueryGraphSummary(QueryGraphSummaryRequest) returns (GraphSummaryResponse);
+  rpc QueryValidate(QueryValidateRequest) returns (ValidateResponse);
+
+  // Server-push events scoped to one session (see Plan 0 §9).
+  //
+  // The server sends an initial StateUpdated event carrying the current
+  // CanvasView before streaming mutation events. This gives clients
+  // authoritative state + subsequent deltas in a single RPC, and acts as
+  // the "subscribed" ready signal — after receiving the initial event,
+  // the handler is in its select loop and future publishes are
+  // guaranteed to fan out to this subscriber.
+  rpc Subscribe(SubscribeRequest) returns (stream EngineEvent);
 }
 
 // ============================================================================
@@ -175,13 +191,13 @@ message RegistryModuleEntry {
   string icon_url = 7;
 }
 
-message RegistryGetRequest {
+message RegistryGetVersionsRequest {
   string name = 1;
   string system = 2;
   string organization = 3;
 }
 
-message RegistryGetResponse {
+message RegistryGetVersionsResponse {
   string name = 1;
   string system = 2;
   repeated RegistryVersionEntry versions = 3;
@@ -192,24 +208,30 @@ message RegistryVersionEntry {
   string description = 2;
 }
 
-message RegistryVersionRequest {
+// ============================================================================
+// Module surface — InspectModule + PlaceModule
+//
+// Replaces the old (RegistryVersion -> DropBundle) round-trip. Bundle bytes
+// no longer cross the wire; the server fetches, decodes, places, and
+// positions. Callers receive either a module-interface projection or an
+// updated CanvasView.
+// ============================================================================
+
+message InspectModuleRequest {
   string name = 1;
   string system = 2;
   string version = 3;
   string organization = 4;
 }
 
-message RegistryVersionResponse {
+message InspectModuleResponse {
   string name = 1;
   string system = 2;
   string version = 3;
-  bytes deploy_bundle = 4;
+  string description = 4;
   ModuleInterface module_interface = 5;
-  string description = 6;
 }
 
-// ModuleInterface exposes the entry module's inputs/outputs without
-// requiring the client to decode the opaque deploy_bundle bytes.
 message ModuleInterface {
   repeated InterfaceField inputs = 1;
   repeated InterfaceField outputs = 2;
@@ -224,17 +246,53 @@ message InterfaceField {
   bool sensitive = 6;
 }
 
+message PlaceModuleRequest {
+  string session_id = 1;
+  string name = 2;
+  string system = 3;
+  string version = 4;
+  string organization = 5;
+  Position position = 6;
+}
+
 // ============================================================================
-// Session
+// Session lifecycle
 // ============================================================================
 
 message SessionOpenRequest {
+  oneof target {
+    EphemeralSession ephemeral = 1;
+    BackedSession backed = 2;
+  }
+  string workspace_name = 3;
+}
+
+message EphemeralSession {}
+
+message BackedSession {
   string file_path = 1;
+}
+
+message SessionOpenResponse {
+  string session_id = 1;
+  CanvasView view = 2;
+}
+
+message TestSessionOpenRequest {
+  string fixture_name = 1;
   string workspace_name = 2;
+}
+
+message SessionSaveRequest {
+  string session_id = 1;
 }
 
 message SessionSaveResponse {
   bool saved = 1;
+}
+
+message SessionCloseRequest {
+  string session_id = 1;
 }
 
 message SessionCloseResponse {
@@ -242,11 +300,12 @@ message SessionCloseResponse {
 }
 
 message SessionGenerateRequest {
-  string output_dir = 1;
-  bool dry_run = 2;
-  bool format = 3;
-  bool validate = 4;
-  bool overwrite = 5;
+  string session_id = 1;
+  string output_dir = 2;
+  bool dry_run = 3;
+  bool format = 4;
+  bool validate = 5;
+  bool overwrite = 6;
 }
 
 message SessionGenerateResponse {
@@ -264,39 +323,43 @@ message Diagnostic {
 }
 
 // ============================================================================
-// Actions
+// Actions — canonical payloads
+//
+// Each mutation has one *Action message carrying only the payload (never
+// session_id). Single-action RPC requests wrap one *Action. DispatchRequest
+// carries `repeated Action` where Action is a oneof over every *Action
+// below. This is the "Action defined once" rule (Plan 0 §6).
 // ============================================================================
 
-message DropBundleRequest {
-  bytes deploy_bundle = 1;
-  Position position = 2;
-  string organization = 3;
-}
-
-message ConnectRequest {
+message ConnectAction {
   string source = 1;
   string target = 2;
   string source_output = 3;
   string target_input = 4;
 }
 
-message AutoConnectRequest {
+message AutoConnectAction {
   string source = 1;
   string target = 2;
 }
 
-message DisconnectRequest {
+message DisconnectAction {
   string target = 1;
   string input_name = 2;
 }
 
-message UpdateInputRequest {
+message UpdateInputAction {
   string instance_id = 1;
   string input_name = 2;
   InputMode mode = 3;
   google.protobuf.Value value = 4;
   string variable = 5;
   string expression = 6;
+}
+
+message UpdateAllInputsAction {
+  string instance_id = 1;
+  repeated InputEntry inputs = 2;
 }
 
 message InputEntry {
@@ -307,49 +370,53 @@ message InputEntry {
   string expression = 5;
 }
 
-message UpdateAllInputsRequest {
-  string instance_id = 1;
-  repeated InputEntry inputs = 2;
-}
-
-message RenameInstanceRequest {
+message RenameInstanceAction {
   string old_id = 1;
   string new_id = 2;
 }
 
-message DeleteInstanceRequest {
+message DeleteInstanceAction {
   string instance_id = 1;
 }
 
-message CopyInstancesRequest {
+message CopyInstancesAction {
   repeated string instance_ids = 1;
 }
 
-message SyncLayoutRequest {
+message SyncLayoutAction {
   map<string, Position> positions = 1;
 }
 
-message CreateGroupRequest {
+message CreateGroupAction {
   string label = 1;
   repeated string node_ids = 2;
 }
 
-message UpdateGroupRequest {
+// UpdateGroupAction uses proto3 `optional` field presence to express partial
+// updates. `node_ids` is wrapped in a message because proto3 `optional` does
+// not apply to `repeated`.
+message UpdateGroupAction {
   string group_id = 1;
-  string label = 2;
-  repeated string node_ids = 3;
-  bool collapsed = 4;
-  bool has_label = 5;
-  bool has_collapsed = 6;
-  bool has_node_ids = 7;
+  optional string label = 2;
+  optional bool collapsed = 3;
+  optional UpdateGroupNodeIds node_ids = 4;
 }
 
-message DeleteGroupRequest {
+message UpdateGroupNodeIds {
+  repeated string node_ids = 1;
+}
+
+message DeleteGroupAction {
   string group_id = 1;
 }
 
-message SetVariablesRequest {
+message SetVariablesAction {
   repeated InputDef variables = 1;
+}
+
+message SetExportsAction {
+  repeated OutputExportEntry outputs = 1;
+  repeated OutputDef output_defs = 2;
 }
 
 message OutputExportEntry {
@@ -358,19 +425,18 @@ message OutputExportEntry {
   string source_output = 3;
 }
 
-message SetExportsRequest {
-  repeated OutputExportEntry outputs = 1;
-  repeated OutputDef output_defs = 2;
-}
-
-message SetTerraformRequest {
+message SetTerraformAction {
   string required_version = 1;
   repeated ProviderReqView required_providers = 2;
   BackendView backend = 3;
 }
 
-message SetProvidersRequest {
+message SetProvidersAction {
   repeated ProviderView providers = 1;
+}
+
+message SetLocalsAction {
+  repeated LocalEntry locals = 1;
 }
 
 message LocalEntry {
@@ -381,18 +447,151 @@ message LocalEntry {
   string expression = 5;
 }
 
-message SetLocalsRequest {
-  repeated LocalEntry locals = 1;
-}
-
-message SetDependsOnRequest {
+message SetDependsOnAction {
   string instance_id = 1;
   repeated string depends_on = 2;
 }
 
-message SetEnvironmentsRequest {
+message SetEnvironmentsAction {
   map<string, google.protobuf.Struct> environments = 1;
   map<string, BackendView> environment_backends = 2;
+}
+
+// The canonical Action type used inside DispatchRequest.
+message Action {
+  oneof action {
+    ConnectAction connect = 1;
+    AutoConnectAction auto_connect = 2;
+    DisconnectAction disconnect = 3;
+    UpdateInputAction update_input = 4;
+    UpdateAllInputsAction update_all_inputs = 5;
+    RenameInstanceAction rename_instance = 6;
+    DeleteInstanceAction delete_instance = 7;
+    CopyInstancesAction copy_instances = 8;
+    SyncLayoutAction sync_layout = 9;
+    CreateGroupAction create_group = 10;
+    UpdateGroupAction update_group = 11;
+    DeleteGroupAction delete_group = 12;
+    SetVariablesAction set_variables = 13;
+    SetExportsAction set_exports = 14;
+    SetTerraformAction set_terraform = 15;
+    SetProvidersAction set_providers = 16;
+    SetLocalsAction set_locals = 17;
+    SetDependsOnAction set_depends_on = 18;
+    SetEnvironmentsAction set_environments = 19;
+  }
+}
+
+// ============================================================================
+// Single-action RPC requests — each wraps one *Action + session_id
+// ============================================================================
+
+message ConnectRequest {
+  string session_id = 1;
+  ConnectAction connect = 2;
+}
+
+message AutoConnectRequest {
+  string session_id = 1;
+  AutoConnectAction auto_connect = 2;
+}
+
+message DisconnectRequest {
+  string session_id = 1;
+  DisconnectAction disconnect = 2;
+}
+
+message UpdateInputRequest {
+  string session_id = 1;
+  UpdateInputAction update_input = 2;
+}
+
+message UpdateAllInputsRequest {
+  string session_id = 1;
+  UpdateAllInputsAction update_all_inputs = 2;
+}
+
+message RenameInstanceRequest {
+  string session_id = 1;
+  RenameInstanceAction rename_instance = 2;
+}
+
+message DeleteInstanceRequest {
+  string session_id = 1;
+  DeleteInstanceAction delete_instance = 2;
+}
+
+message CopyInstancesRequest {
+  string session_id = 1;
+  CopyInstancesAction copy_instances = 2;
+}
+
+message SyncLayoutRequest {
+  string session_id = 1;
+  SyncLayoutAction sync_layout = 2;
+}
+
+message CreateGroupRequest {
+  string session_id = 1;
+  CreateGroupAction create_group = 2;
+}
+
+message UpdateGroupRequest {
+  string session_id = 1;
+  UpdateGroupAction update_group = 2;
+}
+
+message DeleteGroupRequest {
+  string session_id = 1;
+  DeleteGroupAction delete_group = 2;
+}
+
+message SetVariablesRequest {
+  string session_id = 1;
+  SetVariablesAction set_variables = 2;
+}
+
+message SetExportsRequest {
+  string session_id = 1;
+  SetExportsAction set_exports = 2;
+}
+
+message SetTerraformRequest {
+  string session_id = 1;
+  SetTerraformAction set_terraform = 2;
+}
+
+message SetProvidersRequest {
+  string session_id = 1;
+  SetProvidersAction set_providers = 2;
+}
+
+message SetLocalsRequest {
+  string session_id = 1;
+  SetLocalsAction set_locals = 2;
+}
+
+message SetDependsOnRequest {
+  string session_id = 1;
+  SetDependsOnAction set_depends_on = 2;
+}
+
+message SetEnvironmentsRequest {
+  string session_id = 1;
+  SetEnvironmentsAction set_environments = 2;
+}
+
+message UndoRequest {
+  string session_id = 1;
+}
+
+message RedoRequest {
+  string session_id = 1;
+}
+
+message DispatchRequest {
+  string session_id = 1;
+  repeated Action actions = 2;
 }
 
 // ============================================================================
@@ -400,12 +599,26 @@ message SetEnvironmentsRequest {
 // ============================================================================
 
 message NodeConfigRequest {
-  string instance_id = 1;
+  string session_id = 1;
+  string instance_id = 2;
 }
 
 message EdgeConfigRequest {
-  string source = 1;
-  string target = 2;
+  string session_id = 1;
+  string source = 2;
+  string target = 3;
+}
+
+message QuerySettingsRequest {
+  string session_id = 1;
+}
+
+message QueryGraphSummaryRequest {
+  string session_id = 1;
+}
+
+message QueryValidateRequest {
+  string session_id = 1;
 }
 
 message GraphSummaryResponse {
@@ -414,6 +627,42 @@ message GraphSummaryResponse {
 
 message ValidateResponse {
   repeated RenderError errors = 1;
+}
+
+// ============================================================================
+// Subscribe — server-pushed events scoped to one session
+// ============================================================================
+
+message SubscribeRequest {
+  string session_id = 1;
+}
+
+message EngineEvent {
+  oneof event {
+    StateUpdated state_updated = 1;
+    GenerateProgress generate_progress = 2;
+    GenerateSuccess generate_success = 3;
+    GenerateError generate_error = 4;
+  }
+}
+
+message StateUpdated {
+  CanvasView view = 1;
+}
+
+message GenerateProgress {
+  string stage = 1;
+  string message = 2;
+}
+
+message GenerateSuccess {
+  repeated string files_written = 1;
+  map<string, string> files = 2;
+}
+
+message GenerateError {
+  string message = 1;
+  repeated Diagnostic diagnostics = 2;
 }
 
 // ============================================================================
@@ -557,7 +806,7 @@ message RenderError {
 }
 
 // ============================================================================
-// Shared types (used in action requests)
+// Shared types
 // ============================================================================
 
 message Position {

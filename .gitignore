@@ -5,3 +5,13 @@ node_modules
 *.vsix
 .DS_STORE
 *.db
+
+# Package build outputs
+packages/*/dist
+packages/*/out
+*.tsbuildinfo
+
+# Generated proto (regenerate with: pnpm proto:gen)
+packages/proto/src/generated
+packages/host/src/generated
+packages/canvas/src/generated

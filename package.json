@@ -547,7 +547,7 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
+    "vscode:prepublish": "pnpm run build",
     "compile": "rspack --config rspack.config.js",
     "pretest": "npm run compile",
     "format": "prettier --write .",
@@ -555,7 +555,7 @@
     "test:unit": "vitest run --exclude 'src/webview/__tests__/e2e-*'",
     "test:e2e": "vitest run src/webview/__tests__/e2e-*",
     "test:watch": "vitest",
-    "proto:gen": "protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=./src/generated --ts_proto_opt=outputServices=grpc-js,snakeToCamel=false,forceLong=number,esModuleInterop=true,env=node proto/service.proto",
+    "proto:gen": "bash scripts/proto-gen.sh",
     "build": "rspack --config rspack.config.js",
     "watch": "rspack --watch --config rspack.config.js",
     "package": "vsce package",
@@ -571,10 +571,15 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/vscode": "^1.95.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.2",
+    "@typescript-eslint/parser": "^8.58.2",
     "@vitest/ui": "~3.1.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "css-loader": "^7.1.2",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
     "file-loader": "^6.2.0",
     "happy-dom": "^20.7.0",
     "husky": "^9.1.7",
@@ -596,9 +601,17 @@
     ]
   },
   "dependencies": {
+    "@connectrpc/connect": "^2.1.1",
+    "@connectrpc/connect-web": "^2.1.1",
     "@grpc/grpc-js": "^1.12.6",
     "@xyflow/react": "^12.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs"
+    ]
   }
 }
