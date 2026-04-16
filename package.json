@@ -157,6 +157,8 @@
     "proto:gen": "bash scripts/proto-gen.sh",
     "build": "rspack --config rspack.config.js",
     "watch": "rspack --watch --config rspack.config.js",
+    "storybook": "pnpm --filter @lace/canvas-stories run dev",
+    "storybook:build": "pnpm --filter @lace/canvas-stories run build",
     "package": "vsce package",
     "prepare": "husky",
     "release": "./scripts/release.sh"

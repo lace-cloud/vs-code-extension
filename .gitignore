@@ -9,6 +9,7 @@ node_modules
 # Package build outputs
 packages/*/dist
 packages/*/out
+packages/canvas-stories/storybook-static
 *.tsbuildinfo
 
 # Generated proto (regenerate with: pnpm proto:gen)
