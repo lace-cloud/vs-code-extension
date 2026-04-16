@@ -128,9 +128,9 @@ export function useGroupLogic(
     }
 
     // Build lookup: nodeId → group, and parent-of-group for nested
-    // composite groups. Composite preservation landed nested RenderGroups
-    // — iam_stack contains cloudwatch_logs_policy — so a collapsed
-    // ancestor must hide every descendant group + leaf.
+    // groups. Nested RenderGroups — iam_stack contains
+    // cloudwatch_logs_policy — mean a collapsed ancestor must hide
+    // every descendant group and every descendant node.
     const nodeToGroup = new Map<string, RenderGroup>();
     const groupById = new Map<string, RenderGroup>();
     const parentOfGroup = new Map<string, string>(); // childGroupId → parentGroupId
@@ -346,13 +346,14 @@ function computeCollapsedGroup(
   const externalInputs = new Map<string, ExternalPin>();
   const remappedEdges: Edge[] = [];
 
-  // Composite groups carry their declared Interface as boundary pins:
-  // registry-dropped composites publish inputs/outputs straight from the
-  // CLI's ProjectCanvasView. When present, these are the authoritative
-  // boundary surface — we seed externalInputs/Outputs from them before
-  // scanning edges, so the UI renders pins regardless of whether any
-  // edge actually crosses the boundary. User-created groups (today
-  // empty inputs/outputs) fall back to edge-derived pin discovery.
+  // Module-backed groups carry their target's declared Interface as
+  // boundary pins: registry drops whose target has its own sub-modules
+  // publish inputs/outputs straight from the CLI's ProjectCanvasView.
+  // When present, these are the authoritative boundary surface — seed
+  // externalInputs/Outputs from them before scanning edges so the UI
+  // renders pins regardless of whether any edge actually crosses the
+  // boundary. User-created groups (today empty inputs/outputs) fall
+  // back to edge-derived pin discovery.
   if (group.inputs) {
     for (const pin of group.inputs) {
       const handleId = `in:${pin.name}`;
