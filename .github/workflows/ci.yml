@@ -126,7 +126,12 @@ jobs:
         if: always()
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        run: pnpm chromatic:playwright
+        # Workspace inside the container has a UID mismatch with the
+        # shell; git's `safe.directory` check blocks Chromatic's git log
+        # call. Whitelist the workspace before uploading.
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          pnpm chromatic:playwright
 
       - name: Upload Playwright report
         if: always()
