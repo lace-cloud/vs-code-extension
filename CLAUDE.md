@@ -34,7 +34,7 @@ Rspack builds three bundles from the workspace:
 ```
 pnpm install              # install workspace
 pnpm run build            # rspack build (all three bundles)
-pnpm run test:unit        # vitest (114 unit tests)
+pnpm run test:unit        # vitest (117 unit tests)
 pnpm run proto:gen        # regenerate TS proto outputs (3 per-package variants)
 npx tsc --noEmit          # typecheck — must be zero errors
 

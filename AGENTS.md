@@ -45,7 +45,7 @@ Rspack produces three bundles:
 ```bash
 pnpm install
 pnpm run build                # rspack build (all three bundles)
-pnpm run test:unit            # 114 unit tests via vitest
+pnpm run test:unit            # 117 unit tests via vitest
 npx tsc --noEmit              # type-check — must be zero errors
 pnpm run proto:gen            # regenerate three TS proto outputs
 
@@ -205,7 +205,7 @@ CanvasState { view: CanvasView | null, loading: boolean, error: string | null, g
 
 ## Testing
 
-### Unit Tests (vitest, 114 tests)
+### Unit Tests (vitest, 117 tests)
 
 Canvas (`packages/canvas/src/__tests__/`):
 
