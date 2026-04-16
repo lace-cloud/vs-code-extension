@@ -92,9 +92,32 @@ test.describe('seed-drift canary', () => {
     const manifestPath = path.resolve(__dirname, '__snapshots__', 'seed-manifest.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Manifest;
 
-    // Keep this list in sync with packages/canvas-stories/src/stories/flows/*.stories.tsx.
-    // Drift here means a story references a fixture the canary doesn't track.
-    const storyFixtures = ['empty', 'iam-role', 'iam-stack', 'wired-stack', 'collapsed-group'];
+    // Source of truth: the flow-story files themselves. Scan every
+    // `fixtureName="..."` literal in packages/canvas-stories/src/stories/flows/.
+    // When a story is added, the canary picks it up automatically —
+    // no shadow list to keep in sync.
+    const flowsDir = path.resolve(
+      __dirname,
+      '..',
+      '..',
+      'packages',
+      'canvas-stories',
+      'src',
+      'stories',
+      'flows',
+    );
+    const fixtureNamePattern = /fixtureName\s*=\s*"([^"]+)"/g;
+    const storyFixtures = new Set<string>();
+    for (const file of fs.readdirSync(flowsDir)) {
+      if (!file.endsWith('.stories.tsx')) continue;
+      const src = fs.readFileSync(path.join(flowsDir, file), 'utf-8');
+      for (const m of src.matchAll(fixtureNamePattern)) {
+        storyFixtures.add(m[1]);
+      }
+    }
+    expect(storyFixtures.size, 'no flow stories found — path or glob may be wrong').toBeGreaterThan(
+      0,
+    );
 
     for (const fixture of storyFixtures) {
       expect(

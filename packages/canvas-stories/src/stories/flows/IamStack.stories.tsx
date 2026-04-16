@@ -2,9 +2,11 @@ import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { FlowDecorator } from '../../decorators/flow-decorator';
 
-// Multi-module flow: loads the CLI's `iam-stack` seed — two modules placed
-// but unwired. Exercises the user-wires-manually path (drag-to-connect
-// handles, unwired-input warnings).
+// Module-tree flow: loads the CLI's `iam-stack` seed. Renders as one
+// collapsed group at the canvas root (iam_stack), containing a nested
+// tree — iam_role (leaf) + cloudwatch_logs_policy (another collapsed
+// group, which itself contains policy + attachment). Exercises the
+// collapsed-group pin rail + nested-group hiding paths.
 
 const meta: Meta = {
   title: 'Flows/IamStack',

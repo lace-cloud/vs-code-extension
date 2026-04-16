@@ -2,14 +2,12 @@ import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { App, ConnectWebEngine } from '@lace/canvas';
 import type { HostBridge } from '@lace/canvas';
 
-// Storybook exposes env vars prefixed with STORYBOOK_ to the client bundle via
-// Rsbuild's DefinePlugin when declared in `.storybook/main.ts > env`. We read
-// them here and fall back to a missing-CLI banner if not set — designers
-// iterating on component stories don't need a running CLI.
-const ENGINE_URL =
-  typeof process !== 'undefined' ? process.env.STORYBOOK_LACE_ENGINE_URL : undefined;
-const ENGINE_TOKEN =
-  typeof process !== 'undefined' ? process.env.STORYBOOK_LACE_ENGINE_TOKEN : undefined;
+// Storybook exposes env vars prefixed with STORYBOOK_ to the client bundle
+// via Rsbuild's DefinePlugin (see .storybook/main.ts > env). The values
+// are substituted at build time, so at runtime these reads are literal
+// strings or undefined — no `process` shim needed.
+const ENGINE_URL = process.env.STORYBOOK_LACE_ENGINE_URL;
+const ENGINE_TOKEN = process.env.STORYBOOK_LACE_ENGINE_TOKEN;
 
 // Each flow story gets an ephemeral (memory-only) session so concurrent
 // stories don't share state — backed sessions are keyed by file path and
@@ -82,10 +80,13 @@ export function FlowDecorator({ fixtureName, prologue }: FlowDecoratorProps) {
             overwrite: true,
           })
           .catch((err) => {
-            // Errors surface to App via the Subscribe stream's GenerateError
-            // event; log here so dev console also shows it if the stream
-            // hasn't opened yet (e.g. immediate network failure).
-            console.error('[FlowDecorator] sessionGenerate failed:', err);
+            // Immediate network / transport errors don't reach the
+            // Subscribe stream's GenerateError event, so surface them
+            // via the same banner the boot path uses. Downstream
+            // GenerateError events still replace the banner with
+            // their own (richer) message.
+            setErrorMessage(err instanceof Error ? err.message : String(err));
+            setStatus('error');
           });
       },
       openFile: () => {
@@ -127,8 +128,12 @@ export function FlowDecorator({ fixtureName, prologue }: FlowDecoratorProps) {
     return () => {
       cancelled = true;
       stopSubscribe?.();
-      engine.sessionClose().catch(() => {
-        /* best-effort cleanup on unmount */
+      // Cleanup on unmount is best-effort: the React tree is gone,
+      // there's no state to update on failure. Surface the error to
+      // dev console so it shows up in CI logs if the engine hangs
+      // at close time.
+      engine.sessionClose().catch((err) => {
+        console.error('[FlowDecorator] sessionClose on unmount failed:', err);
       });
     };
   }, [engine, fixtureName, prologue]);

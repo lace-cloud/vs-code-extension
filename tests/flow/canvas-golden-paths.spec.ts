@@ -23,15 +23,30 @@ function storyUrl(storyId: string): string {
   return `/iframe.html?id=${storyId}&viewMode=story`;
 }
 
-// Shared setup: navigate, wait for FlowDecorator's readiness marker.
-// Timeout is generous because sessionOpen+subscribe+initial-state round-trip
-// can take ~1s on cold CLI starts.
+// Shared setup: navigate, wait for FlowDecorator's readiness marker
+// (session open + Subscribe + initial state applied), then wait for
+// ReactFlow's own measure pass to settle so screenshots capture a
+// stable layout instead of a mid-transform frame.
 async function gotoStory(page: import('@playwright/test').Page, storyId: string) {
   await page.goto(storyUrl(storyId));
   await page.waitForSelector('[data-flow-ready]', { state: 'attached', timeout: 15_000 });
-  // One extra frame so ReactFlow's measure pass completes — otherwise
-  // screenshots occasionally catch an intermediate layout state.
-  await page.waitForTimeout(200);
+  // ReactFlow positions nodes via `transform: translate(x, y)` on each
+  // `.react-flow__node`. Until the measure pass runs, transforms are
+  // empty/identity and the node sits at the origin. Wait until every
+  // rendered node carries a translate — that's the real "layout
+  // stable" signal, not an arbitrary sleep.
+  await page.waitForFunction(
+    () => {
+      const nodes = document.querySelectorAll<HTMLElement>('.react-flow__node');
+      if (nodes.length === 0) return true;
+      return Array.from(nodes).every((n) => {
+        const t = n.style.transform || '';
+        return /translate\(/.test(t) || /matrix\(/.test(t);
+      });
+    },
+    undefined,
+    { timeout: 5_000 },
+  );
 }
 
 test.describe('flow story golden paths', () => {
