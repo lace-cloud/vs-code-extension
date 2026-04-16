@@ -9,7 +9,9 @@ import { FlowDecorator } from '../../decorators/flow-decorator';
 
 const meta: Meta = {
   title: 'Flows/IamStack',
-  parameters: { layout: 'fullscreen' },
+  // Skip Storybook-mode Chromatic snapshot: flow stories need a live CLI
+  // that Chromatic's cloud can't spawn. Playwright flow-tests cover it.
+  parameters: { layout: 'fullscreen', chromatic: { disableSnapshot: true } },
 };
 export default meta;
 

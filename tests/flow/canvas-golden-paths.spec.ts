@@ -1,20 +1,22 @@
 /**
- * Canvas golden-path tests — Plan 2 Phase F.
+ * Canvas golden-path tests.
  *
  * One test per flow story. Each navigates to Storybook's iframe URL for
  * the story, waits for the `[data-flow-ready]` marker the FlowDecorator
  * renders once boot completes (TestSessionOpen + Subscribe + initial
  * StateUpdated), asserts a small shape-level DOM invariant, and captures
- * a screenshot baseline.
+ * a Chromatic snapshot via `takeSnapshot`.
  *
- * Baselines are CI-only (see playwright.config.ts `snapshotPathTemplate`).
- * Mac devs iterating locally see `-darwin.png` artefacts in __snapshots__/
- * — those are gitignored, not committed, not authoritative.
+ * Baselines live in Chromatic, not git. CI passes CHROMATIC_PROJECT_TOKEN
+ * to the `flow-tests` job; `chromatic:playwright` uploads after the test
+ * run. Visual diffs surface as PR comments from the Chromatic bot;
+ * approve/reject in the Chromatic UI.
  *
  * `drift-badge` is intentionally absent: lace-cli's `pb.RenderNode` has no
  * drift metadata yet. Followup once the proto extends.
  */
 
+import { takeSnapshot } from '@chromatic-com/playwright';
 import { expect, test } from '@playwright/test';
 
 // Shared story URL helper — Storybook serves each story in an iframe at
@@ -50,25 +52,27 @@ async function gotoStory(page: import('@playwright/test').Page, storyId: string)
 }
 
 test.describe('flow story golden paths', () => {
-  test('empty-state: empty canvas, no nodes, no errors', async ({ page }) => {
+  test('empty-state: empty canvas, no nodes, no errors', async ({ page }, testInfo) => {
     await gotoStory(page, 'flows-emptycanvas--default');
     // Canvas mounts but no ReactFlow nodes render.
     const nodeCount = await page.locator('.react-flow__node').count();
     expect(nodeCount).toBe(0);
-    await expect(page).toHaveScreenshot('empty-state.png');
+    await takeSnapshot(page, 'empty-state', testInfo);
   });
 
-  test('drop-module: single iam-role node placed', async ({ page }) => {
+  test('drop-module: single iam-role node placed', async ({ page }, testInfo) => {
     await gotoStory(page, 'flows-iamrole--default');
     // Exactly one node from the iam-role seed.
     await expect(page.locator('.react-flow__node')).toHaveCount(1);
     // The node's label should mention "role" — coarse, but catches
     // schema-shape regressions without pinning to an exact label.
     await expect(page.locator('.react-flow__node').first()).toContainText(/role/i);
-    await expect(page).toHaveScreenshot('drop-module.png');
+    await takeSnapshot(page, 'drop-module', testInfo);
   });
 
-  test('composite-hierarchy: iam-stack fixture renders a collapsed composite', async ({ page }) => {
+  test('composite-hierarchy: iam-stack fixture renders a collapsed composite', async ({
+    page,
+  }, testInfo) => {
     await gotoStory(page, 'flows-iamstack--default');
     // Post composite preservation: iam-stack drops as ONE top-level
     // collapsed composite group. Its internal tree (iam_role leaf +
@@ -88,25 +92,27 @@ test.describe('flow story golden paths', () => {
     // proxy for "the Interface was carried end-to-end".
     const pinCount = await page.locator('[data-group="iam_stack"] .react-flow__handle').count();
     expect(pinCount).toBeGreaterThanOrEqual(6);
-    await expect(page).toHaveScreenshot('composite-hierarchy.png');
+    await takeSnapshot(page, 'composite-hierarchy', testInfo);
   });
 
-  test('collapse-group: group renders collapsed', async ({ page }) => {
+  test('collapse-group: group renders collapsed', async ({ page }, testInfo) => {
     await gotoStory(page, 'flows-collapsedgroup--default');
     // GroupNode tags its root div with `data-group` (= groupId) and
     // `data-collapsed` (= "true" | "false"). The collapsed-group fixture
     // has exactly one group in collapsed state.
     await expect(page.locator('[data-collapsed="true"]')).toHaveCount(1);
-    await expect(page).toHaveScreenshot('collapse-group.png');
+    await takeSnapshot(page, 'collapse-group', testInfo);
   });
 
-  test('generate-flow: wired-stack fixture renders 3 pre-wired nodes', async ({ page }) => {
+  test('generate-flow: wired-stack fixture renders 3 pre-wired nodes', async ({
+    page,
+  }, testInfo) => {
     await gotoStory(page, 'flows-wiredstack--default');
     // wired-stack seed: 3 leaf bundles + 2 cross-bundle wires (per Plan 1 Phase F fixtures).
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    // Baseline screenshot of the wired stack BEFORE any generate click —
+    // Baseline capture of the wired stack BEFORE any generate click —
     // post-generate state has transient toasts that are harder to snapshot
     // deterministically. Clicking generate lives in a followup interaction test.
-    await expect(page).toHaveScreenshot('generate-flow.png');
+    await takeSnapshot(page, 'generate-flow', testInfo);
   });
 });

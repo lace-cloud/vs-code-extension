@@ -9,7 +9,10 @@ import { FlowDecorator } from '../../decorators/flow-decorator';
 
 const meta: Meta = {
   title: 'Flows/EmptyCanvas',
-  parameters: { layout: 'fullscreen' },
+  // Flow stories need a live `lace engine` backend (see FlowDecorator).
+  // Chromatic's Storybook cloud can't spawn the CLI, so skip Storybook-mode
+  // snapshots — coverage lives in the Playwright flow tests instead.
+  parameters: { layout: 'fullscreen', chromatic: { disableSnapshot: true } },
 };
 export default meta;
 

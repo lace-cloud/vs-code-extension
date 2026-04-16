@@ -117,7 +117,16 @@ jobs:
           # .sha256 canaries live under internal/module/server/testdata/seeds/
           # within the tarball (same path as in lace-cli).
           LACE_CLI_REPO: /tmp/lace-test
+          # takeSnapshot() from @chromatic-com/playwright captures archives
+          # under test-results/; chromatic:playwright below uploads them.
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
         run: pnpm flow-tests
+
+      - name: Upload flow-test screenshots to Chromatic
+        if: always()
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        run: pnpm chromatic:playwright
 
       - name: Upload Playwright report
         if: always()
@@ -134,3 +143,27 @@ jobs:
           name: playwright-test-results
           path: test-results/
           retention-days: 14
+
+  chromatic:
+    # Storybook-mode Chromatic: builds the canvas-stories Storybook and
+    # uploads every component story as a visual test. Flow stories are
+    # tagged `disableSnapshot` — their visuals go through the flow-tests
+    # job above via @chromatic-com/playwright.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Chromatic needs full history to resolve the baseline commit.
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-workspace
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Storybook
+        run: pnpm run storybook:build
+
+      - name: Publish to Chromatic
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        run: pnpm chromatic --storybook-build-dir=packages/canvas-stories/storybook-static
