@@ -75,14 +75,18 @@ test.describe('flow story golden paths', () => {
     // nested cloudwatch_logs_policy composite) lives inside and stays
     // hidden until the user expands the parent. Only the top-level
     // collapsed group is visible at canvas level.
-    await expect(page.locator('[data-group="iam-stack"][data-collapsed="true"]')).toHaveCount(1);
+    //
+    // The group's data-group attribute carries the Terraform-sanitized
+    // identifier (hyphens → underscores via ToTerraformIdentifier), not
+    // the fixture name — so the selector is `iam_stack`, not `iam-stack`.
+    await expect(page.locator('[data-group="iam_stack"][data-collapsed="true"]')).toHaveCount(1);
     // The collapsed composite carries its Interface as boundary pins —
     // every declared input (role_name, assume_role_policy, tags) plus
     // every declared output (role_name, role_arn, policy_arn). With
     // three inputs + three outputs rendered as aggregated pin rows,
     // the group has at least six Handle elements — a coarse-but-robust
     // proxy for "the Interface was carried end-to-end".
-    const pinCount = await page.locator('[data-group="iam-stack"] .react-flow__handle').count();
+    const pinCount = await page.locator('[data-group="iam_stack"] .react-flow__handle').count();
     expect(pinCount).toBeGreaterThanOrEqual(6);
     await expect(page).toHaveScreenshot('composite-hierarchy.png');
   });
