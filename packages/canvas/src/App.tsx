@@ -33,10 +33,18 @@ export default function App({ engine, hostBridge }: AppProps) {
     loading: true,
     error: null,
     generation: 0,
+    viewportIntent: null,
+    viewportIntentSeq: 0,
   });
 
   const updateView = useCallback((view: CanvasView) => {
-    setState((prev) => ({ view, loading: false, error: null, generation: prev.generation + 1 }));
+    setState((prev) => ({
+      ...prev,
+      view,
+      loading: false,
+      error: null,
+      generation: prev.generation + 1,
+    }));
   }, []);
 
   // ── Engine events → state updates ──
@@ -51,6 +59,8 @@ export default function App({ engine, hostBridge }: AppProps) {
           loading: false,
           error: null,
           generation: prev.generation + 1,
+          viewportIntent: event.viewportIntent ?? null,
+          viewportIntentSeq: prev.viewportIntentSeq + (event.viewportIntent ? 1 : 0),
         }));
       }
     });

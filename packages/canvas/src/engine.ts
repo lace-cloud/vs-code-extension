@@ -6,6 +6,7 @@ import type {
   RenderError,
   Diagnostic,
   GeneratePhase,
+  ViewportIntent,
 } from './types/render';
 
 // Engine is the interface to the CLI session. All canvas operations go through here.
@@ -16,7 +17,7 @@ import type {
  * these through `onEvent` so UI layers subscribe once regardless of transport.
  */
 export type EngineEvent =
-  | { type: 'stateUpdated'; view: CanvasView }
+  | { type: 'stateUpdated'; view: CanvasView; viewportIntent?: ViewportIntent }
   | { type: 'generateProgress'; phase: GeneratePhase }
   | { type: 'generateSuccess'; files?: string[] }
   | { type: 'generateError'; message: string; diagnostics?: Diagnostic[] };

@@ -65,7 +65,11 @@ export async function addModuleToActiveCanvas(
         const transport = requireTransport(server, 'place module');
         const view = await transport.placeModule({ name, system, version, organization });
         latestCanvasView = view;
-        postToWebview(panel, { command: 'loadState', state: view });
+        postToWebview(panel, {
+          command: 'loadState',
+          state: view,
+          viewportIntent: { kind: 'fit-all', padding: 0.2, duration: 300 },
+        });
       } catch (err: unknown) {
         handleRpcError(err, 'placeModule', 'add module to canvas');
       }

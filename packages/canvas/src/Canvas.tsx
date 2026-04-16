@@ -27,7 +27,7 @@ import { ValidationErrorBanner } from './components/ValidationErrorBanner';
 import Toast from './components/Toast';
 import ContextMenu from './components/ContextMenu';
 
-import type { CanvasView } from './types/render';
+import type { CanvasView, ViewportIntent } from './types/render';
 import { useCanvas } from './state/engine-context';
 import { parseHandleId } from './utils/handleId';
 
@@ -76,9 +76,10 @@ type CompositeEditorProps = {
   onGenerate: () => void;
   onOpenSettings: () => void;
   registerGoToNode: (fn: (nodeId: string) => void) => void;
-  registerZoomToNode: (fn: (nodeId: string) => void) => void;
   registerGetSelectedIds: (fn: () => string[]) => void;
   registerSelectNodes: (fn: (ids: string[]) => void) => void;
+  viewportIntent: ViewportIntent | null;
+  viewportIntentSeq: number;
 };
 
 function CompositeEditor({
@@ -99,9 +100,10 @@ function CompositeEditor({
   onGenerate,
   onOpenSettings,
   registerGoToNode,
-  registerZoomToNode,
   registerGetSelectedIds,
   registerSelectNodes,
+  viewportIntent,
+  viewportIntentSeq,
 }: CompositeEditorProps) {
   const { fitView, fitBounds, getNode } = useReactFlow();
 
@@ -139,8 +141,20 @@ function CompositeEditor({
   }, []);
 
   useEffect(() => {
-    registerZoomToNode((nodeId: string) => {
-      const n = getNode(nodeId);
+    if (!viewportIntent) return;
+
+    requestAnimationFrame(() => {
+      if (viewportIntent.kind === 'fit-all') {
+        if (view.nodes.length > 0) {
+          fitView({
+            padding: viewportIntent.padding ?? 0.2,
+            duration: viewportIntent.duration ?? 300,
+          });
+        }
+        return;
+      }
+
+      const n = getNode(viewportIntent.nodeId);
       if (!n) return;
       fitBounds(
         {
@@ -149,11 +163,13 @@ function CompositeEditor({
           width: n.measured?.width ?? 240,
           height: n.measured?.height ?? 160,
         },
-        { padding: 1.2, duration: 300 },
+        {
+          padding: viewportIntent.padding ?? 1.2,
+          duration: viewportIntent.duration ?? 300,
+        },
       );
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fitBounds, fitView, getNode, view.nodes.length, viewportIntent, viewportIntentSeq]);
 
   // ── Nodes + Edges (group-aware) ──
   const groupLogic = useGroupLogic(view.nodes, view.edges, view.groups, newNodeIds, erroredNodeIds);
@@ -349,14 +365,7 @@ export default function Canvas() {
   const { generating, validationErrors, erroredNodeIds, errorBannerDismissed, dismissErrorBanner } =
     useGenerationStatus(showToast);
 
-  // Stable ref for zoom — set by CompositeEditor
-  const zoomToNodeRef = useRef<((nodeId: string) => void) | null>(null);
-  const registerZoomToNode = useCallback((fn: (nodeId: string) => void) => {
-    zoomToNodeRef.current = fn;
-  }, []);
-  const stableZoomToNode = useCallback((id: string) => zoomToNodeRef.current?.(id), []);
-
-  const { newNodeIds, clearNew } = useNewNodeTracking(state.view, stableZoomToNode);
+  const { newNodeIds, clearNew } = useNewNodeTracking(state.view);
 
   // Stable ref for go-to-node — set by CompositeEditor
   const goToNodeRef = useRef<((nodeId: string) => void) | null>(null);
@@ -624,9 +633,10 @@ export default function Canvas() {
           onGenerate={onGenerate}
           onOpenSettings={onOpenSettings}
           registerGoToNode={registerGoToNode}
-          registerZoomToNode={registerZoomToNode}
           registerGetSelectedIds={registerGetSelectedIds}
           registerSelectNodes={registerSelectNodes}
+          viewportIntent={state.viewportIntent}
+          viewportIntentSeq={state.viewportIntentSeq}
         />
 
         {/* Module config panel */}

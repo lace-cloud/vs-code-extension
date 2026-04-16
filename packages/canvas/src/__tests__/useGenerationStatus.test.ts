@@ -25,7 +25,14 @@ function makeStubEngine(): { engine: CanvasEngine; fire: (event: EngineEvent) =>
 }
 
 function wrapper(engine: CanvasEngine) {
-  const state: CanvasState = { view: null, loading: true, error: null, generation: 0 };
+  const state: CanvasState = {
+    view: null,
+    loading: true,
+    error: null,
+    generation: 0,
+    viewportIntent: null,
+    viewportIntentSeq: 0,
+  };
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(
       CanvasContext.Provider,

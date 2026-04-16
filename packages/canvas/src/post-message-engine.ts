@@ -58,7 +58,7 @@ export class PostMessageEngine implements CanvasEngine {
           return;
         }
         case 'loadState':
-          this.emit({ type: 'stateUpdated', view: msg.state });
+          this.emit({ type: 'stateUpdated', view: msg.state, viewportIntent: msg.viewportIntent });
           return;
         case 'generateProgress':
           this.emit({ type: 'generateProgress', phase: msg.phase });

@@ -130,8 +130,12 @@ export type Diagnostic = {
 
 export type GeneratePhase = 'generating' | 'formatting' | 'validating';
 
+export type ViewportIntent =
+  | { kind: 'fit-all'; padding?: number; duration?: number }
+  | { kind: 'focus-node'; nodeId: string; padding?: number; duration?: number };
+
 export type HostToWebview =
-  | { command: 'loadState'; state: CanvasView }
+  | { command: 'loadState'; state: CanvasView; viewportIntent?: ViewportIntent }
   | { command: 'generateProgress'; phase: GeneratePhase }
   | { command: 'generateSuccess'; files?: string[] }
   | { command: 'generateError'; message: string; diagnostics?: Diagnostic[] }

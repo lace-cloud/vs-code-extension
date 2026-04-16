@@ -16,4 +16,5 @@ export type {
   Diagnostic,
   GeneratePhase,
   HostToWebview,
+  ViewportIntent,
 } from '@lace/proto';
