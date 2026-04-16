@@ -147,13 +147,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install awscli + protoc
-        # The Playwright container ships neither. awscli pulls the R2
-        # bundle; protoc runs scripts/proto-gen.sh. Container runs as
-        # root so apt-get needs no sudo.
+      - name: Install awscli
+        # The Playwright container doesn't ship aws CLI. Container runs
+        # as root so apt-get needs no sudo.
         run: |
           apt-get update
-          apt-get install -y awscli protobuf-compiler
+          apt-get install -y awscli
+
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: '28.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download lace test bundle from R2
         env:

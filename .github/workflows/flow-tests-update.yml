@@ -37,10 +37,15 @@ jobs:
         with:
           ref: ${{ github.event.inputs.target_branch || github.ref_name }}
 
-      - name: Install awscli + protoc
+      - name: Install awscli
         run: |
           apt-get update
-          apt-get install -y awscli protobuf-compiler
+          apt-get install -y awscli
+
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: '28.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download lace test bundle from R2
         env:
