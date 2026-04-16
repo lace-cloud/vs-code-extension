@@ -10,6 +10,7 @@ import type {
   SessionGenerateResponse,
   InitializeResponse,
   ShutdownResponse,
+  AuthStatusResponse,
   RegistryListResponse,
   RegistryGetVersionsResponse,
   InspectModuleResponse,
@@ -132,6 +133,16 @@ export class LaceTransport {
 
   async shutdown(): Promise<void> {
     await this.unary<Record<string, never>, ShutdownResponse>(this.inner.shutdown, {});
+  }
+
+  // ── Auth ──
+
+  async authStatus(): Promise<{ authenticated: boolean }> {
+    const res = await this.unary<Record<string, never>, AuthStatusResponse>(
+      this.inner.authStatus,
+      {},
+    );
+    return { authenticated: res.authenticated };
   }
 
   // ── Registry ──
