@@ -133,9 +133,17 @@ jobs:
         # Workspace inside the container has a UID mismatch with the
         # shell; git's `safe.directory` check blocks Chromatic's git log
         # call. Whitelist the workspace before uploading.
+        #
+        # --parallel-nonce + --parallel-total merge this shard (Playwright
+        # flow-test snapshots) with the chromatic job's shard (Storybook
+        # component snapshots) into ONE Chromatic build per CI run, so
+        # reviewers see a single PR comment with the full changeset rather
+        # than two separate builds.
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          pnpm chromatic:playwright
+          pnpm chromatic:playwright -- \
+            --parallel-nonce=${{ github.run_id }} \
+            --parallel-total=2
 
       - name: Upload Playwright report
         if: always()
@@ -175,4 +183,12 @@ jobs:
       - name: Publish to Chromatic
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        run: pnpm chromatic --storybook-build-dir=packages/canvas-stories/storybook-static
+        # --parallel-nonce + --parallel-total merge this shard (Storybook
+        # component snapshots) with the flow-tests job's shard (Playwright
+        # snapshots) into ONE Chromatic build per CI run. Shared nonce is
+        # github.run_id — stable across the run's jobs, unique per push.
+        run: |
+          pnpm chromatic \
+            --storybook-build-dir=packages/canvas-stories/storybook-static \
+            --parallel-nonce=${{ github.run_id }} \
+            --parallel-total=2
