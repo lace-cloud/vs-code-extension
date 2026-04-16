@@ -70,10 +70,12 @@ describe('host smoke', () => {
 
   it('opens a Lace canvas webview panel on lace.openCanvas', async () => {
     const initialCount = countLaceTabs();
+    // Tab population travels via VS Code's tab-group event loop, so we
+    // subscribe before firing the command and race the open against a
+    // deadline — avoids a race with executeCommand's synchronous return.
+    const tabOpened = waitForLaceTabOpen(2000);
     await vscode.commands.executeCommand('lace.openCanvas');
-    // Panel creation is synchronous but tab population travels via
-    // VS Code's tab-group event loop; one microtask is enough.
-    await new Promise((r) => setTimeout(r, 50));
+    await tabOpened;
     const after = countLaceTabs();
     assert.ok(
       after > initialCount,
@@ -92,4 +94,22 @@ function countLaceTabs(): number {
     }
   }
   return n;
+}
+
+// Resolves on the first tab-change event that surfaces a Lace tab.
+// Rejects with a timeout error if the tab never appears.
+function waitForLaceTabOpen(timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const subscription = vscode.window.tabGroups.onDidChangeTabs((e) => {
+      if (e.opened.some((t) => t.label.startsWith('Lace · '))) {
+        clearTimeout(timer);
+        subscription.dispose();
+        resolve();
+      }
+    });
+    const timer = setTimeout(() => {
+      subscription.dispose();
+      reject(new Error(`Timed out after ${timeoutMs}ms waiting for Lace tab to open`));
+    }, timeoutMs);
+  });
 }
