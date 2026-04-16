@@ -69,6 +69,72 @@ describe('ConnectWebEngine — URL shape and headers', () => {
   });
 });
 
+describe('ConnectWebEngine — testSessionOpen', () => {
+  test('POSTs to /TestSessionOpen with fixtureName + workspaceName', async () => {
+    const fetchImpl = mockJsonFetch(200, {
+      sessionId: 'sess-fixt-1',
+      view: {
+        moduleName: 'iam-role',
+        nodes: [],
+        edges: [],
+        errors: [],
+        canUndo: false,
+        canRedo: false,
+        isDirty: false,
+        groups: [],
+      },
+    });
+    const engine = new ConnectWebEngine({ baseUrl: BASE_URL, token: TOKEN, fetch: fetchImpl });
+
+    await engine.testSessionOpen('iam-role');
+
+    const [url, init] = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe(`${BASE_URL}/lace.engine.LaceEngine/TestSessionOpen`);
+    expect(JSON.parse(init.body)).toEqual({
+      fixtureName: 'iam-role',
+      workspaceName: 'iam-role',
+    });
+    expect(engine.sessionId).toBe('sess-fixt-1');
+  });
+
+  test('defaults workspaceName to fixtureName when omitted', async () => {
+    const fetchImpl = mockJsonFetch(200, {
+      sessionId: 's',
+      view: {
+        moduleName: 'x',
+        nodes: [],
+        edges: [],
+        errors: [],
+        canUndo: false,
+        canRedo: false,
+        isDirty: false,
+        groups: [],
+      },
+    });
+    const engine = new ConnectWebEngine({ baseUrl: BASE_URL, token: TOKEN, fetch: fetchImpl });
+    await engine.testSessionOpen('wired-stack');
+    const [, init] = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(init.body).workspaceName).toBe('wired-stack');
+  });
+
+  test('rewrites Unimplemented to a friendly -tags=test hint', async () => {
+    const fetchImpl = mockJsonFetch(501, {
+      code: 'unimplemented',
+      message: 'TestSessionOpen not available in release builds',
+    });
+    const engine = new ConnectWebEngine({ baseUrl: BASE_URL, token: TOKEN, fetch: fetchImpl });
+    try {
+      await engine.testSessionOpen('empty');
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConnectError);
+      expect((err as ConnectError).code).toBe('unimplemented');
+      expect((err as Error).message).toContain('-tags=test');
+      expect((err as Error).message).toContain('make build-test');
+    }
+  });
+});
+
 describe('ConnectWebEngine — session_id injection', () => {
   test('placeModule uses active session_id', async () => {
     const emptyView = {

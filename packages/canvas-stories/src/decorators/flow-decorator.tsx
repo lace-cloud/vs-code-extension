@@ -29,7 +29,18 @@ type Status = 'idle' | 'connecting' | 'ready' | 'error';
 
 type FlowDecoratorProps = {
   children?: ReactNode;
-  /** Optional setup that runs after sessionOpen and before the story renders. */
+  /**
+   * When set, boot via `engine.testSessionOpen(fixtureName)` which loads a
+   * deterministic embedded seed from the CLI's `-tags=test` build. Preferred
+   * for golden-path tests — no registry, no network. Falls back to an
+   * ephemeral session + prologue when omitted.
+   */
+  fixtureName?: string;
+  /**
+   * Optional setup that runs after session open and before the story
+   * renders. Ignored when `fixtureName` is set (fixtures are supposed to
+   * be complete on their own).
+   */
   prologue?: FlowPrologue;
 };
 
@@ -38,7 +49,7 @@ type FlowDecoratorProps = {
  * STORYBOOK_LACE_ENGINE_URL + STORYBOOK_LACE_ENGINE_TOKEN env vars — launch
  * Storybook via `pnpm run dev:storybook-flows` which starts the CLI first.
  */
-export function FlowDecorator({ prologue }: FlowDecoratorProps) {
+export function FlowDecorator({ fixtureName, prologue }: FlowDecoratorProps) {
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -93,12 +104,16 @@ export function FlowDecorator({ prologue }: FlowDecoratorProps) {
       if (!engine) return;
       setStatus('connecting');
       try {
-        await engine.openEphemeralSession(DEFAULT_WORKSPACE_NAME);
+        if (fixtureName) {
+          await engine.testSessionOpen(fixtureName);
+        } else {
+          await engine.openEphemeralSession(DEFAULT_WORKSPACE_NAME);
+        }
         if (cancelled) return;
         // Start streaming BEFORE prologue so its mutation-driven state
         // updates reach App via the Subscribe StateUpdated events.
         stopSubscribe = engine.startSubscribe();
-        if (prologue) await prologue(engine);
+        if (!fixtureName && prologue) await prologue(engine);
         if (cancelled) return;
         setStatus('ready');
       } catch (err) {
@@ -116,7 +131,7 @@ export function FlowDecorator({ prologue }: FlowDecoratorProps) {
         /* best-effort cleanup on unmount */
       });
     };
-  }, [engine, prologue]);
+  }, [engine, fixtureName, prologue]);
 
   if (!engine || !hostBridge) {
     return <CliMissingBanner />;
@@ -126,6 +141,12 @@ export function FlowDecorator({ prologue }: FlowDecoratorProps) {
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
       {status === 'error' && errorMessage ? <ConnectionErrorBanner message={errorMessage} /> : null}
       <App engine={engine} hostBridge={hostBridge} />
+      {/*
+        Readiness marker for Playwright. Invisible to the user; selectable
+        via [data-flow-ready] once boot (sessionOpen + subscribe + any
+        prologue) has completed. Tests wait for this before screenshotting.
+      */}
+      {status === 'ready' ? <div hidden data-flow-ready="" /> : null}
     </div>
   );
 }

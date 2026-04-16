@@ -43,6 +43,7 @@ import {
   CanvasView as CanvasViewCodec,
   SessionOpenRequest as SessionOpenRequestCodec,
   SessionOpenResponse as SessionOpenResponseCodec,
+  TestSessionOpenRequest as TestSessionOpenRequestCodec,
   SessionSaveRequest as SessionSaveRequestCodec,
   SessionSaveResponse as SessionSaveResponseCodec,
   SessionCloseRequest as SessionCloseRequestCodec,
@@ -88,6 +89,7 @@ import type {
   CanvasView as ProtoCanvasView,
   SessionOpenRequest as ProtoSessionOpenRequest,
   SessionOpenResponse as ProtoSessionOpenResponse,
+  TestSessionOpenRequest as ProtoTestSessionOpenRequest,
   SessionSaveResponse as ProtoSessionSaveResponse,
   SessionCloseResponse as ProtoSessionCloseResponse,
   SessionGenerateResponse as ProtoSessionGenerateResponse,
@@ -262,6 +264,39 @@ export class ConnectWebEngine implements CanvasEngine {
     this._sessionId = res.session_id;
     if (!res.view) throw new Error('SessionOpen returned no view');
     return convertCanvasView(res.view);
+  }
+
+  /**
+   * Opens an ephemeral session pre-populated from one of the CLI's embedded
+   * seed fixtures. Requires the CLI to be built with `-tags=test` — the
+   * release build returns Unimplemented. Used by Storybook flow stories +
+   * Playwright golden tests for deterministic canvas state without touching
+   * the registry (no network, no version drift, stable across environments).
+   */
+  async testSessionOpen(fixtureName: string, workspaceName = fixtureName): Promise<CanvasView> {
+    const req: ProtoTestSessionOpenRequest = {
+      fixture_name: fixtureName,
+      workspace_name: workspaceName,
+    };
+    try {
+      const res = await this.unary<ProtoTestSessionOpenRequest, ProtoSessionOpenResponse>(
+        'TestSessionOpen',
+        req,
+        TestSessionOpenRequestCodec,
+        SessionOpenResponseCodec,
+      );
+      this._sessionId = res.session_id;
+      if (!res.view) throw new Error('TestSessionOpen returned no view');
+      return convertCanvasView(res.view);
+    } catch (err) {
+      if (err instanceof ConnectError && err.code === 'unimplemented') {
+        throw new ConnectError(
+          'unimplemented',
+          'TestSessionOpen is gated behind -tags=test. Rebuild the CLI with `make build-test` in lace-cli and reinstall the binary.',
+        );
+      }
+      throw err;
+    }
   }
 
   async sessionSave(): Promise<{ saved: boolean }> {

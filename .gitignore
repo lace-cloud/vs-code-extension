@@ -16,3 +16,13 @@ packages/canvas-stories/storybook-static
 packages/proto/src/generated
 packages/host/src/generated
 packages/canvas/src/generated
+
+# Playwright (Phase F)
+playwright-report/
+test-results/
+# Platform-specific baselines. Linux baselines (created in the pinned
+# Playwright container in CI) are authoritative and committed; Darwin
+# baselines from local runs are for iteration only and never shipped.
+tests/flow/__snapshots__/**/*-darwin.png
+# Traces auto-retained on failure
+**/*.webm

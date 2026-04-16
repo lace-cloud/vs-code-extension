@@ -225,12 +225,29 @@ Chat sidebar (`packages/chat-sidebar/src/__tests__/`):
 Two tiers:
 
 - **Component stories** (Phase E1) — pure-prop rendering of `Toast`, `SlidePanel`, `ContextMenu`, `ModuleNode`, `GroupNode`. No CLI needed.
-- **Flow stories** (Phase E2) — mount full `<App>` with a live `lace engine -tags=test`. Exercises SessionOpen, PlaceModule, Connect, SessionGenerate, CreateGroup, and Subscribe streaming. Launched via `pnpm run dev:storybook-flows`.
+- **Flow stories** (Phase E2+F) — mount full `<App>` with a live `lace engine` built via `make build-test`. Stories pass `fixtureName` to the `FlowDecorator`, which calls `engine.testSessionOpen(fixtureName)` to load a deterministic embedded seed. 5 fixtures: `empty`, `iam-role`, `iam-stack`, `wired-stack`, `collapsed-group`. Launched via `pnpm run dev:storybook-flows`.
+
+### Playwright flow tests (Phase F)
+
+Golden-path visual regression tests under `tests/flow/`:
+
+- `canvas-golden-paths.spec.ts` — 5 tests, one per flow story. Each navigates to the Storybook iframe URL, waits for `[data-flow-ready]` (rendered by FlowDecorator once boot completes), asserts key DOM, captures a screenshot baseline.
+- `seed-manifest.spec.ts` — pre-flight canary. Reads `$LACE_CLI_REPO/internal/module/server/testdata/seeds/*.sha256` and compares to `tests/flow/__snapshots__/seed-manifest.json`. Fails fast with a clear "hash mismatch" message if upstream `.lace` seeds have shifted.
+
+Configuration (`playwright.config.ts`):
+
+- Pinned viewport 1440×900, DPR 1, `en-US`, `UTC`, `colorScheme: 'dark'`
+- `maxDiffPixelRatio: 0.005` (0.5%)
+- `snapshotPathTemplate` includes `{platform}` so Darwin baselines never overwrite Linux
+- `webServer: 'pnpm run dev:storybook-flows'` spawns CLI + Storybook together
+
+Baselines are **only authoritative from the pinned container** (`mcr.microsoft.com/playwright:v1.59.1-jammy`). Local `*-darwin.png` artefacts are gitignored.
+
+Drift-badge test intentionally absent — `pb.RenderNode` has no drift metadata field yet. When lace-cli extends the proto + ships a `drift-overlay.lace` fixture, a 6th test + story land as a followup.
 
 ### E2E (Phase G — scaffold only)
 
-`packages/host-e2e` is reserved for Playwright-driven integration tests that exercise
-flow stories. Not yet populated.
+`packages/host-e2e` is reserved for `@vscode/test-electron` smoke tests (activation, command registration, sidebar view provider). Not yet populated.
 
 ## Common Gotchas
 

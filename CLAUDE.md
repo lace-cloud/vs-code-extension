@@ -42,7 +42,18 @@ npx tsc --noEmit          # typecheck — must be zero errors
 pnpm run storybook              # component-only stories on :6006 (no CLI needed)
 pnpm run dev:storybook-flows    # flow stories with live `lace engine -tags=test`
 pnpm run storybook:build        # static storybook build
+
+# Playwright flow tests (Phase F)
+pnpm flow-tests                 # run golden-path tests against Storybook + CLI
+pnpm flow-tests:update          # rebaseline screenshots (CI container only for authoritative PNGs)
 ```
+
+### Playwright notes
+
+- Flow stories use `testSessionOpen(fixtureName)` for determinism — stories load embedded seed fixtures from the CLI's `-tags=test` build. Requires a CLI built via `make build-test` in lace-cli.
+- Screenshot baselines are **only authoritative from the pinned Playwright container** (`mcr.microsoft.com/playwright:v1.59.1-jammy`). Local Mac runs produce `*-darwin.png` artefacts that are gitignored. First CI run on a branch will fail with "missing baselines" — operator reruns in the container with `flow-tests:update` to bootstrap, then commits.
+- The seed-drift canary (`tests/flow/seed-manifest.spec.ts`) runs first. If lace-cli regenerates seeds, the canary fails with a clear "hash mismatch" message before any screenshot comparison — update `tests/flow/__snapshots__/seed-manifest.json` + rebaseline screenshots in the same PR.
+- Locally, set `LACE_CLI_REPO=../lace-cli` (or absolute path) so the canary can find lace-cli's `testdata/seeds/*.sha256` canaries.
 
 ## Critical Rules
 

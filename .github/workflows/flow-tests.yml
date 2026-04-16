@@ -1,0 +1,95 @@
+name: Flow Tests
+
+# Plan 2 Phase F — Playwright golden-path tests against Storybook flow stories.
+# Runs inside the pinned Playwright container so Chromium + fonts match the
+# committed screenshot baselines exactly. See playwright.config.ts for the
+# rendering pin details.
+#
+# Depends on lace-cli being checked out adjacent to vs-code-extension (the
+# monorepo layout). Builds the CLI with `-tags=test` so TestSessionOpen is
+# available — flow stories use it to load deterministic seed fixtures.
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [main, develop]
+  workflow_call:
+
+jobs:
+  flow-tests:
+    runs-on: ubuntu-latest
+    # Pinned to match @playwright/test version in package.json. When bumping
+    # Playwright, bump both together; mismatched versions cause subtle
+    # browser-binary incompatibilities.
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-jammy
+      options: --user 1001
+
+    steps:
+      - name: Checkout vs-code-extension
+        uses: actions/checkout@v6
+        with:
+          path: vs-code-extension
+
+      - name: Checkout lace-cli (for seed-drift canary + test CLI build)
+        uses: actions/checkout@v6
+        with:
+          repository: lace-cloud/lace-cli
+          path: lace-cli
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build lace CLI with -tags=test
+        working-directory: lace-cli
+        run: |
+          make build-test
+          install -m 0755 lace /usr/local/bin/lace
+          lace version
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: vs-code-extension/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: vs-code-extension
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate proto
+        working-directory: vs-code-extension
+        run: pnpm proto:gen
+
+      - name: Build extension bundles
+        working-directory: vs-code-extension
+        run: pnpm run build
+
+      - name: Run Playwright flow tests
+        working-directory: vs-code-extension
+        env:
+          CI: '1'
+          LACE_CLI_REPO: ${{ github.workspace }}/lace-cli
+        run: pnpm flow-tests
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: vs-code-extension/playwright-report/
+          retention-days: 14
+
+      - name: Upload failed screenshots (diffs)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: vs-code-extension/test-results/
+          retention-days: 14
