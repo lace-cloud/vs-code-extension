@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { LaceTransport, RegistryModule, CanvasView } from '@lace/host';
+import { buildWebviewHtml } from '@lace/host';
 import { ChatController } from './controller';
 
 /** External deps provided by the extension — everything the controller needs except getCanvasView. */
@@ -30,7 +31,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         vscode.Uri.joinPath(this.context.extensionUri, 'images'),
       ],
     };
-    view.webview.html = getWebviewContent(this.context, view.webview);
+    view.webview.html = buildWebviewHtml(this.context, view.webview, {
+      scriptFilename: 'chat-sidebar.js',
+      title: 'Lace Chat',
+    });
 
     // Create controller first, then wire deps.getCanvasView to its cache.
     // The lazy arrow captures `this.controller` at call time, so it resolves
@@ -57,25 +61,4 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   getLatestView(): CanvasView | null {
     return this.controller?.getLatestView() ?? null;
   }
-}
-
-function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Webview): string {
-  const nonce = Math.random().toString(36).substring(2, 15);
-  const scriptUri = webview.asWebviewUri(
-    vscode.Uri.file(path.join(context.extensionPath, 'out', 'chat-sidebar.js')),
-  );
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src ${webview.cspSource};" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lace Chat</title>
-</head>
-<body>
-  <div id="root"></div>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
 }

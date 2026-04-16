@@ -10,6 +10,8 @@ export { spawnEngine } from './engine-process';
 // type Subscribe stream events (proactivity watcher, etc.).
 export type { EngineEvent } from './generated/service';
 export { RpcError, classifyRpcError, handleRpcError, requireClient } from './rpc-errors';
+export { buildWebviewHtml } from './webview-html';
+export type { WebviewHtmlOptions } from './webview-html';
 export type { RpcErrorCategory } from './rpc-errors';
 
 export type {

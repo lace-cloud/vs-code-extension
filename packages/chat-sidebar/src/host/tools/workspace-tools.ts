@@ -160,103 +160,113 @@ function buildProjectProfile(
 // ── Tool Registration ──
 
 export function registerWorkspaceTools(): void {
-  registerTool('lace_workspace_context', async (): Promise<ToolResult> => {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      return { content: 'No workspace folder is open.', isError: true };
-    }
-
-    const root = workspaceFolder.uri.fsPath;
-    const lines: string[] = [];
-    lines.push(`**Workspace:** ${path.basename(root)}`);
-    lines.push('');
-
-    // Top-level directory listing
-    try {
-      const entries = fs.readdirSync(root, { withFileTypes: true });
-      const dirs = entries
-        .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-        .map((e) => e.name + '/');
-      const files = entries.filter((e) => e.isFile()).map((e) => e.name);
-      lines.push('### Top-level structure');
-      for (const d of dirs.slice(0, 30)) lines.push(`- ${d}`);
-      for (const f of files.slice(0, 30)) lines.push(`- ${f}`);
-      if (dirs.length + files.length > 60)
-        lines.push(`- ... (${dirs.length + files.length} total entries)`);
-      lines.push('');
-    } catch {
-      // Ignore directory listing errors
-    }
-
-    // Read project context files
-    const found = new Set<string>();
-    const fileContents = new Map<string, string>();
-
-    for (const filename of CONTEXT_FILES) {
-      const filePath = path.join(root, filename);
-      try {
-        const raw = fs.readFileSync(filePath, 'utf-8');
-        const truncated = raw.length > MAX_FILE_BYTES;
-        const content = truncated ? raw.slice(0, MAX_FILE_BYTES) : raw;
-        found.add(filename);
-        fileContents.set(filename, content);
-      } catch {
-        // File does not exist or is not readable — skip
+  registerTool(
+    {
+      name: 'lace_workspace_context',
+      description: "Read the user's project files to understand what they are building.",
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+    },
+    async (): Promise<ToolResult> => {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder) {
+        return { content: 'No workspace folder is open.', isError: true };
       }
 
-      if (found.size >= MAX_CONTEXT_FILES) break;
-    }
+      const root = workspaceFolder.uri.fsPath;
+      const lines: string[] = [];
+      lines.push(`**Workspace:** ${path.basename(root)}`);
+      lines.push('');
 
-    // Build and prepend structured project profile
-    const profile = buildProjectProfile(root, found, fileContents);
-    lines.push('### Project Profile');
-    lines.push('```json');
-    lines.push(JSON.stringify(profile, null, 2));
-    lines.push('```');
-    lines.push('');
+      // Top-level directory listing
+      try {
+        const entries = fs.readdirSync(root, { withFileTypes: true });
+        const dirs = entries
+          .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+          .map((e) => e.name + '/');
+        const files = entries.filter((e) => e.isFile()).map((e) => e.name);
+        lines.push('### Top-level structure');
+        for (const d of dirs.slice(0, 30)) lines.push(`- ${d}`);
+        for (const f of files.slice(0, 30)) lines.push(`- ${f}`);
+        if (dirs.length + files.length > 60)
+          lines.push(`- ... (${dirs.length + files.length} total entries)`);
+        lines.push('');
+      } catch {
+        // Ignore directory listing errors
+      }
 
-    // Include raw file contents as context
-    for (const [filename, content] of fileContents) {
-      const truncated = content.length >= MAX_FILE_BYTES;
-      lines.push(`### ${filename}${truncated ? ' (truncated at 4096 bytes)' : ''}`);
-      lines.push('```');
-      lines.push(content);
+      // Read project context files
+      const found = new Set<string>();
+      const fileContents = new Map<string, string>();
+
+      for (const filename of CONTEXT_FILES) {
+        const filePath = path.join(root, filename);
+        try {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          const truncated = raw.length > MAX_FILE_BYTES;
+          const content = truncated ? raw.slice(0, MAX_FILE_BYTES) : raw;
+          found.add(filename);
+          fileContents.set(filename, content);
+        } catch {
+          // File does not exist or is not readable — skip
+        }
+
+        if (found.size >= MAX_CONTEXT_FILES) break;
+      }
+
+      // Build and prepend structured project profile
+      const profile = buildProjectProfile(root, found, fileContents);
+      lines.push('### Project Profile');
+      lines.push('```json');
+      lines.push(JSON.stringify(profile, null, 2));
       lines.push('```');
       lines.push('');
-    }
 
-    // Read existing generated Terraform from .lace/
-    const laceDir = path.join(root, '.lace');
-    try {
-      const laceEntries = fs.readdirSync(laceDir, { withFileTypes: true });
-      const tfFiles = laceEntries.filter((e) => e.isFile() && e.name.endsWith('.tf')).slice(0, 3);
+      // Include raw file contents as context
+      for (const [filename, content] of fileContents) {
+        const truncated = content.length >= MAX_FILE_BYTES;
+        lines.push(`### ${filename}${truncated ? ' (truncated at 4096 bytes)' : ''}`);
+        lines.push('```');
+        lines.push(content);
+        lines.push('```');
+        lines.push('');
+      }
 
-      if (tfFiles.length > 0) {
-        lines.push('### Existing generated Terraform (.lace/)');
-        for (const entry of tfFiles) {
-          const filePath = path.join(laceDir, entry.name);
-          try {
-            const raw = fs.readFileSync(filePath, 'utf-8');
-            const truncated = raw.length > MAX_FILE_BYTES;
-            const content = truncated ? raw.slice(0, MAX_FILE_BYTES) : raw;
-            lines.push(`#### ${entry.name}${truncated ? ' (truncated)' : ''}`);
-            lines.push('```hcl');
-            lines.push(content);
-            lines.push('```');
-            lines.push('');
-          } catch {
-            // Skip unreadable .lace tf files
+      // Read existing generated Terraform from .lace/
+      const laceDir = path.join(root, '.lace');
+      try {
+        const laceEntries = fs.readdirSync(laceDir, { withFileTypes: true });
+        const tfFiles = laceEntries.filter((e) => e.isFile() && e.name.endsWith('.tf')).slice(0, 3);
+
+        if (tfFiles.length > 0) {
+          lines.push('### Existing generated Terraform (.lace/)');
+          for (const entry of tfFiles) {
+            const filePath = path.join(laceDir, entry.name);
+            try {
+              const raw = fs.readFileSync(filePath, 'utf-8');
+              const truncated = raw.length > MAX_FILE_BYTES;
+              const content = truncated ? raw.slice(0, MAX_FILE_BYTES) : raw;
+              lines.push(`#### ${entry.name}${truncated ? ' (truncated)' : ''}`);
+              lines.push('```hcl');
+              lines.push(content);
+              lines.push('```');
+              lines.push('');
+            } catch {
+              // Skip unreadable .lace tf files
+            }
           }
         }
+      } catch {
+        // .lace dir doesn't exist yet — that's fine
       }
-    } catch {
-      // .lace dir doesn't exist yet — that's fine
-    }
 
-    if (found.size === 0) {
-      lines.push('No recognized project files found.');
-    }
+      if (found.size === 0) {
+        lines.push('No recognized project files found.');
+      }
 
-    return { content: lines.join('\n') };
-  });
+      return { content: lines.join('\n') };
+    },
+  );
 }
