@@ -11,9 +11,9 @@ const ENGINE_URL =
 const ENGINE_TOKEN =
   typeof process !== 'undefined' ? process.env.STORYBOOK_LACE_ENGINE_TOKEN : undefined;
 
-// Default session args for flow stories. The CLI's `-tags=test` build ignores
-// the path and serves an in-memory session, but a non-empty value is required.
-const DEFAULT_FILE_PATH = '/tmp/lace-storybook';
+// Each flow story gets an ephemeral (memory-only) session so concurrent
+// stories don't share state — backed sessions are keyed by file path and
+// would be reused across stories. Generate-output paths are per-session too.
 const DEFAULT_WORKSPACE_NAME = 'storybook-flow';
 const DEFAULT_OUTPUT_DIR = '/tmp/lace-storybook-out';
 
@@ -93,7 +93,7 @@ export function FlowDecorator({ prologue }: FlowDecoratorProps) {
       if (!engine) return;
       setStatus('connecting');
       try {
-        await engine.sessionOpen(DEFAULT_FILE_PATH, DEFAULT_WORKSPACE_NAME);
+        await engine.openEphemeralSession(DEFAULT_WORKSPACE_NAME);
         if (cancelled) return;
         // Start streaming BEFORE prologue so its mutation-driven state
         // updates reach App via the Subscribe StateUpdated events.

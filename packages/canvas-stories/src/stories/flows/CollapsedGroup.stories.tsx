@@ -31,7 +31,7 @@ export const Default: Story = {
           position: { x: 280, y: 80 },
         });
         const view = await engine.placeModule({
-          name: 'iam-user',
+          name: 'iam-policy-attachment',
           system: 'aws',
           version: '1.0.0',
           position: { x: 500, y: 80 },

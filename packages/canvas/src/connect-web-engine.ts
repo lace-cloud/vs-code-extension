@@ -242,6 +242,28 @@ export class ConnectWebEngine implements CanvasEngine {
     return convertCanvasView(res.view);
   }
 
+  /**
+   * Opens an ephemeral (memory-only) session that is not backed to disk and
+   * is evicted after 30 minutes of idle with zero subscribers. Used by
+   * Storybook flow stories so each story gets isolated state — backed
+   * sessions are keyed by file path and would be shared across stories.
+   */
+  async openEphemeralSession(workspaceName: string): Promise<CanvasView> {
+    const req: ProtoSessionOpenRequest = {
+      ephemeral: {},
+      workspace_name: workspaceName,
+    };
+    const res = await this.unary<ProtoSessionOpenRequest, ProtoSessionOpenResponse>(
+      'SessionOpen',
+      req,
+      SessionOpenRequestCodec,
+      SessionOpenResponseCodec,
+    );
+    this._sessionId = res.session_id;
+    if (!res.view) throw new Error('SessionOpen returned no view');
+    return convertCanvasView(res.view);
+  }
+
   async sessionSave(): Promise<{ saved: boolean }> {
     const res = await this.unary<{ session_id: string }, ProtoSessionSaveResponse>(
       'SessionSave',

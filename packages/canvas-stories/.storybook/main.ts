@@ -23,10 +23,10 @@ const config: StorybookConfig = {
   rsbuildFinal: async (cfg) => ({
     ...cfg,
     plugins: [...(cfg.plugins ?? []), pluginReact()],
-    source: {
-      ...cfg.source,
+    resolve: {
+      ...cfg.resolve,
       alias: {
-        ...(cfg.source?.alias as Record<string, string> | undefined),
+        ...(cfg.resolve?.alias as Record<string, string> | undefined),
         '@lace/canvas': path.resolve(here, '../../canvas/src'),
         '@lace/proto': path.resolve(here, '../../proto/src'),
         '@lace/design-tokens': path.resolve(here, '../../design-tokens'),
