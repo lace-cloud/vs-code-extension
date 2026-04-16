@@ -16,9 +16,10 @@ runs:
         version: '28.x'
         repo-token: ${{ inputs.github-token }}
 
+    # Version comes from package.json "packageManager" field (single
+    # source of truth). Specifying it here too would cause
+    # pnpm/action-setup to error with "Multiple versions of pnpm".
     - uses: pnpm/action-setup@v4
-      with:
-        version: 10
 
     - uses: actions/setup-node@v6
       with:
