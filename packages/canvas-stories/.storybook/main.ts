@@ -6,7 +6,12 @@ import type { StorybookConfig } from 'storybook-react-rsbuild';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 const config: StorybookConfig = {
-  stories: ['../src/**/*.stories.@(ts|tsx)'],
+  stories: [
+    // Canvas-stories' own stories (component + flow stories for @lace/canvas).
+    '../src/**/*.stories.@(ts|tsx)',
+    // Primitive stories live colocated with the primitive under @lace/ui.
+    '../../ui/src/**/*.stories.@(ts|tsx)',
+  ],
   framework: 'storybook-react-rsbuild',
   typescript: {
     check: false,
@@ -30,6 +35,7 @@ const config: StorybookConfig = {
         '@lace/canvas': path.resolve(here, '../../canvas/src'),
         '@lace/proto': path.resolve(here, '../../proto/src'),
         '@lace/design-tokens': path.resolve(here, '../../design-tokens'),
+        '@lace/ui': path.resolve(here, '../../ui/src'),
       },
     },
   }),

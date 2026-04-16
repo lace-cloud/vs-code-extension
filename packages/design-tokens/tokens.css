@@ -5,6 +5,11 @@
  *
  * These map to Tailwind's @theme directive in consuming packages,
  * or can be used directly as var(--lace-*).
+ *
+ * Rule for new code: canvas + chat-sidebar + @lace/ui components
+ * must reference colors through var(--lace-*). No raw hex literals,
+ * no inline Tailwind arbitrary-value classes like bg-[#1f6feb].
+ * If a color isn't in this file, add a token here first.
  */
 
 :root {
@@ -20,15 +25,27 @@
   /* ── UI: Interactive ── */
   --lace-btn-primary: #1f6feb;
   --lace-btn-primary-dim: #1a4d8f;
+  --lace-btn-secondary-bg: #2d2d2d;
+  --lace-btn-secondary-hover: #3a3a3a;
   --lace-btn-success: #1a7f37;
   --lace-btn-success-hover: #3ab653;
   --lace-btn-danger-bg: #6e2b2b;
+  --lace-btn-danger-hover: #8a3535;
+  --lace-btn-ghost-hover: rgba(206, 254, 101, 0.1);
+  --lace-btn-text-primary: #ffffff;
+  --lace-btn-text-disabled: rgba(255, 255, 255, 0.4);
+  --lace-icon-btn-hover: rgba(206, 254, 101, 0.1);
+  --lace-icon-btn-danger-hover: rgba(229, 72, 77, 0.15);
+  --lace-icon-btn-success-hover: rgba(46, 160, 67, 0.15);
   --lace-text-danger: #e5484d;
   --lace-text-danger-light: #f87171;
   --lace-text-link: #1f6feb;
   --lace-text-muted: #999999;
   --lace-text-label: #e6e6e6;
   --lace-text-description: #9ca3af;
+
+  /* ── Modal / Overlay ── */
+  --lace-modal-backdrop: rgba(0, 0, 0, 0.6);
 
   /* ── Surface ── */
   --lace-bg-surface: #1e1e1e;
