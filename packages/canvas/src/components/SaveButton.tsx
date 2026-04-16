@@ -1,10 +1,5 @@
+import { Button, type ButtonVariant } from '@lace/ui';
 import type { SaveStatus } from '../hooks/useSaveState';
-import {
-  saveButtonClasses,
-  saveButtonErrorClasses,
-  saveButtonSavingClasses,
-  saveButtonSuccessClasses,
-} from '../styles/panel';
 
 type Props = {
   status: SaveStatus;
@@ -14,30 +9,35 @@ type Props = {
   disabledTitle?: string;
 };
 
-const classMap: Record<SaveStatus, string> = {
-  idle: saveButtonClasses,
-  saving: saveButtonSavingClasses,
-  saved: saveButtonSuccessClasses,
-  error: saveButtonErrorClasses,
+// Status → UI-primitive mapping. `idle` uses the caller-supplied label; the
+// other statuses carry their own user-facing text since the status itself
+// is the message (saving, saved, error). `saving` is represented by loading
+// state on the primary Button so the spinner renders consistently with any
+// other loading button in the app.
+const variantByStatus: Record<SaveStatus, ButtonVariant> = {
+  idle: 'primary',
+  saving: 'primary',
+  saved: 'success',
+  error: 'danger',
 };
 
-const textMap: Record<SaveStatus, string> = {
-  saving: 'Saving...',
+const labelByStatus: Record<Exclude<SaveStatus, 'idle'>, string> = {
+  saving: 'Saving…',
   saved: 'Saved!',
-  error: 'Save failed \u2014 try again',
-  idle: '', // overridden by label prop
+  error: 'Save failed — try again',
 };
 
 export default function SaveButton({ status, label, onClick, disabled, disabledTitle }: Props) {
   return (
-    <button
-      className={classMap[status]}
+    <Button
+      variant={variantByStatus[status]}
+      fullWidth
+      loading={status === 'saving'}
+      disabled={disabled || status === 'saved'}
       onClick={onClick}
-      disabled={disabled || status === 'saving'}
       title={disabled ? disabledTitle : undefined}
-      style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
     >
-      {status === 'idle' ? label : textMap[status]}
-    </button>
+      {status === 'idle' ? label : labelByStatus[status]}
+    </Button>
   );
 }

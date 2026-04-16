@@ -18,10 +18,17 @@ packages/
   host/           @lace/host           — extension host: LaceTransport (gRPC-JS), canvas/registry/chat view providers, engine lifecycle
   canvas/         @lace/canvas         — webview UI (React, ReactFlow). PostMessageEngine (VS Code) + ConnectWebEngine (browser)
   chat-sidebar/   @lace/chat-sidebar   — chat webview + host controller (agentic tool loop, tools, proactivity)
-  design-tokens/  @lace/design-tokens  — CSS variables / tokens
-  canvas-stories/ @lace/canvas-stories — Storybook for canvas (component + flow stories)
+  design-tokens/  @lace/design-tokens  — CSS variables / tokens — single source of truth for colors
+  ui/             @lace/ui             — design-system primitives (Button, IconButton, …). Composites consume these instead of re-inventing them.
+  canvas-stories/ @lace/canvas-stories — Storybook for canvas composites + @lace/ui primitives (component + flow stories)
   host-e2e/       @lace/host-e2e       — E2E scaffold (Phase G)
 ```
+
+### Design system
+
+- **Tokens first.** All colors go through `var(--lace-*)` from `@lace/design-tokens/tokens.css`. No raw hex in new code; no inline Tailwind arbitrary-value classes like `bg-[#1f6feb]`. If a color isn't in the tokens file, add a token there first.
+- **Primitives in `@lace/ui`.** `Button`, `IconButton` today; more coming (Badge, Panel, Modal, ModeToggle, CollapseToggle, Input). Stories live colocated with the primitive (`packages/ui/src/Button/Button.stories.tsx`) and are picked up by Storybook via the `canvas-stories/.storybook/main.ts` glob.
+- **Composites consume primitives.** Canvas components should import `Button` from `@lace/ui`, not reinvent button markup. Composite refactors happen incrementally — one composite per session/PR.
 
 Rspack builds three bundles from the workspace:
 

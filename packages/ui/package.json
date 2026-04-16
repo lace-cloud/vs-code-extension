@@ -1,5 +1,5 @@
 {
-  "name": "@lace/canvas",
+  "name": "@lace/ui",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,11 +9,11 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@lace/proto": "workspace:*",
-    "@lace/ui": "workspace:*",
-    "@bufbuild/protobuf": "^2.10.2"
+    "@lace/design-tokens": "workspace:*",
+    "react": "^18.3.1"
   },
   "devDependencies": {
+    "@types/react": "^18.3.12",
     "typescript": "^5.6.3"
   }
 }
