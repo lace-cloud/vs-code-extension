@@ -18,7 +18,6 @@ const noopEngine: CanvasEngine = {
   sessionSave: rejectUnavailable,
   sessionClose: rejectUnavailable,
   sessionGenerate: rejectUnavailable,
-  dropBundle: rejectUnavailable,
   connect: rejectUnavailable,
   autoConnect: rejectUnavailable,
   disconnect: rejectUnavailable,

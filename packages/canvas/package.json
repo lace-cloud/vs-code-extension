@@ -2,8 +2,8 @@
   "name": "@lace/canvas",
   "version": "0.0.0",
   "private": true,
-  "main": "src/index.tsx",
-  "types": "src/index.tsx",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist"

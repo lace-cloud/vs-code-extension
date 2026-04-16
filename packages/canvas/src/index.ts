@@ -1,3 +1,9 @@
-// @lace/canvas — webview UI (React + ReactFlow)
-// Populated in Phase C
-export {};
+// @lace/canvas — React canvas UI + transport implementations.
+// The VS Code webview bootstrap lives in ./index.tsx (rspack entry, side effects).
+// Downstream consumers (Storybook, tests) import from here.
+
+export { default as App } from './App';
+export { PostMessageEngine } from './post-message-engine';
+export { ConnectWebEngine } from './connect-web-engine';
+export type { CanvasEngine } from './engine';
+export type { CanvasState } from './state/engine-context';

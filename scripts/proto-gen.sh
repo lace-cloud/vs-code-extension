@@ -40,9 +40,11 @@ protoc \
   --proto_path="$ROOT_DIR/proto" \
   "$PROTO_FILE"
 
-# ── Output 3: Canvas Connect-Web service definitions (@lace/canvas) ──
-# Browser-safe, produces generic service definitions consumable by @connectrpc/connect-web.
-echo "→ Generating @lace/canvas Connect-Web glue..."
+# ── Output 3: Canvas browser service definitions (@lace/canvas) ──
+# Browser-safe codegen with JSON toJSON/fromJSON methods used by our
+# hand-rolled Connect-JSON client (packages/canvas/src/connect-web-engine.ts).
+# No runtime dependency on @connectrpc/*.
+echo "→ Generating @lace/canvas browser-side glue..."
 OUT3="$ROOT_DIR/packages/canvas/src/generated"
 rm -rf "$OUT3"
 mkdir -p "$OUT3"

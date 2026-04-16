@@ -3,18 +3,24 @@ import { ReactFlowProvider } from '@xyflow/react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Canvas from './Canvas';
 import { CanvasContext, type CanvasState } from './state/engine-context';
-import { PostMessageEngine } from './post-message-engine';
+import type { CanvasEngine } from './engine';
 import type { CanvasView, HostToWebview } from './types/render';
 import { useWindowEvent } from './hooks/useWindowEvent';
 import { CANVAS_EVENTS } from './events';
 
+// VsCodeApi is the surface the webview uses to signal the host. In VS Code
+// mode, `acquireVsCodeApi()` supplies the real one. In Storybook flow mode,
+// FlowDecorator supplies a fake that routes signals to the engine directly,
+// then re-dispatches host→webview messages via window.postMessage. This keeps
+// App transport-agnostic: it only knows about an engine and a postMessage sink.
 type VsCodeApi = { postMessage(msg: unknown): void };
 
 type AppProps = {
+  engine: CanvasEngine;
   vscode: VsCodeApi;
 };
 
-export default function App({ vscode }: AppProps) {
+export default function App({ engine, vscode }: AppProps) {
   const [state, setState] = useState<CanvasState>({
     view: null,
     loading: true,
@@ -22,13 +28,13 @@ export default function App({ vscode }: AppProps) {
     generation: 0,
   });
 
-  const [engine] = useState(() => new PostMessageEngine(vscode));
-
   const updateView = useCallback((view: CanvasView) => {
     setState((prev) => ({ view, loading: false, error: null, generation: prev.generation + 1 }));
   }, []);
 
-  // ── Central message listener: host → webview ──
+  // ── Host → webview: state + generate events ──
+  // engineResult is NOT handled here — PostMessageEngine manages its own
+  // listener for that, which keeps App agnostic of the concrete engine.
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       const msg = e.data as HostToWebview;
@@ -43,10 +49,6 @@ export default function App({ vscode }: AppProps) {
           }));
           break;
 
-        case 'engineResult':
-          engine.handleResult(msg.requestId, msg.result, msg.error);
-          break;
-
         case 'generateProgress':
         case 'generateSuccess':
         case 'generateError':
@@ -57,7 +59,7 @@ export default function App({ vscode }: AppProps) {
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [engine]);
+  }, []);
 
   useEffect(() => {
     if (state.view === null) return;

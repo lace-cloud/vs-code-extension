@@ -159,6 +159,7 @@
     "watch": "rspack --watch --config rspack.config.js",
     "storybook": "pnpm --filter @lace/canvas-stories run dev",
     "storybook:build": "pnpm --filter @lace/canvas-stories run build",
+    "dev:storybook-flows": "bash scripts/dev-storybook.sh",
     "package": "vsce package",
     "prepare": "husky",
     "release": "./scripts/release.sh"
@@ -202,8 +203,6 @@
     ]
   },
   "dependencies": {
-    "@connectrpc/connect": "^2.1.1",
-    "@connectrpc/connect-web": "^2.1.1",
     "@grpc/grpc-js": "^1.12.6",
     "@xyflow/react": "^12.10.1",
     "react": "^18.3.1",

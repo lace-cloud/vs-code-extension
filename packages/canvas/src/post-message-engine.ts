@@ -35,12 +35,35 @@ const CALL_TIMEOUT_MS = 30_000;
 
 export class PostMessageEngine implements CanvasEngine {
   private pending = new Map<string, PendingCall>();
+  private readonly messageListener: (e: MessageEvent) => void;
 
-  constructor(private vscode: VsCodeApi) {}
+  constructor(private vscode: VsCodeApi) {
+    // Self-manage the engineResult listener so App stays engine-agnostic.
+    // ConnectWebEngine uses fetch and never emits engineResult.
+    this.messageListener = (e: MessageEvent) => {
+      const msg = e.data as {
+        command?: string;
+        requestId?: string;
+        result?: unknown;
+        error?: string;
+      } | null;
+      if (!msg || msg.command !== 'engineResult' || typeof msg.requestId !== 'string') return;
+      this.resolvePending(msg.requestId, msg.result, msg.error);
+    };
+    window.addEventListener('message', this.messageListener);
+  }
 
-  // ── Result handler (called from the message listener in App.tsx) ──
+  /** Disposes the message listener. Called when the webview unmounts. */
+  dispose(): void {
+    window.removeEventListener('message', this.messageListener);
+    for (const entry of this.pending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(new Error('PostMessageEngine disposed'));
+    }
+    this.pending.clear();
+  }
 
-  handleResult(requestId: string, result?: unknown, error?: string): void {
+  private resolvePending(requestId: string, result?: unknown, error?: string): void {
     const entry = this.pending.get(requestId);
     if (!entry) return;
 
@@ -107,10 +130,6 @@ export class PostMessageEngine implements CanvasEngine {
   }
 
   // ── Actions ──
-
-  dropBundle(deployBundle: unknown, position?: { x: number; y: number }): Promise<CanvasView> {
-    return this.call('action/drop_bundle', { deploy_bundle: deployBundle, position });
-  }
 
   connect(
     source: string,

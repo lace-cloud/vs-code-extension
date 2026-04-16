@@ -70,8 +70,8 @@ import type {
   RenderInput,
   RenderError,
   Diagnostic,
-  RegistryModule,
-} from './types';
+} from '@lace/proto';
+import type { RegistryModule } from './types';
 
 // ── Enum converters ──
 
