@@ -1,27 +1,24 @@
 name: CI
 
-# Four parallel suites, each isolated — own dependencies, own artefacts,
-# one failing job doesn't mask others.
+# Fast correctness checks on every PR to develop.
 #
 #   lint        → Biome check across the workspace
 #   unit-tests  → Vitest across every package with unit tests
 #   host-e2e    → @vscode/test-electron smoke + command tests
-#   flow-tests  → Playwright golden-path screenshots, in our custom base
-#                 image (extends the pinned Playwright container with
-#                 unzip + AWS CLI v2 + corepack)
 #
-# host-e2e + flow-tests both pull the lace CLI test binary from a
-# private R2 bucket published by lace-cloud/lace-cli's
-# publish-test-bundle workflow. No cross-repo source checkout.
+# Heavy visual regression (Playwright + Chromatic) lives in ci-visual.yml,
+# which runs on push to develop after a PR merges. That keeps per-PR cycles
+# fast while still gating every integrated state visually before main.
+#
+# host-e2e pulls the lace CLI test binary from a private R2 bucket
+# published by lace-cloud/lace-cli's publish-test-bundle workflow.
 
 on:
-  push:
-    branches: [develop, main]
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
 
-# Supersede in-flight runs when a newer commit lands on the same ref —
-# the most recent commit is the only one worth learning from.
+# Supersede in-flight runs when a newer commit lands on the same PR —
+# the most recent push is the only one worth learning from.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -84,111 +81,20 @@ jobs:
       - name: Run host-e2e tests
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm run test:host-e2e
 
-  flow-tests:
-    runs-on: ubuntu-latest
-    # Custom image extends mcr.microsoft.com/playwright:v1.59.1-jammy
-    # with unzip + AWS CLI v2 + corepack. Rebuilt by ci-image.yml when
-    # .github/docker/ci-base/Dockerfile changes. The Playwright version
-    # lives there (single source of truth) and in the tag below.
-    container:
-      image: ghcr.io/lace-cloud/vs-code-extension-ci:playwright-v1.59.1-jammy
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          # Chromatic resolves baselines by walking commit ancestry;
-          # shallow clones give it only one commit and it refuses to run.
-          fetch-depth: 0
-
-      - uses: ./.github/actions/download-lace-bundle
-        with:
-          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
-          r2-bucket: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
-          r2-access-key-id: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
-
-      - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build extension bundles
-        run: pnpm run build
-
-      - name: Run Playwright flow tests
-        env:
-          CI: '1'
-          # Points the seed-drift canary at the extracted bundle — the
-          # .sha256 canaries live under internal/module/server/testdata/seeds/
-          # within the tarball (same path as in lace-cli).
-          LACE_CLI_REPO: /tmp/lace-test
-          # takeSnapshot() from @chromatic-com/playwright captures archives
-          # under test-results/; chromatic:playwright below uploads them.
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        run: pnpm flow-tests
-
-      - name: Upload flow-test screenshots to Chromatic
-        if: always()
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        # Workspace inside the container has a UID mismatch with the
-        # shell; git's `safe.directory` check blocks Chromatic's git log
-        # call. Whitelist the workspace before uploading.
-        #
-        # --parallel-nonce + --parallel-total merge this shard (Playwright
-        # flow-test snapshots) with the chromatic job's shard (Storybook
-        # component snapshots) into ONE Chromatic build per CI run, so
-        # reviewers see a single PR comment with the full changeset rather
-        # than two separate builds.
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          pnpm chromatic:playwright -- \
-            --parallel-nonce=${{ github.run_id }} \
-            --parallel-total=2
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
-
-      - name: Upload failed screenshots (diffs)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-test-results
-          path: test-results/
-          retention-days: 14
-
-  chromatic:
-    # Storybook-mode Chromatic: builds the canvas-stories Storybook and
-    # uploads every component story as a visual test. Flow stories are
-    # tagged `disableSnapshot` — their visuals go through the flow-tests
-    # job above via @chromatic-com/playwright.
+  ci-summary:
+    # Aggregator job develop's ruleset requires. Succeeds only if every
+    # upstream job succeeded; fails otherwise. Keeps the ruleset stable
+    # as upstream job names evolve.
+    needs: [lint, unit-tests, host-e2e]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-        with:
-          # Chromatic needs full history to resolve the baseline commit.
-          fetch-depth: 0
-
-      - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Storybook
-        run: pnpm run storybook:build
-
-      - name: Publish to Chromatic
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        # --parallel-nonce + --parallel-total merge this shard (Storybook
-        # component snapshots) with the flow-tests job's shard (Playwright
-        # snapshots) into ONE Chromatic build per CI run. Shared nonce is
-        # github.run_id — stable across the run's jobs, unique per push.
+      - name: Assert upstream jobs succeeded
         run: |
-          pnpm chromatic \
-            --storybook-build-dir=packages/canvas-stories/storybook-static \
-            --parallel-nonce=${{ github.run_id }} \
-            --parallel-total=2
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.host-e2e.result }}" != "success" ]; then
+            echo "::error::CI failed (lint=${{ needs.lint.result }}, unit-tests=${{ needs.unit-tests.result }}, host-e2e=${{ needs.host-e2e.result }})"
+            exit 1
+          fi
+          echo "All CI jobs passed."

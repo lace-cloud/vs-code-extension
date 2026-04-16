@@ -1,12 +1,23 @@
 name: Release
 
-# Triggered by a version bump landing on main (via scripts/release.sh).
-# The `check-version` job detects the bump by diffing package.json
-# against HEAD~1; if the version changed, the `release` job regenerates
-# proto, builds, packages a .vsix, publishes to the VS Code Marketplace,
-# tags the commit, and attaches the .vsix to a GitHub Release.
+# Two modes, one file, one concern:
+#
+#   PR to main  → `version-bumped` job gates the merge. Main's ruleset
+#                 requires this check to pass, so merging an unchanged-
+#                 version PR is impossible under normal flow.
+#
+#   Push to main → `check-version` detects the bump (belt-and-suspenders;
+#                 the PR gate already guaranteed one), then `release`
+#                 builds, tags, publishes to the Marketplace, and creates
+#                 the GitHub Release.
+#
+# The `check-version` fallback matters if someone ever bypasses the
+# ruleset with admin override — without it, we might try to re-publish
+# the same version.
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
@@ -14,7 +25,29 @@ permissions:
   contents: write  # Required to create tags and releases
 
 jobs:
+  version-bumped:
+    # PR-to-main gate. Required status check on main's ruleset.
+    # Fails if package.json version hasn't changed vs the base branch.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Assert package.json version was bumped vs base
+        run: |
+          HEAD_VERSION=$(jq -r .version package.json)
+          BASE_VERSION=$(git show "origin/${{ github.base_ref }}:package.json" | jq -r .version)
+          if [ "$HEAD_VERSION" = "$BASE_VERSION" ]; then
+            echo "::error::package.json version must be bumped on PRs to main ($HEAD_VERSION unchanged vs ${{ github.base_ref }})."
+            echo "Run \`pnpm version patch\` (or minor/major) on your branch, commit, push."
+            exit 1
+          fi
+          echo "Version bump: $BASE_VERSION → $HEAD_VERSION"
+
   check-version:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -44,7 +77,7 @@ jobs:
 
   release:
     needs: check-version
-    if: needs.check-version.outputs.should_release == 'true'
+    if: github.event_name == 'push' && needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
     steps:

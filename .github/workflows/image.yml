@@ -1,4 +1,4 @@
-name: CI Base Image
+name: Image
 
 # Builds and publishes ghcr.io/lace-cloud/vs-code-extension-ci — the
 # container our Playwright-based jobs and the local devcontainer both use.
@@ -11,11 +11,11 @@ on:
     branches: [main]
     paths:
       - '.github/docker/ci-base/**'
-      - '.github/workflows/ci-image.yml'
+      - '.github/workflows/image.yml'
   workflow_dispatch:
 
 concurrency:
-  group: ci-image-${{ github.ref }}
+  group: image-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

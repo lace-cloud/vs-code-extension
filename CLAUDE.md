@@ -47,25 +47,51 @@ pnpm run storybook:build        # static storybook build
 pnpm flow-tests                 # run golden-path tests against Storybook + CLI
 ```
 
+## Branch Flow
+
+The repo is ruleset-gated into a three-step promotion path:
+
+- **Feature branches** branch off `develop`, PR to `develop`. `ci.yml` runs
+  lint + unit-tests + host-e2e + `ci-summary`. `ci-summary` is the required
+  status check; direct pushes to `develop` are blocked.
+- **`develop`** is the long-lived integration branch. On every merge, a push
+  to `develop` triggers `ci-visual.yml`: builds the canvas-stories Storybook,
+  runs Playwright flow tests, uploads both sets to Chromatic as a single
+  merged build. Approve/reject in the Chromatic UI.
+- **`main`** accepts PRs only from `develop`. Two required status checks on
+  the ruleset: `CI Visual / visual-summary` (only exists on commits built
+  via `ci-visual.yml`, which only runs on `develop` — implicit source check)
+  and `Release / version-bumped` (fails if `package.json` version hasn't
+  moved vs `main`). Direct pushes blocked.
+- **Push to `main`** triggers `release.yml`'s release path: build, package,
+  tag, `vsce publish`, GitHub Release with `.vsix` attached.
+
+### Shipping a New Version
+
+1. On your feature branch, run `pnpm version patch` (or `minor` / `major`).
+   Commit the `package.json` change.
+2. PR → `develop`. `ci.yml` runs. Merge.
+3. After the merge-triggered `ci-visual.yml` run finishes, approve any
+   visual changes in the Chromatic UI.
+4. Open `develop` → `main` PR. `version-bumped` passes (step 1 bumped it);
+   `visual-summary` is already green (step 3). Merge.
+5. `release.yml` auto-ships: tag, Marketplace publish, GitHub Release.
+
 ### Visual regression (Chromatic)
 
-Visual regression for both component stories and flow tests runs through
-Chromatic. The project secret is `CHROMATIC_PROJECT_TOKEN` (repo-level).
+Chromatic owns visual baselines. Two modes feed the same project:
 
-Two modes feed the same Chromatic project:
+- **Storybook mode** — `ci-visual.yml`'s `chromatic` job builds the canvas-
+  stories Storybook and uploads every component story as a snapshot. New
+  story = new coverage for free.
+- **Playwright mode** — `ci-visual.yml`'s `flow-tests` job runs `tests/flow/`.
+  `takeSnapshot(page, 'name', testInfo)` from `@chromatic-com/playwright`
+  captures archives; `chromatic:playwright` uploads them.
 
-- **Storybook mode** — the `chromatic` CI job builds the canvas-stories
-  Storybook and uploads every component story as a snapshot. Adding a new
-  story is automatic visual coverage; no test code required.
-- **Playwright mode** — the `flow-tests` CI job runs `tests/flow/` as
-  today. `takeSnapshot(page, 'name', testInfo)` from `@chromatic-com/playwright`
-  captures artefacts, which `chromatic:playwright` uploads to the same
-  project after the test run.
-
-Each PR gets a Chromatic bot comment listing changed snapshots; reviewer
-approves/rejects in the Chromatic UI. Approved snapshots become the new
-baseline for the target branch. CI itself stays green regardless of visual
-changes (`--exit-zero-on-changes`) — Chromatic holds the approval gate.
+Both uploads share `--parallel-nonce=${{ github.run_id }}` so Chromatic
+merges them into **one build per develop-push**. Approve/reject in
+Chromatic's UI; CI runs use `--exit-zero-on-changes` so they stay green
+regardless of visual deltas — Chromatic is the approval gate.
 
 Flow stories carry `chromatic: { disableSnapshot: true }` in Storybook
 mode because Chromatic's cloud can't spawn `lace engine`. Playwright mode
