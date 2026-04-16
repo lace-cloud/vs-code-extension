@@ -1,7 +1,7 @@
 name: CI
 
-# Plan 2 Phase G — matrix of the four extension-side suites:
-#   - lint        → ESLint workspace rules
+# Matrix of the four extension-side suites:
+#   - lint        → Biome check across the workspace
 #   - unit-tests  → Vitest across every package with unit tests
 #   - host-e2e    → @vscode/test-electron smoke + command tests
 #   - flow-tests  → Playwright golden-path screenshots (delegated to

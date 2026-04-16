@@ -115,7 +115,6 @@ function CompositeEditor({
     if (view.nodes.length > 0) {
       requestAnimationFrame(() => fitView({ padding: 0.2, duration: 300 }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Register go-to-node handler
@@ -136,7 +135,6 @@ function CompositeEditor({
         new CustomEvent(CANVAS_EVENTS.OPEN_NODE_CONFIG, { detail: { instanceId: nodeId } }),
       );
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -227,14 +225,12 @@ function CompositeEditor({
 
   useEffect(() => {
     registerGetSelectedIds(() => selectedIdsRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     registerSelectNodes((ids: string[]) => {
       pendingSelectIdsRef.current = ids;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onNodeDragStop = useCallback(
