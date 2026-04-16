@@ -16,8 +16,12 @@
  * drift metadata yet. Followup once the proto extends.
  */
 
-import { takeSnapshot } from '@chromatic-com/playwright';
-import { expect, test } from '@playwright/test';
+// `test` and `expect` MUST come from @chromatic-com/playwright — those
+// wrap Playwright's equivalents with hooks that capture Chromatic
+// archives under test-results/chromatic-archives/. Without the wrapped
+// test, `takeSnapshot` is a silent no-op and `chromatic:playwright`
+// fails the upload with "archives directory cannot be found."
+import { expect, takeSnapshot, test } from '@chromatic-com/playwright';
 
 // Shared story URL helper — Storybook serves each story in an iframe at
 // /iframe.html?id=<kebab-title>--<kebab-name>&viewMode=story.
