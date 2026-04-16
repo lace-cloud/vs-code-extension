@@ -153,12 +153,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install awscli
-        # The Playwright container doesn't ship aws CLI. Container runs
-        # as root so apt-get needs no sudo.
+      - name: Install aws CLI v2
+        # The Playwright container doesn't ship aws CLI. Don't use
+        # `apt-get install awscli`: that's the legacy v1 Python package
+        # which pulls 68 deps (imagemagick, ghostscript, tzdata) and
+        # hangs on tzdata's interactive timezone prompt with no TTY.
+        # The official v2 bundle is a single static binary, ~7s total.
         run: |
-          apt-get update
-          apt-get install -y awscli
+          curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
+            -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+          aws --version
+          rm -rf /tmp/awscliv2.zip /tmp/aws
 
       - uses: arduino/setup-protoc@v3
         with:

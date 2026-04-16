@@ -37,10 +37,16 @@ jobs:
         with:
           ref: ${{ github.event.inputs.target_branch || github.ref_name }}
 
-      - name: Install awscli
+      - name: Install aws CLI v2
+        # See ci.yml for why the v2 bundle is used instead of
+        # `apt-get install awscli`.
         run: |
-          apt-get update
-          apt-get install -y awscli
+          curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
+            -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+          aws --version
+          rm -rf /tmp/awscliv2.zip /tmp/aws
 
       - uses: arduino/setup-protoc@v3
         with:
