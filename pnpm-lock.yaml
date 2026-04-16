@@ -105,6 +105,9 @@ importers:
 
   packages/canvas:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: ^2.10.2
+        version: 2.11.0
       '@lace/proto':
         specifier: workspace:*
         version: link:../proto
@@ -201,6 +204,9 @@ importers:
 
   packages/host:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: ^2.10.2
+        version: 2.11.0
       '@grpc/grpc-js':
         specifier: ^1.12.6
         version: 1.14.3
@@ -243,6 +249,10 @@ importers:
         version: 5.9.3
 
   packages/proto:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: ^2.10.2
+        version: 2.11.0
     devDependencies:
       typescript:
         specifier: ^5.6.3

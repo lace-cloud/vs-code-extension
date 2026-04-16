@@ -49,13 +49,15 @@ jobs:
           AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           R2_BUCKET: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
         run: |
-          mkdir -p /tmp/lace-test
+          mkdir -p /tmp/lace-dl /tmp/lace-test
           aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
-            /tmp/bundle.tar.gz --endpoint-url "$AWS_ENDPOINT_URL"
+            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz \
+            --endpoint-url "$AWS_ENDPOINT_URL"
           aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
-            /tmp/bundle.tar.gz.sha256 --endpoint-url "$AWS_ENDPOINT_URL"
-          cd /tmp && sha256sum -c bundle.tar.gz.sha256
-          tar -C /tmp/lace-test -xzf /tmp/bundle.tar.gz
+            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz.sha256 \
+            --endpoint-url "$AWS_ENDPOINT_URL"
+          cd /tmp/lace-dl && sha256sum -c lace-test-bundle-linux-amd64.tar.gz.sha256
+          tar -C /tmp/lace-test -xzf /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz
           install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
           lace version
 

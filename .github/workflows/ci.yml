@@ -1,15 +1,14 @@
 name: CI
 
-# Matrix of the four extension-side suites:
-#   - lint        → Biome check across the workspace
-#   - unit-tests  → Vitest across every package with unit tests
-#   - host-e2e    → @vscode/test-electron smoke + command tests
-#   - flow-tests  → Playwright golden-path screenshots (delegated to
-#                   the dedicated flow-tests.yml workflow via
-#                   workflow_call)
+# Four parallel suites, each isolated — own dependencies, own artefacts,
+# one failing job doesn't mask others.
 #
-# Each job is isolated — they install their own dependencies + build
-# their own artefacts so one failing job doesn't mask others.
+#   lint        → Biome check across the workspace
+#   unit-tests  → Vitest across every package with unit tests
+#   host-e2e    → @vscode/test-electron smoke + command tests
+#   flow-tests  → Playwright golden-path screenshots, in the pinned
+#                 Playwright container so Chromium + fonts match the
+#                 committed baselines exactly
 #
 # host-e2e + flow-tests both pull the lace CLI test binary from a
 # private R2 bucket published by lace-cloud/lace-cli's
@@ -89,13 +88,15 @@ jobs:
           AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           R2_BUCKET: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
         run: |
-          mkdir -p /tmp/lace-test
+          mkdir -p /tmp/lace-dl /tmp/lace-test
           aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
-            /tmp/bundle.tar.gz --endpoint-url "$AWS_ENDPOINT_URL"
+            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz \
+            --endpoint-url "$AWS_ENDPOINT_URL"
           aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
-            /tmp/bundle.tar.gz.sha256 --endpoint-url "$AWS_ENDPOINT_URL"
-          cd /tmp && sha256sum -c bundle.tar.gz.sha256
-          tar -C /tmp/lace-test -xzf /tmp/bundle.tar.gz
+            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz.sha256 \
+            --endpoint-url "$AWS_ENDPOINT_URL"
+          cd /tmp/lace-dl && sha256sum -c lace-test-bundle-linux-amd64.tar.gz.sha256
+          tar -C /tmp/lace-test -xzf /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz
           sudo install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
           lace version
 
@@ -132,5 +133,86 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm run test:host-e2e
 
   flow-tests:
-    uses: ./.github/workflows/flow-tests.yml
-    secrets: inherit
+    runs-on: ubuntu-latest
+    # Pinned to match @playwright/test version in package.json. When
+    # bumping Playwright, bump both together; mismatched versions cause
+    # subtle browser-binary incompatibilities.
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-jammy
+
+    env:
+      AWS_REGION: auto
+      AWS_EC2_METADATA_DISABLED: 'true'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install awscli + protoc
+        # The Playwright container ships neither. awscli pulls the R2
+        # bundle; protoc runs scripts/proto-gen.sh. Container runs as
+        # root so apt-get needs no sudo.
+        run: |
+          apt-get update
+          apt-get install -y awscli protobuf-compiler
+
+      - name: Download lace test bundle from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
+        run: |
+          mkdir -p /tmp/lace-dl /tmp/lace-test
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
+            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz \
+            --endpoint-url "$AWS_ENDPOINT_URL"
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
+            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz.sha256 \
+            --endpoint-url "$AWS_ENDPOINT_URL"
+          cd /tmp/lace-dl && sha256sum -c lace-test-bundle-linux-amd64.tar.gz.sha256
+          tar -C /tmp/lace-test -xzf /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz
+          install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
+          lace version
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate proto
+        run: pnpm proto:gen
+
+      - name: Build extension bundles
+        run: pnpm run build
+
+      - name: Run Playwright flow tests
+        env:
+          CI: '1'
+          # Points the seed-drift canary at the extracted bundle — the
+          # .sha256 canaries live under internal/module/server/testdata/seeds/
+          # within the tarball (same path as in lace-cli).
+          LACE_CLI_REPO: /tmp/lace-test
+        run: pnpm flow-tests
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload failed screenshots (diffs)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 14

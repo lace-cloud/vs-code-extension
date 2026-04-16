@@ -9,7 +9,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@lace/proto": "workspace:*"
+    "@lace/proto": "workspace:*",
+    "@bufbuild/protobuf": "^2.10.2"
   },
   "devDependencies": {
     "typescript": "^5.6.3"
