@@ -1,16 +1,16 @@
 name: Flow Tests — Update Baselines
 
 # Manual-dispatch workflow for regenerating Playwright screenshot
-# baselines inside the pinned Playwright container (the only
-# authoritative environment — see playwright.config.ts). Triggered
-# from the GitHub UI (Actions → Flow Tests — Update Baselines → Run
-# workflow) or the `gh workflow run` CLI. The workflow opens a PR
-# with the new `*-linux.png` baselines; the author reviews the pixel
-# diff against their intentional UI change and merges.
+# baselines inside the pinned CI base image (the only authoritative
+# environment — see playwright.config.ts). Triggered from the GitHub UI
+# (Actions → Flow Tests — Update Baselines → Run workflow) or the
+# `gh workflow run` CLI. The workflow opens a PR with the new
+# `*-linux.png` baselines; the author reviews the pixel diff against
+# their intentional UI change and merges.
 #
 # Why not auto-run on every push? Baselines are meant to be
-# intentional — each update should have reviewable context. A
-# manual trigger keeps pixel-diff drift from sneaking in silently.
+# intentional — each update should have reviewable context. A manual
+# trigger keeps pixel-diff drift from sneaking in silently.
 
 on:
   workflow_dispatch:
@@ -19,73 +19,36 @@ on:
         description: 'Branch to regenerate baselines against (defaults to current)'
         required: false
 
+# Queue (don't cancel) — baseline generation is expensive and
+# interrupting leaves the PR branch half-updated.
+concurrency:
+  group: flow-tests-update-${{ github.event.inputs.target_branch || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   update-baselines:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.59.1-jammy
+      image: ghcr.io/lace-cloud/vs-code-extension-ci:playwright-v1.59.1-jammy
     permissions:
       contents: write
       pull-requests: write
-
-    env:
-      AWS_REGION: auto
-      AWS_EC2_METADATA_DISABLED: 'true'
 
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.target_branch || github.ref_name }}
 
-      - name: Install aws CLI v2
-        # See ci.yml for why the v2 bundle is used instead of
-        # `apt-get install awscli`.
-        run: |
-          curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
-            -o /tmp/awscliv2.zip
-          unzip -q /tmp/awscliv2.zip -d /tmp
-          /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
-          aws --version
-          rm -rf /tmp/awscliv2.zip /tmp/aws
-
-      - uses: arduino/setup-protoc@v3
+      - uses: ./.github/actions/download-lace-bundle
         with:
-          version: '28.x'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-bucket: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
+          r2-access-key-id: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
 
-      - name: Download lace test bundle from R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          R2_BUCKET: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
-        run: |
-          mkdir -p /tmp/lace-dl /tmp/lace-test
-          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
-            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz \
-            --endpoint-url "$AWS_ENDPOINT_URL"
-          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
-            /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz.sha256 \
-            --endpoint-url "$AWS_ENDPOINT_URL"
-          cd /tmp/lace-dl && sha256sum -c lace-test-bundle-linux-amd64.tar.gz.sha256
-          tar -C /tmp/lace-test -xzf /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz
-          install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
-          lace version
-
-      - uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/setup-workspace
         with:
-          version: 10
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate proto
-        run: pnpm proto:gen
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build extension bundles
         run: pnpm run build
@@ -103,8 +66,8 @@ jobs:
           delete-branch: true
           title: 'test(flow): refresh Playwright Linux baselines'
           body: |
-            Auto-generated baseline refresh from the pinned Playwright
-            container (`mcr.microsoft.com/playwright:v1.59.1-jammy`).
+            Auto-generated baseline refresh from the pinned CI image
+            (`ghcr.io/lace-cloud/vs-code-extension-ci:playwright-v1.59.1-jammy`).
 
             **Triggered by:** @${{ github.actor }} via manual workflow dispatch.
             **Target branch:** `${{ github.event.inputs.target_branch || github.ref_name }}`

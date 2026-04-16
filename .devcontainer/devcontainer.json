@@ -1,0 +1,11 @@
+{
+  "name": "Lace VS Code Extension",
+  "image": "ghcr.io/lace-cloud/vs-code-extension-ci:playwright-v1.59.1-jammy",
+  "runArgs": ["--ipc=host", "--shm-size=1g"],
+  "postCreateCommand": "pnpm install --frozen-lockfile && pnpm proto:gen",
+  "customizations": {
+    "vscode": {
+      "extensions": ["biomejs.biome", "ms-playwright.playwright"]
+    }
+  }
+}

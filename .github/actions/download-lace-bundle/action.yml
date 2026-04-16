@@ -1,0 +1,53 @@
+name: Download Lace Test Bundle
+description: >
+  Download the lace CLI test bundle from the private R2 bucket, verify
+  its sha256, and install `lace` onto the PATH. AWS CLI is expected to
+  already exist (preinstalled on ubuntu-latest and baked into the
+  vs-code-extension-ci image).
+
+inputs:
+  r2-account-id:
+    description: R2 account ID for the endpoint URL.
+    required: true
+  r2-bucket:
+    description: R2 bucket containing the test bundle.
+    required: true
+  r2-access-key-id:
+    description: R2 read-only access key ID.
+    required: true
+  r2-secret-access-key:
+    description: R2 read-only secret access key.
+    required: true
+  install-with-sudo:
+    description: >
+      Set to 'true' on non-root runners (ubuntu-latest host-e2e).
+      Leave 'false' in the root-by-default Playwright container.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Download and verify lace test bundle
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.r2-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.r2-secret-access-key }}
+        AWS_ENDPOINT_URL: https://${{ inputs.r2-account-id }}.r2.cloudflarestorage.com
+        AWS_REGION: auto
+        AWS_EC2_METADATA_DISABLED: 'true'
+        R2_BUCKET: ${{ inputs.r2-bucket }}
+        SUDO: ${{ inputs.install-with-sudo == 'true' && 'sudo' || '' }}
+      run: |
+        set -euo pipefail
+        mkdir -p /tmp/lace-dl /tmp/lace-test
+        aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
+          /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz \
+          --endpoint-url "$AWS_ENDPOINT_URL"
+        aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
+          /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz.sha256 \
+          --endpoint-url "$AWS_ENDPOINT_URL"
+        cd /tmp/lace-dl && sha256sum -c lace-test-bundle-linux-amd64.tar.gz.sha256
+        tar -C /tmp/lace-test -xzf /tmp/lace-dl/lace-test-bundle-linux-amd64.tar.gz
+        $SUDO install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
+        lace version

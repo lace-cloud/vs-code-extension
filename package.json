@@ -3,6 +3,7 @@
   "displayName": "Lace Cloud",
   "description": "",
   "version": "0.0.29",
+  "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
     "type": "git",

@@ -1,5 +1,11 @@
 name: Release
 
+# Triggered by a version bump landing on main (via scripts/release.sh).
+# The `check-version` job detects the bump by diffing package.json
+# against HEAD~1; if the version changed, the `release` job regenerates
+# proto, builds, packages a .vsix, publishes to the VS Code Marketplace,
+# tags the commit, and attaches the .vsix to a GitHub Release.
+
 on:
   push:
     branches: [main]
@@ -44,17 +50,20 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      # Setup-workspace installs deps AND runs proto:gen — the latter is
+      # critical: generated proto is gitignored, so rspack (invoked by
+      # vsce:prepublish) would fail on missing imports without it.
+      - uses: ./.github/actions/setup-workspace
         with:
-          version: 10
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Build extension bundles
+        run: pnpm run build
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Package .vsix
+        # --no-dependencies: vsce assumes npm and would try to re-run
+        # `npm install` against our pnpm workspace, which fails.
+        run: npx @vscode/vsce package --no-dependencies --out lace-cloud.vsix
 
       - name: Create Git tag
         run: |
@@ -65,7 +74,7 @@ jobs:
           git push origin "v$VERSION"
 
       - name: Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish
+        run: npx @vscode/vsce publish --packagePath lace-cloud.vsix --no-dependencies
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
@@ -74,6 +83,7 @@ jobs:
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: Release v${{ needs.check-version.outputs.version }}
+          files: lace-cloud.vsix
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

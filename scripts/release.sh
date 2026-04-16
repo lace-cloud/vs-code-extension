@@ -38,10 +38,10 @@ echo "Current version: $CURRENT_VERSION"
 
 # Calculate new version
 if [ "$RELEASE_TYPE" = "patch" ] || [ "$RELEASE_TYPE" = "minor" ] || [ "$RELEASE_TYPE" = "major" ]; then
-    # Use npm version to calculate (dry run)
-    NEW_VERSION=$(npm version "$RELEASE_TYPE" --no-git-tag-version 2>/dev/null | tail -1)
+    # Use pnpm version to calculate (dry run)
+    NEW_VERSION=$(pnpm version "$RELEASE_TYPE" --no-git-tag-version 2>/dev/null | tail -1)
     # Revert the dry run change
-    npm version "$CURRENT_VERSION" --no-git-tag-version --allow-same-version > /dev/null 2>&1
+    pnpm version "$CURRENT_VERSION" --no-git-tag-version --allow-same-version > /dev/null 2>&1
 else
     # Specific version provided
     NEW_VERSION="$RELEASE_TYPE"
@@ -63,9 +63,9 @@ RELEASE_BRANCH="release/v$NEW_VERSION"
 echo "Creating release branch: $RELEASE_BRANCH"
 git checkout -b "$RELEASE_BRANCH"
 
-# Bump version (updates package.json and package-lock.json)
+# Bump version (only package.json; pnpm does not touch pnpm-lock.yaml)
 echo "Bumping version to $NEW_VERSION..."
-npm version "$RELEASE_TYPE" --no-git-tag-version
+pnpm version "$RELEASE_TYPE" --no-git-tag-version
 
 # Show changes
 echo ""
@@ -77,7 +77,7 @@ git diff --cached --stat
 # Commit
 echo ""
 echo "Creating commit..."
-git add package.json package-lock.json
+git add package.json
 git commit -m "$NEW_VERSION"
 
 echo ""

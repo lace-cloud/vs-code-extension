@@ -1,0 +1,34 @@
+name: Setup Workspace
+description: >
+  Install protoc, pnpm, Node, project dependencies, and regenerate proto
+  outputs. The one place every job's pre-build toolchain is defined.
+
+inputs:
+  github-token:
+    description: Token forwarded to setup-protoc for GitHub API rate limits.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: arduino/setup-protoc@v3
+      with:
+        version: '28.x'
+        repo-token: ${{ inputs.github-token }}
+
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 22
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Generate proto
+      shell: bash
+      run: pnpm proto:gen
