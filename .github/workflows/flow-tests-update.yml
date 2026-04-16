@@ -53,24 +53,56 @@ jobs:
       - name: Build extension bundles
         run: pnpm run build
 
+      # Invariant upheld by canvas-golden-paths.spec.ts: `toHaveScreenshot`
+      # is always the last assertion in a test. Playwright only writes a
+      # PNG if the test reached (and passed) the screenshot call, so a
+      # failing test never leaves a baseline on disk. That lets us commit
+      # whatever baselines landed — partial output is always trustworthy.
       - name: Regenerate Playwright baselines
+        id: regen
+        continue-on-error: true
         env:
           CI: '1'
           LACE_CLI_REPO: /tmp/lace-test
         run: pnpm flow-tests:update
+
+      - name: Prepare PR metadata
+        id: pr_meta
+        run: |
+          if [ "${{ steps.regen.outcome }}" = "success" ]; then
+            echo "title=test(flow): refresh Playwright Linux baselines" >> "$GITHUB_OUTPUT"
+            {
+              echo 'status<<STATUS_EOF'
+              echo ':white_check_mark: All flow tests passed. Every story baseline was regenerated.'
+              echo 'STATUS_EOF'
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "title=test(flow): partial baseline refresh — some tests failed" >> "$GITHUB_OUTPUT"
+            {
+              echo 'status<<STATUS_EOF'
+              echo ':warning: One or more flow tests failed during regeneration — see the workflow logs linked above.'
+              echo ''
+              echo 'PNGs for **tests that passed** have been committed. Baselines for **failed tests** were NOT written (Playwright skips `toHaveScreenshot` when an earlier assertion fails).'
+              echo ''
+              echo '**Do not merge this PR until the failing tests are investigated and fixed.** Merging now will leave stale baselines for the failed stories and CI will stay red for those tests on the next push.'
+              echo 'STATUS_EOF'
+            } >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Open PR with refreshed baselines
         uses: peter-evans/create-pull-request@v7
         with:
           branch: flow-tests/refresh-baselines
           delete-branch: true
-          title: 'test(flow): refresh Playwright Linux baselines'
+          title: ${{ steps.pr_meta.outputs.title }}
           body: |
             Auto-generated baseline refresh from the pinned CI image
             (`ghcr.io/lace-cloud/vs-code-extension-ci:playwright-v1.59.1-jammy`).
 
             **Triggered by:** @${{ github.actor }} via manual workflow dispatch.
             **Target branch:** `${{ github.event.inputs.target_branch || github.ref_name }}`
+
+            ${{ steps.pr_meta.outputs.status }}
 
             Review the pixel diff — it should match the intentional UI
             change this PR backs. If the diff includes unexpected
