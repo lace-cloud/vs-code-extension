@@ -109,3 +109,15 @@ jobs:
             regions, hold off merging and investigate.
           commit-message: 'test(flow): refresh Playwright Linux baselines'
           add-paths: tests/flow/__snapshots__/**/*-linux.png
+
+      # Mark the workflow red if any test failed, even though we opened
+      # a PR with the valid baselines. The PR is opportunistic forward
+      # motion; the red status is the permanent record that something
+      # needs human attention.
+      - name: Re-surface regen failure as workflow failure
+        if: steps.regen.outcome == 'failure'
+        run: |
+          echo "One or more flow tests failed during regeneration." >&2
+          echo "A PR with partial baselines was opened — review it, but" >&2
+          echo "do NOT merge until the failing tests are fixed." >&2
+          exit 1
