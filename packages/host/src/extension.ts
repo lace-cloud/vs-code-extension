@@ -7,10 +7,15 @@ import {
   addModuleToActiveCanvas,
   triggerGenerateOnActiveCanvas,
   getLaceDir,
-  publishCanvasViewToActivePanel,
-  getLatestCanvasView,
 } from './canvas-panel';
-import { registerChatParticipant } from '@lace/chat-sidebar';
+import {
+  ChatViewProvider,
+  registerRegistryTools,
+  registerGraphReadTools,
+  registerGraphWriteTools,
+  registerWorkspaceTools,
+  registerGenerateTools,
+} from '@lace/chat-sidebar';
 import { ServerManager } from './server-manager';
 import type { RegistryModule } from './types';
 
@@ -199,15 +204,36 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('lace.terraformDocs', () => runTerraformCommand('docs')),
   );
 
-  context.subscriptions.push(
-    registerChatParticipant(context, {
+  // ── Chat sidebar ──
+  const chatViewProvider = new ChatViewProvider(
+    context,
+    {
       getRpcClient: () => server?.transport ?? null,
       getRegistryModules: () => registryProvider?.getModules() ?? [],
       getUserOrgs: () => [],
       getLaceDir,
-      getCanvasView: getLatestCanvasView,
-      publishCanvasView: publishCanvasViewToActivePanel,
-    }),
+    },
+    (msg) => outputChannel.appendLine(msg),
+  );
+
+  // Tools register once on activation. They share the controller's
+  // Subscribe-driven canvas-view cache via getCanvasView.
+  const chatDepsForTools = {
+    getRpcClient: () => server?.transport ?? null,
+    getRegistryModules: () => registryProvider?.getModules() ?? [],
+    getUserOrgs: () => [],
+    getLaceDir,
+    getCanvasView: () => chatViewProvider.getLatestView(),
+  };
+  registerRegistryTools(chatDepsForTools);
+  registerGraphReadTools(chatDepsForTools);
+  registerGraphWriteTools(chatDepsForTools);
+  registerWorkspaceTools();
+  registerGenerateTools(chatDepsForTools);
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatViewProvider),
+    vscode.commands.registerCommand('lace.clearChatHistory', () => chatViewProvider.clearHistory()),
   );
 }
 

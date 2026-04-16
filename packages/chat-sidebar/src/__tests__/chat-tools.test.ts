@@ -86,6 +86,7 @@ function makeWriteDeps(): GraphWriteDeps {
     getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
     getRegistryModules: () => testModules,
     getUserOrgs: () => [],
+    getCanvasView: () => null,
   };
 }
 
@@ -95,6 +96,7 @@ describe('write tools', () => {
     registerGraphWriteTools(deps);
     registerGraphReadTools({
       getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+      getCanvasView: () => null,
     });
   });
 
@@ -163,10 +165,12 @@ describe('write tools', () => {
         getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
         getRegistryModules: () => [], // empty local cache — forces RPC search
         getUserOrgs: () => [{ slug: 'acme-corp', name: 'Acme Corp', role: 'member' }],
+        getCanvasView: () => null,
       };
       registerGraphWriteTools(deps);
       registerGraphReadTools({
         getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+        getCanvasView: () => null,
       });
 
       const handler = getToolHandler('lace_add_module')!;
@@ -264,6 +268,7 @@ describe('generate tools', () => {
     const deps: GenerateToolDeps = {
       getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
       getLaceDir: () => '/tmp/test-workspace/.lace',
+      getCanvasView: () => null,
     };
     registerGenerateTools(deps);
   });
@@ -334,6 +339,7 @@ describe('generate tools', () => {
       const deps: GenerateToolDeps = {
         getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
         getLaceDir: () => undefined,
+        getCanvasView: () => null,
       };
       registerGenerateTools(deps);
 

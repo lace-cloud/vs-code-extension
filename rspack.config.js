@@ -75,4 +75,45 @@ module.exports = [
     },
     devtool: 'source-map',
   },
+  {
+    // Frontend (Webview) — chat sidebar
+    mode: 'development',
+    entry: './packages/chat-sidebar/src/webview/index.tsx',
+    output: {
+      path: path.resolve(__dirname, 'out'),
+      filename: 'chat-sidebar.js',
+    },
+    target: 'web',
+    resolve: {
+      extensions: ['.ts', '.tsx', '.js', '.jsx'],
+    },
+    module: {
+      rules: [
+        {
+          test: /\.tsx?$/,
+          use: {
+            loader: 'ts-loader',
+            options: {
+              configFile: path.resolve(__dirname, 'tsconfig.json'),
+              compilerOptions: { noEmit: false },
+            },
+          },
+          exclude: /node_modules/,
+        },
+        {
+          test: /\.css$/,
+          use: ['style-loader', 'css-loader', 'postcss-loader'],
+        },
+      ],
+    },
+    optimization: {
+      runtimeChunk: false,
+      splitChunks: false,
+    },
+
+    experiments: {
+      css: false,
+    },
+    devtool: 'source-map',
+  },
 ];

@@ -12,7 +12,7 @@ import { formatCanvasState } from '../utils/canvas-summary';
 
 export type GraphReadDeps = {
   getRpcClient: () => LaceTransport | null;
-  getCanvasView?: () => CanvasView | undefined;
+  getCanvasView: () => CanvasView | null;
 };
 
 export function registerGraphReadTools(deps: GraphReadDeps): void {
@@ -20,13 +20,14 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
   // lace_describe_graph
   // ─────────────────────────────────────────────
   registerTool('lace_describe_graph', async (): Promise<ToolResult> => {
-    // Prefer structured in-memory view — deterministic instance IDs
-    const view = deps.getCanvasView?.();
+    // Prefer structured in-memory view — deterministic instance IDs.
+    // The controller maintains this via the Subscribe stream.
+    const view = deps.getCanvasView();
     if (view) {
       return { content: formatCanvasState(view) };
     }
 
-    // Fallback: RPC text summary
+    // Fallback: RPC text summary (if controller stream hasn't delivered yet)
     const engineResult = requireEngine(deps.getRpcClient);
     if ('error' in engineResult) return engineResult.error;
 
@@ -53,7 +54,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
       // Parallelized: all queryNodeConfig calls fire at once.
       type MissingInput = { instance_id: string; input_name: string; input_type: string };
       const missingInputErrors: MissingInput[] = [];
-      const view = deps.getCanvasView?.();
+      const view = deps.getCanvasView();
 
       if (view && view.nodes.length > 0) {
         const configs = await Promise.all(

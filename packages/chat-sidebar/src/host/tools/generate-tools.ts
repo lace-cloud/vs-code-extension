@@ -12,7 +12,7 @@ import { requireEngine, errorMessage } from './helpers';
 export type GenerateToolDeps = {
   getRpcClient: () => LaceTransport | null;
   getLaceDir: () => string | undefined;
-  getCanvasView?: () => CanvasView | undefined;
+  getCanvasView: () => CanvasView | null;
 };
 
 export function registerGenerateTools(deps: GenerateToolDeps): void {
@@ -99,7 +99,7 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
 
     // Save canvas before generating to avoid stale output
     try {
-      const view = deps.getCanvasView?.();
+      const view = deps.getCanvasView();
       if (view?.is_dirty) {
         await engineResult.client.sessionSave();
       }

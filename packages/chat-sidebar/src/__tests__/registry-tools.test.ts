@@ -135,7 +135,7 @@ describe('lace_inspect_module', () => {
     };
 
     registerRegistryTools({
-      getRpcClient: () => mockClient as any,
+      getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
       getRegistryModules: () => allModules,
       getUserOrgs: () => [],
     });
