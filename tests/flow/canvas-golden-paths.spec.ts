@@ -53,29 +53,29 @@ test.describe('flow story golden paths', () => {
     await expect(page).toHaveScreenshot('drop-module.png');
   });
 
-  test('wire-modules: iam-stack fixture renders 2 nodes unwired', async ({ page }) => {
+  test('wire-modules: iam-stack fixture renders 3 nodes', async ({ page }) => {
     await gotoStory(page, 'flows-iamstack--default');
-    await expect(page.locator('.react-flow__node')).toHaveCount(2);
-    // Unwired-input state: canvas reports validation errors via
-    // `has_errors` — the fixture has required inputs unbound, so the
-    // error banner or node-level error class should be present.
-    // Soft assertion: presence of at least one unwired-required indicator
-    // is enough — exact DOM structure may evolve.
+    // iam-stack seed loads the full composite: role + policy + policy-attachment.
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
     await expect(page).toHaveScreenshot('wire-modules.png');
   });
 
   test('collapse-group: group renders collapsed', async ({ page }) => {
     await gotoStory(page, 'flows-collapsedgroup--default');
-    // Collapsed group should render as a group node with collapsed styling.
-    await expect(page.locator('.react-flow__node-group, [data-group-collapsed]')).toHaveCount(1);
+    // GroupNode tags its root div with `data-group` (= groupId) and
+    // `data-collapsed` (= "true" | "false"). The collapsed-group fixture
+    // has exactly one group in collapsed state.
+    await expect(page.locator('[data-collapsed="true"]')).toHaveCount(1);
     await expect(page).toHaveScreenshot('collapse-group.png');
   });
 
-  test('generate-flow: WiredStack triggers generate → success toast', async ({ page }) => {
+  test('generate-flow: wired-stack fixture renders 3 pre-wired nodes', async ({ page }) => {
     await gotoStory(page, 'flows-wiredstack--default');
-    await expect(page.locator('.react-flow__node')).toHaveCount(2);
-    // Baseline screenshot of the wired stack BEFORE generate — the post-
-    // generate state has toasts and is harder to snapshot deterministically.
+    // wired-stack seed: 3 leaf bundles + 2 cross-bundle wires (per Plan 1 Phase F fixtures).
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    // Baseline screenshot of the wired stack BEFORE any generate click —
+    // post-generate state has transient toasts that are harder to snapshot
+    // deterministically. Clicking generate lives in a followup interaction test.
     await expect(page).toHaveScreenshot('generate-flow.png');
   });
 });

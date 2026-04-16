@@ -263,7 +263,13 @@ export class ConnectWebEngine implements CanvasEngine {
     );
     this._sessionId = res.session_id;
     if (!res.view) throw new Error('SessionOpen returned no view');
-    return convertCanvasView(res.view);
+    const view = convertCanvasView(res.view);
+    // Emit synchronously so subscribers (App) update state on the same tick
+    // as the caller's await resolves. Without this, Playwright's ready
+    // marker can fire before Subscribe's async initial snapshot arrives,
+    // racing against ReactFlow's initial node render.
+    this.emit({ type: 'stateUpdated', view });
+    return view;
   }
 
   /**
@@ -287,7 +293,11 @@ export class ConnectWebEngine implements CanvasEngine {
       );
       this._sessionId = res.session_id;
       if (!res.view) throw new Error('TestSessionOpen returned no view');
-      return convertCanvasView(res.view);
+      const view = convertCanvasView(res.view);
+      // See openEphemeralSession for why we emit synchronously instead of
+      // waiting for Subscribe's initial snapshot.
+      this.emit({ type: 'stateUpdated', view });
+      return view;
     } catch (err) {
       if (err instanceof ConnectError && err.code === 'unimplemented') {
         throw new ConnectError(

@@ -303,6 +303,8 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
 
     return (
       <div
+        data-group={data.groupId}
+        data-collapsed="true"
         className="relative"
         style={{
           width: COLLAPSED_WIDTH,
@@ -337,6 +339,8 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
 
   return (
     <div
+      data-group={data.groupId}
+      data-collapsed="false"
       className="relative"
       style={{
         width: '100%',
