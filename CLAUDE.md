@@ -62,9 +62,12 @@ The repo is ruleset-gated into a three-step promotion path:
   lint + unit-tests + host-e2e + `ci-summary`. `ci-summary` is the required
   status check; direct pushes to `develop` are blocked.
 - **`develop`** is the long-lived integration branch. On every merge, a push
-  to `develop` triggers `ci-visual.yml`: builds the canvas-stories Storybook,
-  runs Playwright flow tests, uploads both sets to Chromatic as a single
-  merged build. Approve/reject in the Chromatic UI.
+  to `develop` triggers `ci-visual.yml`: in parallel, (a) the `chromatic`
+  job uploads every Storybook component story to Chromatic for visual
+  regression, and (b) the `flow-tests` job runs Playwright integration /
+  contract tests against the real `lace engine` (from the R2 test bundle)
+  with DOM assertions — no visual upload. Approve visual changes in the
+  Chromatic UI.
 - **`main`** accepts PRs only from `develop`. Two required status checks on
   the ruleset: `CI Visual / visual-summary` (only exists on commits built
   via `ci-visual.yml`, which only runs on `develop` — implicit source check)
@@ -86,29 +89,43 @@ The repo is ruleset-gated into a three-step promotion path:
 
 ### Visual regression (Chromatic)
 
-Chromatic owns visual baselines. Two modes feed the same project:
+Chromatic handles visual regression via Storybook mode only. The
+`chromatic` job in `ci-visual.yml` builds the canvas-stories Storybook
+and uploads every component story as a snapshot. New story = new
+coverage for free. CI uses `--exit-zero-on-changes` so runs stay green
+regardless of visual deltas — approval is gated in the Chromatic UI,
+not in CI.
 
-- **Storybook mode** — `ci-visual.yml`'s `chromatic` job builds the canvas-
-  stories Storybook and uploads every component story as a snapshot. New
-  story = new coverage for free.
-- **Playwright mode** — `ci-visual.yml`'s `flow-tests` job runs `tests/flow/`.
-  `takeSnapshot(page, 'name', testInfo)` from `@chromatic-com/playwright`
-  captures archives; `chromatic:playwright` uploads them.
+Flow stories carry `chromatic: { disableSnapshot: true }` because
+Chromatic's cloud can't spawn `lace engine`. Flow-level visual
+regression is a gap today, planned to be filled by adding MSW-mocked
+flow stories to Storybook in a later session (so their visuals also
+flow through Storybook mode with no live CLI dependency).
 
-Both uploads share `--parallel-nonce=${{ github.run_id }}` so Chromatic
-merges them into **one build per develop-push**. Approve/reject in
-Chromatic's UI; CI runs use `--exit-zero-on-changes` so they stay green
-regardless of visual deltas — Chromatic is the approval gate.
+### Playwright flow-tests (integration / contract)
 
-Flow stories carry `chromatic: { disableSnapshot: true }` in Storybook
-mode because Chromatic's cloud can't spawn `lace engine`. Playwright mode
-covers them.
+`tests/flow/canvas-golden-paths.spec.ts` runs the flow stories against
+a real `lace engine` in the pinned CI container, asserting shape-level
+DOM invariants (node counts, data attributes, pin counts). These are
+**integration tests, not visual tests** — no Chromatic upload.
 
-### Playwright notes
+What they catch:
+- CLI↔extension wire-format regressions (proto fields, Action oneof
+  shapes, Subscribe event types)
+- Engine handshake / auth / Subscribe stream bugs
+- ReactFlow / xyflow upgrades that break real-DOM rendering
+- Fixture-to-render drift (amplified by the seed-drift canary)
 
-- Flow stories use `testSessionOpen(fixtureName)` for determinism — stories load embedded seed fixtures from the CLI's `-tags=test` build. Requires a CLI built via `make build-test` in lace-cli.
-- The seed-drift canary (`tests/flow/seed-manifest.spec.ts`) runs first. If lace-cli regenerates seeds, the canary fails with a clear "hash mismatch" message before any visual check — update `tests/flow/__snapshots__/seed-manifest.json` in the same PR.
-- Locally, set `LACE_CLI_REPO=../lace-cli` (or absolute path) so the canary can find lace-cli's `testdata/seeds/*.sha256` canaries.
+Notes:
+- Flow stories use `testSessionOpen(fixtureName)` for determinism —
+  stories load embedded seed fixtures from the CLI's `-tags=test`
+  build. Requires a CLI built via `make build-test` in lace-cli.
+- The seed-drift canary (`tests/flow/seed-manifest.spec.ts`) runs
+  first. If lace-cli regenerates seeds, the canary fails with a clear
+  "hash mismatch" message before any flow test runs — update
+  `tests/flow/__snapshots__/seed-manifest.json` in the same PR.
+- Locally, set `LACE_CLI_REPO=../lace-cli` (or absolute path) so the
+  canary can find lace-cli's `testdata/seeds/*.sha256` canaries.
 
 ## Critical Rules
 

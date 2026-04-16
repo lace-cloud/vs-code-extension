@@ -164,14 +164,12 @@
     "dev:storybook-flows": "bash scripts/dev-storybook.sh",
     "flow-tests": "playwright test",
     "chromatic": "chromatic --exit-zero-on-changes",
-    "chromatic:playwright": "chromatic --playwright --exit-zero-on-changes",
     "package": "vsce package",
     "prepare": "husky",
     "release": "./scripts/release.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
-    "@chromatic-com/playwright": "^0.13.1",
     "@playwright/test": "1.59.1",
     "@rspack/cli": "^1.1.8",
     "@tailwindcss/postcss": "^4.1.18",
