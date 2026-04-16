@@ -95,6 +95,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Chromatic resolves baselines by walking commit ancestry;
+          # shallow clones give it only one commit and it refuses to run.
+          fetch-depth: 0
 
       - uses: ./.github/actions/download-lace-bundle
         with:
