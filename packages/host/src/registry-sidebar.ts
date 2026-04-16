@@ -7,7 +7,11 @@ import type { RegistryModule } from './types';
 
 const MAX_PAGES_PER_SYSTEM = 10;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const DEFAULT_SYSTEMS = ['aws', 'azure', 'gcp'] as const;
+const DEFAULT_SYSTEMS = ['aws', 'azure', 'gcp', 'google'] as const;
+
+function getModuleCacheKey(module: RegistryModule): string {
+  return `${module.id}:${module.version}`;
+}
 
 // ── Provider ──
 
@@ -135,9 +139,16 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     const failCount = results.filter((r) => r.status === 'rejected').length;
 
     this.modules = [];
+    const publicKeys = new Set<string>();
     for (const result of results) {
       if (result.status === 'fulfilled') {
-        this.modules.push(...result.value);
+        for (const m of result.value) {
+          const key = getModuleCacheKey(m);
+          if (!publicKeys.has(key)) {
+            publicKeys.add(key);
+            this.modules.push(m);
+          }
+        }
       }
     }
 
@@ -147,14 +158,15 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
         DEFAULT_SYSTEMS.map((system) => this.fetchAllModules(system, force, org)),
       );
       this.orgModules = [];
+      const publicIds = new Set(this.modules.map((m) => m.id));
+      const orgKeys = new Set<string>();
       for (const result of orgResults) {
         if (result.status === 'fulfilled') {
-          // Only include modules not already in public registry (deduplicate by id)
-          const publicIds = new Set(this.modules.map((m) => m.id));
           for (const m of result.value) {
-            if (!publicIds.has(m.id)) {
-              this.orgModules.push(m);
-            }
+            const key = getModuleCacheKey(m);
+            if (publicIds.has(m.id) || orgKeys.has(key)) continue;
+            orgKeys.add(key);
+            this.orgModules.push(m);
           }
         }
       }
