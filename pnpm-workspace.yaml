@@ -1,2 +1,8 @@
 packages:
   - "packages/*"
+
+# pnpm-specific install settings. Previously lived in .npmrc, but npm 11
+# warns loudly on unknown keys (and npm 12 will error), so they moved here
+# where only pnpm reads them. pnpm 10+ honours these keys directly.
+shamefully-hoist: true
+node-linker: hoisted
