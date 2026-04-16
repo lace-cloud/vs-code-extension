@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Launches Storybook with a live `lace engine -tags=test` attached, so flow
-# stories can drive the real CLI over Connect-JSON. The 5-line handshake
-# parser mirrors packages/host/src/engine-process.ts so env/test behaviour
-# stays in sync.
+# Launches Storybook with a live `lace engine` attached, so flow stories can
+# drive the real CLI over Connect-JSON. The 5-line handshake parser mirrors
+# packages/host/src/engine-process.ts so env/test behaviour stays in sync.
+#
+# The CLI should be built with `-tags=test` (run `make build-test` in lace-cli
+# then install to a PATH location) if flow stories want deterministic embedded
+# seed fixtures via TestSessionOpen. The default `lace engine` command accepts
+# no `-tags` flag — that's a Go compile-time build tag, not a runtime option.
 #
 # Usage: pnpm run dev:storybook-flows
 # Env: LACE_BIN (default: `lace`). Override when the binary isn't on PATH.
@@ -29,8 +33,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "→ Spawning lace engine (-tags=test) ..."
-"$LACE_BIN" engine -tags=test >"$TMPOUT" 2>&1 &
+echo "→ Spawning lace engine ..."
+"$LACE_BIN" engine >"$TMPOUT" 2>&1 &
 ENGINE_PID=$!
 
 # Wait up to 10s for the READY line.
