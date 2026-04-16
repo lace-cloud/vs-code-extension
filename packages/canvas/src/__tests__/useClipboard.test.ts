@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { test, expect, describe, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { useClipboard } from '../hooks/useClipboard';
 import { makeCanvasView, makeNode } from './helpers';
 

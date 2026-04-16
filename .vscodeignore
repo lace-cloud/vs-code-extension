@@ -7,10 +7,9 @@ src/**
 node_modules/**
 .gitignore
 .yarnrc
-.prettierrc
+biome.json
 vsc-extension-quickstart.md
 **/tsconfig.json
-**/eslint.config.mjs
 **/rspack.config.*
 **/vitest.config.*
 **/postcss.config.*

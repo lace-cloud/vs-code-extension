@@ -1,12 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import ErrorBoundary from './components/ErrorBoundary';
+import { useCallback, useEffect, useState } from 'react';
 import Canvas from './Canvas';
-import { CanvasContext, type CanvasState } from './state/engine-context';
+import ErrorBoundary from './components/ErrorBoundary';
 import type { CanvasEngine } from './engine';
-import type { CanvasView } from './types/render';
-import { useWindowEvent } from './hooks/useWindowEvent';
 import { CANVAS_EVENTS } from './events';
+import { useWindowEvent } from './hooks/useWindowEvent';
+import { CanvasContext, type CanvasState } from './state/engine-context';
+import type { CanvasView } from './types/render';
 
 /**
  * HostBridge is the narrow, typed surface for outbound signals to whatever is

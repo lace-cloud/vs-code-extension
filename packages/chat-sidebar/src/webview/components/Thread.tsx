@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { MessageItem } from './MessageItem';
+import { useEffect, useRef } from 'react';
 import type { ProactiveSuggestion } from '../../protocol';
+import { MessageItem } from './MessageItem';
 
 export type ThreadMessage =
   | { kind: 'user'; text: string }
@@ -25,7 +25,7 @@ export function Thread({ messages, onAcceptSuggestion }: ThreadProps) {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages]);
+  }, []);
 
   return (
     <div className="lace-chat-thread">

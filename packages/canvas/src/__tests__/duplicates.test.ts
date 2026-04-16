@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { expect, test } from 'vitest';
 import { findDuplicateIndices } from '../utils/duplicates';
 
 test('returns empty set when no duplicates', () => {

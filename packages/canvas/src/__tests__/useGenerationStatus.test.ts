@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+
+import { act, renderHook } from '@testing-library/react';
 import React from 'react';
-import { test, expect, describe, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { CanvasEngine, EngineEvent, EngineEventListener } from '../engine';
 import { useGenerationStatus } from '../hooks/useGenerationStatus';
 import { CanvasContext, type CanvasState } from '../state/engine-context';
-import type { CanvasEngine, EngineEvent, EngineEventListener } from '../engine';
 
 // Minimal engine stub: the hook only uses onEvent, so stub just that method.
 // Tests fire events by invoking the captured listener directly.

@@ -1,45 +1,44 @@
 // src/webview/Canvas.tsx
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+
 import {
-  ReactFlow,
-  Controls,
-  MiniMap,
-  MarkerType,
-  useReactFlow,
-  applyNodeChanges,
   applyEdgeChanges,
+  applyNodeChanges,
   type Connection,
+  Controls,
   type Edge,
   type EdgeChange,
+  MarkerType,
+  MiniMap,
   type Node,
   type NodeChange,
+  ReactFlow,
+  useReactFlow,
 } from '@xyflow/react';
-
-import ModuleNode from './components/nodes/ModuleNode';
-import GroupNode from './components/nodes/GroupNode';
-import SlidePanel from './components/SlidePanel';
-import { ErrorState } from './components/ErrorBoundary';
-import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
-import EdgeInspectorPanel from './components/panels/EdgeInspectorPanel';
-import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ActionBar from './components/ActionBar';
-import { ValidationErrorBanner } from './components/ValidationErrorBanner';
-import Toast from './components/Toast';
 import ContextMenu from './components/ContextMenu';
-
-import type { CanvasView, ViewportIntent } from './types/render';
-import { useCanvas } from './state/engine-context';
-import { parseHandleId } from './utils/handleId';
-
-import { useToast } from './hooks/useToast';
+import { ErrorState } from './components/ErrorBoundary';
+import GroupNode from './components/nodes/GroupNode';
+import ModuleNode from './components/nodes/ModuleNode';
+import EdgeInspectorPanel from './components/panels/EdgeInspectorPanel';
+import ModuleConfigPanel from './components/panels/ModuleConfigPanel';
+import UnifiedSettingsPanel from './components/panels/UnifiedSettingsPanel';
+import SlidePanel from './components/SlidePanel';
+import Toast from './components/Toast';
+import { ValidationErrorBanner } from './components/ValidationErrorBanner';
+import { CANVAS_EVENTS } from './events';
+import { useClipboard } from './hooks/useClipboard';
 import { useContextMenu } from './hooks/useContextMenu';
-import { useUndoRedo } from './hooks/useUndoRedo';
 import { useEdgeInspector } from './hooks/useEdgeInspector';
 import { useGenerationStatus } from './hooks/useGenerationStatus';
+import { toAbsolutePositions, useGroupLogic } from './hooks/useGroupLogic';
 import { useNewNodeTracking } from './hooks/useNewNodeTracking';
-import { useClipboard } from './hooks/useClipboard';
-import { CANVAS_EVENTS } from './events';
-import { useGroupLogic, toAbsolutePositions } from './hooks/useGroupLogic';
+import { useToast } from './hooks/useToast';
+import { useUndoRedo } from './hooks/useUndoRedo';
+import { useCanvas } from './state/engine-context';
+import type { CanvasView, ViewportIntent } from './types/render';
+import { parseHandleId } from './utils/handleId';
 
 // ── Node types registration ──
 

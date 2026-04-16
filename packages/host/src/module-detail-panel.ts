@@ -14,7 +14,7 @@ export async function showModuleDetail(
 
   // Reuse existing panel if open
   if (activePanels.has(panelKey)) {
-    activePanels.get(panelKey)!.reveal();
+    activePanels.get(panelKey)?.reveal();
     return;
   }
 

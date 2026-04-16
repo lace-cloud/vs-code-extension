@@ -1,0 +1,130 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!out",
+      "!dist",
+      "!data",
+      "!.vscode",
+      "!packages/*/dist",
+      "!packages/*/src/generated",
+      "!package-lock.json",
+      "!pnpm-lock.yaml"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "semicolons": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "a11y": {
+        "recommended": false
+      },
+      "style": {
+        "noNonNullAssertion": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/canvas/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "vscode": "Canvas runs in the browser — cannot import vscode.",
+                  "@grpc/grpc-js": "Canvas uses Connect-Web, not grpc-js.",
+                  "fs": "Canvas runs in the browser — no Node.js builtins.",
+                  "path": "Canvas runs in the browser — no Node.js builtins.",
+                  "child_process": "Canvas runs in the browser — no Node.js builtins.",
+                  "os": "Canvas runs in the browser — no Node.js builtins."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/host/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@xyflow/react": "Host runs in Node.js — cannot import @xyflow/react.",
+                  "react": "Host runs in Node.js — cannot import React.",
+                  "react-dom": "Host runs in Node.js — cannot import React.",
+                  "@connectrpc/connect": "Host uses grpc-js, not Connect-Web.",
+                  "@connectrpc/connect-web": "Host uses grpc-js, not Connect-Web."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/chat-sidebar/src/webview/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "vscode": "Sidebar webview runs in the browser — cannot import vscode.",
+                  "@grpc/grpc-js": "Sidebar webview cannot use grpc-js directly."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/proto/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "vscode": "Proto package is environment-neutral.",
+                  "@xyflow/react": "Proto package is environment-neutral.",
+                  "react": "Proto package is environment-neutral.",
+                  "react-dom": "Proto package is environment-neutral.",
+                  "@grpc/grpc-js": "Proto package has no service layer — use @lace/host."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

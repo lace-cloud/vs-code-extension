@@ -10,20 +10,20 @@ import type {
   GenerateResult,
   GraphSummary,
   InputUpdate,
-  VariableDef,
-  OutputExportDef,
-  OutputDefEntry,
-  ProviderDef,
-  ProviderConfigDef,
   LocalDef,
+  OutputDefEntry,
+  OutputExportDef,
+  ProviderConfigDef,
+  ProviderDef,
+  VariableDef,
 } from './engine';
 import type {
   CanvasView,
-  NodeConfig,
   EdgeConfig,
-  SettingsConfig,
-  RenderError,
   HostToWebview,
+  NodeConfig,
+  RenderError,
+  SettingsConfig,
 } from './types/render';
 
 type VsCodeApi = { postMessage(msg: unknown): void };

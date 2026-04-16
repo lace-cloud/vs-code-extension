@@ -1,21 +1,20 @@
-import * as vscode from 'vscode';
-
-import { RegistrySidebarProvider } from './registry-sidebar';
-import { showModuleDetail } from './module-detail-panel';
-import {
-  openCanvas,
-  addModuleToActiveCanvas,
-  triggerGenerateOnActiveCanvas,
-  getLaceDir,
-} from './canvas-panel';
 import {
   ChatViewProvider,
-  registerRegistryTools,
+  registerGenerateTools,
   registerGraphReadTools,
   registerGraphWriteTools,
+  registerRegistryTools,
   registerWorkspaceTools,
-  registerGenerateTools,
 } from '@lace/chat-sidebar';
+import * as vscode from 'vscode';
+import {
+  addModuleToActiveCanvas,
+  getLaceDir,
+  openCanvas,
+  triggerGenerateOnActiveCanvas,
+} from './canvas-panel';
+import { showModuleDetail } from './module-detail-panel';
+import { RegistrySidebarProvider } from './registry-sidebar';
 import { ServerManager } from './server-manager';
 import type { RegistryModule } from './types';
 
@@ -180,7 +179,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const items = modules.map((m) => ({
         label: `$(symbol-module) ${m.name}`,
         description: `v${m.version}`,
-        detail: `${m.system}${m.categories?.length ? ' · ' + m.categories.join(', ') : ''}`,
+        detail: `${m.system}${m.categories?.length ? ` · ${m.categories.join(', ')}` : ''}`,
         module: m,
       }));
       const pick = await vscode.window.showQuickPick(items, {

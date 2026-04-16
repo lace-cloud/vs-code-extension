@@ -3,9 +3,9 @@
 // Tool: lace_search_registry — search the module registry.
 // Tool: lace_inspect_module — get full input/output schema for a specific module.
 
-import type { LaceTransport, RegistryModule, ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { requireEngine, errorMessage } from './helpers';
+import type { LaceTransport, RegistryModule, ToolResult } from '../types';
+import { errorMessage, requireEngine } from './helpers';
 
 export type RegistryToolDeps = {
   getRpcClient: () => LaceTransport | null;
@@ -88,7 +88,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
           // Augment with description/category matches — server only searches by name.
           // Fetch all modules per org (no query filter) and search descriptions client-side.
           const q = query.toLowerCase();
-          let descriptionMatches: RegistryModule[] = [];
+          const descriptionMatches: RegistryModule[] = [];
           if (q) {
             // Fetch all modules for public + each org with no search query, filter by description
             const allFetches = ['', ...orgSlugs].map((org) =>

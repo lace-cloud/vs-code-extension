@@ -1,16 +1,16 @@
 // src/webview/components/panels/ProvidersPanel.tsx
-import React, { useState, useCallback } from 'react';
-import type { SettingsConfig } from '../../types/render';
+import { useCallback, useState } from 'react';
+import { useSaveState } from '../../hooks/useSaveState';
 import {
+  addButtonClasses,
+  addButtonSmClasses,
   inputClasses,
   removeButtonClasses,
   removeButtonSmClasses,
-  addButtonClasses,
-  addButtonSmClasses,
   rowCardClasses,
 } from '../../styles/panel';
+import type { SettingsConfig } from '../../types/render';
 import PanelFrame from '../PanelFrame';
-import { useSaveState } from '../../hooks/useSaveState';
 import SaveButton from '../SaveButton';
 
 // ── Types derived from SettingsConfig ──

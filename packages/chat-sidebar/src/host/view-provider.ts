@@ -1,7 +1,7 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-import type { LaceTransport, RegistryModule, CanvasView } from '@lace/host';
+import * as path from 'node:path';
+import type { CanvasView, LaceTransport, RegistryModule } from '@lace/host';
 import { buildWebviewHtml } from '@lace/host';
+import * as vscode from 'vscode';
 import { ChatController } from './controller';
 
 /** External deps provided by the extension — everything the controller needs except getCanvasView. */

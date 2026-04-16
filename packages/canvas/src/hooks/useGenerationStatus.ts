@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEngine } from '../state/engine-context';
 import type { Diagnostic, GeneratePhase } from '../types/render';
 import type { ShowToastFn } from './useToast';
-import { useEngine } from '../state/engine-context';
 
 const PHASE_LABELS: Record<GeneratePhase, string> = {
   generating: 'Generating Terraform...',

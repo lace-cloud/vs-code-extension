@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { App, ConnectWebEngine } from '@lace/canvas';
 import type { HostBridge } from '@lace/canvas';
+import { App, ConnectWebEngine } from '@lace/canvas';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 // Storybook exposes env vars prefixed with STORYBOOK_ to the client bundle
 // via Rsbuild's DefinePlugin (see .storybook/main.ts > env). The values

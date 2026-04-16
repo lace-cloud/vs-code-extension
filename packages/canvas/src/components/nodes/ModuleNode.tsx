@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import type { NodePin, RenderNode } from '../../types/render';
-import { useEngine } from '../../state/engine-context';
-import { pinColor } from './pinColor';
+import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CANVAS_EVENTS } from '../../events';
+import { useEngine } from '../../state/engine-context';
+import type { NodePin, RenderNode } from '../../types/render';
+import { pinColor } from './pinColor';
 
 // ── Node data contract (serializable — no callbacks) ──
 

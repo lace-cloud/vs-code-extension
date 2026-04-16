@@ -1,11 +1,11 @@
 import type {
   CanvasView,
-  NodeConfig,
-  EdgeConfig,
-  SettingsConfig,
-  RenderError,
   Diagnostic,
+  EdgeConfig,
   GeneratePhase,
+  NodeConfig,
+  RenderError,
+  SettingsConfig,
   ViewportIntent,
 } from './types/render';
 

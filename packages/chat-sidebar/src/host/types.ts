@@ -2,14 +2,14 @@
 // Re-exports types from @lace/host that chat tools need.
 
 export type {
-  LaceTransport,
   CanvasView,
-  RenderError,
-  NodeConfig,
-  EdgeConfig,
-  SettingsConfig,
   Diagnostic,
+  EdgeConfig,
+  LaceTransport,
+  NodeConfig,
   RegistryModule,
+  RenderError,
+  SettingsConfig,
 } from '@lace/host';
 
 export type ToolResult = {
@@ -17,7 +17,7 @@ export type ToolResult = {
   isError?: boolean;
 };
 
-import type { LaceTransport, RegistryModule, CanvasView } from '@lace/host';
+import type { CanvasView, LaceTransport, RegistryModule } from '@lace/host';
 
 /**
  * Dependencies injected into the chat tools and the ChatController.

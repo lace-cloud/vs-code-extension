@@ -1,5 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
 import SlidePanel from '@lace/canvas/components/SlidePanel';
+import type { Meta, StoryObj } from '@storybook/react';
 
 const meta: Meta<typeof SlidePanel> = {
   title: 'Components/SlidePanel',

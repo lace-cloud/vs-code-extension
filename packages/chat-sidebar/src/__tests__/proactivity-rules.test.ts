@@ -1,13 +1,13 @@
-import { describe, test, expect } from 'vitest';
 import type { CanvasView, RenderNode } from '@lace/host';
+import { describe, expect, test } from 'vitest';
 import {
-  matchUnwiredRequiredInput,
-  matchGenerateError,
-  matchErrorsAppeared,
-  matchAll,
   advanceState,
-  initialRuleState,
   type EngineEventLike,
+  initialRuleState,
+  matchAll,
+  matchErrorsAppeared,
+  matchGenerateError,
+  matchUnwiredRequiredInput,
 } from '../host/proactivity/rules';
 
 function makeView(nodes: RenderNode[], errorCount = 0): CanvasView {

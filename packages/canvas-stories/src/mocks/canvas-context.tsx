@@ -1,7 +1,7 @@
-import React, { type ReactNode } from 'react';
-import { CanvasContext } from '@lace/canvas/state/engine-context';
 import type { CanvasEngine } from '@lace/canvas/engine';
+import { CanvasContext } from '@lace/canvas/state/engine-context';
 import type { CanvasView } from '@lace/canvas/types/render';
+import type { ReactNode } from 'react';
 
 /**
  * No-op engine stub for stories. Methods reject if called so accidental

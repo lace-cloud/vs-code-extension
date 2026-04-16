@@ -1,4 +1,3 @@
-import React from 'react';
 import type { ToastState } from '../hooks/useToast';
 
 type Props = {

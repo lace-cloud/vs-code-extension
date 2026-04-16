@@ -1,6 +1,6 @@
 import type { ClientReadableStream } from '@grpc/grpc-js';
-import type { EngineEvent } from './generated/service';
 import { convertCanvasView, convertDiagnosticSeverity } from '@lace/proto';
+import type { EngineEvent } from './generated/service';
 import type { CanvasView, Diagnostic } from './types';
 
 export type SubscribeCallbacks = {

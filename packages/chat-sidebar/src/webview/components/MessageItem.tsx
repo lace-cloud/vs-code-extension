@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { ProactiveSuggestion } from '../../protocol';
 import type { ThreadMessage } from './Thread';
 

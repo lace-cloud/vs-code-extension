@@ -1,4 +1,3 @@
-import React from 'react';
 import type { ContextMenuState } from '../hooks/useContextMenu';
 
 type Props = {

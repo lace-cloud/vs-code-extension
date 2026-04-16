@@ -1,6 +1,6 @@
-import { defineConfig } from '@vscode/test-cli';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defineConfig } from '@vscode/test-cli';
 
 // @vscode/test-cli config — Plan 2 Phase G.
 //

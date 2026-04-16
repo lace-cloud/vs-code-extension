@@ -1,6 +1,6 @@
-import { test, expect, describe } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { formatCanvasState } from '../host/utils/canvas-summary';
-import { makeCanvasView, makeNode, makeEdge } from './helpers';
+import { makeCanvasView, makeEdge, makeNode } from './helpers';
 
 describe('formatCanvasState', () => {
   test('undefined view returns "no canvas" message', () => {

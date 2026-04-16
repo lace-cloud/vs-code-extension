@@ -4,12 +4,9 @@
 // lace_disconnect, lace_set_input, lace_rename_instance, lace_set_variable, lace_undo.
 // All operations go through RPC to the CLI.
 
-import type { LaceTransport } from '../types';
-import type { RegistryModule } from '../types';
-import type { CanvasView } from '../types';
-import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { requireEngine, errorMessage } from './helpers';
+import type { CanvasView, LaceTransport, RegistryModule, ToolResult } from '../types';
+import { errorMessage, requireEngine } from './helpers';
 
 export type GraphWriteDeps = {
   getRpcClient: () => LaceTransport | null;
@@ -163,9 +160,8 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
         const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
 
         // Find the newly added instance ID — try module_key match first, then new node
-        let instanceId =
-          canvasView.nodes.find((n) => n.module_key && n.module_key.includes(match!.id))?.id ??
-          newNodes[0]?.id;
+        const instanceId =
+          canvasView.nodes.find((n) => n.module_key?.includes(match?.id))?.id ?? newNodes[0]?.id;
 
         // Build response with required inputs so model can set them immediately
         const lines: string[] = [];

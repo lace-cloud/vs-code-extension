@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
 import type { Edge } from '@xyflow/react';
+import { useCallback, useState } from 'react';
 import type { CanvasEngine } from '../engine';
 import type { CanvasView } from '../types/render';
 

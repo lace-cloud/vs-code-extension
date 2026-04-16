@@ -14,16 +14,16 @@
 // covers host-generated AND canvas-generated AND proto-generated inputs.
 
 import type {
+  LocalView,
   NodePin,
   Position,
-  ValidationBlock,
+  ProviderView,
   RenderEdge,
   RenderGroup,
   RenderOutput,
-  VariableRef,
   TerraformView,
-  ProviderView,
-  LocalView,
+  ValidationBlock,
+  VariableRef,
 } from './generated/service';
 
 export type ProtoDiagnosticLike = {

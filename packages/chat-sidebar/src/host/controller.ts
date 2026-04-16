@@ -1,13 +1,12 @@
+import type { CanvasView, EngineEvent, LaceTransport } from '@lace/host';
 import * as vscode from 'vscode';
-import type { LaceTransport, CanvasView } from '@lace/host';
-import type { EngineEvent } from '@lace/host';
-import type { ToolDeps, ToolResult } from './types';
-import type { WebviewToHost, HostToWebview, CompletedTurn, ContextSummary } from '../protocol';
-import { buildSystemPrompt } from './system-prompt';
-import { getToolHandler, getToolSchemas } from './tool-registry';
-import { startSession, endSession, logToolInvocation } from './telemetry';
-import { serialize, hydrate, capToRecent, type SerializedMessage } from './history-codec';
+import type { CompletedTurn, ContextSummary, HostToWebview, WebviewToHost } from '../protocol';
+import { capToRecent, hydrate, type SerializedMessage, serialize } from './history-codec';
 import { ProactivityWatcher } from './proactivity';
+import { buildSystemPrompt } from './system-prompt';
+import { endSession, logToolInvocation, startSession } from './telemetry';
+import { getToolHandler, getToolSchemas } from './tool-registry';
+import type { ToolDeps, ToolResult } from './types';
 
 const MAX_TOOL_ROUNDS = 25;
 const HISTORY_STATE_KEY = 'lace.chatHistory';
@@ -103,7 +102,7 @@ export class ChatController {
   /** Opens Subscribe stream + starts ProactivityWatcher. Idempotent. */
   private ensureSubscribe(): void {
     const transport = this.deps.getRpcClient();
-    if (!transport || !transport.sessionId) return;
+    if (!transport?.sessionId) return;
     if (this.subscribeHandler) return;
 
     const stream = transport.subscribeStream(transport.sessionId);
@@ -419,6 +418,7 @@ function abortSignalToToken(signal: AbortSignal): vscode.CancellationToken {
 // the exported one.
 
 import { convertCanvasView } from '@lace/host';
+
 function convertRawCanvasView(view: NonNullable<EngineEvent['state_updated']>['view']): CanvasView {
   return convertCanvasView(view as Parameters<typeof convertCanvasView>[0]);
 }

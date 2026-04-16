@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, test, expect, vi } from 'vitest';
-import { ConnectWebEngine, ConnectError } from '../connect-web-engine';
+import { describe, expect, test, vi } from 'vitest';
+import { ConnectError, ConnectWebEngine } from '../connect-web-engine';
 import type { EngineEvent } from '../engine';
 
 // Connect-JSON wire format uses camelCase on the wire (Connect default), even

@@ -1,5 +1,5 @@
 // src/webview/components/PanelFrame.tsx
-import React from 'react';
+import type React from 'react';
 
 type Props = {
   title: string | React.ReactNode;

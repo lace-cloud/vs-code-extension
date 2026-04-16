@@ -1,5 +1,5 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import * as path from 'path';
 
 export type WebviewHtmlOptions = {
   /** Filename of the bundled webview script in `out/` (e.g. 'webview.js' or 'chat-sidebar.js'). */

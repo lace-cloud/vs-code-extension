@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { test, expect, describe, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useSaveState } from '../hooks/useSaveState';
 
 describe('useSaveState', () => {

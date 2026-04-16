@@ -3,11 +3,9 @@
 // Tools: lace_auto_connect, lace_generate
 // All operations go through RPC to the CLI.
 
-import type { LaceTransport } from '../types';
-import type { CanvasView } from '../types';
-import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { requireEngine, errorMessage } from './helpers';
+import type { CanvasView, LaceTransport, ToolResult } from '../types';
+import { errorMessage, requireEngine } from './helpers';
 
 export type GenerateToolDeps = {
   getRpcClient: () => LaceTransport | null;

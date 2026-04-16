@@ -1,11 +1,11 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import * as path from 'path';
+import { handleRpcError, requireClient } from './rpc-errors';
 import type { ServerManager } from './server-manager';
-import type { LaceTransport } from './transport';
 import { SubscribeHandler } from './subscribe';
-import { requireClient, handleRpcError } from './rpc-errors';
+import type { LaceTransport } from './transport';
+import type { CanvasView, Diagnostic, HostToWebview, WebviewToHost } from './types';
 import { buildWebviewHtml } from './webview-html';
-import type { CanvasView, HostToWebview, WebviewToHost, Diagnostic } from './types';
 
 const LACE_DIR = '.lace';
 

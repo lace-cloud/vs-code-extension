@@ -1,8 +1,3 @@
-// VS Code webview entry. Constructs PostMessageEngine bound to the VS Code API
-// and a thin HostBridge that wraps VS Code's postMessage, then hands both to
-// App. Storybook flow decorator uses a different entry (ConnectWebEngine +
-// a flow-specific HostBridge) — see packages/canvas-stories.
-import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App, { type HostBridge } from './App';

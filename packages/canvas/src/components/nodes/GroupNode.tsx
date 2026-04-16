@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { useEngine } from '../../state/engine-context';
+import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CANVAS_EVENTS } from '../../events';
+import { useEngine } from '../../state/engine-context';
 
 // ── Data contract ──
 

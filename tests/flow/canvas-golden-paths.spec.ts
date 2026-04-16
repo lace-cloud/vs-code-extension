@@ -15,7 +15,7 @@
  * drift metadata yet. Followup once the proto extends.
  */
 
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 // Shared story URL helper — Storybook serves each story in an iframe at
 // /iframe.html?id=<kebab-title>--<kebab-name>&viewMode=story.

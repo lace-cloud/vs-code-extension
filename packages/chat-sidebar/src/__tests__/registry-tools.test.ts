@@ -1,7 +1,7 @@
-import { test, expect, describe, beforeEach, vi } from 'vitest';
-import type { RegistryModule } from '../host/types';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { getToolHandler } from '../host/tool-registry';
-import { registerRegistryTools, type RegistryToolDeps } from '../host/tools/registry-tools';
+import { type RegistryToolDeps, registerRegistryTools } from '../host/tools/registry-tools';
+import type { RegistryModule } from '../host/types';
 
 // ── Mock registry modules ──
 

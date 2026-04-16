@@ -1,13 +1,13 @@
-import * as vscode from 'vscode';
-import type { LaceTransport, EngineEvent } from '@lace/host';
+import type { EngineEvent, LaceTransport } from '@lace/host';
 import { convertCanvasView } from '@lace/host';
+import * as vscode from 'vscode';
 import type { ProactiveSuggestion } from '../protocol';
 import {
-  matchAll,
   advanceState,
-  initialRuleState,
-  type RuleState,
   type EngineEventLike,
+  initialRuleState,
+  matchAll,
+  type RuleState,
 } from './proactivity/rules';
 
 const RETRY_DELAY_MS = 1000;

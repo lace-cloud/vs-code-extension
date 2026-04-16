@@ -1,9 +1,9 @@
 // src/webview/components/panels/TerraformConfigPanel.tsx
-import React, { useState, useCallback } from 'react';
-import type { SettingsConfig } from '../../types/render';
-import { inputClasses, removeButtonClasses, addButtonClasses } from '../../styles/panel';
-import PanelFrame from '../PanelFrame';
+import { useCallback, useState } from 'react';
 import { useSaveState } from '../../hooks/useSaveState';
+import { addButtonClasses, inputClasses, removeButtonClasses } from '../../styles/panel';
+import type { SettingsConfig } from '../../types/render';
+import PanelFrame from '../PanelFrame';
 import SaveButton from '../SaveButton';
 
 // ── Types derived from SettingsConfig ──

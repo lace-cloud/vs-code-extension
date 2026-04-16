@@ -187,5 +187,5 @@ export function logFeedback(kind: vscode.ChatResultFeedbackKind, metadata?: Sess
 /* ---------------------------------- */
 
 function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max) + '...' : s;
+  return s.length > max ? `${s.slice(0, max)}...` : s;
 }

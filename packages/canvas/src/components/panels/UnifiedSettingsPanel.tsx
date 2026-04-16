@@ -1,13 +1,13 @@
 // src/webview/components/panels/UnifiedSettingsPanel.tsx
-import React, { useState, useEffect } from 'react';
-import type { SettingsConfig } from '../../types/render';
+import { useEffect, useState } from 'react';
 import type { CanvasEngine } from '../../engine';
+import type { SettingsConfig } from '../../types/render';
 import AccordionSection from '../AccordionSection';
 import PanelFrame from '../PanelFrame';
-import { TerraformConfigContent } from './TerraformConfigPanel';
-import { ProvidersContent } from './ProvidersPanel';
-import { LocalsContent } from './LocalsPanel';
 import { EnvironmentsContent } from './EnvironmentsPanel';
+import { LocalsContent } from './LocalsPanel';
+import { ProvidersContent } from './ProvidersPanel';
+import { TerraformConfigContent } from './TerraformConfigPanel';
 
 type Props = {
   engine: CanvasEngine;

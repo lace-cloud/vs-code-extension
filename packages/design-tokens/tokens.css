@@ -9,13 +9,13 @@
 
 :root {
   /* ── Brand ── */
-  --lace-green: #CEFE65;
+  --lace-green: #cefe65;
   --lace-green-bright: #e0ff8a;
   --lace-gunmetal: #153238;
   --lace-gunmetal-light: #1a3f47;
   --lace-night: #161616;
-  --lace-cyan: #95E7FF;
-  --lace-grey: #ECEFED;
+  --lace-cyan: #95e7ff;
+  --lace-grey: #ecefed;
 
   /* ── UI: Interactive ── */
   --lace-btn-primary: #1f6feb;
@@ -48,20 +48,20 @@
   --lace-node-default-border: rgba(206, 254, 101, 0.18);
 
   /* ── Pin colors (Blender-style type handles) ── */
-  --lace-pin-string-fill: #95E7FF;
-  --lace-pin-string-stroke: #2C9DB9;
-  --lace-pin-number-fill: #F5A623;
-  --lace-pin-number-stroke: #8A5A10;
-  --lace-pin-bool-fill: #B084F0;
-  --lace-pin-bool-stroke: #5C3E9A;
-  --lace-pin-list-fill: #CEFE65;
-  --lace-pin-list-stroke: #5E8A1A;
-  --lace-pin-map-fill: #F288C6;
-  --lace-pin-map-stroke: #8A2E5C;
-  --lace-pin-object-fill: #FF8A4C;
-  --lace-pin-object-stroke: #8A3A10;
-  --lace-pin-any-fill: #9BA19E;
-  --lace-pin-any-stroke: #4A4F4C;
+  --lace-pin-string-fill: #95e7ff;
+  --lace-pin-string-stroke: #2c9db9;
+  --lace-pin-number-fill: #f5a623;
+  --lace-pin-number-stroke: #8a5a10;
+  --lace-pin-bool-fill: #b084f0;
+  --lace-pin-bool-stroke: #5c3e9a;
+  --lace-pin-list-fill: #cefe65;
+  --lace-pin-list-stroke: #5e8a1a;
+  --lace-pin-map-fill: #f288c6;
+  --lace-pin-map-stroke: #8a2e5c;
+  --lace-pin-object-fill: #ff8a4c;
+  --lace-pin-object-stroke: #8a3a10;
+  --lace-pin-any-fill: #9ba19e;
+  --lace-pin-any-stroke: #4a4f4c;
 
   /* ── Alpha variants (borders, glows, overlays) ── */
   --lace-green-alpha-10: rgba(206, 254, 101, 0.1);

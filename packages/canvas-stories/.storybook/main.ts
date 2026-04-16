@@ -1,7 +1,7 @@
-import type { StorybookConfig } from 'storybook-react-rsbuild';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { pluginReact } from '@rsbuild/plugin-react';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import type { StorybookConfig } from 'storybook-react-rsbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 

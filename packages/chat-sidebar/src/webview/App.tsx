@@ -1,14 +1,14 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
-  HostToWebview,
-  WebviewToHost,
   CompletedTurn,
   ContextSummary,
+  HostToWebview,
   ProactiveSuggestion,
+  WebviewToHost,
 } from '../protocol';
-import { Thread, type ThreadMessage } from './components/Thread';
-import { Input } from './components/Input';
 import { ContextStrip } from './components/ContextStrip';
+import { Input } from './components/Input';
+import { Thread, type ThreadMessage } from './components/Thread';
 
 type VsCodeApi = { postMessage(msg: unknown): void };
 

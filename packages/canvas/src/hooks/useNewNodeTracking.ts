@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CanvasView } from '../types/render';
 
 export function useNewNodeTracking(view: CanvasView | null) {

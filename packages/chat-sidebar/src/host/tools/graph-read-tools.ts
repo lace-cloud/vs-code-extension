@@ -3,12 +3,10 @@
 // Tools: lace_describe_graph, lace_validate_graph, lace_inspect_node, lace_get_settings
 // All operations go through RPC to the CLI.
 
-import type { LaceTransport } from '../types';
-import type { CanvasView } from '../types';
-import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
-import { requireEngine, errorMessage } from './helpers';
+import type { CanvasView, LaceTransport, ToolResult } from '../types';
 import { formatCanvasState } from '../utils/canvas-summary';
+import { errorMessage, requireEngine } from './helpers';
 
 export type GraphReadDeps = {
   getRpcClient: () => LaceTransport | null;

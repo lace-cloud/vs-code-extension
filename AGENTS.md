@@ -274,7 +274,7 @@ Drift-badge test intentionally absent — `pb.RenderNode` has no drift metadata 
 **Runtime (extension):** `@grpc/grpc-js`, `react`, `react-dom`, `@xyflow/react`.
 
 **Dev:** `typescript`, `vitest`, `@testing-library/react`, `happy-dom`, `@rspack/cli`,
-`tailwindcss`, `postcss`, `prettier`, `husky`, `lint-staged`, `ts-proto`, `storybook` +
+`tailwindcss`, `postcss`, `@biomejs/biome`, `husky`, `lint-staged`, `ts-proto`, `storybook` +
 `storybook-react-rsbuild`, `@rsbuild/core`.
 
 **Zero native Node.js modules.** The CLI handles all heavy lifting (terraform exec,

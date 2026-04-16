@@ -4,11 +4,11 @@
 // visual groups with expand/collapse. Groups are purely visual — they live
 // in GraphLayout and don't affect Terraform generation.
 
+import type { Edge, Node } from '@xyflow/react';
 import { useMemo } from 'react';
-import type { Node, Edge } from '@xyflow/react';
-import type { RenderNode, RenderEdge, RenderGroup } from '../types/render';
 import type { ExternalPin } from '../components/nodes/GroupNode';
 import { pinColor } from '../components/nodes/pinColor';
+import type { RenderEdge, RenderGroup, RenderNode } from '../types/render';
 
 // ── Constants ──
 

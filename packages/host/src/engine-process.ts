@@ -1,5 +1,5 @@
-import { spawn, type ChildProcess } from 'child_process';
-import * as readline from 'readline';
+import { type ChildProcess, spawn } from 'node:child_process';
+import * as readline from 'node:readline';
 import type { EngineHandshake } from './types';
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;

@@ -1,10 +1,3 @@
-// src/webview/components/panels/EdgeInspectorPanel.tsx
-//
-// Slim edge inspector. Per-variable handles on ModuleNode made the old
-// disambiguation flow (dropdown pair selection) unnecessary — edges are
-// created by dragging between labeled pins. This panel is now just a
-// read-only summary with a Delete button for a selected edge.
-import React from 'react';
 import PanelFrame from '../PanelFrame';
 
 type Props = {

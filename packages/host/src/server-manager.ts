@@ -1,7 +1,7 @@
-import { type ChildProcess } from 'child_process';
-import { EventEmitter } from 'events';
-import { LaceTransport } from './transport';
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { spawnEngine } from './engine-process';
+import { LaceTransport } from './transport';
 import type { ServerState } from './types';
 
 type ServerManagerOpts = {
@@ -123,7 +123,7 @@ export class ServerManager extends EventEmitter {
 
     this.restartScheduled = true;
     this.restartCount++;
-    const delayMs = 1000 * Math.pow(2, this.restartCount - 1);
+    const delayMs = 1000 * 2 ** (this.restartCount - 1);
     this.log(`Scheduling restart ${this.restartCount}/${this.maxRestarts} in ${delayMs}ms`);
     setTimeout(() => {
       this.restartScheduled = false;

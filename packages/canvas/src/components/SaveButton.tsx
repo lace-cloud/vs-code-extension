@@ -1,10 +1,9 @@
-import React from 'react';
 import type { SaveStatus } from '../hooks/useSaveState';
 import {
   saveButtonClasses,
+  saveButtonErrorClasses,
   saveButtonSavingClasses,
   saveButtonSuccessClasses,
-  saveButtonErrorClasses,
 } from '../styles/panel';
 
 type Props = {

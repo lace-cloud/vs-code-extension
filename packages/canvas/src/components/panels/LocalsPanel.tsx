@@ -1,19 +1,19 @@
 // src/webview/components/panels/LocalsPanel.tsx
-import React, { useState, useCallback } from 'react';
-import type { SettingsConfig } from '../../types/render';
+import { useCallback, useState } from 'react';
+import { useSaveState } from '../../hooks/useSaveState';
 import {
+  addButtonClasses,
   inputClasses,
-  modeButtonBase,
   modeButtonActive,
+  modeButtonBase,
   modeButtonInactive,
   removeButtonClasses,
-  addButtonClasses,
   rowCardClasses,
 } from '../../styles/panel';
-import PanelFrame from '../PanelFrame';
-import { useSaveState } from '../../hooks/useSaveState';
-import SaveButton from '../SaveButton';
+import type { SettingsConfig } from '../../types/render';
 import { findDuplicateIndices } from '../../utils/duplicates';
+import PanelFrame from '../PanelFrame';
+import SaveButton from '../SaveButton';
 
 // ── Types derived from SettingsConfig ──
 

@@ -1,4 +1,4 @@
-import type { CanvasView, NodePin, RenderNode, RenderEdge } from '../types/render';
+import type { CanvasView, NodePin, RenderEdge, RenderNode } from '../types/render';
 
 // ── CanvasView builders for tests ──
 

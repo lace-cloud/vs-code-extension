@@ -1,5 +1,5 @@
-import * as vscode from 'vscode';
 import { status as GrpcStatus, type ServiceError } from '@grpc/grpc-js';
+import * as vscode from 'vscode';
 
 // ── Error categories ──
 

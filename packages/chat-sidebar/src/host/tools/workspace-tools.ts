@@ -3,11 +3,11 @@
 // Tool: lace_workspace_context — read project files and build a structured
 // ProjectProfile to help the model understand what the user is building.
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-import type { ToolResult } from '../types';
 import { registerTool } from '../tool-registry';
+import type { ToolResult } from '../types';
 
 // Files to look for (ordered by priority)
 const CONTEXT_FILES = [
@@ -185,7 +185,7 @@ export function registerWorkspaceTools(): void {
         const entries = fs.readdirSync(root, { withFileTypes: true });
         const dirs = entries
           .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-          .map((e) => e.name + '/');
+          .map((e) => `${e.name}/`);
         const files = entries.filter((e) => e.isFile()).map((e) => e.name);
         lines.push('### Top-level structure');
         for (const d of dirs.slice(0, 30)) lines.push(`- ${d}`);

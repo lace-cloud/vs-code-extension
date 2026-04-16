@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, KeyboardEvent } from 'react';
+import { type KeyboardEvent, useCallback, useRef, useState } from 'react';
 
 type InputProps = {
   onSend: (text: string) => void;

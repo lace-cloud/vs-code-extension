@@ -1,5 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
 import Toast from '@lace/canvas/components/Toast';
+import type { Meta, StoryObj } from '@storybook/react';
 
 const meta: Meta<typeof Toast> = {
   title: 'Components/Toast',
@@ -27,7 +27,7 @@ export const Success: Story = {
   },
 };
 
-export const Error: Story = {
+export const ErrorState: Story = {
   args: {
     toast: { message: 'Failed to validate: missing cidr_block', type: 'error' },
   },

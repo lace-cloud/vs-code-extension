@@ -1,17 +1,18 @@
 // src/webview/components/panels/ModuleConfigPanel.tsx
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import type { RenderInput, RenderOutput, NodeConfig } from '../../types/render';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CanvasEngine } from '../../engine';
 import { useCanvas } from '../../state/engine-context';
+import {
+  footerSaveButtonClasses,
+  inputClasses,
+  modeButtonActive,
+  modeButtonBase,
+  modeButtonInactive,
+} from '../../styles/panel';
+import type { NodeConfig, RenderInput, RenderOutput } from '../../types/render';
 import AccordionSection from '../AccordionSection';
 import PanelFrame from '../PanelFrame';
-import {
-  inputClasses,
-  modeButtonBase,
-  modeButtonActive,
-  modeButtonInactive,
-  footerSaveButtonClasses,
-} from '../../styles/panel';
 
 // ── Binding mode type ──
 

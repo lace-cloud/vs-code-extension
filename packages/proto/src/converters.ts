@@ -6,25 +6,25 @@
 // per-package outputs. See proto-shapes.ts for the full explanation.
 
 import type {
-  CanvasView,
-  NodeConfig,
-  EdgeConfig,
-  SettingsConfig,
-  RenderNode,
-  RenderInput,
-  RenderError,
-  Diagnostic,
-} from './render';
-import type {
+  ProtoCanvasViewLike,
   ProtoDiagnosticLike,
+  ProtoEdgeConfigLike,
+  ProtoNodeConfigLike,
+  ProtoRenderErrorLike,
   ProtoRenderInputLike,
   ProtoRenderNodeLike,
-  ProtoRenderErrorLike,
-  ProtoCanvasViewLike,
-  ProtoNodeConfigLike,
-  ProtoEdgeConfigLike,
   ProtoSettingsConfigLike,
 } from './proto-shapes';
+import type {
+  CanvasView,
+  Diagnostic,
+  EdgeConfig,
+  NodeConfig,
+  RenderError,
+  RenderInput,
+  RenderNode,
+  SettingsConfig,
+} from './render';
 
 // Wire values match ts-proto's `snakeToCamel=false, numeric enum` output.
 // Source of truth: the proto definition.

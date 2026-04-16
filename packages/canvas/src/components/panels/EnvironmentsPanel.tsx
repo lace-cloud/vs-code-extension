@@ -1,17 +1,17 @@
 // src/webview/components/panels/EnvironmentsPanel.tsx
-import React, { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { useSaveState } from '../../hooks/useSaveState';
 import {
+  addButtonClasses,
+  addButtonSmClasses,
   inputClasses,
   removeButtonClasses,
   removeButtonSmClasses,
-  addButtonClasses,
-  addButtonSmClasses,
   rowCardClasses,
 } from '../../styles/panel';
-import PanelFrame from '../PanelFrame';
-import { useSaveState } from '../../hooks/useSaveState';
-import SaveButton from '../SaveButton';
 import { findDuplicateIndices } from '../../utils/duplicates';
+import PanelFrame from '../PanelFrame';
+import SaveButton from '../SaveButton';
 
 // ── Local editing state ──
 

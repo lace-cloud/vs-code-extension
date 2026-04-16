@@ -1,11 +1,11 @@
-import { test, expect, describe, beforeEach, vi } from 'vitest';
-import { getToolHandler } from '../host/tool-registry';
-import { registerGraphWriteTools, type GraphWriteDeps } from '../host/tools/graph-write-tools';
-import { registerGraphReadTools } from '../host/tools/graph-read-tools';
-import { registerGenerateTools, type GenerateToolDeps } from '../host/tools/generate-tools';
-import { makeCanvasView, makeNode, makeEdge } from './helpers';
 import type { RenderError } from '@lace/host';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { getToolHandler } from '../host/tool-registry';
+import { type GenerateToolDeps, registerGenerateTools } from '../host/tools/generate-tools';
+import { registerGraphReadTools } from '../host/tools/graph-read-tools';
+import { type GraphWriteDeps, registerGraphWriteTools } from '../host/tools/graph-write-tools';
 import type { RegistryModule } from '../host/types';
+import { makeCanvasView, makeEdge, makeNode } from './helpers';
 
 // ── Mock RPC client ──
 

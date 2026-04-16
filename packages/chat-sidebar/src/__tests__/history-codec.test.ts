@@ -1,4 +1,4 @@
-import { describe, test, expect, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 // Mock vscode module — history-codec uses instanceof checks and constructor calls.
 // Each mocked class is a minimal shape matching the real vscode API.
@@ -46,7 +46,7 @@ vi.mock('vscode', () => {
 
 // Import after mock is set up.
 import * as vscode from 'vscode';
-import { serialize, hydrate, capToRecent, type SerializedMessage } from '../host/history-codec';
+import { capToRecent, hydrate, type SerializedMessage, serialize } from '../host/history-codec';
 
 describe('history-codec', () => {
   describe('serialize', () => {

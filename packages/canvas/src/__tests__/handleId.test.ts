@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { expect, test } from 'vitest';
 import { parseHandleId } from '../utils/handleId';
 
 test('parses input handle', () => {

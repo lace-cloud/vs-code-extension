@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CANVAS_EVENTS } from '../events';
 
 export type ContextMenuState = {

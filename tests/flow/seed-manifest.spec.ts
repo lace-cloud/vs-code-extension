@@ -19,9 +19,9 @@
  *      `pnpm flow-tests:update` in the pinned Playwright container)
  */
 
-import { test, expect } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { expect, test } from '@playwright/test';
 
 // Resolve the lace-cli checkout. Locally devs keep it as a sibling at
 // ../lace-cli. CI workflows set $LACE_CLI_REPO explicitly.

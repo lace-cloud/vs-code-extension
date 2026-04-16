@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { test, expect, describe } from 'vitest';
+
 import { renderHook } from '@testing-library/react';
-import { useGroupLogic, toAbsolutePositions } from '../hooks/useGroupLogic';
-import type { RenderGroup } from '../types/render';
-import { makeNode, makeEdge, makePin } from './helpers';
 import type { Node } from '@xyflow/react';
+import { describe, expect, test } from 'vitest';
+import { toAbsolutePositions, useGroupLogic } from '../hooks/useGroupLogic';
+import type { RenderGroup } from '../types/render';
+import { makeEdge, makeNode, makePin } from './helpers';
 
 // ── Helpers ──
 
@@ -60,17 +61,17 @@ describe('useGroupLogic — expanded groups', () => {
 
     const groupNode = result.current.rfNodes.find((n) => n.id === 'g1');
     expect(groupNode).toBeDefined();
-    expect(groupNode!.type).toBe('groupNode');
+    expect(groupNode?.type).toBe('groupNode');
 
     const vpcNode = result.current.rfNodes.find((n) => n.id === 'vpc');
-    expect(vpcNode!.parentId).toBe('g1');
+    expect(vpcNode?.parentId).toBe('g1');
 
     const subnetNode = result.current.rfNodes.find((n) => n.id === 'subnet');
-    expect(subnetNode!.parentId).toBe('g1');
+    expect(subnetNode?.parentId).toBe('g1');
 
     // ec2 is ungrouped — no parentId
     const ec2Node = result.current.rfNodes.find((n) => n.id === 'ec2');
-    expect(ec2Node!.parentId).toBeUndefined();
+    expect(ec2Node?.parentId).toBeUndefined();
   });
 
   test('child positions are relative to group origin', () => {
@@ -130,13 +131,13 @@ describe('useGroupLogic — collapsed groups', () => {
     const { result } = renderHook(() => useGroupLogic(nodes, [], groups, empty, empty));
 
     const vpcNode = result.current.rfNodes.find((n) => n.id === 'vpc');
-    expect(vpcNode!.hidden).toBe(true);
+    expect(vpcNode?.hidden).toBe(true);
 
     const subnetNode = result.current.rfNodes.find((n) => n.id === 'subnet');
-    expect(subnetNode!.hidden).toBe(true);
+    expect(subnetNode?.hidden).toBe(true);
 
     const ec2Node = result.current.rfNodes.find((n) => n.id === 'ec2');
-    expect(ec2Node!.hidden).toBeUndefined();
+    expect(ec2Node?.hidden).toBeUndefined();
   });
 
   test('creates collapsed group node', () => {
@@ -150,9 +151,9 @@ describe('useGroupLogic — collapsed groups', () => {
 
     const groupNode = result.current.rfNodes.find((n) => n.id === 'g1');
     expect(groupNode).toBeDefined();
-    expect(groupNode!.type).toBe('groupNode');
-    expect(groupNode!.data.collapsed).toBe(true);
-    expect(groupNode!.data.memberCount).toBe(2);
+    expect(groupNode?.type).toBe('groupNode');
+    expect(groupNode?.data.collapsed).toBe(true);
+    expect(groupNode?.data.memberCount).toBe(2);
   });
 
   test('hides internal edges', () => {
@@ -183,9 +184,9 @@ describe('useGroupLogic — collapsed groups', () => {
     // Edge should be remapped: source = g1, target = ec2
     const remapped = result.current.rfEdges.find((e) => e.id === 'vpc.vpc_id->ec2.vpc_id');
     expect(remapped).toBeDefined();
-    expect(remapped!.source).toBe('g1');
-    expect(remapped!.target).toBe('ec2');
-    expect(remapped!.sourceHandle).toBe('out:vpc/vpc_id');
+    expect(remapped?.source).toBe('g1');
+    expect(remapped?.target).toBe('ec2');
+    expect(remapped?.sourceHandle).toBe('out:vpc/vpc_id');
 
     // Group node should have external pin
     const groupNode = result.current.rfNodes.find((n) => n.id === 'g1')!;
@@ -275,19 +276,19 @@ describe('useGroupLogic — non-adjacent grouping', () => {
 
     // B should be visible (not in group)
     const bNode = result.current.rfNodes.find((n) => n.id === 'b');
-    expect(bNode!.hidden).toBeUndefined();
+    expect(bNode?.hidden).toBeUndefined();
 
     // A→B remapped: group→B (outbound)
     const outEdge = result.current.rfEdges.find((e) => e.id === 'a.out->b.in');
     expect(outEdge).toBeDefined();
-    expect(outEdge!.source).toBe('g1');
-    expect(outEdge!.target).toBe('b');
+    expect(outEdge?.source).toBe('g1');
+    expect(outEdge?.target).toBe('b');
 
     // B→C remapped: B→group (inbound)
     const inEdge = result.current.rfEdges.find((e) => e.id === 'b.out->c.in');
     expect(inEdge).toBeDefined();
-    expect(inEdge!.source).toBe('b');
-    expect(inEdge!.target).toBe('g1');
+    expect(inEdge?.source).toBe('b');
+    expect(inEdge?.target).toBe('g1');
 
     // Group has both input and output handles
     const groupNode = result.current.rfNodes.find((n) => n.id === 'g1')!;
