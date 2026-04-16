@@ -1,13 +1,13 @@
 name: Flow Tests
 
-# Plan 2 Phase F — Playwright golden-path tests against Storybook flow stories.
-# Runs inside the pinned Playwright container so Chromium + fonts match the
-# committed screenshot baselines exactly. See playwright.config.ts for the
-# rendering pin details.
+# Playwright golden-path tests against Storybook flow stories. Runs
+# inside the pinned Playwright container so Chromium + fonts match the
+# committed screenshot baselines exactly. See playwright.config.ts for
+# the rendering pin details.
 #
-# Depends on lace-cli being checked out adjacent to vs-code-extension (the
-# monorepo layout). Builds the CLI with `-tags=test` so TestSessionOpen is
-# available — flow stories use it to load deterministic seed fixtures.
+# Pulls the -tags=test lace CLI binary + seed-drift canary hashes from
+# a private R2 bucket published by lace-cloud/lace-cli's
+# publish-test-bundle workflow. No cross-repo source checkout.
 
 on:
   push:
@@ -19,34 +19,42 @@ on:
 jobs:
   flow-tests:
     runs-on: ubuntu-latest
-    # Pinned to match @playwright/test version in package.json. When bumping
-    # Playwright, bump both together; mismatched versions cause subtle
-    # browser-binary incompatibilities.
+    # Pinned to match @playwright/test version in package.json. When
+    # bumping Playwright, bump both together; mismatched versions cause
+    # subtle browser-binary incompatibilities.
     container:
       image: mcr.microsoft.com/playwright:v1.59.1-jammy
-      options: --user 1001
+
+    env:
+      AWS_REGION: auto
+      AWS_EC2_METADATA_DISABLED: 'true'
 
     steps:
-      - name: Checkout vs-code-extension
-        uses: actions/checkout@v6
-        with:
-          path: vs-code-extension
+      - uses: actions/checkout@v6
 
-      - name: Checkout lace-cli (for seed-drift canary + test CLI build)
-        uses: actions/checkout@v6
-        with:
-          repository: lace-cloud/lace-cli
-          path: lace-cli
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-
-      - name: Build lace CLI with -tags=test
-        working-directory: lace-cli
+      - name: Install awscli + protoc
+        # The Playwright container ships neither. awscli pulls the R2
+        # bundle; protoc runs scripts/proto-gen.sh. apt-get needs no
+        # sudo since this container runs as root.
         run: |
-          make build-test
-          install -m 0755 lace /usr/local/bin/lace
+          apt-get update
+          apt-get install -y awscli protobuf-compiler
+
+      - name: Download lace test bundle from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
+        run: |
+          mkdir -p /tmp/lace-test
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
+            /tmp/bundle.tar.gz --endpoint-url "$AWS_ENDPOINT_URL"
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
+            /tmp/bundle.tar.gz.sha256 --endpoint-url "$AWS_ENDPOINT_URL"
+          cd /tmp && sha256sum -c bundle.tar.gz.sha256
+          tar -C /tmp/lace-test -xzf /tmp/bundle.tar.gz
+          install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
           lace version
 
       - uses: pnpm/action-setup@v4
@@ -57,25 +65,23 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: vs-code-extension/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: vs-code-extension
         run: pnpm install --frozen-lockfile
 
       - name: Generate proto
-        working-directory: vs-code-extension
         run: pnpm proto:gen
 
       - name: Build extension bundles
-        working-directory: vs-code-extension
         run: pnpm run build
 
       - name: Run Playwright flow tests
-        working-directory: vs-code-extension
         env:
           CI: '1'
-          LACE_CLI_REPO: ${{ github.workspace }}/lace-cli
+          # Points the seed-drift canary at the extracted bundle — the
+          # .sha256 canaries live under internal/module/server/testdata/seeds/
+          # within the tarball (same path as in lace-cli).
+          LACE_CLI_REPO: /tmp/lace-test
         run: pnpm flow-tests
 
       - name: Upload Playwright report
@@ -83,7 +89,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: vs-code-extension/playwright-report/
+          path: playwright-report/
           retention-days: 14
 
       - name: Upload failed screenshots (diffs)
@@ -91,5 +97,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-test-results
-          path: vs-code-extension/test-results/
+          path: test-results/
           retention-days: 14

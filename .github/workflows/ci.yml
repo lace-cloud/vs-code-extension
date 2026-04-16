@@ -10,6 +10,10 @@ name: CI
 #
 # Each job is isolated — they install their own dependencies + build
 # their own artefacts so one failing job doesn't mask others.
+#
+# host-e2e + flow-tests both pull the lace CLI test binary from a
+# private R2 bucket published by lace-cloud/lace-cli's
+# publish-test-bundle workflow. No cross-repo source checkout.
 
 on:
   push:
@@ -22,6 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: '28.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -40,6 +48,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: '28.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -58,27 +70,33 @@ jobs:
     # VS Code Electron tests need a display; xvfb-run wraps the test
     # command to provide one on the headless CI host.
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: auto
+      AWS_EC2_METADATA_DISABLED: 'true'
+
     steps:
-      - name: Checkout vs-code-extension
-        uses: actions/checkout@v6
-        with:
-          path: vs-code-extension
+      - uses: actions/checkout@v6
 
-      - name: Checkout lace-cli (for test-tag CLI build)
-        uses: actions/checkout@v6
+      - uses: arduino/setup-protoc@v3
         with:
-          repository: lace-cloud/lace-cli
-          path: lace-cli
+          version: '28.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-
-      - name: Build lace CLI with -tags=test
-        working-directory: lace-cli
+      - name: Download lace test bundle from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
         run: |
-          make build-test
-          sudo install -m 0755 lace /usr/local/bin/lace
+          mkdir -p /tmp/lace-test
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
+            /tmp/bundle.tar.gz --endpoint-url "$AWS_ENDPOINT_URL"
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
+            /tmp/bundle.tar.gz.sha256 --endpoint-url "$AWS_ENDPOINT_URL"
+          cd /tmp && sha256sum -c bundle.tar.gz.sha256
+          tar -C /tmp/lace-test -xzf /tmp/bundle.tar.gz
+          sudo install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
           lace version
 
       - uses: pnpm/action-setup@v4
@@ -89,18 +107,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: vs-code-extension/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: vs-code-extension
         run: pnpm install --frozen-lockfile
 
       - name: Generate proto
-        working-directory: vs-code-extension
         run: pnpm proto:gen
 
       - name: Build extension bundles
-        working-directory: vs-code-extension
         run: pnpm run build
 
       - name: Install xvfb + platform packages for VS Code
@@ -111,12 +125,12 @@ jobs:
       - name: Cache VS Code test download
         uses: actions/cache@v4
         with:
-          path: vs-code-extension/packages/host-e2e/.vscode-test
+          path: packages/host-e2e/.vscode-test
           key: vscode-test-${{ runner.os }}-stable-v1
 
       - name: Run host-e2e tests
-        working-directory: vs-code-extension
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm run test:host-e2e
 
   flow-tests:
     uses: ./.github/workflows/flow-tests.yml
+    secrets: inherit

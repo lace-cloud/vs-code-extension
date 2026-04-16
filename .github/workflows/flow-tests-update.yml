@@ -24,33 +24,39 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.59.1-jammy
-      options: --user 1001
     permissions:
       contents: write
       pull-requests: write
 
+    env:
+      AWS_REGION: auto
+      AWS_EC2_METADATA_DISABLED: 'true'
+
     steps:
-      - name: Checkout vs-code-extension
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
-          path: vs-code-extension
           ref: ${{ github.event.inputs.target_branch || github.ref_name }}
 
-      - name: Checkout lace-cli (for seed canaries + test CLI build)
-        uses: actions/checkout@v6
-        with:
-          repository: lace-cloud/lace-cli
-          path: lace-cli
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-
-      - name: Build lace CLI with -tags=test
-        working-directory: lace-cli
+      - name: Install awscli + protoc
         run: |
-          make build-test
-          install -m 0755 lace /usr/local/bin/lace
+          apt-get update
+          apt-get install -y awscli protobuf-compiler
+
+      - name: Download lace test bundle from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
+        run: |
+          mkdir -p /tmp/lace-test
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz" \
+            /tmp/bundle.tar.gz --endpoint-url "$AWS_ENDPOINT_URL"
+          aws s3 cp "s3://$R2_BUCKET/lace-test-bundle-linux-amd64.tar.gz.sha256" \
+            /tmp/bundle.tar.gz.sha256 --endpoint-url "$AWS_ENDPOINT_URL"
+          cd /tmp && sha256sum -c bundle.tar.gz.sha256
+          tar -C /tmp/lace-test -xzf /tmp/bundle.tar.gz
+          install -m 0755 /tmp/lace-test/lace /usr/local/bin/lace
           lace version
 
       - uses: pnpm/action-setup@v4
@@ -61,31 +67,25 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: vs-code-extension/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: vs-code-extension
         run: pnpm install --frozen-lockfile
 
       - name: Generate proto
-        working-directory: vs-code-extension
         run: pnpm proto:gen
 
       - name: Build extension bundles
-        working-directory: vs-code-extension
         run: pnpm run build
 
       - name: Regenerate Playwright baselines
-        working-directory: vs-code-extension
         env:
           CI: '1'
-          LACE_CLI_REPO: ${{ github.workspace }}/lace-cli
+          LACE_CLI_REPO: /tmp/lace-test
         run: pnpm flow-tests:update
 
       - name: Open PR with refreshed baselines
         uses: peter-evans/create-pull-request@v7
         with:
-          path: vs-code-extension
           branch: flow-tests/refresh-baselines
           delete-branch: true
           title: 'test(flow): refresh Playwright Linux baselines'
