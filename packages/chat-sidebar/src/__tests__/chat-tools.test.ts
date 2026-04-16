@@ -1,0 +1,416 @@
+import { test, expect, describe, beforeEach, vi } from 'vitest';
+import { getToolHandler } from '../host/tool-registry';
+import { registerGraphWriteTools, type GraphWriteDeps } from '../host/tools/graph-write-tools';
+import { registerGraphReadTools } from '../host/tools/graph-read-tools';
+import { registerGenerateTools, type GenerateToolDeps } from '../host/tools/generate-tools';
+import { makeCanvasView, makeNode, makeEdge } from './helpers';
+import type { RenderError } from '@lace/host';
+import type { RegistryModule } from '../host/types';
+
+// ── Mock RPC client ──
+
+function makeMockClient(overrides: Record<string, unknown> = {}) {
+  return {
+    placeModule: vi
+      .fn()
+      .mockResolvedValue(makeCanvasView([makeNode('vpc', 'module', 'aws/vpc@v1.0.0')])),
+    inspectModule: vi.fn().mockResolvedValue({
+      name: 'aws/vpc',
+      system: 'aws',
+      version: 'v1.0.0',
+      module_interface: { inputs: [], outputs: [] },
+    }),
+    updateInput: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
+    autoConnect: vi
+      .fn()
+      .mockResolvedValue(
+        makeCanvasView(
+          [makeNode('vpc'), makeNode('subnet')],
+          [makeEdge('vpc', 'subnet', 'vpc_id', 'vpc_id')],
+        ),
+      ),
+    syncLayout: vi.fn().mockResolvedValue({}),
+    queryValidate: vi.fn().mockResolvedValue({ errors: [] as RenderError[] }),
+    querySettings: vi.fn().mockResolvedValue({
+      terraform: { required_version: '', required_providers: [] },
+      providers: [],
+      locals: [],
+      environments: {},
+    }),
+    setLocals: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
+    setEnvironments: vi.fn().mockResolvedValue({}),
+    sessionGenerate: vi.fn().mockResolvedValue({
+      files_written: ['main.tf'],
+      diagnostics: [],
+    }),
+    ...overrides,
+  };
+}
+
+// ── Registry module fixtures ──
+
+const testModules: RegistryModule[] = [
+  {
+    id: 'aws/vpc',
+    name: 'aws/vpc',
+    version: 'v1.0.0',
+    system: 'aws',
+    description: 'AWS VPC',
+    categories: ['networking'],
+  },
+  {
+    id: 'aws/subnet',
+    name: 'aws/subnet',
+    version: 'v1.0.0',
+    system: 'aws',
+    description: 'AWS Subnet',
+    categories: ['networking'],
+  },
+  {
+    id: 'azure/resource-group',
+    name: 'azure/resource-group',
+    version: 'v2.0.0',
+    system: 'azure',
+    description: 'Azure RG',
+    categories: ['core'],
+  },
+];
+
+// ── Test setup ──
+
+let mockClient: ReturnType<typeof makeMockClient>;
+
+function makeWriteDeps(): GraphWriteDeps {
+  mockClient = makeMockClient();
+  return {
+    getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+    getRegistryModules: () => testModules,
+    getUserOrgs: () => [],
+  };
+}
+
+describe('write tools', () => {
+  beforeEach(() => {
+    const deps = makeWriteDeps();
+    registerGraphWriteTools(deps);
+    registerGraphReadTools({
+      getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+    });
+  });
+
+  describe('lace_add_module', () => {
+    test('adds module by exact name via placeModule RPC', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws/vpc' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('aws/vpc');
+      expect(result.content).toContain('instance **"vpc"**');
+      expect(mockClient.placeModule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'aws/vpc',
+          system: 'aws',
+          version: 'v1.0.0',
+        }),
+      );
+    });
+
+    test('resolves single fuzzy match', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'resource-group' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('azure/resource-group');
+      expect(mockClient.placeModule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'azure/resource-group',
+          system: 'azure',
+          version: 'v2.0.0',
+        }),
+      );
+    });
+
+    test('disambiguates multiple fuzzy matches', async () => {
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Multiple modules match');
+      expect(result.content).toContain('aws/vpc');
+      expect(result.content).toContain('aws/subnet');
+      expect(mockClient.placeModule).not.toHaveBeenCalled();
+    });
+
+    test('passes org provenance when module found in user org', async () => {
+      // Simulate: private module not in local cache, found via RPC in org
+      mockClient = makeMockClient({
+        listRegistryModules: vi
+          .fn()
+          .mockResolvedValueOnce({ modules: [] }) // public: not found
+          .mockResolvedValueOnce({
+            modules: [
+              {
+                id: 'aws/custom-networking',
+                name: 'aws/custom-networking',
+                version: 'v1.0.0',
+                system: 'aws',
+              },
+            ],
+          }),
+      });
+
+      const deps: GraphWriteDeps = {
+        getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+        getRegistryModules: () => [], // empty local cache — forces RPC search
+        getUserOrgs: () => [{ slug: 'acme-corp', name: 'Acme Corp', role: 'member' }],
+      };
+      registerGraphWriteTools(deps);
+      registerGraphReadTools({
+        getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+      });
+
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws/custom-networking' });
+
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.placeModule).toHaveBeenCalledWith(
+        expect.objectContaining({ organization: 'acme-corp' }),
+      );
+    });
+
+    test('surfaces engine error when placeModule fails', async () => {
+      mockClient.placeModule.mockRejectedValue(new Error('module not found in registry'));
+      const handler = getToolHandler('lace_add_module')!;
+      const result = await handler({ name: 'aws/vpc' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('module not found in registry');
+    });
+  });
+
+  describe('lace_set_input', () => {
+    test('sets literal value', async () => {
+      const handler = getToolHandler('lace_set_input')!;
+      const result = await handler({
+        instance_id: 'vpc',
+        input_name: 'enable_dns',
+        value: true,
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('literal true');
+      expect(mockClient.updateInput).toHaveBeenCalledWith({
+        instance_id: 'vpc',
+        input_name: 'enable_dns',
+        mode: 'literal',
+        value: true,
+        variable: undefined,
+        expression: undefined,
+      });
+    });
+
+    test('sets variable reference', async () => {
+      const handler = getToolHandler('lace_set_input')!;
+      const result = await handler({
+        instance_id: 'vpc',
+        input_name: 'cidr_block',
+        variable: 'vpc_cidr',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('variable "vpc_cidr"');
+      expect(mockClient.updateInput).toHaveBeenCalledWith({
+        instance_id: 'vpc',
+        input_name: 'cidr_block',
+        mode: 'variable',
+        value: undefined,
+        variable: 'vpc_cidr',
+        expression: undefined,
+      });
+    });
+
+    test('returns error when no binding type provided', async () => {
+      const handler = getToolHandler('lace_set_input')!;
+      const result = await handler({
+        instance_id: 'vpc',
+        input_name: 'cidr_block',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Must provide exactly one of');
+    });
+  });
+
+  describe('lace_validate_graph', () => {
+    test('reports errors from CLI', async () => {
+      mockClient.queryValidate.mockResolvedValue({
+        errors: [
+          { instance_id: 'subnet', input_name: 'vpc_id', message: 'Dangling reference to "ghost"' },
+        ],
+      });
+      const handler = getToolHandler('lace_validate_graph')!;
+      const result = await handler({});
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('1 error(s) found');
+      expect(result.content).toContain('ghost');
+    });
+  });
+});
+
+describe('generate tools', () => {
+  beforeEach(() => {
+    mockClient = makeMockClient();
+    const deps: GenerateToolDeps = {
+      getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+      getLaceDir: () => '/tmp/test-workspace/.lace',
+    };
+    registerGenerateTools(deps);
+  });
+
+  describe('lace_auto_connect', () => {
+    test('auto-connects matching outputs to unbound inputs', async () => {
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({
+        source_instance: 'vpc',
+        target_instance: 'subnet',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('Auto-connected 1 wire(s)');
+      expect(result.content).toContain('vpc.vpc_id');
+      expect(mockClient.autoConnect).toHaveBeenCalledWith({
+        source: 'vpc',
+        target: 'subnet',
+      });
+    });
+
+    test('reports no match when no edges returned', async () => {
+      mockClient.autoConnect.mockResolvedValue(
+        makeCanvasView([makeNode('vpc'), makeNode('subnet')]),
+      );
+      const handler = getToolHandler('lace_auto_connect')!;
+      const result = await handler({
+        source_instance: 'vpc',
+        target_instance: 'subnet',
+      });
+
+      expect(result.content).toContain('No compatible connections found');
+    });
+  });
+
+  describe('lace_generate', () => {
+    test('generates terraform via RPC', async () => {
+      const handler = getToolHandler('lace_generate')!;
+      const result = await handler({});
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('Terraform generated successfully');
+      expect(result.content).toContain('Files written to');
+      expect(mockClient.sessionGenerate).toHaveBeenCalledWith({
+        output_dir: '/tmp/test-workspace/.lace',
+        options: {
+          dry_run: false,
+          format: true,
+          validate: true,
+          overwrite: true,
+        },
+      });
+    });
+
+    test('reports errors from CLI', async () => {
+      mockClient.sessionGenerate.mockResolvedValue({
+        diagnostics: [{ severity: 'error', message: 'Missing required input' }],
+      });
+      const handler = getToolHandler('lace_generate')!;
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Generation failed');
+      expect(result.content).toContain('Missing required input');
+    });
+
+    test('returns error when no workspace folder', async () => {
+      const deps: GenerateToolDeps = {
+        getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+        getLaceDir: () => undefined,
+      };
+      registerGenerateTools(deps);
+
+      const handler = getToolHandler('lace_generate')!;
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('No workspace folder');
+    });
+  });
+});
+
+describe('settings tools', () => {
+  beforeEach(() => {
+    const deps = makeWriteDeps();
+    registerGraphWriteTools(deps);
+  });
+
+  describe('lace_set_local', () => {
+    test('sets literal local value', async () => {
+      const handler = getToolHandler('lace_set_local')!;
+      const result = await handler({ name: 'region', value: 'us-east-1' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('region');
+      expect(result.content).toContain('us-east-1');
+      expect(mockClient.querySettings).toHaveBeenCalled();
+      expect(mockClient.setLocals).toHaveBeenCalledWith({
+        locals: [{ name: 'region', mode: 'literal', value: 'us-east-1', expression: undefined }],
+      });
+    });
+
+    test('sets expression local', async () => {
+      const handler = getToolHandler('lace_set_local')!;
+      const result = await handler({ name: 'prefix', expression: 'var.project' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('expression');
+      expect(mockClient.setLocals).toHaveBeenCalledWith({
+        locals: [
+          { name: 'prefix', mode: 'expression', value: undefined, expression: 'var.project' },
+        ],
+      });
+    });
+
+    test('returns error when neither value nor expression provided', async () => {
+      const handler = getToolHandler('lace_set_local')!;
+      const result = await handler({ name: 'region' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Must provide exactly one of');
+    });
+  });
+
+  describe('lace_set_environment', () => {
+    test('sets environment variables', async () => {
+      const handler = getToolHandler('lace_set_environment')!;
+      const result = await handler({
+        environment: 'staging',
+        variables: { region: 'us-west-2', instance_type: 't3.small' },
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toContain('staging');
+      expect(result.content).toContain('region');
+      expect(mockClient.querySettings).toHaveBeenCalled();
+      expect(mockClient.setEnvironments).toHaveBeenCalledWith({
+        environments: { staging: { region: 'us-west-2', instance_type: 't3.small' } },
+      });
+    });
+
+    test('returns error when environment name missing', async () => {
+      const handler = getToolHandler('lace_set_environment')!;
+      const result = await handler({ variables: { region: 'us-east-1' } });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain('Missing required parameter: environment');
+    });
+  });
+});

@@ -135,6 +135,9 @@ importers:
 
   packages/chat-sidebar:
     dependencies:
+      '@lace/host':
+        specifier: workspace:*
+        version: link:../host
       '@lace/proto':
         specifier: workspace:*
         version: link:../proto
@@ -151,10 +154,19 @@ importers:
 
   packages/host:
     dependencies:
+      '@grpc/grpc-js':
+        specifier: ^1.12.6
+        version: 1.14.3
+      '@lace/chat-sidebar':
+        specifier: workspace:*
+        version: link:../chat-sidebar
       '@lace/proto':
         specifier: workspace:*
         version: link:../proto
     devDependencies:
+      '@types/vscode':
+        specifier: ^1.95.0
+        version: 1.116.0
       typescript:
         specifier: ^5.6.3
         version: 5.9.3

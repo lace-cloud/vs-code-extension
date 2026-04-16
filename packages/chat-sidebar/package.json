@@ -2,14 +2,15 @@
   "name": "@lace/chat-sidebar",
   "version": "0.0.0",
   "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@lace/proto": "workspace:*"
+    "@lace/proto": "workspace:*",
+    "@lace/host": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

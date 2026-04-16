@@ -3,8 +3,8 @@ const path = require('path');
 
 module.exports = [
   {
-    // Backend (Node.js)
-    entry: './src/extension.ts',
+    // Backend (Node.js) — host package
+    entry: './packages/host/src/extension.ts',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'extension.js',
@@ -21,6 +21,7 @@ module.exports = [
           use: {
             loader: 'ts-loader',
             options: {
+              configFile: path.resolve(__dirname, 'tsconfig.json'),
               compilerOptions: { noEmit: false },
             },
           },
@@ -34,9 +35,9 @@ module.exports = [
     devtool: 'source-map',
   },
   {
-    // Frontend (Webview)
+    // Frontend (Webview) — canvas package
     mode: 'development',
-    entry: './src/webview/index.tsx',
+    entry: './packages/canvas/src/index.tsx',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'webview.js',
@@ -52,6 +53,7 @@ module.exports = [
           use: {
             loader: 'ts-loader',
             options: {
+              configFile: path.resolve(__dirname, 'tsconfig.json'),
               compilerOptions: { noEmit: false },
             },
           },
