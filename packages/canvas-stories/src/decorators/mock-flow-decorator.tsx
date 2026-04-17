@@ -1,6 +1,6 @@
 import { App, type HostBridge } from '@lace/canvas';
 import type { CanvasView } from '@lace/proto';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { MockCanvasEngine } from '../mocks/mock-engine';
 
 // Noop bridge — mock flow stories are static snapshots, so host signals
@@ -20,6 +20,13 @@ function makeMockBridge(engine: MockCanvasEngine): HostBridge {
 
 type Props = {
   fixture: CanvasView;
+  /**
+   * Optional hook scene stories use to pin the canvas into a specific
+   * UI state after the initial view mounts — e.g. fire a synthetic
+   * `generateSuccess` to make the save toast appear. Runs on the
+   * microtask after mount so subscriptions have landed.
+   */
+  onReady?: (engine: MockCanvasEngine) => void;
 };
 
 /**
@@ -28,9 +35,17 @@ type Props = {
  * captured by `scripts/capture-fixtures.mjs`. Stories using this decorator
  * snapshot in Chromatic's cloud without any backend.
  */
-export function MockFlowDecorator({ fixture }: Props) {
+export function MockFlowDecorator({ fixture, onReady }: Props) {
   const engine = useMemo(() => new MockCanvasEngine(fixture), [fixture]);
   const hostBridge = useMemo(() => makeMockBridge(engine), [engine]);
+
+  useEffect(() => {
+    if (!onReady) return;
+    // Deferred past the stateUpdated microtask so listeners have seen
+    // the initial view before we start injecting state transitions.
+    const timer = setTimeout(() => onReady(engine), 0);
+    return () => clearTimeout(timer);
+  }, [engine, onReady]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>

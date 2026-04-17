@@ -1,5 +1,6 @@
 // src/webview/Canvas.tsx
 
+import './Canvas.css';
 import {
   applyEdgeChanges,
   applyNodeChanges,
@@ -300,24 +301,26 @@ function CompositeEditor({
       deleteKeyCode={['Backspace', 'Delete']}
       fitView={false}
       proOptions={{ hideAttribution: true }}
-      style={{ background: '#161616' }}
+      style={{ background: 'var(--lace-color-bg-canvas)' }}
     >
       {/* Bottom-left stack: Controls at the floor, MiniMap above.
-          116px = Controls height (84px, 3×28px buttons) + gap (12px) + floor (20px).
-          Inline offsets instead of @lace/canvas/index.css overrides so
-          Storybook (which doesn't import that stylesheet) matches the
-          webview build. */}
+          108px = Controls height (84px, 3×28px buttons) + gap (8px) + floor (20px − 4px
+          minimap bleed).
+          Inline offsets because Controls/MiniMap render at the ReactFlow
+          pane root; `style` is xyflow's first-class positioning API and
+          behaves identically in the webview and Storybook. Colors flow
+          through design tokens. */}
       <MiniMap
         position="bottom-left"
         style={{
-          background: '#111',
-          border: '1px solid #333',
-          borderRadius: 4,
-          bottom: 116,
+          width: 160,
+          height: 110,
+          background: 'var(--lace-canvas-minimap-bg)',
+          bottom: 108,
           left: 20,
         }}
-        maskColor="rgba(0,0,0,0.6)"
-        nodeColor="#CEFE65"
+        maskColor="var(--lace-canvas-minimap-mask)"
+        nodeColor="var(--lace-color-accent)"
       />
       <Controls position="bottom-left" showInteractive={false} style={{ bottom: 20, left: 20 }} />
       <ActionBar

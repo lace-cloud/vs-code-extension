@@ -1,18 +1,19 @@
-/* Storybook preview CSS — mirrors the canvas webview's CSS order */
+/*
+ * Storybook preview CSS. Mirrors the @lace/canvas webview entry so
+ * stories load exactly the same global stylesheets the webview does —
+ * any per-component xyflow overrides come in via Canvas.css through
+ * the React import chain, not from here.
+ */
+
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css" layer(components);
 @import "@lace/design-tokens/tokens.css";
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--lace-night);
-  color: var(--lace-grey);
-  margin: 0;
-  padding: 0;
-}
-
-/* Storybook centers components by default; ensure enough space */
+/* Storybook centers components by default; give isolated primitive
+ * stories a little breathing room. Full-screen stories (layout:
+ * 'fullscreen' — every flow/mock + most composite stories) are
+ * unaffected because the centred iframe root isn't used for them. */
 #storybook-root {
   min-width: 320px;
-  padding: 16px;
+  padding: var(--lace-space-4);
 }

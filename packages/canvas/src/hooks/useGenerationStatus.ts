@@ -21,13 +21,13 @@ export function useGenerationStatus(showToast: ShowToastFn) {
         case 'generateProgress':
           setGenerating(true);
           setValidationErrors([]);
-          showToast(PHASE_LABELS[event.phase], 'progress');
+          showToast(PHASE_LABELS[event.phase], 'progress', event.toastDurationMs);
           return;
         case 'generateSuccess':
           setGenerating(false);
           setValidationErrors([]);
           setErrorBannerDismissed(false);
-          showToast('Successfully generated', 'success');
+          showToast('Successfully generated', 'success', event.toastDurationMs);
           return;
         case 'generateError': {
           setGenerating(false);
@@ -35,9 +35,9 @@ export function useGenerationStatus(showToast: ShowToastFn) {
           setValidationErrors(diags);
           setErrorBannerDismissed(false);
           if (diags.length > 0) {
-            showToast(`Validation: ${diags.length} error(s)`, 'error');
+            showToast(`Validation: ${diags.length} error(s)`, 'error', event.toastDurationMs);
           } else {
-            showToast(`Generate error: ${event.message}`, 'error');
+            showToast(`Generate error: ${event.message}`, 'error', event.toastDurationMs);
           }
           return;
         }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Diagnostic } from '../types/render';
+import './ValidationErrorBanner.css';
 
 // ── ValidationErrorDialog ──────────────────────────────────────────────────
 
@@ -20,82 +21,48 @@ function ValidationErrorDialog({
 }: DialogProps) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
+      className="lace-error-dialog-backdrop"
       onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+      role="presentation"
     >
       <div
-        className="relative rounded-lg shadow-2xl"
-        style={{
-          background: '#1a1a1a',
-          border: '1px solid rgba(229,72,77,0.35)',
-          width: 520,
-          maxHeight: '70vh',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
+        className="lace-error-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lace-error-dialog-title"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-4 py-3"
-          style={{ borderBottom: '1px solid rgba(229,72,77,0.2)' }}
-        >
-          <span style={{ color: '#f87171', fontSize: 13, fontWeight: 600 }}>
+        <header className="lace-error-dialog__header">
+          <h2 id="lace-error-dialog-title" className="lace-error-dialog__title">
             Terraform Validation Errors ({diagnostics.length})
-          </span>
+          </h2>
           <button
+            type="button"
+            className="lace-error-dialog__close"
             onClick={onClose}
-            style={{
-              color: '#888',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 16,
-              lineHeight: 1,
-            }}
             title="Close"
+            aria-label="Close"
           >
             ×
           </button>
-        </div>
-
-        {/* Error list */}
-        <div
-          className="overflow-y-auto flex-1 px-4 py-3"
-          style={{ gap: 10, display: 'flex', flexDirection: 'column' }}
-        >
+        </header>
+        <div className="lace-error-dialog__list">
           {diagnostics.map((d, i) => {
             const nodeId = extractNodeId(d, nodeIds);
             const hasFileLink = !!d.file;
             return (
-              <div
-                key={i}
-                style={{
-                  background: '#2a1414',
-                  border: '1px solid rgba(229,72,77,0.2)',
-                  borderRadius: 6,
-                  padding: '8px 10px',
-                }}
-              >
-                <div style={{ color: '#f87171', fontSize: 12, marginBottom: 4 }}>{d.message}</div>
+              <div key={`${d.message}-${i}`} className="lace-error-dialog__item">
+                <div className="lace-error-dialog__item-message">{d.message}</div>
                 {hasFileLink && (
                   <button
+                    type="button"
+                    className="lace-error-dialog__file-link"
                     onClick={() => onOpenFile(d.file!, d.line, d.column)}
                     title="Open file in editor"
-                    style={{
-                      display: 'block',
-                      color: '#888',
-                      fontSize: 10,
-                      marginBottom: nodeId ? 6 : 0,
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      textDecoration: 'underline',
-                      textDecorationColor: 'rgba(136,136,136,0.4)',
-                    }}
                   >
                     {d.file}
                     {d.line != null && `:${d.line}`}
@@ -104,16 +71,9 @@ function ValidationErrorDialog({
                 )}
                 {nodeId && (
                   <button
+                    type="button"
+                    className="lace-error-dialog__node-link"
                     onClick={() => onGoToNode(nodeId)}
-                    style={{
-                      fontSize: 10,
-                      color: '#CEFE65',
-                      background: 'rgba(206,254,101,0.08)',
-                      border: '1px solid rgba(206,254,101,0.25)',
-                      borderRadius: 4,
-                      padding: '2px 8px',
-                      cursor: 'pointer',
-                    }}
                   >
                     View node
                   </button>
@@ -150,52 +110,36 @@ export function ValidationErrorBanner({
 
   return (
     <>
-      {/* Persistent banner — top-right, below the ActionBar. Matches Toast's
-          60px/16px offset so banner and toast visually align. */}
-      <div
-        className="absolute top-[60px] right-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)] border"
-        style={{
-          background: '#3a1518',
-          color: '#f87171',
-          borderColor: 'rgba(248,113,113,0.3)',
-        }}
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="#f87171" style={{ flexShrink: 0 }}>
+      <div className="lace-error-banner" role="status">
+        <svg
+          className="lace-error-banner__icon"
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
           <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3.5c.28 0 .5.22.5.5v3a.5.5 0 0 1-1 0V5c0-.28.22-.5.5-.5zm0 6a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5z" />
         </svg>
-        <span>Terraform validation failed</span>
+        <span className="lace-error-banner__message">Terraform validation failed</span>
         <button
+          type="button"
+          className="lace-error-banner__view-details"
           onClick={() => setDialogOpen(true)}
-          style={{
-            color: '#f87171',
-            background: 'rgba(248,113,113,0.12)',
-            border: '1px solid rgba(248,113,113,0.3)',
-            borderRadius: 4,
-            padding: '1px 7px',
-            cursor: 'pointer',
-            fontSize: 11,
-          }}
         >
           View details
         </button>
         <button
+          type="button"
+          className="lace-error-banner__dismiss"
           onClick={onDismiss}
-          style={{
-            color: '#888',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 14,
-            lineHeight: 1,
-            padding: '0 2px',
-          }}
           title="Dismiss"
+          aria-label="Dismiss"
         >
           ×
         </button>
       </div>
 
-      {/* Dialog — only mounts when opened */}
       {dialogOpen && (
         <ValidationErrorDialog
           diagnostics={diagnostics}
