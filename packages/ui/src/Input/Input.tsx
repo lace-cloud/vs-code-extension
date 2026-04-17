@@ -5,6 +5,8 @@ export type InputType = 'text' | 'password' | 'number' | 'email' | 'url' | 'sear
 
 export interface InputProps {
   value: string;
+  /** Omit for read-only display; React still treats the input as
+   * controlled (no spurious warning) because `readOnly` is set. */
   onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
   type?: InputType;
   placeholder?: string;

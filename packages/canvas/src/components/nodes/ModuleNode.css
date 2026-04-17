@@ -130,5 +130,5 @@
 }
 
 .lace-module-node__pin-row-label--default {
-  color: rgba(236, 239, 237, 0.85);
+  color: var(--lace-color-neutral-100-alpha-85);
 }

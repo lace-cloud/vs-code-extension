@@ -12,7 +12,7 @@
   background: var(--lace-bg-context-menu);
   border: 1px solid var(--lace-green-alpha-20);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--lace-shadow-lg);
 }
 
 .lace-ctx-menu__item {

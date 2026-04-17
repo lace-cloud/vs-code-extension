@@ -249,7 +249,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     return (
       <div className="lace-mcp__wired-row">
         <div className="lace-mcp__wired-input">
-          <Input value={label} onChange={() => {}} readOnly fullWidth mono />
+          <Input value={label} readOnly fullWidth mono />
         </div>
         <Badge variant="info" size="md">
           Wired

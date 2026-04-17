@@ -80,17 +80,17 @@ export const StateMatrix: Story = {
         width: 380,
       }}
     >
-      <div style={{ color: '#999', fontSize: 11 }}>Idle</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>Idle</div>
       <Input value="vpc-main" fullWidth />
-      <div style={{ color: '#999', fontSize: 11 }}>Placeholder</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>Placeholder</div>
       <Input value="" placeholder="Enter a name…" fullWidth />
-      <div style={{ color: '#999', fontSize: 11 }}>Mono</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>Mono</div>
       <Input value="module.iam_role.role_arn" mono fullWidth />
-      <div style={{ color: '#999', fontSize: 11 }}>Error</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>Error</div>
       <Input value="duplicate_name" error fullWidth />
-      <div style={{ color: '#999', fontSize: 11 }}>Disabled</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>Disabled</div>
       <Input value="Locked" disabled fullWidth />
-      <div style={{ color: '#999', fontSize: 11 }}>Read-only</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>Read-only</div>
       <Input value="aws/vpc@v1.0.0" readOnly mono fullWidth />
     </div>
   ),

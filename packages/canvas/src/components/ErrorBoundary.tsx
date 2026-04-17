@@ -1,13 +1,20 @@
 import React from 'react';
+import './ErrorBoundary.css';
 
 type ErrorStateProps = { message: string };
 
 export function ErrorState({ message }: ErrorStateProps) {
   return (
-    <div style={{ padding: 24, color: '#f44' }}>
-      <h3>Something went wrong</h3>
-      <pre>{message}</pre>
-      <button onClick={() => window.location.reload()}>Reload</button>
+    <div className="lace-error-state" role="alert">
+      <h3 className="lace-error-state__title">Something went wrong</h3>
+      <pre className="lace-error-state__message">{message}</pre>
+      <button
+        type="button"
+        className="lace-error-state__reload"
+        onClick={() => window.location.reload()}
+      >
+        Reload
+      </button>
     </div>
   );
 }

@@ -60,12 +60,16 @@ export const SizeMatrix: Story = {
       }}
     >
       <div />
-      <div style={{ color: '#999', fontSize: 11 }}>sm</div>
-      <div style={{ color: '#999', fontSize: 11 }}>md</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>sm</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>md</div>
       {(['neutral', 'info', 'success', 'danger'] as const).flatMap((variant) => [
         <div
           key={`${variant}-label`}
-          style={{ color: '#999', fontSize: 11, textTransform: 'capitalize' }}
+          style={{
+            color: 'var(--lace-color-text-muted)',
+            fontSize: 11,
+            textTransform: 'capitalize',
+          }}
         >
           {variant}
         </div>,

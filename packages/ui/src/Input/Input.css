@@ -48,7 +48,7 @@
 
 .lace-input--error:focus {
   border-color: var(--lace-input-border-error);
-  box-shadow: 0 0 0 2px rgba(229, 72, 77, 0.25);
+  box-shadow: 0 0 0 2px var(--lace-color-red-alpha-25);
 }
 
 /* ── Modifiers ── */

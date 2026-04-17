@@ -7,7 +7,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import { useMemo } from 'react';
 import type { ExternalPin } from '../components/nodes/GroupNode';
-import { pinColor } from '../components/nodes/pinColor';
+import { ANY_PIN_COLOR, pinColor } from '../components/nodes/pinColor';
 import type { RenderEdge, RenderGroup, RenderNode } from '../types/render';
 
 // ── Constants ──
@@ -396,7 +396,7 @@ function computeCollapsedGroup(
           handleId,
           label: `${e.source}.${e.source_output}`,
           side: 'output',
-          color: pin ? pinColor(pin) : { fill: '#9BA19E', stroke: '#4A4F4C' },
+          color: pin ? pinColor(pin) : ANY_PIN_COLOR,
         });
       }
 
@@ -433,7 +433,7 @@ function computeCollapsedGroup(
           handleId,
           label: `${e.target}.${e.target_input}`,
           side: 'input',
-          color: pin ? pinColor(pin) : { fill: '#9BA19E', stroke: '#4A4F4C' },
+          color: pin ? pinColor(pin) : ANY_PIN_COLOR,
         });
       }
 

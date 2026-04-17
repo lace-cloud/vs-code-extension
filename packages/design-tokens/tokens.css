@@ -73,10 +73,12 @@
   --lace-color-tag-blue-text: #9ecbff;
 
   /* ── Palette: alpha variants ── */
+  --lace-color-green-alpha-04: rgba(206, 254, 101, 0.04);
   --lace-color-green-alpha-10: rgba(206, 254, 101, 0.1);
   --lace-color-green-alpha-15: rgba(206, 254, 101, 0.15);
   --lace-color-green-alpha-18: rgba(206, 254, 101, 0.18);
   --lace-color-green-alpha-20: rgba(206, 254, 101, 0.2);
+  --lace-color-green-alpha-50: rgba(206, 254, 101, 0.5);
   --lace-color-green-alpha-60: rgba(206, 254, 101, 0.6);
   --lace-color-red-alpha-12: rgba(248, 113, 113, 0.12);
   --lace-color-red-alpha-20: rgba(229, 72, 77, 0.2);
@@ -93,6 +95,13 @@
   --lace-color-black-alpha-50: rgba(0, 0, 0, 0.5);
   --lace-color-black-alpha-60: rgba(0, 0, 0, 0.6);
   --lace-color-blue-alpha-30: rgba(59, 130, 246, 0.3);
+  --lace-color-neutral-100-alpha-85: rgba(236, 239, 237, 0.85);
+  --lace-color-teal-600-alpha-60: rgba(21, 50, 56, 0.6);
+  --lace-color-grey-fog-alpha-15: rgba(155, 161, 158, 0.15);
+  --lace-color-grey-fog-alpha-40: rgba(155, 161, 158, 0.4);
+  --lace-color-grey-fog: #9ba19e;
+  --lace-color-group-collapsed-bg: #1a2a20;
+  --lace-color-green-alpha-03: rgba(206, 254, 101, 0.03);
 
   /* ── Scale: spacing (4px base) ── */
   --lace-space-0: 0;
@@ -348,10 +357,12 @@
   --lace-canvas-minimap-bg: #111111;
   --lace-canvas-minimap-border: var(--lace-color-border-default);
   --lace-canvas-minimap-mask: var(--lace-color-black-alpha-60);
-  --lace-canvas-edge-stroke: var(--lace-color-accent);
+  --lace-canvas-edge-stroke: var(--lace-color-green-alpha-50);
+  --lace-canvas-edge-stroke-hover: var(--lace-color-accent-strong);
   --lace-canvas-edge-stroke-selected: var(--lace-color-accent-strong);
   --lace-canvas-edge-stroke-width: 1.5px;
   --lace-canvas-edge-stroke-width-selected: 2.5px;
+  --lace-canvas-grid-dot: var(--lace-color-green-alpha-04);
 
   /* ── Module detail panel ── */
   --lace-accent-blue: var(--lace-color-blue-accent);
