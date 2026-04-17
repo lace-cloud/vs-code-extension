@@ -1,4 +1,10 @@
+export type { BadgeProps, BadgeSize, BadgeVariant } from './Badge';
+export { Badge } from './Badge';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './Button';
 export { Button } from './Button';
 export type { IconButtonProps, IconButtonSize, IconButtonVariant } from './IconButton';
 export { IconButton } from './IconButton';
+export type { ModalProps, ModalTone } from './Modal';
+export { Modal } from './Modal';
+export type { PanelProps } from './Panel';
+export { Panel } from './Panel';
