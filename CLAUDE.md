@@ -102,6 +102,45 @@ regression is a gap today, planned to be filled by adding MSW-mocked
 flow stories to Storybook in a later session (so their visuals also
 flow through Storybook mode with no live CLI dependency).
 
+#### Review protocol
+
+Chromatic's diff view only shows *changed* pixels. That's not enough
+to catch a story that renders broken in isolation — a newly-broken
+story gets accepted as a clean baseline. So every PR review walks
+through the Storybook Library view, not just the diff.
+
+- **PR description lists new/changed stories.** One bullet per story
+  so the reviewer knows what to click. If a PR only touches plumbing
+  (no story changes), say that.
+- **Reviewer opens each in the Chromatic Library**, not just the
+  "Changes" tab. Confirm the component looks the way it should look
+  in the real app — not just that nothing is different from last
+  time.
+- **Broken-isolation stories → deny in Chromatic + fix forward.**
+  Never accept a snapshot of a misrendered story as the baseline.
+  Diagnose why it renders broken (missing CSS, missing positioning
+  context, missing provider, missing decorator) and fix it in the
+  same PR.
+- **Stories tagged `chromatic: { disableSnapshot: true }` are
+  ignored.** Flow stories fall here — they need a live CLI that
+  Chromatic's cloud can't spawn, so the library shows the
+  `CliMissingBanner` fallback. That's expected; not a review item.
+- **Rule of thumb:** if a story in the library doesn't match how the
+  component actually looks in the app, the story or the component is
+  wrong — never the baseline.
+
+#### Scene stories (introduced Session 4+)
+
+A **scene story** composes multiple components in their intended
+spatial arrangement — e.g. a canvas with two wired ModuleNodes + a
+ContextMenu open on the second one, all at real layout scale. Scene
+stories catch layout regressions that single-component stories miss
+(header overlapping pin rows, context menu escaping the canvas
+frame, panel pushing the canvas below the fold) and serve as
+designer-facing reference renders. They're introduced alongside
+composite refactors from Session 4 onward; earlier sessions stick to
+primitive / single-composite stories.
+
 ### Playwright flow-tests (integration / contract)
 
 `tests/flow/canvas-golden-paths.spec.ts` runs the flow stories against
