@@ -1,22 +1,24 @@
 // src/webview/components/panels/ModuleConfigPanel.tsx
+import { Badge, Button, Input, ModeToggle, Panel, Textarea } from '@lace/ui';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CanvasEngine } from '../../engine';
 import { useCanvas } from '../../state/engine-context';
-import {
-  footerSaveButtonClasses,
-  inputClasses,
-  modeButtonActive,
-  modeButtonBase,
-  modeButtonInactive,
-} from '../../styles/panel';
 import type { NodeConfig, RenderInput, RenderOutput } from '../../types/render';
 import AccordionSection from '../AccordionSection';
-import PanelFrame from '../PanelFrame';
+import './ModuleConfigPanel.css';
+import './panels-shared.css';
 
 // ── Binding mode type ──
 
 type BindingMode = 'empty' | 'literal' | 'variable' | 'expression' | 'wired';
+
+const MODE_ITEMS: { value: BindingMode; label: string }[] = [
+  { value: 'literal', label: 'Lit' },
+  { value: 'variable', label: 'Var' },
+  { value: 'expression', label: 'Expr' },
+  { value: 'wired', label: 'Wired' },
+];
 
 // ── Props ──
 
@@ -34,7 +36,6 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Local state: tracks per-input binding changes as a single object
   type InputState = {
     modes: Record<string, BindingMode>;
     values: Record<string, unknown>;
@@ -48,7 +49,6 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     expressions: {},
   });
 
-  // Destructured aliases for read access
   const {
     modes: localModes,
     values: localValues,
@@ -56,7 +56,6 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     expressions: localExpressions,
   } = inputState;
 
-  // Convenience setters
   const setLocalModes = (fn: (prev: Record<string, BindingMode>) => Record<string, BindingMode>) =>
     setInputState((s) => ({ ...s, modes: fn(s.modes) }));
   const setLocalValues = (fn: (prev: Record<string, unknown>) => Record<string, unknown>) =>
@@ -66,10 +65,8 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
   const setLocalExpressions = (fn: (prev: Record<string, string>) => Record<string, string>) =>
     setInputState((s) => ({ ...s, expressions: fn(s.expressions) }));
 
-  // depends_on local state
   const [localDependsOn, setLocalDependsOn] = useState<Set<string>>(new Set());
 
-  // Fetch config from engine
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +79,6 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
         setConfig(result);
         setLoading(false);
 
-        // Initialize local state from fetched config
         const modes: Record<string, BindingMode> = {};
         const values: Record<string, unknown> = {};
         const variables: Record<string, string> = {};
@@ -109,35 +105,30 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     };
   }, [instance_id, engine, state.generation]);
 
-  const switchMode = useCallback(
-    (name: string, mode: BindingMode, input: RenderInput) => {
-      setLocalModes((prev) => ({ ...prev, [name]: mode }));
-      switch (mode) {
-        case 'literal':
-          setLocalValues((prev) => ({ ...prev, [name]: input.default_value ?? null }));
-          break;
-        case 'variable':
-          setLocalVariables((prev) => ({ ...prev, [name]: '' }));
-          break;
-        case 'expression':
-          setLocalExpressions((prev) => ({ ...prev, [name]: '' }));
-          break;
-        case 'empty':
-          setLocalValues((prev) => {
-            const next = { ...prev };
-            delete next[name];
-            return next;
-          });
-          break;
-        case 'wired':
-          // Cannot switch to wired manually
-          break;
-      }
-    },
-    [config],
-  );
-
-  // ── Split inputs ──
+  const switchMode = useCallback((name: string, mode: BindingMode, input: RenderInput) => {
+    setLocalModes((prev) => ({ ...prev, [name]: mode }));
+    switch (mode) {
+      case 'literal':
+        setLocalValues((prev) => ({ ...prev, [name]: input.default_value ?? null }));
+        break;
+      case 'variable':
+        setLocalVariables((prev) => ({ ...prev, [name]: '' }));
+        break;
+      case 'expression':
+        setLocalExpressions((prev) => ({ ...prev, [name]: '' }));
+        break;
+      case 'empty':
+        setLocalValues((prev) => {
+          const next = { ...prev };
+          delete next[name];
+          return next;
+        });
+        break;
+      case 'wired':
+        // Cannot switch to wired manually.
+        break;
+    }
+  }, []);
 
   const { requiredInputs, optionalInputs } = useMemo(
     () => ({
@@ -147,16 +138,9 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     [config?.inputs],
   );
 
-  // ── Save handler ──
-
   const handleSave = async () => {
     if (!config) return;
 
-    // Update each non-wired input individually so the CLI processes them
-    // one at a time. Wired inputs are intentionally skipped — their bindings
-    // are managed by connect/disconnect and must not be touched here.
-    // (Using updateAllInputs with a partial list causes the CLI to replace the
-    // full input set, which erases wired bindings.)
     let lastView = state.view;
     for (const input of config.inputs) {
       const mode = localModes[input.name] ?? input.mode;
@@ -178,13 +162,10 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     }
     await engine.setDependsOn(instance_id, [...localDependsOn]);
 
-    // Clear the blue "new" border only when at least one required input has
-    // been given a non-empty value. If the module has no required inputs at
-    // all, any save counts as configured.
-    const requiredInputs = config.inputs.filter((i) => i.required);
+    const requiredToCheck = config.inputs.filter((i) => i.required);
     const hasFilledRequired =
-      requiredInputs.length === 0 ||
-      requiredInputs.some((input) => {
+      requiredToCheck.length === 0 ||
+      requiredToCheck.some((input) => {
         const mode = localModes[input.name] ?? input.mode;
         if (mode === 'wired') return true;
         if (mode === 'literal') {
@@ -197,7 +178,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
         if (mode === 'expression') {
           return (localExpressions[input.name] ?? '').trim().length > 0;
         }
-        return false; // mode === 'empty'
+        return false;
       });
 
     if (hasFilledRequired) {
@@ -206,136 +187,116 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     onClose();
   };
 
-  // ── Disconnect handler ──
-
   const handleDisconnect = async (inputName: string) => {
     const result = await engine.disconnect(instance_id, inputName);
     updateView(result);
-    // Refresh config after disconnect
     const updated = await engine.queryNodeConfig(instance_id);
     setConfig(updated);
-    // Reset mode for that input
     const input = updated.inputs.find((i) => i.name === inputName);
     if (input) {
       setLocalModes((prev) => ({ ...prev, [inputName]: input.mode }));
     }
   };
 
-  // ── Mode selector ──
-
   function renderModeSelector(input: RenderInput): React.ReactNode {
     const currentMode = localModes[input.name] ?? input.mode;
     const isWired = currentMode === 'wired';
-
-    const buttons: { mode: BindingMode; label: string; disabled?: boolean }[] = [
-      { mode: 'literal', label: 'Lit', disabled: isWired },
-      { mode: 'variable', label: 'Var', disabled: isWired },
-      { mode: 'expression', label: 'Expr', disabled: isWired },
-      { mode: 'wired', label: 'Wired', disabled: true },
-    ];
-
+    // Wired is always disabled (set by connect/disconnect). When the
+    // current mode is wired, Lit/Var/Expr are also disabled so the user
+    // can't silently overwrite a live binding.
+    const items = MODE_ITEMS.map((m) => ({
+      ...m,
+      disabled: m.value === 'wired' || isWired,
+    }));
     return (
-      <div className="flex gap-1 mb-2">
-        {buttons.map((btn) => (
-          <button
-            key={btn.mode}
-            className={`${modeButtonBase} ${currentMode === btn.mode ? modeButtonActive : modeButtonInactive} ${btn.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-            onClick={() => {
-              if (!btn.disabled) switchMode(input.name, btn.mode, input);
-            }}
-            disabled={btn.disabled}
-          >
-            {btn.label}
-          </button>
-        ))}
-      </div>
+      <ModeToggle<BindingMode>
+        value={currentMode}
+        onChange={(next) => switchMode(input.name, next, input)}
+        items={items}
+        aria-label={`${input.name} binding mode`}
+      />
     );
   }
-
-  // ── Render a single input field based on mode ──
 
   function renderInputField(input: RenderInput): React.ReactNode {
     const currentMode = localModes[input.name] ?? input.mode;
 
     return (
-      <div key={input.name} className="mb-4 flex flex-col gap-1.5">
-        <label className="text-xs font-semibold text-[#e6e6e6]">
+      <div key={input.name} className="lace-panel-field">
+        <label className="lace-panel-row-label">
           {input.name}
-          {input.required && <span className="text-[#e5484d] ml-1">*</span>}
+          {input.required && <span className="lace-mcp__required-star">*</span>}
         </label>
 
-        {/* Mode selector */}
         {renderModeSelector(input)}
 
-        {/* Mode-specific editor */}
-        {currentMode === 'wired' && renderWiredEditor(input)}
-        {currentMode === 'variable' && renderVariableEditor(input)}
-        {currentMode === 'expression' && renderExpressionEditor(input)}
-        {currentMode === 'literal' && renderLiteralEditor(input)}
+        <div className="lace-panel-row-content">
+          {currentMode === 'wired' && renderWiredEditor(input)}
+          {currentMode === 'variable' && renderVariableEditor(input)}
+          {currentMode === 'expression' && renderExpressionEditor(input)}
+          {currentMode === 'literal' && renderLiteralEditor(input)}
+        </div>
 
-        {input.description && <div className="text-[11px] text-[#9ca3af]">{input.description}</div>}
+        {input.description && (
+          <div className="lace-panel-field__description">{input.description}</div>
+        )}
       </div>
     );
   }
-
-  // ── Wired mode (read-only with disconnect button) ──
 
   function renderWiredEditor(input: RenderInput): React.ReactNode {
     const label = input.wired_source ?? 'Not wired';
     return (
-      <div className="flex gap-2 items-center">
-        <input value={label} readOnly className={`${inputClasses} font-mono opacity-95`} />
-        <span className="text-[11px] px-2.5 py-1.5 rounded-full border border-[#2b4a7a] bg-[#0b1f3a] text-[#9ecbff] font-bold whitespace-nowrap">
+      <div className="lace-mcp__wired-row">
+        <div className="lace-mcp__wired-input">
+          <Input value={label} onChange={() => {}} readOnly fullWidth mono />
+        </div>
+        <Badge variant="info" size="md">
           Wired
-        </span>
-        <button
+        </Badge>
+        <Button
+          variant="danger"
+          size="sm"
           onClick={() => handleDisconnect(input.name)}
-          className="text-[11px] px-2 py-1.5 rounded-full border border-[#e5484d] bg-transparent text-[#e5484d] cursor-pointer hover:bg-[#e5484d] hover:text-white transition-colors duration-100 font-bold whitespace-nowrap"
           title="Disconnect this input"
+          aria-label="Disconnect"
         >
           ✕
-        </button>
+        </Button>
       </div>
     );
   }
 
-  // ── Variable mode ──
-
   function renderVariableEditor(input: RenderInput): React.ReactNode {
     const currentVar = localVariables[input.name] ?? input.variable ?? '';
-
     return (
-      <input
+      <Input
         value={currentVar}
         onChange={(e) => {
-          // Strip "var." prefix if user types it — we store just the name
           const raw = e.target.value;
           const name = raw.startsWith('var.') ? raw.slice(4) : raw;
           setLocalVariables((prev) => ({ ...prev, [input.name]: name }));
         }}
         placeholder="e.g. region"
-        className={`${inputClasses} font-mono`}
+        fullWidth
+        mono
       />
     );
   }
-
-  // ── Expression mode ──
 
   function renderExpressionEditor(input: RenderInput): React.ReactNode {
     const currentExpr = localExpressions[input.name] ?? input.expression ?? '';
-
     return (
-      <textarea
+      <Textarea
         value={currentExpr}
         onChange={(e) => setLocalExpressions((prev) => ({ ...prev, [input.name]: e.target.value }))}
         rows={3}
-        placeholder={'e.g. join("-", [var.prefix, var.name])'}
-        className={`${inputClasses} font-mono resize-y`}
+        placeholder='e.g. join("-", [var.prefix, var.name])'
+        fullWidth
+        mono
       />
     );
   }
-
-  // ── Literal mode ──
 
   function renderLiteralEditor(input: RenderInput): React.ReactNode {
     const value = localValues[input.name] ?? input.value ?? input.default_value ?? null;
@@ -348,9 +309,9 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     if (type === 'bool') {
       return (
         <select
+          className="lace-mcp__select"
           value={String(value ?? false)}
           onChange={(e) => updateValue(e.target.value === 'true')}
-          className={inputClasses}
         >
           <option value="true">True</option>
           <option value="false">False</option>
@@ -360,11 +321,11 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
 
     if (type === 'number') {
       return (
-        <input
+        <Input
           type="number"
           value={String(value ?? '')}
           onChange={(e) => updateValue(e.target.value === '' ? '' : Number(e.target.value))}
-          className={inputClasses}
+          fullWidth
         />
       );
     }
@@ -378,7 +339,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     ) {
       const jsonStr = typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2);
       return (
-        <textarea
+        <Textarea
           value={jsonStr}
           onChange={(e) => {
             try {
@@ -388,18 +349,17 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
             }
           }}
           rows={4}
-          className={`${inputClasses} font-mono resize-y`}
+          fullWidth
+          mono
         />
       );
     }
 
-    // Default: string
     return (
-      <input
+      <Input
         value={String(value ?? '')}
         onChange={(e) => {
           let v = e.target.value;
-          // Strip wrapping quotes — the CLI handles HCL quoting automatically.
           if (
             v.length >= 2 &&
             ((v[0] === '"' && v[v.length - 1] === '"') || (v[0] === "'" && v[v.length - 1] === "'"))
@@ -408,80 +368,74 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
           }
           updateValue(v);
         }}
-        className={inputClasses}
+        fullWidth
       />
     );
   }
 
   if (error) {
     return (
-      <PanelFrame title="Error" onClose={onClose}>
-        <div className="text-xs text-red-400">
+      <Panel title="Error" onClose={onClose}>
+        <div className="lace-mcp__error-title">
           Failed to load configuration for "{instance_id}":
         </div>
-        <div className="text-xs text-red-300 mt-1 break-all">{error}</div>
-      </PanelFrame>
+        <div className="lace-mcp__error-detail">{error}</div>
+      </Panel>
     );
   }
 
   if (loading || !config) {
     return (
-      <PanelFrame title="Loading..." onClose={onClose}>
-        <div className="text-xs opacity-60">Loading configuration...</div>
-      </PanelFrame>
+      <Panel title="Loading..." onClose={onClose}>
+        <div className="lace-panel-hint">Loading configuration...</div>
+      </Panel>
     );
   }
 
-  // ── Depends On count ──
   const dependsOnCount = localDependsOn.size;
 
   const title = (
-    <div className="flex flex-col gap-1">
-      <div className="text-xs opacity-70">Module</div>
-      <h3 className="m-0 text-base">{instance_id}</h3>
+    <div className="lace-mcp__title">
+      <div className="lace-mcp__title-eyebrow">Module</div>
+      <h3 className="lace-mcp__title-id">{instance_id}</h3>
     </div>
   );
 
   const footer = (
-    <button className={footerSaveButtonClasses} onClick={handleSave}>
+    <Button variant="primary" fullWidth onClick={handleSave}>
       Save configuration
-    </button>
+    </Button>
   );
 
   return (
-    <PanelFrame title={title} footer={footer} scrollable={false} onClose={onClose}>
-      {/* Required Inputs */}
+    <Panel title={title} footer={footer} scrollable={false} onClose={onClose}>
       {requiredInputs.length > 0 && (
         <AccordionSection title="Required Inputs" defaultOpen badge={`(${requiredInputs.length})`}>
           {requiredInputs.map(renderInputField)}
         </AccordionSection>
       )}
 
-      {/* Optional Inputs */}
       {optionalInputs.length > 0 && (
         <AccordionSection title="Optional Inputs" defaultOpen badge={`(${optionalInputs.length})`}>
           {optionalInputs.map(renderInputField)}
         </AccordionSection>
       )}
 
-      {/* Depends On */}
       {config.sibling_ids.length > 0 && (
         <AccordionSection
           title="Depends On"
           badge={dependsOnCount > 0 ? `(${dependsOnCount})` : undefined}
         >
-          <div className="text-[11px] opacity-60 mb-2">
+          <div className="lace-mcp__depends-hint">
             Select sibling instances this module depends on.
           </div>
           {config.sibling_ids.map((sibId) => {
             const depKey = `module.${sibId}`;
             return (
-              <label
-                key={sibId}
-                className="flex items-start gap-2 mb-1.5 text-xs text-[#e6e6e6] cursor-pointer"
-              >
+              <label key={sibId} className="lace-mcp__depends-item">
                 <input
                   type="checkbox"
+                  className="lace-mcp__depends-checkbox"
                   checked={localDependsOn.has(depKey)}
                   onChange={(e) => {
                     setLocalDependsOn((prev) => {
@@ -491,39 +445,28 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
                       return next;
                     });
                   }}
-                  className="accent-[#1f6feb] shrink-0 mt-0.5"
                 />
-                <span className="font-mono text-[#e6e6e6] opacity-90 break-all leading-4">
-                  {depKey}
-                </span>
+                <span className="lace-mcp__depends-label">{depKey}</span>
               </label>
             );
           })}
         </AccordionSection>
       )}
 
-      {/* Outputs */}
       {config.outputs.length > 0 && (
         <AccordionSection title="Outputs" badge={`(${config.outputs.length})`}>
           {config.outputs.map((o: RenderOutput) => (
-            <div
-              key={o.name}
-              className="mb-2.5 text-xs opacity-85 bg-[#0f0f0f] border border-[#333] rounded-[10px] px-2.5 py-2.5"
-            >
-              <div className="flex justify-between gap-2.5">
-                <strong className="text-xs">{o.name}</strong>
-                <span className="font-mono opacity-75 text-[11px]">{o.type ?? ''}</span>
+            <div key={o.name} className="lace-mcp__output-card">
+              <div className="lace-mcp__output-header">
+                <strong className="lace-mcp__output-name">{o.name}</strong>
+                <span className="lace-mcp__output-type">{o.type ?? ''}</span>
               </div>
-              {o.description && (
-                <div className="mt-1.5 text-[11px] text-[#9ca3af]">{o.description}</div>
-              )}
-              {o.sensitive && (
-                <div className="mt-1 text-[10px] text-yellow-400 opacity-80">sensitive</div>
-              )}
+              {o.description && <div className="lace-mcp__output-description">{o.description}</div>}
+              {o.sensitive && <div className="lace-mcp__output-sensitive">sensitive</div>}
             </div>
           ))}
         </AccordionSection>
       )}
-    </PanelFrame>
+    </Panel>
   );
 }

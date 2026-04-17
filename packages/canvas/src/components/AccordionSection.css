@@ -1,0 +1,74 @@
+/* AccordionSection — collapsible section used inside config panels.
+ * Whole-row button click toggles; chevron rotates 0→90 on open.
+ * The grid-rows animation is the "height: auto transition" trick —
+ * grid-template-rows can animate, so the inner wrapper's overflow:
+ * hidden clips it until it expands to 1fr. */
+
+.lace-accordion {
+  border-bottom: 1px solid var(--lace-color-border-default);
+}
+
+.lace-accordion__header {
+  display: flex;
+  align-items: center;
+  gap: var(--lace-space-2);
+  width: 100%;
+  padding: var(--lace-space-3) var(--lace-space-4);
+  background: transparent;
+  border: none;
+  color: var(--lace-color-neutral-300);
+  font-family: inherit;
+  font-size: var(--lace-font-size-lg);
+  font-weight: var(--lace-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--lace-duration-fast) var(--lace-easing-standard);
+}
+
+.lace-accordion__header:hover {
+  color: var(--lace-color-text-primary);
+}
+
+.lace-accordion__chevron {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  transition: transform var(--lace-duration-medium) var(--lace-easing-standard);
+}
+
+.lace-accordion--open .lace-accordion__chevron {
+  transform: rotate(90deg);
+}
+
+.lace-accordion__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  opacity: 0.85;
+}
+
+.lace-accordion__badge {
+  font-size: var(--lace-font-size-sm);
+  font-weight: var(--lace-font-weight-regular);
+  opacity: 0.6;
+}
+
+.lace-accordion__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--lace-duration-medium) var(--lace-easing-out);
+}
+
+.lace-accordion--open .lace-accordion__body {
+  grid-template-rows: 1fr;
+}
+
+.lace-accordion__body-inner {
+  overflow: hidden;
+}
+
+.lace-accordion__body-content {
+  padding: 0 var(--lace-space-4) var(--lace-space-4);
+}

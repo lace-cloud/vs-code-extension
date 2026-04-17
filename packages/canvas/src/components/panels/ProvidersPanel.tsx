@@ -1,17 +1,10 @@
 // src/webview/components/panels/ProvidersPanel.tsx
+import { Input, Panel } from '@lace/ui';
 import { useCallback, useState } from 'react';
 import { useSaveState } from '../../hooks/useSaveState';
-import {
-  addButtonClasses,
-  addButtonSmClasses,
-  inputClasses,
-  removeButtonClasses,
-  removeButtonSmClasses,
-  rowCardClasses,
-} from '../../styles/panel';
 import type { SettingsConfig } from '../../types/render';
-import PanelFrame from '../PanelFrame';
 import SaveButton from '../SaveButton';
+import './panels-shared.css';
 
 // ── Types derived from SettingsConfig ──
 
@@ -124,52 +117,69 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
   return (
     <>
       {rows.map((row, pi) => (
-        <div key={pi} className={rowCardClasses}>
-          <div className="flex gap-2 mb-2">
-            <input
+        <div
+          key={`provider-${pi}`}
+          className="lace-panel-row-card lace-panel-row-card--with-footer"
+        >
+          <div className="lace-panel-row-actions">
+            <Input
               value={row.name}
               onChange={(e) => updateField(pi, 'name', e.target.value)}
               placeholder="Provider name (e.g. aws)"
-              className={`${inputClasses} flex-1`}
+              fullWidth
             />
-            <input
+            <Input
               value={row.alias}
               onChange={(e) => updateField(pi, 'alias', e.target.value)}
               placeholder="Alias (optional)"
-              className={`${inputClasses} flex-1`}
+              fullWidth
             />
-            <button onClick={() => removeProvider(pi)} className={removeButtonClasses}>
+            <button
+              type="button"
+              onClick={() => removeProvider(pi)}
+              className="lace-panel-remove-btn"
+              aria-label="Remove provider"
+            >
               ✕
             </button>
           </div>
 
-          <div className="text-[11px] opacity-70 mb-2">Config</div>
+          <div className="lace-panel-row-sublabel">Config</div>
           {row.configEntries.map((entry, ei) => (
-            <div key={ei} className="flex gap-2 mb-1.5">
-              <input
+            <div key={`config-${pi}-${ei}`} className="lace-panel-row-actions">
+              <Input
                 value={entry.key}
                 onChange={(e) => updateConfigEntry(pi, ei, 'key', e.target.value)}
                 placeholder="Key"
-                className={`${inputClasses} flex-1`}
+                fullWidth
               />
-              <input
+              <Input
                 value={entry.value}
                 onChange={(e) => updateConfigEntry(pi, ei, 'value', e.target.value)}
                 placeholder="Value"
-                className={`${inputClasses} flex-1`}
+                fullWidth
               />
-              <button onClick={() => removeConfigEntry(pi, ei)} className={removeButtonSmClasses}>
+              <button
+                type="button"
+                onClick={() => removeConfigEntry(pi, ei)}
+                className="lace-panel-remove-btn lace-panel-remove-btn--sm"
+                aria-label="Remove config key"
+              >
                 ✕
               </button>
             </div>
           ))}
-          <button onClick={() => addConfigEntry(pi)} className={addButtonSmClasses}>
+          <button
+            type="button"
+            onClick={() => addConfigEntry(pi)}
+            className="lace-panel-add-btn lace-panel-add-btn--sm"
+          >
             + Add config key
           </button>
         </div>
       ))}
 
-      <button onClick={addProvider} className={addButtonClasses}>
+      <button type="button" onClick={addProvider} className="lace-panel-add-btn">
         + Add provider
       </button>
 
@@ -188,8 +198,8 @@ type Props = {
 
 export default function ProvidersPanel({ providers, onSave, onClose }: Props) {
   return (
-    <PanelFrame title="Providers" onClose={onClose}>
+    <Panel title="Providers" onClose={onClose}>
       <ProvidersContent providers={providers} onSave={onSave} />
-    </PanelFrame>
+    </Panel>
   );
 }

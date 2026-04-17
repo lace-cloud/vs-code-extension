@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useState } from 'react';
+import './AccordionSection.css';
 
 type Props = {
   title: string;
@@ -12,35 +13,23 @@ export default function AccordionSection({ title, defaultOpen = false, badge, ch
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-[#333]">
-      {/* Header */}
+    <div className={`lace-accordion${open ? ' lace-accordion--open' : ''}`}>
       <button
+        type="button"
+        className="lace-accordion__header"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-4 py-3 bg-transparent border-none text-left cursor-pointer text-[#ccc] hover:text-white transition-colors duration-100"
+        aria-expanded={open}
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          width="12"
-          height="12"
-          className="shrink-0 transition-transform duration-200"
-          style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
-        >
+        <svg className="lace-accordion__chevron" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z" />
         </svg>
-        <span className="text-[13px] font-bold uppercase tracking-wide opacity-85 flex-1">
-          {title}
-        </span>
-        {badge && <span className="text-[11px] opacity-60 font-normal">{badge}</span>}
+        <span className="lace-accordion__title">{title}</span>
+        {badge && <span className="lace-accordion__badge">{badge}</span>}
       </button>
 
-      {/* Body — animated height via grid trick */}
-      <div
-        className="transition-[grid-template-rows] duration-200 ease-out"
-        style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr' }}
-      >
-        <div className="overflow-hidden">
-          <div className="px-4 pb-4">{children}</div>
+      <div className="lace-accordion__body">
+        <div className="lace-accordion__body-inner">
+          <div className="lace-accordion__body-content">{children}</div>
         </div>
       </div>
     </div>

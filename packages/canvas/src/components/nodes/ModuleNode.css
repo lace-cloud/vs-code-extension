@@ -1,0 +1,134 @@
+/* ModuleNode — canvas module/resource block. Geometry (NODE_WIDTH,
+ * HEADER_HEIGHT, ROW_HEIGHT, ICON_SIZE) lives in ModuleNode.tsx as
+ * constants because PinRow layout depends on them at runtime. Purely
+ * visual properties (colors, radii, transitions) live here. */
+
+.lace-module-node {
+  position: relative;
+  background: var(--lace-color-bg-canvas);
+  border: 1px solid var(--lace-node-default-border);
+  border-radius: var(--lace-radius-sm);
+  box-shadow: var(--lace-shadow-md);
+  font-family: inherit;
+}
+
+.lace-module-node--error {
+  border-color: var(--lace-node-error-border);
+  box-shadow: 0 0 10px var(--lace-node-error-shadow-color);
+}
+
+.lace-module-node--new {
+  border-color: var(--lace-node-new-border);
+  box-shadow: 0 0 10px var(--lace-node-new-shadow-color);
+}
+
+.lace-module-node__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--lace-space-2);
+  background: var(--lace-gunmetal);
+  border-top-left-radius: var(--lace-radius-sm);
+  border-top-right-radius: var(--lace-radius-sm);
+  border-bottom: 1px solid var(--lace-color-green-alpha-10);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.lace-module-node--collapsed .lace-module-node__header {
+  border-bottom: none;
+}
+
+.lace-module-node__collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--lace-color-green-alpha-60);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.lace-module-node__icon {
+  flex-shrink: 0;
+  border-radius: var(--lace-radius-sm);
+  object-fit: contain;
+}
+
+.lace-module-node__icon-fallback {
+  flex-shrink: 0;
+}
+
+.lace-module-node__rename-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1px var(--lace-space-1);
+  background: var(--lace-color-bg-canvas);
+  border: 1px solid var(--lace-color-accent-alpha-medium);
+  border-radius: var(--lace-radius-sm);
+  color: var(--lace-color-accent);
+  font-family: inherit;
+  font-size: var(--lace-font-size-sm);
+}
+
+.lace-module-node__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--lace-color-accent);
+  font-size: var(--lace-font-size-sm);
+  font-weight: var(--lace-font-weight-medium);
+}
+
+.lace-module-node__delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: var(--lace-color-red-alpha-12);
+  border: 1px solid var(--lace-color-red-alpha-30);
+  border-radius: var(--lace-radius-pill);
+  color: var(--lace-color-text-danger);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.lace-module-node__body {
+  position: relative;
+}
+
+.lace-module-node__hidden-count {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  color: var(--lace-color-green-alpha-60);
+  font-size: 9px;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.lace-module-node__pin-row-label {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--lace-font-size-xs);
+}
+
+.lace-module-node__pin-row-label--error {
+  color: var(--lace-color-text-danger);
+}
+
+.lace-module-node__pin-row-label--default {
+  color: rgba(236, 239, 237, 0.85);
+}

@@ -14,3 +14,5 @@ export type { ModeToggleItem, ModeToggleProps } from './ModeToggle';
 export { ModeToggle } from './ModeToggle';
 export type { PanelProps } from './Panel';
 export { Panel } from './Panel';
+export type { TextareaProps } from './Textarea';
+export { Textarea } from './Textarea';

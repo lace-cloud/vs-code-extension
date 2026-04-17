@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CANVAS_EVENTS } from '../../events';
 import { useEngine } from '../../state/engine-context';
 import type { NodePin, RenderNode } from '../../types/render';
+import './ModuleNode.css';
 import { pinColor } from './pinColor';
 
 // ── Node data contract (serializable — no callbacks) ──
@@ -22,18 +23,9 @@ const HEADER_HEIGHT = 28;
 const ROW_HEIGHT = 22;
 const ICON_SIZE = 18;
 
-// ── Node border/shadow by state ──
-
-const NODE_COLORS = {
-  error: { border: '#e5484d', shadow: '0 0 10px rgba(229, 72, 77, 0.3)' },
-  new: { border: '#3b82f6', shadow: '0 0 10px rgba(59, 130, 246, 0.3)' },
-  default: { border: 'rgba(206, 254, 101, 0.18)', shadow: '0 2px 6px rgba(0,0,0,0.35)' },
-} as const;
-
-function getNodeStyling(hasError: boolean, isNew: boolean) {
-  const key = hasError ? 'error' : isNew ? 'new' : 'default';
-  return { borderColor: NODE_COLORS[key].border, shadow: NODE_COLORS[key].shadow };
-}
+// Border / shadow variants now live in ModuleNode.css as
+// `.lace-module-node--error` / `--new` classes. Node colors flow
+// through design tokens.
 
 // ── Broken icon fallback ──
 
@@ -103,12 +95,8 @@ const PinRow: React.FC<PinRowProps> = ({ pin, side, top, isError }) => {
         style={handleStyle}
       />
       <span
-        className="truncate"
-        style={{
-          fontSize: 10,
-          color: isError ? '#e5484d' : 'rgba(236, 239, 237, 0.85)',
-          maxWidth: NODE_WIDTH - 28,
-        }}
+        className={`lace-module-node__pin-row-label lace-module-node__pin-row-label--${isError ? 'error' : 'default'}`}
+        style={{ maxWidth: NODE_WIDTH - 28 }}
       >
         {pin.name}
       </span>
@@ -228,8 +216,6 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const hasAnyError = !!(data.has_errors || data.hasValidationError);
   const isNew = !!data.isNew && !hasAnyError;
 
-  const { borderColor, shadow } = getNodeStyling(hasAnyError, isNew);
-
   // Body height — when collapsed, header only. Otherwise, whichever rail is
   // taller dictates the height. The "Show N more" toggle on the left counts
   // as an extra input row.
@@ -238,57 +224,30 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const bodyHeight = rowCount * ROW_HEIGHT;
   const nodeHeight = HEADER_HEIGHT + bodyHeight;
 
+  const stateClass = hasAnyError ? 'lace-module-node--error' : isNew ? 'lace-module-node--new' : '';
+
   return (
     <div
-      className="relative"
-      style={{
-        width: NODE_WIDTH,
-        height: nodeHeight,
-        background: '#161616',
-        border: `1px solid ${borderColor}`,
-        borderRadius: 4,
-        boxShadow: shadow,
-        fontFamily: 'inherit',
-      }}
+      className={`lace-module-node${collapsed ? ' lace-module-node--collapsed' : ''}${stateClass ? ` ${stateClass}` : ''}`}
+      style={{ width: NODE_WIDTH, height: nodeHeight }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* ── Header ── */}
       <div
-        className="relative cursor-pointer"
-        style={{
-          height: HEADER_HEIGHT,
-          background: '#153238',
-          borderTopLeftRadius: 4,
-          borderTopRightRadius: 4,
-          borderBottom: collapsed ? 'none' : '1px solid rgba(206,254,101,0.12)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          paddingLeft: 8,
-          paddingRight: 8,
-          overflow: 'hidden',
-        }}
+        className="lace-module-node__header"
+        style={{ height: HEADER_HEIGHT }}
         onClick={onHeaderClick}
         title={hasAnyError ? data.error_messages?.join('\n') : data.label}
       >
         <button
+          type="button"
           onClick={toggleCollapsed}
-          className="leading-none cursor-pointer"
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'rgba(206,254,101,0.7)',
-            padding: 0,
-            width: 12,
-            height: 12,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          className="lace-module-node__collapse-btn"
           title={collapsed ? 'Expand' : 'Collapse'}
+          aria-label={collapsed ? 'Expand' : 'Collapse'}
         >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
             {collapsed ? <path d="M8 5l8 7-8 7V5z" /> : <path d="M5 8l7 8 7-8H5z" />}
           </svg>
         </button>
@@ -297,12 +256,12 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
           <img
             src={data.icon_url}
             alt=""
-            className="rounded object-contain flex-shrink-0"
+            className="lace-module-node__icon"
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <div className="flex-shrink-0">
+          <div className="lace-module-node__icon-fallback">
             <BrokenIcon />
           </div>
         )}
@@ -314,22 +273,12 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitRename}
             onKeyDown={onKeyDown}
-            className="bg-[#161616] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] rounded px-1 py-px flex-1"
-            style={{ fontSize: 11 }}
+            className="lace-module-node__rename-input"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
           <span
-            style={{
-              flex: '1 1 auto',
-              minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: 11,
-              color: '#CEFE65',
-              fontWeight: 500,
-            }}
+            className="lace-module-node__label"
             onDoubleClick={onDoubleClick}
             title={data.label}
           >
@@ -339,19 +288,13 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
         {hovered && (
           <button
+            type="button"
             onClick={onDeleteInstance}
-            className="rounded-full leading-none cursor-pointer flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'rgba(229,72,77,0.15)',
-              border: '1px solid rgba(229,72,77,0.4)',
-              color: '#e5484d',
-              width: 14,
-              height: 14,
-              padding: 0,
-            }}
+            className="lace-module-node__delete-btn"
             title="Delete instance"
+            aria-label="Delete instance"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" width="8" height="8">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="8" height="8" aria-hidden="true">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
             </svg>
           </button>
@@ -360,7 +303,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
       {/* ── Body: input rail (left) + output rail (right), absolutely positioned rows ── */}
       {!collapsed && (
-        <div style={{ position: 'relative', height: bodyHeight }}>
+        <div className="lace-module-node__body" style={{ height: bodyHeight }}>
           {visibleInputs.map((pin, i) => {
             const errored = !!pin.required && !pin.wired;
             return (
@@ -379,19 +322,19 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
           {hiddenInputCount > 0 && (
             <div
+              className="lace-module-node__hidden-count"
               onClick={toggleShowAllInputs}
-              className="cursor-pointer"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ')
+                  toggleShowAllInputs(e as unknown as React.MouseEvent);
+              }}
+              role="button"
+              tabIndex={0}
               style={{
-                position: 'absolute',
                 top: visibleInputs.length * ROW_HEIGHT,
                 left: 12,
                 right: 12,
                 height: ROW_HEIGHT,
-                display: 'flex',
-                alignItems: 'center',
-                fontSize: 9,
-                color: 'rgba(206,254,101,0.55)',
-                fontStyle: 'italic',
               }}
               title="Show all inputs"
             >

@@ -1,10 +1,10 @@
 // src/webview/components/panels/TerraformConfigPanel.tsx
+import { Input, Panel } from '@lace/ui';
 import { useCallback, useState } from 'react';
 import { useSaveState } from '../../hooks/useSaveState';
-import { addButtonClasses, inputClasses, removeButtonClasses } from '../../styles/panel';
 import type { SettingsConfig } from '../../types/render';
-import PanelFrame from '../PanelFrame';
 import SaveButton from '../SaveButton';
+import './panels-shared.css';
 
 // ── Types derived from SettingsConfig ──
 
@@ -30,8 +30,6 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
     }));
   });
 
-  // ── Provider rows ──
-
   const addProvider = useCallback(() => {
     setProviders((prev) => [...prev, { name: '', source: '', version: '' }]);
   }, []);
@@ -46,8 +44,6 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
     },
     [],
   );
-
-  // ── Save ──
 
   const { status: saveStatus, handleSave } = useSaveState(
     useCallback(async () => {
@@ -67,51 +63,58 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
 
   return (
     <>
-      {/* Required Version */}
-      <SectionTitle label="Required Version" />
-      <input
-        value={requiredVersion}
-        onChange={(e) => setRequiredVersion(e.target.value)}
-        placeholder=">= 1.5"
-        className={`${inputClasses} mb-4`}
-      />
+      <h4 className="lace-panel-section-title">Required Version</h4>
+      <div className="lace-panel-field">
+        <Input
+          value={requiredVersion}
+          onChange={(e) => setRequiredVersion(e.target.value)}
+          placeholder=">= 1.5"
+          fullWidth
+        />
+      </div>
 
-      {/* Required Providers */}
-      <SectionTitle label="Required Providers" />
+      <h4 className="lace-panel-section-title">Required Providers</h4>
       {providers.map((p, i) => (
-        <div key={i} className="mb-3 p-2.5 bg-[#0f0f0f] border border-[#333] rounded-lg">
-          <div className="flex gap-2 mb-2">
-            <input
+        <div key={`provider-${i}`} className="lace-panel-row-card lace-panel-row-card--with-footer">
+          <div className="lace-panel-row-actions">
+            <Input
               value={p.name}
               onChange={(e) => updateProvider(i, 'name', e.target.value)}
               placeholder="Name (e.g. aws)"
-              className={`${inputClasses} flex-1`}
+              fullWidth
             />
-            <button onClick={() => removeProvider(i)} className={removeButtonClasses}>
+            <button
+              type="button"
+              onClick={() => removeProvider(i)}
+              className="lace-panel-remove-btn"
+            >
               Remove
             </button>
           </div>
-          <input
-            value={p.source}
-            onChange={(e) => updateProvider(i, 'source', e.target.value)}
-            placeholder="Source (e.g. hashicorp/aws)"
-            className={`${inputClasses} mb-2`}
-          />
-          <input
-            value={p.version}
-            onChange={(e) => updateProvider(i, 'version', e.target.value)}
-            placeholder="Version (e.g. ~> 5.0)"
-            className={inputClasses}
-          />
+          <div className="lace-panel-row-actions">
+            <Input
+              value={p.source}
+              onChange={(e) => updateProvider(i, 'source', e.target.value)}
+              placeholder="Source (e.g. hashicorp/aws)"
+              fullWidth
+            />
+          </div>
+          <div className="lace-panel-row-actions">
+            <Input
+              value={p.version}
+              onChange={(e) => updateProvider(i, 'version', e.target.value)}
+              placeholder="Version (e.g. ~> 5.0)"
+              fullWidth
+            />
+          </div>
         </div>
       ))}
-      <button onClick={addProvider} className={addButtonClasses}>
+      <button type="button" onClick={addProvider} className="lace-panel-add-btn">
         + Add provider
       </button>
 
-      {/* Backend — managed by Lace */}
-      <SectionTitle label="Backend" />
-      <div className="text-xs opacity-60 mb-4">
+      <h4 className="lace-panel-section-title">Backend</h4>
+      <div className="lace-panel-hint">
         Terraform state is managed by Lace Cloud. The HTTP backend is configured automatically
         during generation.
       </div>
@@ -131,14 +134,8 @@ type Props = {
 
 export default function TerraformConfigPanel({ terraform, onSave, onClose }: Props) {
   return (
-    <PanelFrame title="Terraform Configuration" onClose={onClose}>
+    <Panel title="Terraform Configuration" onClose={onClose}>
       <TerraformConfigContent terraform={terraform} onSave={onSave} />
-    </PanelFrame>
-  );
-}
-
-function SectionTitle({ label }: { label: string }) {
-  return (
-    <h4 className="m-0 mb-3 text-[13px] font-bold uppercase tracking-wide opacity-85">{label}</h4>
+    </Panel>
   );
 }

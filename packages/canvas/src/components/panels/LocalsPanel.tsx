@@ -1,19 +1,11 @@
 // src/webview/components/panels/LocalsPanel.tsx
+import { Input, ModeToggle, Panel, Textarea } from '@lace/ui';
 import { useCallback, useState } from 'react';
 import { useSaveState } from '../../hooks/useSaveState';
-import {
-  addButtonClasses,
-  inputClasses,
-  modeButtonActive,
-  modeButtonBase,
-  modeButtonInactive,
-  removeButtonClasses,
-  rowCardClasses,
-} from '../../styles/panel';
 import type { SettingsConfig } from '../../types/render';
 import { findDuplicateIndices } from '../../utils/duplicates';
-import PanelFrame from '../PanelFrame';
 import SaveButton from '../SaveButton';
+import './panels-shared.css';
 
 // ── Types derived from SettingsConfig ──
 
@@ -50,6 +42,11 @@ function fromRows(rows: LocalRow[]): LocalEntry[] {
     }));
 }
 
+const BINDING_MODE_ITEMS = [
+  { value: 'literal' as const, label: 'Literal' },
+  { value: 'expression' as const, label: 'Expression' },
+];
+
 // ── Content-only component (used by UnifiedSettingsPanel) ──
 
 type ContentProps = {
@@ -84,8 +81,6 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, exprValue } : r)));
   }, []);
 
-  // ── Validation: duplicate name detection ──
-
   const nameDupes = findDuplicateIndices(rows, (r) => r.name);
   const hasErrors = nameDupes.size > 0;
 
@@ -99,61 +94,61 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
   return (
     <>
       {rows.map((row, i) => (
-        <div key={i} className={rowCardClasses}>
-          {/* Name */}
-          <div className="flex gap-2 mb-2">
-            <input
+        <div key={`local-${i}`} className="lace-panel-row-card lace-panel-row-card--with-footer">
+          <div className="lace-panel-row-actions">
+            <Input
               value={row.name}
               onChange={(e) => updateName(i, e.target.value)}
               placeholder="Local name"
-              className={`${inputClasses} flex-1 font-mono ${nameDupes.has(i) ? 'border-[#e5484d]' : ''}`}
+              fullWidth
+              mono
+              error={nameDupes.has(i)}
             />
-            <button onClick={() => removeLocal(i)} className={removeButtonClasses}>
+            <button
+              type="button"
+              onClick={() => removeLocal(i)}
+              className="lace-panel-remove-btn"
+              aria-label="Remove local"
+            >
               ✕
             </button>
           </div>
-          {nameDupes.has(i) && (
-            <div className="text-[10px] text-[#e5484d] mb-2">Duplicate local name</div>
-          )}
+          {nameDupes.has(i) && <div className="lace-panel-row-error">Duplicate local name</div>}
 
-          {/* Mode selector */}
-          <div className="flex gap-1 mb-2">
-            <button
-              className={`${modeButtonBase} ${row.mode === 'literal' ? modeButtonActive : modeButtonInactive}`}
-              onClick={() => switchMode(i, 'literal')}
-            >
-              Literal
-            </button>
-            <button
-              className={`${modeButtonBase} ${row.mode === 'expression' ? modeButtonActive : modeButtonInactive}`}
-              onClick={() => switchMode(i, 'expression')}
-            >
-              Expression
-            </button>
+          <div className="lace-panel-row-actions">
+            <ModeToggle<BindingMode>
+              value={row.mode}
+              onChange={(next) => switchMode(i, next)}
+              items={BINDING_MODE_ITEMS}
+              aria-label="Local binding mode"
+            />
           </div>
 
-          {/* Value editor */}
-          {row.mode === 'literal' ? (
-            <textarea
-              value={row.litValue}
-              onChange={(e) => updateLitValue(i, e.target.value)}
-              placeholder='e.g. "my-bucket" or {"key": "value"}'
-              rows={3}
-              className={`${inputClasses} font-mono resize-y`}
-            />
-          ) : (
-            <textarea
-              value={row.exprValue}
-              onChange={(e) => updateExprValue(i, e.target.value)}
-              placeholder='e.g. "${var.environment}-${var.role_name}"'
-              rows={3}
-              className={`${inputClasses} font-mono resize-y`}
-            />
-          )}
+          <div className="lace-panel-row-content">
+            {row.mode === 'literal' ? (
+              <Textarea
+                value={row.litValue}
+                onChange={(e) => updateLitValue(i, e.target.value)}
+                placeholder='e.g. "my-bucket" or {"key": "value"}'
+                rows={3}
+                fullWidth
+                mono
+              />
+            ) : (
+              <Textarea
+                value={row.exprValue}
+                onChange={(e) => updateExprValue(i, e.target.value)}
+                placeholder='e.g. "${var.environment}-${var.role_name}"'
+                rows={3}
+                fullWidth
+                mono
+              />
+            )}
+          </div>
         </div>
       ))}
 
-      <button onClick={addLocal} className={addButtonClasses}>
+      <button type="button" onClick={addLocal} className="lace-panel-add-btn">
         + Add local
       </button>
 
@@ -178,8 +173,8 @@ type Props = {
 
 export default function LocalsPanel({ locals, onSave, onClose }: Props) {
   return (
-    <PanelFrame title="Locals" onClose={onClose}>
+    <Panel title="Locals" onClose={onClose}>
       <LocalsContent locals={locals} onSave={onSave} />
-    </PanelFrame>
+    </Panel>
   );
 }

@@ -1,17 +1,10 @@
 // src/webview/components/panels/EnvironmentsPanel.tsx
+import { Input, Panel } from '@lace/ui';
 import { useCallback, useState } from 'react';
 import { useSaveState } from '../../hooks/useSaveState';
-import {
-  addButtonClasses,
-  addButtonSmClasses,
-  inputClasses,
-  removeButtonClasses,
-  removeButtonSmClasses,
-  rowCardClasses,
-} from '../../styles/panel';
 import { findDuplicateIndices } from '../../utils/duplicates';
-import PanelFrame from '../PanelFrame';
 import SaveButton from '../SaveButton';
+import './panels-shared.css';
 
 // ── Local editing state ──
 
@@ -57,8 +50,6 @@ type ContentProps = {
 export function EnvironmentsContent({ environments, onSave }: ContentProps) {
   const [envRows, setEnvRows] = useState<EnvRow[]>(() => toEnvRows(environments));
 
-  // ── Environment editing ──
-
   const addEnv = useCallback(() => {
     setEnvRows((prev) => [...prev, { name: '', vars: [{ key: '', value: '' }] }]);
   }, []);
@@ -103,8 +94,6 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
     [],
   );
 
-  // ── Validation: duplicate detection ──
-
   const envNameDupes = findDuplicateIndices(envRows, (r) => r.name);
 
   const envVarDupes: Record<number, Set<number>> = {};
@@ -114,8 +103,6 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
   });
 
   const hasDuplicates = envNameDupes.size > 0 || Object.keys(envVarDupes).length > 0;
-
-  // ── Save ──
 
   const { status: saveStatus, handleSave } = useSaveState(
     useCallback(async () => {
@@ -127,49 +114,65 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
   return (
     <>
       {envRows.map((env, ei) => (
-        <div key={ei} className={rowCardClasses}>
-          <div className="flex gap-2 mb-1">
-            <input
+        <div key={`env-${ei}`} className="lace-panel-row-card lace-panel-row-card--with-footer">
+          <div className="lace-panel-row-actions">
+            <Input
               value={env.name}
               onChange={(e) => updateEnvName(ei, e.target.value)}
               placeholder="Environment name (e.g. dev)"
-              className={`${inputClasses} flex-1 font-bold ${envNameDupes.has(ei) ? 'border-[#e5484d]' : ''}`}
+              fullWidth
+              error={envNameDupes.has(ei)}
             />
-            <button onClick={() => removeEnv(ei)} className={removeButtonClasses}>
+            <button
+              type="button"
+              onClick={() => removeEnv(ei)}
+              className="lace-panel-remove-btn"
+              aria-label="Remove environment"
+            >
               ✕
             </button>
           </div>
           {envNameDupes.has(ei) && (
-            <div className="text-[10px] text-[#e5484d] mb-2">Duplicate environment name</div>
+            <div className="lace-panel-row-error">Duplicate environment name</div>
           )}
 
-          <div className="text-[11px] opacity-70 mb-2">Variable overrides</div>
+          <div className="lace-panel-row-sublabel">Variable overrides</div>
           {env.vars.map((v, vi) => (
-            <div key={vi} className="flex gap-2 mb-1.5">
-              <input
+            <div key={`envvar-${ei}-${vi}`} className="lace-panel-row-actions">
+              <Input
                 value={v.key}
                 onChange={(e) => updateEnvVar(ei, vi, 'key', e.target.value)}
                 placeholder="Variable name"
-                className={`${inputClasses} flex-1 ${envVarDupes[ei]?.has(vi) ? 'border-[#e5484d]' : ''}`}
+                fullWidth
+                error={envVarDupes[ei]?.has(vi)}
                 title={envVarDupes[ei]?.has(vi) ? 'Duplicate variable name' : undefined}
               />
-              <input
+              <Input
                 value={v.value}
                 onChange={(e) => updateEnvVar(ei, vi, 'value', e.target.value)}
                 placeholder="Value"
-                className={`${inputClasses} flex-1`}
+                fullWidth
               />
-              <button onClick={() => removeEnvVar(ei, vi)} className={removeButtonSmClasses}>
+              <button
+                type="button"
+                onClick={() => removeEnvVar(ei, vi)}
+                className="lace-panel-remove-btn lace-panel-remove-btn--sm"
+                aria-label="Remove variable"
+              >
                 ✕
               </button>
             </div>
           ))}
-          <button onClick={() => addEnvVar(ei)} className={addButtonSmClasses}>
+          <button
+            type="button"
+            onClick={() => addEnvVar(ei)}
+            className="lace-panel-add-btn lace-panel-add-btn--sm"
+          >
             + Add variable
           </button>
         </div>
       ))}
-      <button onClick={addEnv} className={addButtonClasses}>
+      <button type="button" onClick={addEnv} className="lace-panel-add-btn">
         + Add environment
       </button>
 
@@ -181,7 +184,7 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
         disabledTitle="Fix duplicate names before saving"
       />
       {hasDuplicates && (
-        <div className="text-[10px] text-[#e5484d] mt-1">
+        <div className="lace-panel-row-error">
           Fix duplicate environment or variable names before saving.
         </div>
       )}
@@ -199,8 +202,8 @@ type Props = {
 
 export default function EnvironmentsPanel({ environments, onSave, onClose }: Props) {
   return (
-    <PanelFrame title="Environments" onClose={onClose}>
+    <Panel title="Environments" onClose={onClose}>
       <EnvironmentsContent environments={environments} onSave={onSave} />
-    </PanelFrame>
+    </Panel>
   );
 }
