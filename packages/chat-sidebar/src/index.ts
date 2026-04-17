@@ -1,9 +1,11 @@
-// @lace/chat-sidebar — custom webview sidebar for chat
+// @lace/chat-sidebar — VS Code adapter for the chat UI.
+//
+// This package is the VS Code implementation of chat-core's
+// adapter contracts. Public surface is intentionally small: host
+// activation constructs a ChatViewProvider and registers it with
+// VS Code's webview view registry. The controller inside does the
+// rest (constructs the adapter, transport, tool registry, agent
+// controller, and proactivity watcher).
 
-export { registerGenerateTools } from './host/tools/generate-tools';
-export { registerGraphReadTools } from './host/tools/graph-read-tools';
-export { registerGraphWriteTools } from './host/tools/graph-write-tools';
-export { registerRegistryTools } from './host/tools/registry-tools';
-export { registerWorkspaceTools } from './host/tools/workspace-tools';
-export type { ToolDeps } from './host/types';
+export type { ChatSidebarDeps } from './host/controller';
 export { ChatViewProvider } from './host/view-provider';

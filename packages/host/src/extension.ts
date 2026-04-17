@@ -1,11 +1,4 @@
-import {
-  ChatViewProvider,
-  registerGenerateTools,
-  registerGraphReadTools,
-  registerGraphWriteTools,
-  registerRegistryTools,
-  registerWorkspaceTools,
-} from '@lace/chat-sidebar';
+import { ChatViewProvider } from '@lace/chat-sidebar';
 import * as vscode from 'vscode';
 import {
   addModuleToActiveCanvas,
@@ -204,31 +197,15 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   // ── Chat sidebar ──
-  const chatViewProvider = new ChatViewProvider(
-    context,
-    {
-      getRpcClient: () => server?.transport ?? null,
-      getRegistryModules: () => registryProvider?.getModules() ?? [],
-      getUserOrgs: () => [],
-      getLaceDir,
-    },
-    (msg) => outputChannel.appendLine(msg),
-  );
-
-  // Tools register once on activation. They share the controller's
-  // Subscribe-driven canvas-view cache via getCanvasView.
-  const chatDepsForTools = {
+  // The provider creates a ChatController per webview resolution;
+  // the controller owns a per-instance ToolRegistry and registers
+  // its tools internally. No global tool registration here.
+  const chatViewProvider = new ChatViewProvider(context, {
     getRpcClient: () => server?.transport ?? null,
     getRegistryModules: () => registryProvider?.getModules() ?? [],
     getUserOrgs: () => [],
     getLaceDir,
-    getCanvasView: () => chatViewProvider.getLatestView(),
-  };
-  registerRegistryTools(chatDepsForTools);
-  registerGraphReadTools(chatDepsForTools);
-  registerGraphWriteTools(chatDepsForTools);
-  registerWorkspaceTools();
-  registerGenerateTools(chatDepsForTools);
+  });
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatViewProvider),

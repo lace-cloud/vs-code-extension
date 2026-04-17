@@ -3,8 +3,8 @@
 // Tool: lace_search_registry — search the module registry.
 // Tool: lace_inspect_module — get full input/output schema for a specific module.
 
-import { registerTool } from '../tool-registry';
-import type { LaceTransport, RegistryModule, ToolResult } from '../types';
+import type { ToolRegistry, ToolResult } from '@lace/chat-core';
+import type { LaceTransport, RegistryModule } from '@lace/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type RegistryToolDeps = {
@@ -27,8 +27,8 @@ function formatModuleLine(m: {
   return `- **${m.name}** (${m.system}, v${m.version})${cats}${desc}`;
 }
 
-export function registerRegistryTools(deps: RegistryToolDeps): void {
-  registerTool(
+export function registerRegistryTools(registry: ToolRegistry, deps: RegistryToolDeps): void {
+  registry.register(
     {
       name: 'lace_search_registry',
       description:
@@ -171,7 +171,7 @@ export function registerRegistryTools(deps: RegistryToolDeps): void {
   // ─────────────────────────────────────────────
   // lace_inspect_module
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_inspect_module',
       description: 'Get input/output schema of a registry module.',

@@ -1,7 +1,7 @@
+import { createToolRegistry, type ToolRegistry } from '@lace/chat-core';
+import type { LaceTransport, RegistryModule } from '@lace/host';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { getToolHandler } from '../host/tool-registry';
 import { type RegistryToolDeps, registerRegistryTools } from '../host/tools/registry-tools';
-import type { RegistryModule } from '../host/types';
 
 // ── Mock registry modules ──
 
@@ -45,13 +45,16 @@ function makeDeps(modules: RegistryModule[] = allModules): RegistryToolDeps {
   };
 }
 
+let registry: ToolRegistry;
+
 describe('lace_search_registry', () => {
   beforeEach(() => {
-    registerRegistryTools(makeDeps());
+    registry = createToolRegistry();
+    registerRegistryTools(registry, makeDeps());
   });
 
   test('finds modules by keyword', async () => {
-    const handler = getToolHandler('lace_search_registry')!;
+    const handler = registry.getHandler('lace_search_registry')!;
     const result = await handler({ query: 'vpc' });
 
     expect(result.isError).toBeFalsy();
@@ -60,7 +63,7 @@ describe('lace_search_registry', () => {
   });
 
   test('filters by system', async () => {
-    const handler = getToolHandler('lace_search_registry')!;
+    const handler = registry.getHandler('lace_search_registry')!;
     const result = await handler({ system: 'azure' });
 
     expect(result.isError).toBeFalsy();
@@ -71,11 +74,12 @@ describe('lace_search_registry', () => {
 
 describe('lace_inspect_module', () => {
   beforeEach(() => {
-    registerRegistryTools(makeDeps());
+    registry = createToolRegistry();
+    registerRegistryTools(registry, makeDeps());
   });
 
   test('returns basic info when RPC unavailable', async () => {
-    const handler = getToolHandler('lace_inspect_module')!;
+    const handler = registry.getHandler('lace_inspect_module')!;
     const result = await handler({ name: 'aws/vpc' });
 
     // No RPC client, so falls back to local cache info
@@ -87,7 +91,7 @@ describe('lace_inspect_module', () => {
   });
 
   test('disambiguates multiple fuzzy matches', async () => {
-    const handler = getToolHandler('lace_inspect_module')!;
+    const handler = registry.getHandler('lace_inspect_module')!;
     const result = await handler({ name: 'aws' });
 
     // "aws" matches both aws/vpc and aws/subnet
@@ -134,13 +138,14 @@ describe('lace_inspect_module', () => {
       }),
     };
 
-    registerRegistryTools({
-      getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+    const registryWithClient = createToolRegistry();
+    registerRegistryTools(registryWithClient, {
+      getRpcClient: () => mockClient as unknown as LaceTransport,
       getRegistryModules: () => allModules,
       getUserOrgs: () => [],
     });
 
-    const handler = getToolHandler('lace_inspect_module')!;
+    const handler = registryWithClient.getHandler('lace_inspect_module')!;
     const result = await handler({ name: 'aws/vpc' });
 
     expect(result.isError).toBeFalsy();

@@ -8,7 +8,6 @@
 
 // ── Agent controller ──
 export { AgentController, type AgentControllerOptions } from './agent-controller';
-export type { FileSystemAdapter } from './filesystem-adapter';
 // ── History helpers ──
 export { capRecentMessages } from './history';
 // ── Adapter contracts ──
