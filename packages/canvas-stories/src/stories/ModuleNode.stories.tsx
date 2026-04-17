@@ -39,7 +39,7 @@ const meta: Meta<StoryArgs> = {
 export default meta;
 type Story = StoryObj<StoryArgs>;
 
-export const SimpleLeaf: Story = {
+export const SimpleModule: Story = {
   args: {
     data: {
       id: 'vpc',

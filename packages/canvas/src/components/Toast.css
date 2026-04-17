@@ -1,0 +1,47 @@
+/* Toast — transient banner anchored top-left in the canvas viewport.
+ * Colors pull from @lace/design-tokens; no raw hex or Tailwind arbitrary
+ * utilities so the component renders identically in the canvas bundle
+ * and in Storybook (where Tailwind v4 doesn't scan @lace/canvas). */
+
+.lace-toast {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.lace-toast--success,
+.lace-toast--progress {
+  background: var(--lace-toast-success-bg);
+  color: var(--lace-green);
+  border-color: var(--lace-toast-success-border);
+}
+
+.lace-toast--error {
+  background: var(--lace-toast-error-bg);
+  color: var(--lace-text-danger-light);
+  border-color: var(--lace-toast-error-border);
+}
+
+.lace-toast__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--lace-green);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: lace-toast-spin 900ms linear infinite;
+}
+
+@keyframes lace-toast-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

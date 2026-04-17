@@ -1,4 +1,5 @@
 import type { ContextMenuState } from '../hooks/useContextMenu';
+import './ContextMenu.css';
 
 type Props = {
   contextMenu: ContextMenuState;
@@ -24,10 +25,8 @@ export default function ContextMenu({
   const items: { label: string; shortcut?: string; action: () => void }[] = [];
 
   if (contextMenu.groupId) {
-    // Right-clicked on a group node
     items.push({ label: 'Ungroup', action: () => onUngroup(contextMenu.groupId!) });
   } else {
-    // Standard items
     items.push(
       { label: 'Cut', shortcut: 'Ctrl+X', action: onCut },
       { label: 'Copy', shortcut: 'Ctrl+C', action: onCopy },
@@ -41,24 +40,23 @@ export default function ContextMenu({
   return (
     <>
       <div
-        className="fixed z-50 bg-[#1a1a1a] border border-[rgba(206,254,101,0.2)] rounded shadow-[0_4px_12px_rgba(0,0,0,0.5)] py-1"
-        style={{ left: contextMenu.x, top: contextMenu.y, minWidth: 120 }}
+        className="lace-ctx-menu"
+        style={{ left: contextMenu.x, top: contextMenu.y }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {items.map(({ label, shortcut, action }) => (
           <button
             key={label}
-            className="w-full text-left px-3 py-1.5 text-xs text-[#CEFE65] hover:bg-[#153238] cursor-pointer flex items-center justify-between gap-4"
-            style={{ background: 'transparent', border: 'none' }}
+            type="button"
+            className="lace-ctx-menu__item"
             onClick={() => action()}
           >
             <span>{label}</span>
-            {shortcut && <span className="text-[#5a7060] text-[10px]">{shortcut}</span>}
+            {shortcut && <span className="lace-ctx-menu__shortcut">{shortcut}</span>}
           </button>
         ))}
       </div>
-      {/* Dismiss on outside click */}
-      <div className="fixed inset-0 z-40" onClick={onDismiss} />
+      <div className="lace-ctx-menu__scrim" onClick={onDismiss} />
     </>
   );
 }

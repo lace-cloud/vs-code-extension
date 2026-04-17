@@ -15,6 +15,11 @@ const meta: Meta<typeof ContextMenu> = {
           width: 600,
           height: 400,
           background: 'var(--lace-night)',
+          // `transform` creates a containing block, so the menu's
+          // `position: fixed` stays inside the decorator box instead of
+          // escaping to the viewport. Real-world positioning is unchanged —
+          // Canvas has no ancestor transform.
+          transform: 'translateZ(0)',
         }}
       >
         <Story />
