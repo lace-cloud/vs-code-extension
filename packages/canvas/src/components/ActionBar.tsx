@@ -9,6 +9,8 @@ type ActionBarProps = {
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: () => void;
+  showMiniMap: boolean;
+  onToggleMiniMap: () => void;
 };
 
 const ICON_VIEWBOX = '0 0 24 24';
@@ -43,6 +45,22 @@ const GenerateIcon = () => (
   </svg>
 );
 
+const MapIcon = () => (
+  <svg className="lace-action-bar__icon" viewBox={ICON_VIEWBOX} aria-hidden="true">
+    <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z" />
+  </svg>
+);
+
+const MapOffIcon = () => (
+  <svg className="lace-action-bar__icon" viewBox={ICON_VIEWBOX} aria-hidden="true">
+    <path
+      d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM10 5.47l4 1.4v11.66l-4-1.4V5.47zm-5 .99l3-1.01v11.7l-3 1.16V6.46zm14 11.08l-3 1.01V6.86l3-1.16v11.84z"
+      opacity=".35"
+    />
+    <path d="M3 3l18 18" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" />
+  </svg>
+);
+
 const SettingsIcon = () => (
   <svg className="lace-action-bar__icon" viewBox={ICON_VIEWBOX} aria-hidden="true">
     <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 110-7.2 3.6 3.6 0 010 7.2z" />
@@ -57,6 +75,8 @@ export default function ActionBar({
   onClearGraph,
   onGenerate,
   onOpenSettings,
+  showMiniMap,
+  onToggleMiniMap,
 }: ActionBarProps) {
   return (
     <Panel position="top-right">
@@ -109,6 +129,16 @@ export default function ActionBar({
           aria-label="Generate"
         >
           <GenerateIcon />
+        </button>
+        <button
+          type="button"
+          className="lace-action-bar__icon-btn"
+          onClick={onToggleMiniMap}
+          title={showMiniMap ? 'Hide minimap' : 'Show minimap'}
+          aria-label={showMiniMap ? 'Hide minimap' : 'Show minimap'}
+          aria-pressed={showMiniMap}
+        >
+          {showMiniMap ? <MapIcon /> : <MapOffIcon />}
         </button>
         <button
           type="button"

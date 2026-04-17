@@ -75,6 +75,8 @@ type CompositeEditorProps = {
   onClearGraph: () => void;
   onGenerate: () => void;
   onOpenSettings: () => void;
+  showMiniMap: boolean;
+  onToggleMiniMap: () => void;
   registerGoToNode: (fn: (nodeId: string) => void) => void;
   registerGetSelectedIds: (fn: () => string[]) => void;
   registerSelectNodes: (fn: (ids: string[]) => void) => void;
@@ -99,6 +101,8 @@ function CompositeEditor({
   onClearGraph,
   onGenerate,
   onOpenSettings,
+  showMiniMap,
+  onToggleMiniMap,
   registerGoToNode,
   registerGetSelectedIds,
   registerSelectNodes,
@@ -303,26 +307,27 @@ function CompositeEditor({
       proOptions={{ hideAttribution: true }}
       style={{ background: 'var(--lace-color-bg-canvas)' }}
     >
-      {/* Bottom-left stack: Controls at the floor, MiniMap above.
-          108px = Controls height (84px, 3×28px buttons) + gap (8px) + floor (20px − 4px
-          minimap bleed).
-          Inline offsets because Controls/MiniMap render at the ReactFlow
-          pane root; `style` is xyflow's first-class positioning API and
-          behaves identically in the webview and Storybook. Colors flow
+      {/* Opposite-corner overlay layout:
+          - MiniMap bottom-left (standalone; toggleable via ActionBar below).
+          - Controls bottom-right (always available, detached from minimap).
+          Inline offsets use xyflow's first-class positioning API and
+          behave identically in the webview and Storybook. Colors flow
           through design tokens. */}
-      <MiniMap
-        position="bottom-left"
-        style={{
-          width: 160,
-          height: 110,
-          background: 'var(--lace-canvas-minimap-bg)',
-          bottom: 108,
-          left: 20,
-        }}
-        maskColor="var(--lace-canvas-minimap-mask)"
-        nodeColor="var(--lace-color-accent)"
-      />
-      <Controls position="bottom-left" showInteractive={false} style={{ bottom: 20, left: 20 }} />
+      {showMiniMap ? (
+        <MiniMap
+          position="bottom-left"
+          style={{
+            width: 140,
+            height: 100,
+            background: 'var(--lace-canvas-minimap-bg)',
+            bottom: 20,
+            left: 20,
+          }}
+          maskColor="var(--lace-canvas-minimap-mask)"
+          nodeColor="var(--lace-color-accent)"
+        />
+      ) : null}
+      <Controls position="bottom-right" showInteractive={false} style={{ bottom: 20, right: 20 }} />
       <ActionBar
         isGenerating={isGenerating}
         onSave={onSave}
@@ -331,6 +336,8 @@ function CompositeEditor({
         onClearGraph={onClearGraph}
         onGenerate={onGenerate}
         onOpenSettings={onOpenSettings}
+        showMiniMap={showMiniMap}
+        onToggleMiniMap={onToggleMiniMap}
       />
       <svg>
         <defs>
@@ -358,6 +365,11 @@ export default function Canvas() {
 
   const [configTarget, setConfigTarget] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Default off: canvases at our scale (<15 nodes) don't need the
+  // overview; MiniMap is chrome tax. Users opt in via the ActionBar
+  // toggle. Matches VS Code's own "Toggle MiniMap" pattern.
+  const [showMiniMap, setShowMiniMap] = useState(false);
+  const toggleMiniMap = useCallback(() => setShowMiniMap((v) => !v), []);
 
   // ── Hooks ──
   const { toast, showToast } = useToast();
@@ -657,6 +669,8 @@ export default function Canvas() {
           onClearGraph={onClearGraph}
           onGenerate={onGenerate}
           onOpenSettings={onOpenSettings}
+          showMiniMap={showMiniMap}
+          onToggleMiniMap={toggleMiniMap}
           registerGoToNode={registerGoToNode}
           registerGetSelectedIds={registerGetSelectedIds}
           registerSelectNodes={registerSelectNodes}

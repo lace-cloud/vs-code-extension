@@ -266,10 +266,11 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
           alignItems: 'center',
           gap: 6,
           paddingLeft: 8,
-          paddingRight: 6,
+          paddingRight: 8,
+          overflow: 'hidden',
         }}
         onClick={onHeaderClick}
-        title={hasAnyError ? data.error_messages?.join('\n') : data.id}
+        title={hasAnyError ? data.error_messages?.join('\n') : data.label}
       >
         <button
           onClick={toggleCollapsed}
@@ -319,9 +320,18 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
           />
         ) : (
           <span
-            className="truncate flex-1"
-            style={{ fontSize: 11, color: '#CEFE65', fontWeight: 500 }}
+            style={{
+              flex: '1 1 auto',
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 11,
+              color: '#CEFE65',
+              fontWeight: 500,
+            }}
             onDoubleClick={onDoubleClick}
+            title={data.label}
           >
             {data.label}
           </span>

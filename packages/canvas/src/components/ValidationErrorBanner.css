@@ -5,8 +5,8 @@
 
 .lace-error-banner {
   position: absolute;
-  top: 60px;
-  right: var(--lace-space-4);
+  top: var(--lace-space-4);
+  left: var(--lace-space-4);
   z-index: var(--lace-z-chrome);
   display: inline-flex;
   align-items: center;
