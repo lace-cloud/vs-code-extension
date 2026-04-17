@@ -51,6 +51,25 @@
   /* ── Panel ── */
   --lace-panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
 
+  /* ── Input ── */
+  --lace-input-bg: var(--lace-bg-input);
+  --lace-input-border: var(--lace-border-default);
+  --lace-input-border-hover: var(--lace-border-input-hover);
+  --lace-input-border-focus: var(--lace-green);
+  --lace-input-border-error: var(--lace-text-danger);
+  --lace-input-text: var(--lace-grey);
+  --lace-input-placeholder: var(--lace-text-muted);
+
+  /* ── ModeToggle ── */
+  --lace-mode-toggle-active-bg: var(--lace-btn-primary);
+  --lace-mode-toggle-active-border: var(--lace-btn-primary);
+  --lace-mode-toggle-active-text: var(--lace-btn-text-primary);
+  --lace-mode-toggle-inactive-bg: transparent;
+  --lace-mode-toggle-inactive-border: var(--lace-border-input);
+  --lace-mode-toggle-inactive-text: var(--lace-text-muted);
+  --lace-mode-toggle-inactive-hover-border: var(--lace-border-input-hover);
+  --lace-mode-toggle-inactive-hover-text: var(--lace-grey);
+
   /* ── Toast ── */
   --lace-toast-success-bg: #153238;
   --lace-toast-success-border: rgba(206, 254, 101, 0.2);
