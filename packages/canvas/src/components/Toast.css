@@ -3,10 +3,12 @@
  * utilities so the component renders identically in the canvas bundle
  * and in Storybook (where Tailwind v4 doesn't scan @lace/canvas). */
 
+/* Top-right corner, below the ActionBar. ActionBar is ~48px tall + its
+ * xyflow Panel offset, so 60px clears it cleanly. */
 .lace-toast {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  top: 60px;
+  right: 16px;
   z-index: 20;
   display: flex;
   align-items: center;

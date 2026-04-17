@@ -10,7 +10,7 @@ const meta: Meta<typeof Toast> = {
   decorators: [
     (Story) => (
       <div
-        style={{ position: 'relative', width: 400, height: 120, background: 'var(--lace-night)' }}
+        style={{ position: 'relative', width: 480, height: 200, background: 'var(--lace-night)' }}
       >
         <Story />
       </div>

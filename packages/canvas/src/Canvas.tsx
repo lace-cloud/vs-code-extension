@@ -302,12 +302,24 @@ function CompositeEditor({
       proOptions={{ hideAttribution: true }}
       style={{ background: '#161616' }}
     >
+      {/* Bottom-left stack: Controls at the floor, MiniMap above.
+          116px = Controls height (84px, 3×28px buttons) + gap (12px) + floor (20px).
+          Inline offsets instead of @lace/canvas/index.css overrides so
+          Storybook (which doesn't import that stylesheet) matches the
+          webview build. */}
       <MiniMap
-        style={{ background: '#111', border: '1px solid #333', borderRadius: 4 }}
+        position="bottom-left"
+        style={{
+          background: '#111',
+          border: '1px solid #333',
+          borderRadius: 4,
+          bottom: 116,
+          left: 20,
+        }}
         maskColor="rgba(0,0,0,0.6)"
         nodeColor="#CEFE65"
       />
-      <Controls position="bottom-left" showInteractive={false} />
+      <Controls position="bottom-left" showInteractive={false} style={{ bottom: 20, left: 20 }} />
       <ActionBar
         isGenerating={isGenerating}
         onSave={onSave}
@@ -568,7 +580,16 @@ export default function Canvas() {
       return <ErrorState message={state.error} />;
     }
     return (
-      <div className="h-screen flex items-center justify-center text-[#999] text-sm">
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--lace-text-muted)',
+          fontSize: 13,
+        }}
+      >
         Loading canvas...
       </div>
     );
@@ -581,8 +602,14 @@ export default function Canvas() {
   const view = state.view;
 
   // ── Render ──
+  // Inline layout instead of Tailwind utilities so this works in Storybook
+  // (Tailwind v4 only scans canvas-stories, not @lace/canvas). Children
+  // rely on the outer 100vh height to place xyflow's bottom-docked panels
+  // correctly — without it the ReactFlow container collapses.
   return (
-    <div className="h-screen flex flex-col relative">
+    <div
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100vh' }}
+    >
       <Toast toast={toast} />
       <ContextMenu
         contextMenu={contextMenu}
@@ -609,7 +636,7 @@ export default function Canvas() {
         />
       )}
 
-      <div className="flex-1 relative min-h-0">
+      <div style={{ position: 'relative', flex: '1 1 auto', minHeight: 0 }}>
         <CompositeEditor
           view={view}
           isGenerating={generating}
