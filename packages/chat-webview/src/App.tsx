@@ -1,20 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CompletedTurn,
   ContextSummary,
   HostToWebview,
   ProactiveSuggestion,
   WebviewToHost,
-} from '../protocol';
+} from '@lace/chat-core';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ContextStrip } from './components/ContextStrip';
 import { Input } from './components/Input';
 import { Thread, type ThreadMessage } from './components/Thread';
 
-type VsCodeApi = { postMessage(msg: unknown): void };
+/**
+ * Minimal bridge contract. IDE-specific entries (VS Code, JetBrains)
+ * wrap their native webview-bootstrap APIs to match this shape and
+ * pass it to `<App bridge={...} />`. Incoming messages arrive as
+ * standard `window.message` events — both VS Code's webview and
+ * JCEF's `postMessage` shim dispatch them the same way.
+ */
+export type WebviewBridge = {
+  postMessage(msg: WebviewToHost): void;
+};
 
-type AppProps = { vscode: VsCodeApi };
+type AppProps = { bridge: WebviewBridge };
 
-export function App({ vscode }: AppProps) {
+export function App({ bridge }: AppProps) {
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [context, setContext] = useState<ContextSummary | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -23,9 +32,9 @@ export function App({ vscode }: AppProps) {
 
   const post = useCallback(
     (msg: WebviewToHost) => {
-      vscode.postMessage(msg);
+      bridge.postMessage(msg);
     },
-    [vscode],
+    [bridge],
   );
 
   useEffect(() => {

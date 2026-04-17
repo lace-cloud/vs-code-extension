@@ -1,5 +1,5 @@
 {
-  "name": "@lace/chat-sidebar",
+  "name": "@lace/chat-webview",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -10,17 +10,13 @@
   },
   "dependencies": {
     "@lace/chat-core": "workspace:*",
-    "@lace/chat-webview": "workspace:*",
     "@lace/design-tokens": "workspace:*",
-    "@lace/host": "workspace:*",
-    "@lace/proto": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/vscode": "^1.95.0",
     "typescript": "^5.6.3"
   }
 }

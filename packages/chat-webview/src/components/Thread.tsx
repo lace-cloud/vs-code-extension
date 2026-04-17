@@ -1,5 +1,5 @@
+import type { ProactiveSuggestion } from '@lace/chat-core';
 import { useEffect, useRef } from 'react';
-import type { ProactiveSuggestion } from '../../protocol';
 import { MessageItem } from './MessageItem';
 
 export type ThreadMessage =
