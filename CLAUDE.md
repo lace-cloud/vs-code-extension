@@ -152,7 +152,7 @@ through the Storybook Library view, not just the diff.
   component actually looks in the app, the story or the component is
   wrong — never the baseline.
 
-#### Scene stories (introduced Session 4+)
+#### Scene stories
 
 A **scene story** composes multiple components in their intended
 spatial arrangement — e.g. a canvas with two wired ModuleNodes + a
@@ -160,9 +160,49 @@ ContextMenu open on the second one, all at real layout scale. Scene
 stories catch layout regressions that single-component stories miss
 (header overlapping pin rows, context menu escaping the canvas
 frame, panel pushing the canvas below the fold) and serve as
-designer-facing reference renders. They're introduced alongside
-composite refactors from Session 4 onward; earlier sessions stick to
-primitive / single-composite stories.
+designer-facing reference renders.
+
+Scenes mount the real `App` against `MockFlowDecorator` + a
+`MockCanvasEngine`. They can:
+
+- Pin transient UI state (Toast, banner) via `EngineEvent.toastDurationMs = Infinity`.
+- Skip transient UI to capture a follow-on state (`toastDurationMs = 0`).
+- Inject per-instance `NodeConfig` / `SettingsConfig` / `EdgeConfig` via `MockFlowDecorator`'s `engineOptions` prop.
+- Dispatch window events (`openNodeConfig`, `canvasContextMenu`, `canvasViewUpdated`) from `onReady` to drive panel/menu state.
+- Synthesize a click on an ActionBar button by `aria-label` when no external event exists.
+
+#### Coverage invariants (canonical per composite)
+
+Future PRs should not drop below these. Adding stories is fine;
+deleting or renaming the canonical ones requires a note in the PR.
+
+**Primitives (`UI / *`)** — one story per variant + one matrix story per size-or-state axis. Current: Button (9), IconButton (7), Badge (6), Panel (4), Modal (4), Input (8), Textarea (4), ModeToggle (4), CollapseToggle (3).
+
+**Composites (`Components / *`)** — at least the happy path + one "extreme" state (error, max data, or long text) that catches layout drift:
+
+- `ActionBar` — default, generating, minimap-shown, interactive-toggle
+- `Toast` — success, error, progress (phase variants are visually identical; one story covers them all)
+- `ContextMenu` — single-node, multi-select, group-right-click
+- `ValidationErrorBanner` — single diagnostic, multiple diagnostics (dialog state covered via Scene)
+- `AccordionSection` — closed, open
+- `ModuleNode` — simple-module, with-error, newly-added, many-pins, resource
+- `GroupNode` — expanded, collapsed, collapsed-with-errors
+- `SlidePanel` — open, closed
+
+**Config panels (`Panels / *`)** — empty + populated, minimum:
+
+- `TerraformConfigPanel`, `LocalsPanel`, `ProvidersPanel`, `EnvironmentsPanel` — empty + populated each
+- `EdgeInspectorPanel` — typical (no empty state; only opens with a selected edge)
+- `ModuleConfigPanel` — loading, populated-with-required, wired-inputs
+- `UnifiedSettingsPanel` — loading, populated, empty
+
+**Flows**:
+
+- `Flows / *` — one per seed fixture (empty, iam-role, wired-stack, iam-stack, collapsed-group). `disableSnapshot: true`; Playwright exercises them against the real CLI.
+- `Flows / Mock / *` — mock twins of the live flows, Chromatic-captured.
+- `Flows / Scene / *` — canonical user moments: SaveSuccess, Generating, ValidationError, MiniMapVisible, MiniMapHidden, ConfigOpen, SettingsOpen, EdgeSelected, ContextMenuOpen, ConfirmClear.
+
+New primitives, composites, or panels need their canonical entries appended to this list in the same PR that ships them.
 
 ### Playwright flow-tests (integration / contract)
 

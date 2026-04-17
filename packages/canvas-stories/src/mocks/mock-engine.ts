@@ -18,6 +18,25 @@
 import type { CanvasEngine, EngineEvent, EngineEventListener, GenerateResult } from '@lace/canvas';
 import type { CanvasView, EdgeConfig, NodeConfig, RenderError, SettingsConfig } from '@lace/proto';
 
+export type MockEngineOptions = {
+  /**
+   * Per-instance `NodeConfig` lookup for `queryNodeConfig(instanceId)`.
+   * Stories that exercise `ModuleConfigPanel` provide realistic fixtures
+   * here; unmapped instances fall back to the empty default.
+   */
+  nodeConfigs?: Record<string, NodeConfig>;
+  /**
+   * `SettingsConfig` returned by `querySettings`. Stories that exercise
+   * `UnifiedSettingsPanel` provide a populated fixture.
+   */
+  settings?: SettingsConfig;
+  /**
+   * `EdgeConfig` lookup keyed by `"<source>|<target>"`. Used by the
+   * EdgeInspectorPanel scene.
+   */
+  edgeConfigs?: Record<string, EdgeConfig>;
+};
+
 const EMPTY_NODE_CONFIG: NodeConfig = {
   instance_id: '',
   inputs: [],
@@ -43,8 +62,18 @@ const EMPTY_SETTINGS: SettingsConfig = {
 
 export class MockCanvasEngine implements CanvasEngine {
   private listeners = new Set<EngineEventListener>();
+  private readonly nodeConfigs: Record<string, NodeConfig>;
+  private readonly settings: SettingsConfig;
+  private readonly edgeConfigs: Record<string, EdgeConfig>;
 
-  constructor(private readonly view: CanvasView) {}
+  constructor(
+    private readonly view: CanvasView,
+    options: MockEngineOptions = {},
+  ) {
+    this.nodeConfigs = options.nodeConfigs ?? {};
+    this.settings = options.settings ?? EMPTY_SETTINGS;
+    this.edgeConfigs = options.edgeConfigs ?? {};
+  }
 
   // ── Session ──
 
@@ -126,13 +155,19 @@ export class MockCanvasEngine implements CanvasEngine {
   // ── Queries ──
 
   async queryNodeConfig(instanceId: string): Promise<NodeConfig> {
-    return { ...EMPTY_NODE_CONFIG, instance_id: instanceId };
+    return this.nodeConfigs[instanceId] ?? { ...EMPTY_NODE_CONFIG, instance_id: instanceId };
   }
   async queryEdgeConfig(source: string, target: string): Promise<EdgeConfig> {
-    return { ...EMPTY_EDGE_CONFIG, source_instance: source, target_instance: target };
+    return (
+      this.edgeConfigs[`${source}|${target}`] ?? {
+        ...EMPTY_EDGE_CONFIG,
+        source_instance: source,
+        target_instance: target,
+      }
+    );
   }
   async querySettings(): Promise<SettingsConfig> {
-    return EMPTY_SETTINGS;
+    return this.settings;
   }
   async queryGraphSummary(): Promise<{ text: string }> {
     return { text: `${this.view.nodes.length} nodes, ${this.view.edges.length} edges` };
