@@ -47,7 +47,7 @@ Rspack produces three bundles:
 
 - `out/extension.js` — Node, from `src/extension.ts` (vscode-coupled host primitives in `src/vscode/`)
 - `out/webview.js` — Browser, from `src/canvas-webview-entry.tsx` (VS Code-specific bootstrap; @lace/canvas itself is pure library code)
-- `out/chat-sidebar.js` — Browser, from `packages/chat-sidebar/src/webview-entry.tsx`
+- `out/chat-sidebar.js` — Browser, from `src/chat-webview-entry.tsx` (VS Code-specific bootstrap; @lace/chat-webview is pure React)
 
 ## Build & Test
 

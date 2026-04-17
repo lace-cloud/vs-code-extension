@@ -17,6 +17,9 @@ importers:
       '@lace/chat-sidebar':
         specifier: workspace:*
         version: link:packages/chat-sidebar
+      '@lace/chat-webview':
+        specifier: workspace:*
+        version: link:packages/chat-webview
       '@lace/design-tokens':
         specifier: workspace:*
         version: link:packages/design-tokens

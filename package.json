@@ -208,6 +208,7 @@
     "@grpc/grpc-js": "^1.12.6",
     "@lace/canvas": "workspace:*",
     "@lace/chat-sidebar": "workspace:*",
+    "@lace/chat-webview": "workspace:*",
     "@lace/design-tokens": "workspace:*",
     "@lace/host": "workspace:*",
     "@xyflow/react": "^12.10.1",

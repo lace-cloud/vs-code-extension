@@ -16,7 +16,8 @@ verification layer.
 src/                                — extension shell (VS Code-coupled, not published)
   extension.ts                      — activation, command registration, view-provider wiring
   canvas-webview-entry.tsx          — rspack entry for webview.js (canvas)
-  canvas-webview-entry.css          — global stylesheet for the webview bundle
+  canvas-webview-entry.css          — global stylesheet for the canvas webview bundle
+  chat-webview-entry.tsx            — rspack entry for chat-sidebar.js (chat)
   vscode/                           — vscode-coupled host primitives
     canvas-panel.ts                 — canvas WebviewPanel + Subscribe stream bridge
     module-detail-panel.ts          — module detail tab
@@ -53,7 +54,7 @@ Rspack builds three bundles from the workspace:
 
 - `out/extension.js` (Node) — entry `src/extension.ts` (extension activation; vscode-coupled host primitives in `src/vscode/`)
 - `out/webview.js` (Browser) — entry `src/canvas-webview-entry.tsx` (VS Code-specific bootstrap; @lace/canvas itself is pure library code)
-- `out/chat-sidebar.js` (Browser) — entry `packages/chat-sidebar/src/webview-entry.tsx`
+- `out/chat-sidebar.js` (Browser) — entry `src/chat-webview-entry.tsx` (VS Code-specific bootstrap; @lace/chat-webview is pure React)
 
 ## Build & Test
 

@@ -80,9 +80,11 @@ module.exports = [
     devtool: 'source-map',
   },
   {
-    // Frontend (Webview) — chat sidebar
+    // Frontend (Webview) — chat sidebar. Entry lives at extension
+    // root (mirrors canvas-webview-entry); @lace/chat-webview is pure
+    // React, host-agnostic.
     mode: 'development',
-    entry: './packages/chat-sidebar/src/webview-entry.tsx',
+    entry: './src/chat-webview-entry.tsx',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'chat-sidebar.js',
