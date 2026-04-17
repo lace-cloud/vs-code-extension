@@ -317,8 +317,8 @@ function CompositeEditor({
         <MiniMap
           position="bottom-left"
           style={{
-            width: 160,
-            height: 110,
+            width: 140,
+            height: 100,
             background: 'var(--lace-canvas-minimap-bg)',
             bottom: 20,
             left: 20,
@@ -365,7 +365,10 @@ export default function Canvas() {
 
   const [configTarget, setConfigTarget] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [showMiniMap, setShowMiniMap] = useState(true);
+  // Default off: canvases at our scale (<15 nodes) don't need the
+  // overview; MiniMap is chrome tax. Users opt in via the ActionBar
+  // toggle. Matches VS Code's own "Toggle MiniMap" pattern.
+  const [showMiniMap, setShowMiniMap] = useState(false);
   const toggleMiniMap = useCallback(() => setShowMiniMap((v) => !v), []);
 
   // ── Hooks ──
