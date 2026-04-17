@@ -3,13 +3,15 @@
  * utilities so the component renders identically in the canvas bundle
  * and in Storybook (where Tailwind v4 doesn't scan @lace/canvas). */
 
-/* Top-right corner, below the ActionBar. ActionBar is ~48px tall + its
- * xyflow Panel offset, so 60px clears it cleanly. */
+/* Top-left corner, away from the ActionBar (top-right) and below any
+ * browser chrome gutters. Paired with ValidationErrorBanner which
+ * shares the same anchor so notifications stack in one predictable
+ * location. */
 .lace-toast {
   position: absolute;
-  top: 60px;
-  right: 16px;
-  z-index: 20;
+  top: var(--lace-space-4);
+  left: var(--lace-space-4);
+  z-index: var(--lace-z-chrome);
   display: flex;
   align-items: center;
   gap: 8px;
