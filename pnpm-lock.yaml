@@ -11,6 +11,12 @@ importers:
       '@grpc/grpc-js':
         specifier: ^1.12.6
         version: 1.14.3
+      '@lace/canvas':
+        specifier: workspace:*
+        version: link:packages/canvas
+      '@lace/design-tokens':
+        specifier: workspace:*
+        version: link:packages/design-tokens
       '@xyflow/react':
         specifier: ^12.10.1
         version: 12.10.2(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

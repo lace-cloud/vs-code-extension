@@ -34,9 +34,10 @@ module.exports = [
     devtool: 'source-map',
   },
   {
-    // Frontend (Webview) — canvas package
+    // Frontend (Webview) — canvas. Entry lives at extension root, not
+    // inside @lace/canvas, so the published package is portable.
     mode: 'development',
-    entry: './packages/canvas/src/index.tsx',
+    entry: './src/canvas-webview-entry.tsx',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'webview.js',

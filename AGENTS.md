@@ -37,7 +37,7 @@ pnpm workspace with seven packages:
 Rspack produces three bundles:
 
 - `out/extension.js` — Node, from `packages/host/src/extension.ts`
-- `out/webview.js` — Browser, from `packages/canvas/src/index.tsx`
+- `out/webview.js` — Browser, from `src/canvas-webview-entry.tsx` (VS Code-specific bootstrap; @lace/canvas itself is pure library code)
 - `out/chat-sidebar.js` — Browser, from `packages/chat-sidebar/src/webview/index.tsx`
 
 ## Build & Test

@@ -9,6 +9,7 @@
     "declarationMap": false
   },
   "include": [
+    "src/**/*",
     "packages/host/src/**/*",
     "packages/canvas/src/**/*",
     "packages/chat-sidebar/src/**/*"

@@ -33,7 +33,7 @@ packages/
 Rspack builds three bundles from the workspace:
 
 - `out/extension.js` (Node) — entry `packages/host/src/extension.ts`
-- `out/webview.js` (Browser) — entry `packages/canvas/src/index.tsx`
+- `out/webview.js` (Browser) — entry `src/canvas-webview-entry.tsx` (VS Code-specific bootstrap; @lace/canvas itself is pure library code)
 - `out/chat-sidebar.js` (Browser) — entry `packages/chat-sidebar/src/webview/index.tsx`
 
 ## Build & Test
