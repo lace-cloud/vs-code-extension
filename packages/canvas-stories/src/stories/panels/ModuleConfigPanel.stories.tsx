@@ -1,4 +1,4 @@
-import { default as ModuleConfigPanel } from '@lace/canvas/components/panels/ModuleConfigPanel';
+import { ModuleConfigPanel } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useMemo } from 'react';
 import { MockCanvasContext } from '../../mocks/canvas-context';

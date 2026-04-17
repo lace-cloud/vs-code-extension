@@ -1,4 +1,4 @@
-import AccordionSection from '@lace/canvas/components/AccordionSection';
+import { AccordionSection } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 
 // AccordionSection is a whole-row-click collapsible used inside the

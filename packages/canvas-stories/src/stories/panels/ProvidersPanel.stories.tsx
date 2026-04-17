@@ -1,4 +1,4 @@
-import { default as ProvidersPanel } from '@lace/canvas/components/panels/ProvidersPanel';
+import { ProvidersPanel } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { populatedSettings } from '../../mocks/fixtures/configs';
 

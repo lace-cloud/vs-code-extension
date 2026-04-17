@@ -1,4 +1,4 @@
-import Toast from '@lace/canvas/components/Toast';
+import { Toast } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 
 // Three stories — one per semantic type. Multiple progress-phase

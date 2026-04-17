@@ -1,6 +1,4 @@
-import type { CanvasEngine } from '@lace/canvas/engine';
-import { CanvasContext } from '@lace/canvas/state/engine-context';
-import type { CanvasView } from '@lace/canvas/types/render';
+import { CanvasContext, type CanvasEngine, type CanvasView } from '@lace/canvas';
 import type { ReactNode } from 'react';
 
 /**

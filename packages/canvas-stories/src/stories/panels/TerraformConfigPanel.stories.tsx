@@ -1,7 +1,4 @@
-import {
-  TerraformConfigContent,
-  default as TerraformConfigPanel,
-} from '@lace/canvas/components/panels/TerraformConfigPanel';
+import { TerraformConfigContent, TerraformConfigPanel } from '@lace/canvas';
 import { Panel } from '@lace/ui';
 import type { Meta, StoryObj } from '@storybook/react';
 import { populatedSettings } from '../../mocks/fixtures/configs';
