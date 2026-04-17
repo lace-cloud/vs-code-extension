@@ -43,8 +43,10 @@
 }
 
 /* ── Controls ──
- * ReactFlow Panel sets .bottom { bottom: 0 } and .right { right: 0 }
- * in @layer components. We override to inset from edges.
+ * Bottom-left corner offsets live on the Controls component's `style`
+ * prop in Canvas.tsx (alongside MiniMap's stack offset), so the layout
+ * works identically in the webview and in Storybook — Storybook doesn't
+ * import this stylesheet.
  */
 
 .react-flow__controls {
@@ -52,11 +54,6 @@
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid rgba(206, 254, 101, 0.15);
-}
-
-.react-flow__panel.bottom.right {
-  bottom: 40px;
-  right: 20px;
 }
 
 .react-flow__controls-button {
@@ -93,11 +90,6 @@
 }
 
 /* ── MiniMap ── */
-
-.react-flow__panel.bottom.left {
-  bottom: 40px;
-  left: 20px;
-}
 
 .react-flow__minimap {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);

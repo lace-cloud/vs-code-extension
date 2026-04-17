@@ -150,9 +150,10 @@ export function ValidationErrorBanner({
 
   return (
     <>
-      {/* Persistent banner — same top-left position as toast */}
+      {/* Persistent banner — top-right, below the ActionBar. Matches Toast's
+          60px/16px offset so banner and toast visually align. */}
       <div
-        className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)] border"
+        className="absolute top-[60px] right-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-md text-xs shadow-[0_2px_6px_rgba(0,0,0,0.3)] border"
         style={{
           background: '#3a1518',
           color: '#f87171',
