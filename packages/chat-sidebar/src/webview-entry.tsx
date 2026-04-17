@@ -8,7 +8,7 @@
 // its own equivalent entry.
 
 import { App, type WebviewBridge, type WebviewToHost } from '@lace/chat-webview';
-import '@lace/chat-webview/src/styles.css';
+import '@lace/chat-webview/styles.css';
 import { createRoot } from 'react-dom/client';
 
 declare global {
