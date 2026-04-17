@@ -1,4 +1,4 @@
-import type { ContextSummary } from '../../protocol';
+import type { ContextSummary } from '@lace/chat-core';
 
 type ContextStripProps = {
   context: ContextSummary | null;

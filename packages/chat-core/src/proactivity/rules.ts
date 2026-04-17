@@ -5,7 +5,7 @@
 // Returning null means "nothing to suggest for this event."
 
 import type { CanvasView, NodePin, RenderNode } from '@lace/host';
-import type { ProactiveSuggestion } from '../../protocol';
+import type { ProactiveSuggestion } from '../protocol';
 
 // ── Proto-shaped inputs ──
 // Matches the shape of EngineEvent fields from packages/host/src/generated/service.ts.

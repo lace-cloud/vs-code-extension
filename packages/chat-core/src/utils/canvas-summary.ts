@@ -1,4 +1,4 @@
-import type { CanvasView } from '../types';
+import type { CanvasView } from '@lace/host';
 
 type FormatOptions = {
   /** Compact: single-line lists. Detailed (default): markdown headers and bullets. */

@@ -5,9 +5,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { ToolRegistry, ToolResult } from '@lace/chat-core';
 import * as vscode from 'vscode';
-import { registerTool } from '../tool-registry';
-import type { ToolResult } from '../types';
 
 // Files to look for (ordered by priority)
 const CONTEXT_FILES = [
@@ -159,8 +158,8 @@ function buildProjectProfile(
 
 // ── Tool Registration ──
 
-export function registerWorkspaceTools(): void {
-  registerTool(
+export function registerWorkspaceTools(registry: ToolRegistry): void {
+  registry.register(
     {
       name: 'lace_workspace_context',
       description: "Read the user's project files to understand what they are building.",

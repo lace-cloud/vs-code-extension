@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { formatCanvasState } from '../host/utils/canvas-summary';
+import { formatCanvasState } from '../utils/canvas-summary';
 import { makeCanvasView, makeEdge, makeNode } from './helpers';
 
 describe('formatCanvasState', () => {

@@ -8,7 +8,7 @@ import {
   matchErrorsAppeared,
   matchGenerateError,
   matchUnwiredRequiredInput,
-} from '../host/proactivity/rules';
+} from '../proactivity/rules';
 
 function makeView(nodes: RenderNode[], errorCount = 0): CanvasView {
   return {

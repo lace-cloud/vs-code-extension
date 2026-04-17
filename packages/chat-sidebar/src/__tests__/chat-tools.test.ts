@@ -1,10 +1,9 @@
-import type { RenderError } from '@lace/host';
+import { createToolRegistry, type ToolRegistry } from '@lace/chat-core';
+import type { LaceTransport, RegistryModule, RenderError } from '@lace/host';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { getToolHandler } from '../host/tool-registry';
 import { type GenerateToolDeps, registerGenerateTools } from '../host/tools/generate-tools';
 import { registerGraphReadTools } from '../host/tools/graph-read-tools';
 import { type GraphWriteDeps, registerGraphWriteTools } from '../host/tools/graph-write-tools';
-import type { RegistryModule } from '../host/types';
 import { makeCanvasView, makeEdge, makeNode } from './helpers';
 
 // ── Mock RPC client ──
@@ -79,11 +78,12 @@ const testModules: RegistryModule[] = [
 // ── Test setup ──
 
 let mockClient: ReturnType<typeof makeMockClient>;
+let registry: ToolRegistry;
 
 function makeWriteDeps(): GraphWriteDeps {
   mockClient = makeMockClient();
   return {
-    getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+    getRpcClient: () => mockClient as unknown as LaceTransport,
     getRegistryModules: () => testModules,
     getUserOrgs: () => [],
     getCanvasView: () => null,
@@ -92,17 +92,18 @@ function makeWriteDeps(): GraphWriteDeps {
 
 describe('write tools', () => {
   beforeEach(() => {
+    registry = createToolRegistry();
     const deps = makeWriteDeps();
-    registerGraphWriteTools(deps);
-    registerGraphReadTools({
-      getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+    registerGraphWriteTools(registry, deps);
+    registerGraphReadTools(registry, {
+      getRpcClient: () => mockClient as unknown as LaceTransport,
       getCanvasView: () => null,
     });
   });
 
   describe('lace_add_module', () => {
     test('adds module by exact name via placeModule RPC', async () => {
-      const handler = getToolHandler('lace_add_module')!;
+      const handler = registry.getHandler('lace_add_module')!;
       const result = await handler({ name: 'aws/vpc' });
 
       expect(result.isError).toBeFalsy();
@@ -118,7 +119,7 @@ describe('write tools', () => {
     });
 
     test('resolves single fuzzy match', async () => {
-      const handler = getToolHandler('lace_add_module')!;
+      const handler = registry.getHandler('lace_add_module')!;
       const result = await handler({ name: 'resource-group' });
 
       expect(result.isError).toBeFalsy();
@@ -133,7 +134,7 @@ describe('write tools', () => {
     });
 
     test('disambiguates multiple fuzzy matches', async () => {
-      const handler = getToolHandler('lace_add_module')!;
+      const handler = registry.getHandler('lace_add_module')!;
       const result = await handler({ name: 'aws' });
 
       expect(result.isError).toBe(true);
@@ -162,18 +163,19 @@ describe('write tools', () => {
       });
 
       const deps: GraphWriteDeps = {
-        getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+        getRpcClient: () => mockClient as unknown as LaceTransport,
         getRegistryModules: () => [], // empty local cache — forces RPC search
         getUserOrgs: () => [{ slug: 'acme-corp', name: 'Acme Corp', role: 'member' }],
         getCanvasView: () => null,
       };
-      registerGraphWriteTools(deps);
-      registerGraphReadTools({
-        getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+      registry = createToolRegistry();
+      registerGraphWriteTools(registry, deps);
+      registerGraphReadTools(registry, {
+        getRpcClient: () => mockClient as unknown as LaceTransport,
         getCanvasView: () => null,
       });
 
-      const handler = getToolHandler('lace_add_module')!;
+      const handler = registry.getHandler('lace_add_module')!;
       const result = await handler({ name: 'aws/custom-networking' });
 
       expect(result.isError).toBeFalsy();
@@ -184,7 +186,7 @@ describe('write tools', () => {
 
     test('surfaces engine error when placeModule fails', async () => {
       mockClient.placeModule.mockRejectedValue(new Error('module not found in registry'));
-      const handler = getToolHandler('lace_add_module')!;
+      const handler = registry.getHandler('lace_add_module')!;
       const result = await handler({ name: 'aws/vpc' });
 
       expect(result.isError).toBe(true);
@@ -194,7 +196,7 @@ describe('write tools', () => {
 
   describe('lace_set_input', () => {
     test('sets literal value', async () => {
-      const handler = getToolHandler('lace_set_input')!;
+      const handler = registry.getHandler('lace_set_input')!;
       const result = await handler({
         instance_id: 'vpc',
         input_name: 'enable_dns',
@@ -214,7 +216,7 @@ describe('write tools', () => {
     });
 
     test('sets variable reference', async () => {
-      const handler = getToolHandler('lace_set_input')!;
+      const handler = registry.getHandler('lace_set_input')!;
       const result = await handler({
         instance_id: 'vpc',
         input_name: 'cidr_block',
@@ -234,7 +236,7 @@ describe('write tools', () => {
     });
 
     test('returns error when no binding type provided', async () => {
-      const handler = getToolHandler('lace_set_input')!;
+      const handler = registry.getHandler('lace_set_input')!;
       const result = await handler({
         instance_id: 'vpc',
         input_name: 'cidr_block',
@@ -252,7 +254,7 @@ describe('write tools', () => {
           { instance_id: 'subnet', input_name: 'vpc_id', message: 'Dangling reference to "ghost"' },
         ],
       });
-      const handler = getToolHandler('lace_validate_graph')!;
+      const handler = registry.getHandler('lace_validate_graph')!;
       const result = await handler({});
 
       expect(result.isError).toBeFalsy();
@@ -265,17 +267,18 @@ describe('write tools', () => {
 describe('generate tools', () => {
   beforeEach(() => {
     mockClient = makeMockClient();
+    registry = createToolRegistry();
     const deps: GenerateToolDeps = {
-      getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+      getRpcClient: () => mockClient as unknown as LaceTransport,
       getLaceDir: () => '/tmp/test-workspace/.lace',
       getCanvasView: () => null,
     };
-    registerGenerateTools(deps);
+    registerGenerateTools(registry, deps);
   });
 
   describe('lace_auto_connect', () => {
     test('auto-connects matching outputs to unbound inputs', async () => {
-      const handler = getToolHandler('lace_auto_connect')!;
+      const handler = registry.getHandler('lace_auto_connect')!;
       const result = await handler({
         source_instance: 'vpc',
         target_instance: 'subnet',
@@ -294,7 +297,7 @@ describe('generate tools', () => {
       mockClient.autoConnect.mockResolvedValue(
         makeCanvasView([makeNode('vpc'), makeNode('subnet')]),
       );
-      const handler = getToolHandler('lace_auto_connect')!;
+      const handler = registry.getHandler('lace_auto_connect')!;
       const result = await handler({
         source_instance: 'vpc',
         target_instance: 'subnet',
@@ -306,7 +309,7 @@ describe('generate tools', () => {
 
   describe('lace_generate', () => {
     test('generates terraform via RPC', async () => {
-      const handler = getToolHandler('lace_generate')!;
+      const handler = registry.getHandler('lace_generate')!;
       const result = await handler({});
 
       expect(result.isError).toBeFalsy();
@@ -327,7 +330,7 @@ describe('generate tools', () => {
       mockClient.sessionGenerate.mockResolvedValue({
         diagnostics: [{ severity: 'error', message: 'Missing required input' }],
       });
-      const handler = getToolHandler('lace_generate')!;
+      const handler = registry.getHandler('lace_generate')!;
       const result = await handler({});
 
       expect(result.isError).toBe(true);
@@ -337,13 +340,14 @@ describe('generate tools', () => {
 
     test('returns error when no workspace folder', async () => {
       const deps: GenerateToolDeps = {
-        getRpcClient: () => mockClient as unknown as import('../host/types').LaceTransport,
+        getRpcClient: () => mockClient as unknown as LaceTransport,
         getLaceDir: () => undefined,
         getCanvasView: () => null,
       };
-      registerGenerateTools(deps);
+      registry = createToolRegistry();
+      registerGenerateTools(registry, deps);
 
-      const handler = getToolHandler('lace_generate')!;
+      const handler = registry.getHandler('lace_generate')!;
       const result = await handler({});
 
       expect(result.isError).toBe(true);
@@ -354,13 +358,14 @@ describe('generate tools', () => {
 
 describe('settings tools', () => {
   beforeEach(() => {
+    registry = createToolRegistry();
     const deps = makeWriteDeps();
-    registerGraphWriteTools(deps);
+    registerGraphWriteTools(registry, deps);
   });
 
   describe('lace_set_local', () => {
     test('sets literal local value', async () => {
-      const handler = getToolHandler('lace_set_local')!;
+      const handler = registry.getHandler('lace_set_local')!;
       const result = await handler({ name: 'region', value: 'us-east-1' });
 
       expect(result.isError).toBeFalsy();
@@ -373,7 +378,7 @@ describe('settings tools', () => {
     });
 
     test('sets expression local', async () => {
-      const handler = getToolHandler('lace_set_local')!;
+      const handler = registry.getHandler('lace_set_local')!;
       const result = await handler({ name: 'prefix', expression: 'var.project' });
 
       expect(result.isError).toBeFalsy();
@@ -386,7 +391,7 @@ describe('settings tools', () => {
     });
 
     test('returns error when neither value nor expression provided', async () => {
-      const handler = getToolHandler('lace_set_local')!;
+      const handler = registry.getHandler('lace_set_local')!;
       const result = await handler({ name: 'region' });
 
       expect(result.isError).toBe(true);
@@ -396,7 +401,7 @@ describe('settings tools', () => {
 
   describe('lace_set_environment', () => {
     test('sets environment variables', async () => {
-      const handler = getToolHandler('lace_set_environment')!;
+      const handler = registry.getHandler('lace_set_environment')!;
       const result = await handler({
         environment: 'staging',
         variables: { region: 'us-west-2', instance_type: 't3.small' },
@@ -412,7 +417,7 @@ describe('settings tools', () => {
     });
 
     test('returns error when environment name missing', async () => {
-      const handler = getToolHandler('lace_set_environment')!;
+      const handler = registry.getHandler('lace_set_environment')!;
       const result = await handler({ variables: { region: 'us-east-1' } });
 
       expect(result.isError).toBe(true);

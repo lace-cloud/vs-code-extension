@@ -1,16 +1,7 @@
 import * as path from 'node:path';
-import type { CanvasView, LaceTransport, RegistryModule } from '@lace/host';
-import { buildWebviewHtml } from '@lace/host';
+import { buildWebviewHtml, type CanvasView } from '@lace/host';
 import * as vscode from 'vscode';
-import { ChatController } from './controller';
-
-/** External deps provided by the extension — everything the controller needs except getCanvasView. */
-export type ChatSidebarDeps = {
-  getRpcClient: () => LaceTransport | null;
-  getRegistryModules: () => RegistryModule[];
-  getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
-  getLaceDir: () => string | undefined;
-};
+import { ChatController, type ChatSidebarDeps } from './controller';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'laceChat';
@@ -20,7 +11,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly externalDeps: ChatSidebarDeps,
-    private readonly log: (msg: string) => void,
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -36,16 +26,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       title: 'Lace Chat',
     });
 
-    // Create controller first, then wire deps.getCanvasView to its cache.
-    // The lazy arrow captures `this.controller` at call time, so it resolves
-    // after the controller is assigned.
-    let controller: ChatController;
-    const deps = {
-      ...this.externalDeps,
-      getCanvasView: () => controller?.getLatestView() ?? null,
-    };
-    controller = new ChatController(this.context, view.webview, deps, this.log);
+    const controller = new ChatController(this.context, view.webview, this.externalDeps);
     this.controller = controller;
+    void controller.init();
 
     view.onDidDispose(() => {
       this.controller?.dispose();
@@ -62,3 +45,5 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return this.controller?.getLatestView() ?? null;
   }
 }
+
+export type { ChatSidebarDeps } from './controller';

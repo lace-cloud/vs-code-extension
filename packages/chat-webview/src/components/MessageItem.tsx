@@ -1,5 +1,5 @@
+import type { ProactiveSuggestion } from '@lace/chat-core';
 import { useState } from 'react';
-import type { ProactiveSuggestion } from '../../protocol';
 import type { ThreadMessage } from './Thread';
 
 type MessageItemProps = {

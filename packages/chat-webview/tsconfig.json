@@ -6,10 +6,5 @@
     "jsx": "react-jsx"
   },
   "include": ["src/**/*"],
-  "references": [
-    { "path": "../proto" },
-    { "path": "../host" },
-    { "path": "../chat-core" },
-    { "path": "../chat-webview" }
-  ]
+  "references": [{ "path": "../chat-core" }]
 }

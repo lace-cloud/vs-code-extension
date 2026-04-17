@@ -1,12 +1,19 @@
-// Shared postMessage protocol between chat sidebar webview and host.
-// No imports — pure type unions so webview can import without pulling
-// host dependencies into the browser bundle.
+// Shared postMessage protocol between the chat webview and its host.
+//
+// Plain types. No imports — webview code can import these without
+// pulling chat-core's runtime in. Host adapters use them to shape
+// messages going both directions.
 
 export type CompletedTurn = {
   messageId: string;
   userText: string;
   assistantText: string;
-  toolCalls: Array<{ name: string; input: unknown; resultContent: string; isError?: boolean }>;
+  toolCalls: Array<{
+    name: string;
+    input: unknown;
+    resultContent: string;
+    isError?: boolean;
+  }>;
 };
 
 export type ProactiveSuggestion = {

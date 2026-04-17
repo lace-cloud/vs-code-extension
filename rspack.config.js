@@ -77,7 +77,7 @@ module.exports = [
   {
     // Frontend (Webview) — chat sidebar
     mode: 'development',
-    entry: './packages/chat-sidebar/src/webview/index.tsx',
+    entry: './packages/chat-sidebar/src/webview-entry.tsx',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'chat-sidebar.js',
