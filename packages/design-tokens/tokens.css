@@ -46,12 +46,34 @@
 
   /* ── Modal / Overlay ── */
   --lace-modal-backdrop: rgba(0, 0, 0, 0.6);
+  --lace-modal-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+  /* ── Panel ── */
+  --lace-panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
 
   /* ── Toast ── */
   --lace-toast-success-bg: #153238;
   --lace-toast-success-border: rgba(206, 254, 101, 0.2);
   --lace-toast-error-bg: #3a1518;
   --lace-toast-error-border: rgba(248, 113, 113, 0.3);
+
+  /* ── Badge ── */
+  /* Neutral: quiet count/meta pills (e.g. "(5)") */
+  --lace-badge-neutral-bg: transparent;
+  --lace-badge-neutral-border: var(--lace-border-default);
+  --lace-badge-neutral-text: var(--lace-text-muted);
+  /* Info: reuse existing blue tag tokens for versions etc. */
+  --lace-badge-info-bg: var(--lace-tag-bg);
+  --lace-badge-info-border: var(--lace-tag-border);
+  --lace-badge-info-text: var(--lace-tag-text);
+  /* Success: brand green, low saturation */
+  --lace-badge-success-bg: rgba(46, 160, 67, 0.12);
+  --lace-badge-success-border: rgba(46, 160, 67, 0.35);
+  --lace-badge-success-text: var(--lace-accent-green);
+  /* Danger: red border/text on transparent, used for destructive chips */
+  --lace-badge-danger-bg: transparent;
+  --lace-badge-danger-border: var(--lace-text-danger);
+  --lace-badge-danger-text: var(--lace-text-danger);
 
   /* ── Surface ── */
   --lace-bg-surface: #1e1e1e;

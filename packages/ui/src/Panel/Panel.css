@@ -1,0 +1,76 @@
+/* Panel primitive — side-panel surface with a header, scrollable body,
+ * and optional sticky footer. Replaces the ad-hoc PanelFrame in
+ * @lace/canvas. Composites position the panel (SlidePanel, fixed
+ * docking, etc.); Panel only owns the frame. */
+
+.lace-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--lace-bg-surface);
+  border-left: 1px solid var(--lace-border-default);
+  box-shadow: var(--lace-panel-shadow);
+  font-family: inherit;
+  color: var(--lace-grey);
+}
+
+.lace-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--lace-border-default);
+  flex-shrink: 0;
+}
+
+.lace-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lace-text-label);
+}
+
+.lace-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--lace-bg-input);
+  border: 1px solid var(--lace-border-default);
+  border-radius: 6px;
+  color: var(--lace-grey);
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.lace-panel__close:hover {
+  background: var(--lace-btn-secondary-hover);
+  border-color: var(--lace-border-input-hover);
+}
+
+.lace-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px;
+}
+
+.lace-panel__body--scrollable {
+  overflow-y: auto;
+  padding-bottom: 96px;
+}
+
+.lace-panel__footer {
+  flex-shrink: 0;
+  padding: 16px;
+  background: var(--lace-bg-surface);
+  border-top: 1px solid var(--lace-border-default);
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
