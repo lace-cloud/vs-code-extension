@@ -96,11 +96,33 @@ coverage for free. CI uses `--exit-zero-on-changes` so runs stay green
 regardless of visual deltas — approval is gated in the Chromatic UI,
 not in CI.
 
-Flow stories carry `chromatic: { disableSnapshot: true }` because
-Chromatic's cloud can't spawn `lace engine`. Flow-level visual
-regression is a gap today, planned to be filled by adding MSW-mocked
-flow stories to Storybook in a later session (so their visuals also
-flow through Storybook mode with no live CLI dependency).
+Flow visuals split into two twin sets:
+
+- **`Flows/*`** — live-CLI stories driven by `FlowDecorator` +
+  `ConnectWebEngine`. Tagged `chromatic: { disableSnapshot: true }`
+  (Chromatic's cloud can't spawn `lace engine`). These exist for
+  Playwright flow-tests that hit the real CLI to check the wire
+  contract.
+- **`Flows/Mock/*`** — mock-engine stories driven by `MockFlowDecorator` +
+  `MockCanvasEngine`, backed by captured fixtures in
+  `packages/canvas-stories/src/mocks/fixtures/`. These are **not**
+  tagged `disableSnapshot` — Chromatic captures them. No CLI, no
+  network, no env vars.
+
+#### Regenerating mock fixtures
+
+Fixtures are captured once from a live `lace engine -tags=test` and
+committed as TS files. Regenerate when lace-cli changes a seed (the
+seed-drift canary in `tests/flow/seed-manifest.spec.ts` flags this):
+
+```
+pnpm run capture-fixtures     # spawns `lace engine`, overwrites TS files
+```
+
+The capture script converts the Connect-JSON proto response to
+render-model POJOs using the same enum and camelCase-to-snake_case
+mapping as the runtime `convertCanvasView` converter, so fixtures are
+byte-equivalent to what `ConnectWebEngine` would produce at runtime.
 
 #### Review protocol
 
@@ -122,9 +144,10 @@ through the Storybook Library view, not just the diff.
   context, missing provider, missing decorator) and fix it in the
   same PR.
 - **Stories tagged `chromatic: { disableSnapshot: true }` are
-  ignored.** Flow stories fall here — they need a live CLI that
-  Chromatic's cloud can't spawn, so the library shows the
-  `CliMissingBanner` fallback. That's expected; not a review item.
+  ignored.** Live-CLI `Flows/*` stories fall here — they show the
+  `CliMissingBanner` fallback because Chromatic's cloud can't spawn
+  the CLI. That's expected; the mock twins (`Flows/Mock/*`) are the
+  ones Chromatic captures.
 - **Rule of thumb:** if a story in the library doesn't match how the
   component actually looks in the app, the story or the component is
   wrong — never the baseline.
