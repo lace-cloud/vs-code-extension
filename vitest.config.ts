@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       'packages/canvas/src/__tests__/**/*.test.{ts,tsx}',
       'packages/chat-sidebar/src/__tests__/**/*.test.{ts,tsx}',
+      'packages/canvas-stories/src/__tests__/**/*.test.{ts,tsx}',
     ],
     environment: 'node',
     passWithNoTests: true,

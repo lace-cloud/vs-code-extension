@@ -162,6 +162,7 @@
     "storybook": "pnpm --filter @lace/canvas-stories run dev",
     "storybook:build": "pnpm --filter @lace/canvas-stories run build",
     "dev:storybook-flows": "bash scripts/dev-storybook.sh",
+    "capture-fixtures": "node scripts/capture-fixtures.mjs",
     "flow-tests": "playwright test",
     "chromatic": "chromatic --exit-zero-on-changes",
     "package": "vsce package",
