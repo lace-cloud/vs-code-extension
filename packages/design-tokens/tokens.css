@@ -1,154 +1,391 @@
 /*
  * Lace Design Tokens
- * Single source of truth for colors, spacing, and visual constants.
+ * ===================
+ *
+ * Three-tier architecture (Primitive → Semantic → Component).
+ * Consumers should reference the *highest* layer that expresses intent:
+ *   - Composites reach for semantic (`--lace-color-text`, `--lace-space-3`)
+ *   - Component styles reach for component tokens (`--lace-btn-primary-bg`)
+ *   - Primitives are rarely referenced directly — they exist so the
+ *     semantic + component layers can all swap with one edit.
+ *
  * Import via: @import '@lace/design-tokens/tokens.css';
  *
- * These map to Tailwind's @theme directive in consuming packages,
- * or can be used directly as var(--lace-*).
- *
- * Rule for new code: canvas + chat-sidebar + @lace/ui components
- * must reference colors through var(--lace-*). No raw hex literals,
- * no inline Tailwind arbitrary-value classes like bg-[#1f6feb].
- * If a color isn't in this file, add a token here first.
+ * Rule for new code: no raw hex literals, no raw px values for spacing,
+ * font-size, shadow, or radius. If a token doesn't exist for your use
+ * case, add it here first — don't bypass the system.
  */
 
-:root {
-  /* ── Brand ── */
-  --lace-green: #cefe65;
-  --lace-green-bright: #e0ff8a;
-  --lace-gunmetal: #153238;
-  --lace-gunmetal-light: #1a3f47;
-  --lace-night: #161616;
-  --lace-cyan: #95e7ff;
-  --lace-grey: #ecefed;
+/* ══════════════════════════════════════════════════════════════════════
+ * TIER 1 — PRIMITIVES
+ *
+ * Raw values. Named descriptively (color/number), never by usage. These
+ * are the only tokens allowed to contain hex / rgba / px values.
+ * ══════════════════════════════════════════════════════════════════════ */
 
-  /* ── UI: Interactive ── */
-  --lace-btn-primary: #1f6feb;
-  --lace-btn-primary-dim: #1a4d8f;
+:root {
+  /* ── Palette: brand ── */
+  --lace-color-green-300: #e0ff8a;
+  --lace-color-green-500: #cefe65;
+  --lace-color-green-700: #5e8a1a;
+  --lace-color-cyan-500: #95e7ff;
+  --lace-color-cyan-700: #2c9db9;
+
+  /* ── Palette: neutral ── */
+  --lace-color-neutral-100: #ecefed;
+  --lace-color-neutral-200: #e6e6e6;
+  --lace-color-neutral-300: #cccccc;
+  --lace-color-neutral-400: #9ca3af;
+  --lace-color-neutral-500: #999999;
+  --lace-color-neutral-600: #555555;
+  --lace-color-neutral-700: #3c3c3c;
+  --lace-color-neutral-750: #333333;
+  --lace-color-neutral-800: #252526;
+  --lace-color-neutral-850: #1e1e1e;
+  --lace-color-neutral-900: #161616;
+  --lace-color-neutral-950: #0f0f0f;
+  --lace-color-neutral-black: #000000;
+
+  /* ── Palette: semantic accents ── */
+  --lace-color-teal-700: #153238;
+  --lace-color-teal-600: #1a3f47;
+  --lace-color-blue-500: #1f6feb;
+  --lace-color-blue-700: #1a4d8f;
+  --lace-color-blue-accent: #4fc1ff;
+  --lace-color-red-400: #f87171;
+  --lace-color-red-500: #e5484d;
+  --lace-color-red-700: #6e2b2b;
+  --lace-color-red-800: #3a1518;
+  --lace-color-red-900: #2a1414;
+  --lace-color-green-accent-500: #2ea043;
+  --lace-color-green-accent-600: #3ab550;
+  --lace-color-green-accent-700: #1a7f37;
+  --lace-color-amber-400: #f5a623;
+  --lace-color-amber-600: #8a5a10;
+  --lace-color-purple-400: #b084f0;
+  --lace-color-purple-700: #5c3e9a;
+  --lace-color-pink-400: #f288c6;
+  --lace-color-pink-700: #8a2e5c;
+  --lace-color-orange-400: #ff8a4c;
+  --lace-color-orange-700: #8a3a10;
+  --lace-color-tag-blue-bg: #0b1f3a;
+  --lace-color-tag-blue-border: #2b4a7a;
+  --lace-color-tag-blue-text: #9ecbff;
+
+  /* ── Palette: alpha variants ── */
+  --lace-color-green-alpha-10: rgba(206, 254, 101, 0.1);
+  --lace-color-green-alpha-15: rgba(206, 254, 101, 0.15);
+  --lace-color-green-alpha-18: rgba(206, 254, 101, 0.18);
+  --lace-color-green-alpha-20: rgba(206, 254, 101, 0.2);
+  --lace-color-green-alpha-60: rgba(206, 254, 101, 0.6);
+  --lace-color-red-alpha-12: rgba(248, 113, 113, 0.12);
+  --lace-color-red-alpha-20: rgba(229, 72, 77, 0.2);
+  --lace-color-red-alpha-25: rgba(229, 72, 77, 0.25);
+  --lace-color-red-alpha-30: rgba(248, 113, 113, 0.3);
+  --lace-color-red-alpha-35: rgba(229, 72, 77, 0.35);
+  --lace-color-green-accent-alpha-12: rgba(46, 160, 67, 0.12);
+  --lace-color-green-accent-alpha-15: rgba(46, 160, 67, 0.15);
+  --lace-color-green-accent-alpha-35: rgba(46, 160, 67, 0.35);
+  --lace-color-white-alpha-40: rgba(255, 255, 255, 0.4);
+  --lace-color-black-alpha-30: rgba(0, 0, 0, 0.3);
+  --lace-color-black-alpha-35: rgba(0, 0, 0, 0.35);
+  --lace-color-black-alpha-40: rgba(0, 0, 0, 0.4);
+  --lace-color-black-alpha-50: rgba(0, 0, 0, 0.5);
+  --lace-color-black-alpha-60: rgba(0, 0, 0, 0.6);
+  --lace-color-blue-alpha-30: rgba(59, 130, 246, 0.3);
+
+  /* ── Scale: spacing (4px base) ── */
+  --lace-space-0: 0;
+  --lace-space-1: 4px;
+  --lace-space-2: 8px;
+  --lace-space-3: 12px;
+  --lace-space-4: 16px;
+  --lace-space-5: 24px;
+  --lace-space-6: 32px;
+  --lace-space-7: 48px;
+
+  /* ── Scale: font size ── */
+  --lace-font-size-xs: 10px;
+  --lace-font-size-sm: 11px;
+  --lace-font-size-md: 12px;
+  --lace-font-size-lg: 13px;
+  --lace-font-size-xl: 14px;
+  --lace-font-size-2xl: 16px;
+
+  /* ── Scale: line height ── */
+  --lace-line-height-tight: 1.2;
+  --lace-line-height-normal: 1.4;
+  --lace-line-height-relaxed: 1.6;
+
+  /* ── Scale: font weight ── */
+  --lace-font-weight-regular: 400;
+  --lace-font-weight-medium: 500;
+  --lace-font-weight-semibold: 600;
+  --lace-font-weight-bold: 700;
+
+  /* ── Font family ── */
+  --lace-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --lace-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* ── Scale: radius ── */
+  --lace-radius-sm: 4px;
+  --lace-radius-md: 6px;
+  --lace-radius-lg: 8px;
+  --lace-radius-pill: 999px;
+
+  /* ── Scale: shadow (elevation) ── */
+  --lace-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --lace-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --lace-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --lace-shadow-xl: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+  /* ── Scale: z-index ── */
+  --lace-z-canvas: 0;
+  --lace-z-chrome: 10; /* action bar, toast, banner */
+  --lace-z-scrim: 40; /* context-menu dismiss overlay */
+  --lace-z-overlay: 50; /* context menu, modal */
+  --lace-z-tooltip: 60;
+
+  /* ── Motion ── */
+  --lace-duration-fast: 120ms;
+  --lace-duration-medium: 200ms;
+  --lace-duration-slow: 300ms;
+  --lace-easing-standard: ease;
+  --lace-easing-out: ease-out;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * TIER 2 — SEMANTIC
+ *
+ * Use-case-named tokens that alias primitives. Composites should prefer
+ * these over primitives so a future palette change re-themes everything
+ * with one edit.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Surface (background layers) ── */
+  --lace-color-bg-canvas: var(--lace-color-neutral-900);
+  --lace-color-bg-surface: var(--lace-color-neutral-850);
+  --lace-color-bg-surface-alt: var(--lace-color-neutral-800);
+  --lace-color-bg-input: var(--lace-color-neutral-950);
+  --lace-color-bg-context-menu: #1a1a1a;
+
+  /* ── Border ── */
+  --lace-color-border-default: var(--lace-color-neutral-750);
+  --lace-color-border-subtle: var(--lace-color-neutral-700);
+  --lace-color-border-input: var(--lace-color-neutral-600);
+  --lace-color-border-input-hover: #888888;
+
+  /* ── Text ── */
+  --lace-color-text-primary: var(--lace-color-neutral-100);
+  --lace-color-text-label: var(--lace-color-neutral-200);
+  --lace-color-text-muted: var(--lace-color-neutral-500);
+  --lace-color-text-description: var(--lace-color-neutral-400);
+  --lace-color-text-accent: var(--lace-color-green-500);
+  --lace-color-text-link: var(--lace-color-blue-500);
+  --lace-color-text-danger: var(--lace-color-red-500);
+  --lace-color-text-danger-soft: var(--lace-color-red-400);
+
+  /* ── Accent ── */
+  --lace-color-accent: var(--lace-color-green-500);
+  --lace-color-accent-alpha-subtle: var(--lace-color-green-alpha-10);
+  --lace-color-accent-alpha-medium: var(--lace-color-green-alpha-20);
+  --lace-color-accent-strong: var(--lace-color-green-bright, var(--lace-color-green-300));
+
+  /* ── Status ── */
+  --lace-color-success: var(--lace-color-green-accent-500);
+  --lace-color-success-hover: var(--lace-color-green-accent-600);
+  --lace-color-success-strong: var(--lace-color-green-accent-700);
+  --lace-color-danger: var(--lace-color-red-500);
+  --lace-color-danger-bg-soft: var(--lace-color-red-alpha-12);
+  --lace-color-warning-bg: #3b2507;
+  --lace-color-warning-fg: #f0a030;
+
+  /* ── Focus ring ── */
+  --lace-color-focus-ring: var(--lace-color-accent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * TIER 3 — COMPONENT
+ *
+ * Specific-to-component tokens. Retained names match what composites
+ * reference today so the migration is additive. New components should
+ * prefer semantic tokens unless they need component-specific colors.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Brand aliases (legacy — prefer semantic) ── */
+  --lace-green: var(--lace-color-green-500);
+  --lace-green-bright: var(--lace-color-green-300);
+  --lace-gunmetal: var(--lace-color-teal-700);
+  --lace-gunmetal-light: var(--lace-color-teal-600);
+  --lace-night: var(--lace-color-neutral-900);
+  --lace-cyan: var(--lace-color-cyan-500);
+  --lace-grey: var(--lace-color-neutral-100);
+
+  /* ── Surface aliases (legacy) ── */
+  --lace-bg-surface: var(--lace-color-bg-surface);
+  --lace-bg-surface-alt: var(--lace-color-bg-surface-alt);
+  --lace-bg-input: var(--lace-color-bg-input);
+  --lace-bg-context-menu: var(--lace-color-bg-context-menu);
+  --lace-border-default: var(--lace-color-border-default);
+  --lace-border-input: var(--lace-color-border-input);
+  --lace-border-input-hover: var(--lace-color-border-input-hover);
+  --lace-border-subtle: var(--lace-color-border-subtle);
+
+  /* ── Text aliases (legacy) ── */
+  --lace-text-danger: var(--lace-color-text-danger);
+  --lace-text-danger-light: var(--lace-color-text-danger-soft);
+  --lace-text-link: var(--lace-color-text-link);
+  --lace-text-muted: var(--lace-color-text-muted);
+  --lace-text-label: var(--lace-color-text-label);
+  --lace-text-description: var(--lace-color-text-description);
+
+  /* ── Alpha variants (legacy) ── */
+  --lace-green-alpha-10: var(--lace-color-green-alpha-10);
+  --lace-green-alpha-15: var(--lace-color-green-alpha-15);
+  --lace-green-alpha-20: var(--lace-color-green-alpha-20);
+  --lace-green-alpha-60: var(--lace-color-green-alpha-60);
+
+  /* ── Button ── */
+  --lace-btn-primary: var(--lace-color-blue-500);
+  --lace-btn-primary-dim: var(--lace-color-blue-700);
   --lace-btn-secondary-bg: #2d2d2d;
   --lace-btn-secondary-hover: #3a3a3a;
-  --lace-btn-success: #1a7f37;
-  --lace-btn-success-hover: #3ab653;
-  --lace-btn-danger-bg: #6e2b2b;
+  --lace-btn-success: var(--lace-color-green-accent-700);
+  --lace-btn-success-hover: var(--lace-color-green-accent-600);
+  --lace-btn-danger-bg: var(--lace-color-red-700);
   --lace-btn-danger-hover: #8a3535;
-  --lace-btn-ghost-hover: rgba(206, 254, 101, 0.1);
+  --lace-btn-ghost-hover: var(--lace-color-accent-alpha-subtle);
   --lace-btn-text-primary: #ffffff;
-  --lace-btn-text-disabled: rgba(255, 255, 255, 0.4);
-  --lace-icon-btn-hover: rgba(206, 254, 101, 0.1);
-  --lace-icon-btn-danger-hover: rgba(229, 72, 77, 0.15);
-  --lace-icon-btn-success-hover: rgba(46, 160, 67, 0.15);
-  --lace-text-danger: #e5484d;
-  --lace-text-danger-light: #f87171;
-  --lace-text-link: #1f6feb;
-  --lace-text-muted: #999999;
-  --lace-text-label: #e6e6e6;
-  --lace-text-description: #9ca3af;
+  --lace-btn-text-disabled: var(--lace-color-white-alpha-40);
+  --lace-icon-btn-hover: var(--lace-color-accent-alpha-subtle);
+  --lace-icon-btn-danger-hover: var(--lace-color-red-alpha-30);
+  --lace-icon-btn-success-hover: var(--lace-color-green-accent-alpha-15);
 
   /* ── Modal / Overlay ── */
-  --lace-modal-backdrop: rgba(0, 0, 0, 0.6);
-  --lace-modal-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --lace-modal-backdrop: var(--lace-color-black-alpha-60);
+  --lace-modal-shadow: var(--lace-shadow-xl);
 
   /* ── Panel ── */
-  --lace-panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  --lace-panel-shadow: 0 2px 12px var(--lace-color-black-alpha-35);
+
+  /* ── ActionBar ── */
+  --lace-action-bar-bg: rgba(30, 30, 30, 0.8);
+  --lace-action-bar-separator: #444444;
+  --lace-action-bar-shadow: var(--lace-shadow-md);
+  --lace-action-bar-generate-bg: var(--lace-color-success);
+  --lace-action-bar-generate-bg-hover: var(--lace-color-success-hover);
 
   /* ── Input ── */
-  --lace-input-bg: var(--lace-bg-input);
-  --lace-input-border: var(--lace-border-default);
-  --lace-input-border-hover: var(--lace-border-input-hover);
-  --lace-input-border-focus: var(--lace-green);
-  --lace-input-border-error: var(--lace-text-danger);
-  --lace-input-text: var(--lace-grey);
-  --lace-input-placeholder: var(--lace-text-muted);
+  --lace-input-bg: var(--lace-color-bg-input);
+  --lace-input-border: var(--lace-color-border-default);
+  --lace-input-border-hover: var(--lace-color-border-input-hover);
+  --lace-input-border-focus: var(--lace-color-focus-ring);
+  --lace-input-border-error: var(--lace-color-danger);
+  --lace-input-text: var(--lace-color-text-primary);
+  --lace-input-placeholder: var(--lace-color-text-muted);
 
   /* ── ModeToggle ── */
   --lace-mode-toggle-active-bg: var(--lace-btn-primary);
   --lace-mode-toggle-active-border: var(--lace-btn-primary);
   --lace-mode-toggle-active-text: var(--lace-btn-text-primary);
   --lace-mode-toggle-inactive-bg: transparent;
-  --lace-mode-toggle-inactive-border: var(--lace-border-input);
-  --lace-mode-toggle-inactive-text: var(--lace-text-muted);
-  --lace-mode-toggle-inactive-hover-border: var(--lace-border-input-hover);
-  --lace-mode-toggle-inactive-hover-text: var(--lace-grey);
-
-  /* ── ActionBar ── */
-  --lace-action-bar-bg: rgba(30, 30, 30, 0.8);
-  --lace-action-bar-separator: #444444;
-  --lace-action-bar-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --lace-action-bar-generate-bg: var(--lace-accent-green);
-  --lace-action-bar-generate-bg-hover: #3ab550;
+  --lace-mode-toggle-inactive-border: var(--lace-color-border-input);
+  --lace-mode-toggle-inactive-text: var(--lace-color-text-muted);
+  --lace-mode-toggle-inactive-hover-border: var(--lace-color-border-input-hover);
+  --lace-mode-toggle-inactive-hover-text: var(--lace-color-text-primary);
 
   /* ── Toast ── */
-  --lace-toast-success-bg: #153238;
-  --lace-toast-success-border: rgba(206, 254, 101, 0.2);
-  --lace-toast-error-bg: #3a1518;
-  --lace-toast-error-border: rgba(248, 113, 113, 0.3);
+  --lace-toast-success-bg: var(--lace-color-teal-700);
+  --lace-toast-success-border: var(--lace-color-accent-alpha-medium);
+  --lace-toast-error-bg: var(--lace-color-red-800);
+  --lace-toast-error-border: var(--lace-color-red-alpha-30);
 
   /* ── Badge ── */
-  /* Neutral: quiet count/meta pills (e.g. "(5)") */
   --lace-badge-neutral-bg: transparent;
-  --lace-badge-neutral-border: var(--lace-border-default);
-  --lace-badge-neutral-text: var(--lace-text-muted);
-  /* Info: reuse existing blue tag tokens for versions etc. */
-  --lace-badge-info-bg: var(--lace-tag-bg);
-  --lace-badge-info-border: var(--lace-tag-border);
-  --lace-badge-info-text: var(--lace-tag-text);
-  /* Success: brand green, low saturation */
-  --lace-badge-success-bg: rgba(46, 160, 67, 0.12);
-  --lace-badge-success-border: rgba(46, 160, 67, 0.35);
-  --lace-badge-success-text: var(--lace-accent-green);
-  /* Danger: red border/text on transparent, used for destructive chips */
+  --lace-badge-neutral-border: var(--lace-color-border-default);
+  --lace-badge-neutral-text: var(--lace-color-text-muted);
+  --lace-badge-info-bg: var(--lace-color-tag-blue-bg);
+  --lace-badge-info-border: var(--lace-color-tag-blue-border);
+  --lace-badge-info-text: var(--lace-color-tag-blue-text);
+  --lace-badge-success-bg: var(--lace-color-green-accent-alpha-12);
+  --lace-badge-success-border: var(--lace-color-green-accent-alpha-35);
+  --lace-badge-success-text: var(--lace-color-success);
   --lace-badge-danger-bg: transparent;
-  --lace-badge-danger-border: var(--lace-text-danger);
-  --lace-badge-danger-text: var(--lace-text-danger);
+  --lace-badge-danger-border: var(--lace-color-danger);
+  --lace-badge-danger-text: var(--lace-color-danger);
 
-  /* ── Surface ── */
-  --lace-bg-surface: #1e1e1e;
-  --lace-bg-surface-alt: #252526;
-  --lace-bg-input: #0f0f0f;
-  --lace-bg-context-menu: #1a1a1a;
-  --lace-border-default: #333333;
-  --lace-border-input: #555555;
-  --lace-border-input-hover: #888888;
-  --lace-border-subtle: #3c3c3c;
-
-  /* ── Node states ── */
-  --lace-node-error-border: #e5484d;
-  --lace-node-error-shadow: rgba(229, 72, 77, 0.3);
+  /* ── Canvas nodes (inline-styled; tokens listed for completeness) ── */
+  --lace-node-default-border: var(--lace-color-green-alpha-18);
+  --lace-node-error-border: var(--lace-color-red-500);
+  --lace-node-error-shadow-color: var(--lace-color-red-alpha-30);
   --lace-node-new-border: #3b82f6;
-  --lace-node-new-shadow: rgba(59, 130, 246, 0.3);
-  --lace-node-default-border: rgba(206, 254, 101, 0.18);
+  --lace-node-new-shadow-color: var(--lace-color-blue-alpha-30);
 
-  /* ── Pin colors (Blender-style type handles) ── */
-  --lace-pin-string-fill: #95e7ff;
-  --lace-pin-string-stroke: #2c9db9;
-  --lace-pin-number-fill: #f5a623;
-  --lace-pin-number-stroke: #8a5a10;
-  --lace-pin-bool-fill: #b084f0;
-  --lace-pin-bool-stroke: #5c3e9a;
-  --lace-pin-list-fill: #cefe65;
-  --lace-pin-list-stroke: #5e8a1a;
-  --lace-pin-map-fill: #f288c6;
-  --lace-pin-map-stroke: #8a2e5c;
-  --lace-pin-object-fill: #ff8a4c;
-  --lace-pin-object-stroke: #8a3a10;
+  /* ── Canvas pin colors (Blender-style type handles) ── */
+  --lace-pin-string-fill: var(--lace-color-cyan-500);
+  --lace-pin-string-stroke: var(--lace-color-cyan-700);
+  --lace-pin-number-fill: var(--lace-color-amber-400);
+  --lace-pin-number-stroke: var(--lace-color-amber-600);
+  --lace-pin-bool-fill: var(--lace-color-purple-400);
+  --lace-pin-bool-stroke: var(--lace-color-purple-700);
+  --lace-pin-list-fill: var(--lace-color-green-500);
+  --lace-pin-list-stroke: var(--lace-color-green-700);
+  --lace-pin-map-fill: var(--lace-color-pink-400);
+  --lace-pin-map-stroke: var(--lace-color-pink-700);
+  --lace-pin-object-fill: var(--lace-color-orange-400);
+  --lace-pin-object-stroke: var(--lace-color-orange-700);
   --lace-pin-any-fill: #9ba19e;
   --lace-pin-any-stroke: #4a4f4c;
 
-  /* ── Alpha variants (borders, glows, overlays) ── */
-  --lace-green-alpha-10: rgba(206, 254, 101, 0.1);
-  --lace-green-alpha-15: rgba(206, 254, 101, 0.15);
-  --lace-green-alpha-20: rgba(206, 254, 101, 0.2);
-  --lace-green-alpha-60: rgba(206, 254, 101, 0.6);
+  /* ── Canvas controls + minimap ── */
+  --lace-canvas-controls-bg: var(--lace-gunmetal);
+  --lace-canvas-controls-bg-hover: var(--lace-gunmetal-light);
+  --lace-canvas-controls-icon: var(--lace-color-accent);
+  --lace-canvas-controls-icon-hover: var(--lace-color-accent-strong);
+  --lace-canvas-controls-border: var(--lace-color-accent-alpha-medium);
+  --lace-canvas-minimap-bg: #111111;
+  --lace-canvas-minimap-border: var(--lace-color-border-default);
+  --lace-canvas-minimap-mask: var(--lace-color-black-alpha-60);
+  --lace-canvas-edge-stroke: var(--lace-color-accent);
+  --lace-canvas-edge-stroke-selected: var(--lace-color-accent-strong);
+  --lace-canvas-edge-stroke-width: 1.5px;
+  --lace-canvas-edge-stroke-width-selected: 2.5px;
 
   /* ── Module detail panel ── */
-  --lace-accent-blue: #4fc1ff;
-  --lace-accent-green: #2ea043;
+  --lace-accent-blue: var(--lace-color-blue-accent);
+  --lace-accent-green: var(--lace-color-success);
   --lace-code-string: #ce9178;
-  --lace-warning-bg: #3b2507;
-  --lace-warning-fg: #f0a030;
+  --lace-warning-bg: var(--lace-color-warning-bg);
+  --lace-warning-fg: var(--lace-color-warning-fg);
 
-  /* ── Tag pill (module config panel) ── */
-  --lace-tag-border: #2b4a7a;
-  --lace-tag-bg: #0b1f3a;
-  --lace-tag-text: #9ecbff;
+  /* ── Tag pill (legacy — prefer Badge primitive) ── */
+  --lace-tag-border: var(--lace-color-tag-blue-border);
+  --lace-tag-bg: var(--lace-color-tag-blue-bg);
+  --lace-tag-text: var(--lace-color-tag-blue-text);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * GLOBAL DEFAULTS
+ *
+ * Applied at the root so every webview / Storybook iframe picks them up
+ * without requiring each component to restate them.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+html,
+body {
+  font-family: var(--lace-font-sans);
+  font-size: var(--lace-font-size-md);
+  line-height: var(--lace-line-height-normal);
+  color: var(--lace-color-text-primary);
+  background: var(--lace-color-bg-canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }

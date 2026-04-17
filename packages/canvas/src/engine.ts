@@ -18,9 +18,14 @@ import type {
  */
 export type EngineEvent =
   | { type: 'stateUpdated'; view: CanvasView; viewportIntent?: ViewportIntent }
-  | { type: 'generateProgress'; phase: GeneratePhase }
-  | { type: 'generateSuccess'; files?: string[] }
-  | { type: 'generateError'; message: string; diagnostics?: Diagnostic[] };
+  | { type: 'generateProgress'; phase: GeneratePhase; toastDurationMs?: number }
+  | { type: 'generateSuccess'; files?: string[]; toastDurationMs?: number }
+  | {
+      type: 'generateError';
+      message: string;
+      diagnostics?: Diagnostic[];
+      toastDurationMs?: number;
+    };
 
 export type EngineEventListener = (event: EngineEvent) => void;
 

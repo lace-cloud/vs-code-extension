@@ -155,7 +155,12 @@ export class MockCanvasEngine implements CanvasEngine {
     };
   }
 
-  private emit(event: EngineEvent): void {
+  /**
+   * Fire a synthetic event. Scene stories use this to drive the canvas
+   * into specific UI states (toast visible, banner showing, etc.)
+   * without exercising real mutations.
+   */
+  emit(event: EngineEvent): void {
     for (const listener of this.listeners) listener(event);
   }
 }

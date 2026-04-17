@@ -73,7 +73,7 @@ describe('useGenerationStatus', () => {
     });
 
     expect(result.current.generating).toBe(true);
-    expect(showToast).toHaveBeenCalledWith('Generating Terraform...', 'progress');
+    expect(showToast).toHaveBeenCalledWith('Generating Terraform...', 'progress', undefined);
   });
 
   test('generateSuccess resets generating and clears errors', () => {
@@ -93,7 +93,7 @@ describe('useGenerationStatus', () => {
 
     expect(result.current.generating).toBe(false);
     expect(result.current.validationErrors).toEqual([]);
-    expect(showToast).toHaveBeenCalledWith('Successfully generated', 'success');
+    expect(showToast).toHaveBeenCalledWith('Successfully generated', 'success', undefined);
   });
 
   test('generateError populates validation errors', () => {
@@ -114,7 +114,7 @@ describe('useGenerationStatus', () => {
     expect(result.current.generating).toBe(false);
     expect(result.current.validationErrors).toHaveLength(1);
     expect(result.current.validationErrors[0].message).toBe('Missing required input');
-    expect(showToast).toHaveBeenCalledWith('Validation: 1 error(s)', 'error');
+    expect(showToast).toHaveBeenCalledWith('Validation: 1 error(s)', 'error', undefined);
   });
 
   test('erroredNodeIds extracts instance_id from diagnostics', () => {
