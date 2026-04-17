@@ -44,10 +44,11 @@ function fromEnvRows(rows: EnvRow[]): Record<string, Record<string, unknown>> {
 
 type ContentProps = {
   environments: Record<string, Record<string, unknown>> | undefined;
+  readOnly?: boolean;
   onSave: (environments: Record<string, Record<string, unknown>>) => void | Promise<void>;
 };
 
-export function EnvironmentsContent({ environments, onSave }: ContentProps) {
+export function EnvironmentsContent({ environments, readOnly = false, onSave }: ContentProps) {
   const [envRows, setEnvRows] = useState<EnvRow[]>(() => toEnvRows(environments));
 
   const addEnv = useCallback(() => {
@@ -122,15 +123,18 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
               placeholder="Environment name (e.g. dev)"
               fullWidth
               error={envNameDupes.has(ei)}
+              readOnly={readOnly}
             />
-            <button
-              type="button"
-              onClick={() => removeEnv(ei)}
-              className="lace-panel-remove-btn"
-              aria-label="Remove environment"
-            >
-              ✕
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => removeEnv(ei)}
+                className="lace-panel-remove-btn"
+                aria-label="Remove environment"
+              >
+                ✕
+              </button>
+            )}
           </div>
           {envNameDupes.has(ei) && (
             <div className="lace-panel-row-error">Duplicate environment name</div>
@@ -146,47 +150,57 @@ export function EnvironmentsContent({ environments, onSave }: ContentProps) {
                 fullWidth
                 error={envVarDupes[ei]?.has(vi)}
                 title={envVarDupes[ei]?.has(vi) ? 'Duplicate variable name' : undefined}
+                readOnly={readOnly}
               />
               <Input
                 value={v.value}
                 onChange={(e) => updateEnvVar(ei, vi, 'value', e.target.value)}
                 placeholder="Value"
                 fullWidth
+                readOnly={readOnly}
               />
-              <button
-                type="button"
-                onClick={() => removeEnvVar(ei, vi)}
-                className="lace-panel-remove-btn lace-panel-remove-btn--sm"
-                aria-label="Remove variable"
-              >
-                ✕
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => removeEnvVar(ei, vi)}
+                  className="lace-panel-remove-btn lace-panel-remove-btn--sm"
+                  aria-label="Remove variable"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() => addEnvVar(ei)}
-            className="lace-panel-add-btn lace-panel-add-btn--sm"
-          >
-            + Add variable
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => addEnvVar(ei)}
+              className="lace-panel-add-btn lace-panel-add-btn--sm"
+            >
+              + Add variable
+            </button>
+          )}
         </div>
       ))}
-      <button type="button" onClick={addEnv} className="lace-panel-add-btn">
-        + Add environment
-      </button>
+      {!readOnly && (
+        <>
+          <button type="button" onClick={addEnv} className="lace-panel-add-btn">
+            + Add environment
+          </button>
 
-      <SaveButton
-        status={saveStatus}
-        label="Save environments"
-        onClick={handleSave}
-        disabled={hasDuplicates}
-        disabledTitle="Fix duplicate names before saving"
-      />
-      {hasDuplicates && (
-        <div className="lace-panel-row-error">
-          Fix duplicate environment or variable names before saving.
-        </div>
+          <SaveButton
+            status={saveStatus}
+            label="Save environments"
+            onClick={handleSave}
+            disabled={hasDuplicates}
+            disabledTitle="Fix duplicate names before saving"
+          />
+          {hasDuplicates && (
+            <div className="lace-panel-row-error">
+              Fix duplicate environment or variable names before saving.
+            </div>
+          )}
+        </>
       )}
     </>
   );

@@ -25,9 +25,15 @@ export type HostBridge = {
 type AppProps = {
   engine: CanvasEngine;
   hostBridge: HostBridge;
+  /**
+   * When true, the canvas renders in read-only mode: pan/zoom/drag/inspect
+   * still work, but every IR-mutating affordance (save, delete, rename,
+   * wire, generate) is hidden or blocked. Defaults to `false`.
+   */
+  readOnly?: boolean;
 };
 
-export default function App({ engine, hostBridge }: AppProps) {
+export default function App({ engine, hostBridge, readOnly = false }: AppProps) {
   const [state, setState] = useState<CanvasState>({
     view: null,
     loading: true,
@@ -36,6 +42,15 @@ export default function App({ engine, hostBridge }: AppProps) {
     viewportIntent: null,
     viewportIntentSeq: 0,
   });
+
+  // Read-only local collapse overrides. Untouched when readOnly=false
+  // (editable canvas persists collapse via engine.updateGroup instead).
+  const [localGroupCollapseOverrides, setLocalGroupCollapseOverrides] = useState<
+    Record<string, boolean>
+  >({});
+  const toggleLocalGroupCollapse = useCallback((groupId: string, currentCollapsed: boolean) => {
+    setLocalGroupCollapseOverrides((prev) => ({ ...prev, [groupId]: !currentCollapsed }));
+  }, []);
 
   const updateView = useCallback((view: CanvasView) => {
     setState((prev) => ({
@@ -72,9 +87,16 @@ export default function App({ engine, hostBridge }: AppProps) {
     else hostBridge.markClean();
   }, [state.view?.is_dirty, hostBridge]);
 
-  useWindowEvent(CANVAS_EVENTS.SAVE, () => engine.sessionSave(), [engine]);
+  // SAVE / GENERATE are host-dispatched mutations. In read-only we
+  // don't install listeners — so if the host accidentally dispatches
+  // them, the canvas is silent. Gating at the install site (rather
+  // than inside the handler) keeps read-only mode a structural
+  // property, not a runtime check.
+  useWindowEvent(CANVAS_EVENTS.SAVE, () => engine.sessionSave(), [engine], { enabled: !readOnly });
 
-  useWindowEvent(CANVAS_EVENTS.GENERATE, () => hostBridge.triggerGenerate(), [hostBridge]);
+  useWindowEvent(CANVAS_EVENTS.GENERATE, () => hostBridge.triggerGenerate(), [hostBridge], {
+    enabled: !readOnly,
+  });
 
   useWindowEvent(
     CANVAS_EVENTS.OPEN_FILE,
@@ -96,7 +118,16 @@ export default function App({ engine, hostBridge }: AppProps) {
 
   return (
     <ErrorBoundary>
-      <CanvasContext.Provider value={{ state, engine, updateView }}>
+      <CanvasContext.Provider
+        value={{
+          state,
+          engine,
+          updateView,
+          readOnly,
+          localGroupCollapseOverrides,
+          toggleLocalGroupCollapse,
+        }}
+      >
         <ReactFlowProvider>
           <Canvas />
         </ReactFlowProvider>

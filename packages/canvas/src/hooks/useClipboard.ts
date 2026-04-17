@@ -12,6 +12,7 @@ export function useClipboard(
   selectNodes: (ids: string[]) => void,
   getContextMenuNodeId: () => string | null,
   dismissContextMenu: () => void,
+  readOnly: boolean,
 ) {
   const clipboardRef = useRef<string[]>([]);
   const isCutRef = useRef(false);
@@ -77,8 +78,11 @@ export function useClipboard(
     }
   }, [engine, updateView, view, showToast, selectNodes, dismissContextMenu]);
 
-  // Expose globally for HTML-level keyboard shortcuts
+  // Expose globally for HTML-level keyboard shortcuts. In read-only we
+  // skip the install so Cmd+C/X/V route through their host-side
+  // handlers, find `window.__canvas*` undefined, and no-op.
   useEffect(() => {
+    if (readOnly) return;
     window.__canvasCopy = onCopy;
     window.__canvasCut = onCut;
     window.__canvasPaste = onPaste;
@@ -87,7 +91,7 @@ export function useClipboard(
       window.__canvasCut = undefined;
       window.__canvasPaste = undefined;
     };
-  }, [onCopy, onCut, onPaste]);
+  }, [onCopy, onCut, onPaste, readOnly]);
 
   return { onCopy, onCut, onPaste };
 }

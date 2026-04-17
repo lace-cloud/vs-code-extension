@@ -15,6 +15,7 @@ import { MockCanvasEngine } from '../../mocks/mock-engine';
 type StoryArgs = {
   instanceId: string;
   nodeConfig: typeof vpcNodeConfig | 'loading';
+  readOnly?: boolean;
 };
 
 const meta: Meta<StoryArgs> = {
@@ -28,22 +29,6 @@ const meta: Meta<StoryArgs> = {
       },
     },
   },
-  decorators: [
-    (Story) => (
-      <MockCanvasContext view={emptyFixture}>
-        <div
-          style={{
-            position: 'relative',
-            width: 520,
-            height: '100vh',
-            background: 'var(--lace-color-bg-canvas)',
-          }}
-        >
-          <Story />
-        </div>
-      </MockCanvasContext>
-    ),
-  ],
   render: (args) => {
     const engine = useMemo(() => {
       if (args.nodeConfig === 'loading') {
@@ -59,12 +44,23 @@ const meta: Meta<StoryArgs> = {
     }, [args.nodeConfig]);
 
     return (
-      <ModuleConfigPanel
-        instance_id={args.instanceId}
-        engine={engine}
-        onClose={() => {}}
-        onModified={() => {}}
-      />
+      <MockCanvasContext view={emptyFixture} readOnly={args.readOnly ?? false}>
+        <div
+          style={{
+            position: 'relative',
+            width: 520,
+            height: '100vh',
+            background: 'var(--lace-color-bg-canvas)',
+          }}
+        >
+          <ModuleConfigPanel
+            instance_id={args.instanceId}
+            engine={engine}
+            onClose={() => {}}
+            onModified={() => {}}
+          />
+        </div>
+      </MockCanvasContext>
     );
   },
 };
@@ -95,4 +91,12 @@ export const PopulatedRequiredAndOptional: Story = {
 export const WiredInputs: Story = {
   name: 'Wired inputs (disconnect flow)',
   args: { instanceId: 'attachment', nodeConfig: attachmentNodeConfig },
+};
+
+// Read-only — every editable affordance is gated off. Inputs carry
+// `readonly`, ModeToggle items all disabled, disconnect + Save CTA
+// hidden. Portal-mode inspection lands here.
+export const ReadOnly: Story = {
+  name: 'Read-only (inspection)',
+  args: { instanceId: 'vpc', nodeConfig: vpcNodeConfig, readOnly: true },
 };

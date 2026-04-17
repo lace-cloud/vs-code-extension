@@ -16,10 +16,11 @@ type ProviderRequirementRow = { name: string; source: string; version: string };
 
 type ContentProps = {
   terraform: TerraformConfig | undefined;
+  readOnly?: boolean;
   onSave: (terraform: TerraformConfig) => void | Promise<void>;
 };
 
-export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
+export function TerraformConfigContent({ terraform, readOnly = false, onSave }: ContentProps) {
   const [requiredVersion, setRequiredVersion] = useState(terraform?.required_version ?? '');
   const [providers, setProviders] = useState<ProviderRequirementRow[]>(() => {
     if (!terraform?.required_providers) return [];
@@ -70,6 +71,7 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
           onChange={(e) => setRequiredVersion(e.target.value)}
           placeholder=">= 1.5"
           fullWidth
+          readOnly={readOnly}
         />
       </div>
 
@@ -82,14 +84,17 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
               onChange={(e) => updateProvider(i, 'name', e.target.value)}
               placeholder="Name (e.g. aws)"
               fullWidth
+              readOnly={readOnly}
             />
-            <button
-              type="button"
-              onClick={() => removeProvider(i)}
-              className="lace-panel-remove-btn"
-            >
-              Remove
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => removeProvider(i)}
+                className="lace-panel-remove-btn"
+              >
+                Remove
+              </button>
+            )}
           </div>
           <div className="lace-panel-row-actions">
             <Input
@@ -97,6 +102,7 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
               onChange={(e) => updateProvider(i, 'source', e.target.value)}
               placeholder="Source (e.g. hashicorp/aws)"
               fullWidth
+              readOnly={readOnly}
             />
           </div>
           <div className="lace-panel-row-actions">
@@ -105,13 +111,16 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
               onChange={(e) => updateProvider(i, 'version', e.target.value)}
               placeholder="Version (e.g. ~> 5.0)"
               fullWidth
+              readOnly={readOnly}
             />
           </div>
         </div>
       ))}
-      <button type="button" onClick={addProvider} className="lace-panel-add-btn">
-        + Add provider
-      </button>
+      {!readOnly && (
+        <button type="button" onClick={addProvider} className="lace-panel-add-btn">
+          + Add provider
+        </button>
+      )}
 
       <h4 className="lace-panel-section-title">Backend</h4>
       <div className="lace-panel-hint">
@@ -119,7 +128,9 @@ export function TerraformConfigContent({ terraform, onSave }: ContentProps) {
         during generation.
       </div>
 
-      <SaveButton status={saveStatus} label="Save configuration" onClick={handleSave} />
+      {!readOnly && (
+        <SaveButton status={saveStatus} label="Save configuration" onClick={handleSave} />
+      )}
     </>
   );
 }

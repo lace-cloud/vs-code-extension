@@ -49,15 +49,26 @@ const noopEngine: CanvasEngine = {
 type Props = {
   children: ReactNode;
   view?: CanvasView | null;
+  readOnly?: boolean;
 };
 
-export function MockCanvasContext({ children, view = null }: Props) {
+export function MockCanvasContext({ children, view = null, readOnly = false }: Props) {
   return (
     <CanvasContext.Provider
       value={{
-        state: { view, loading: false, error: null, generation: 0 },
+        state: {
+          view,
+          loading: false,
+          error: null,
+          generation: 0,
+          viewportIntent: null,
+          viewportIntentSeq: 0,
+        },
         engine: noopEngine,
         updateView: () => {},
+        readOnly,
+        localGroupCollapseOverrides: {},
+        toggleLocalGroupCollapse: () => {},
       }}
     >
       {children}

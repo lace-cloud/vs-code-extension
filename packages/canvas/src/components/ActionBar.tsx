@@ -2,6 +2,13 @@ import { Panel } from '@xyflow/react';
 import './ActionBar.css';
 
 type ActionBarProps = {
+  /**
+   * When true, only the MiniMap toggle + Settings gear render. Save,
+   * Clear, Undo, Redo, and Generate are IR-mutating and hidden; the
+   * Settings gear is kept because the settings panel has its own
+   * read-only flow for inspection. Defaults to `false`.
+   */
+  readOnly?: boolean;
   isGenerating?: boolean;
   onSave: () => void;
   onUndo: () => void;
@@ -68,6 +75,7 @@ const SettingsIcon = () => (
 );
 
 export default function ActionBar({
+  readOnly = false,
   isGenerating,
   onSave,
   onUndo,
@@ -81,55 +89,59 @@ export default function ActionBar({
   return (
     <Panel position="top-right">
       <div className="lace-action-bar">
-        <button
-          type="button"
-          className="lace-action-bar__icon-btn"
-          onClick={onSave}
-          title="Save (Cmd+S)"
-          aria-label="Save"
-        >
-          <SaveIcon />
-        </button>
-        <button
-          type="button"
-          className="lace-action-bar__icon-btn"
-          onClick={onClearGraph}
-          title="Clear all modules"
-          aria-label="Clear all"
-        >
-          <TrashIcon />
-        </button>
-        <button
-          type="button"
-          className="lace-action-bar__icon-btn"
-          onClick={onUndo}
-          title="Undo (Cmd+Z)"
-          aria-label="Undo"
-        >
-          <UndoIcon />
-        </button>
-        <button
-          type="button"
-          className="lace-action-bar__icon-btn"
-          onClick={onRedo}
-          title="Redo (Cmd+Shift+Z)"
-          aria-label="Redo"
-        >
-          <RedoIcon />
-        </button>
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              className="lace-action-bar__icon-btn"
+              onClick={onSave}
+              title="Save (Cmd+S)"
+              aria-label="Save"
+            >
+              <SaveIcon />
+            </button>
+            <button
+              type="button"
+              className="lace-action-bar__icon-btn"
+              onClick={onClearGraph}
+              title="Clear all modules"
+              aria-label="Clear all"
+            >
+              <TrashIcon />
+            </button>
+            <button
+              type="button"
+              className="lace-action-bar__icon-btn"
+              onClick={onUndo}
+              title="Undo (Cmd+Z)"
+              aria-label="Undo"
+            >
+              <UndoIcon />
+            </button>
+            <button
+              type="button"
+              className="lace-action-bar__icon-btn"
+              onClick={onRedo}
+              title="Redo (Cmd+Shift+Z)"
+              aria-label="Redo"
+            >
+              <RedoIcon />
+            </button>
 
-        <div className="lace-action-bar__separator" aria-hidden="true" />
+            <div className="lace-action-bar__separator" aria-hidden="true" />
 
-        <button
-          type="button"
-          className="lace-action-bar__generate"
-          onClick={onGenerate}
-          disabled={isGenerating}
-          title="Generate Terraform files"
-          aria-label="Generate"
-        >
-          <GenerateIcon />
-        </button>
+            <button
+              type="button"
+              className="lace-action-bar__generate"
+              onClick={onGenerate}
+              disabled={isGenerating}
+              title="Generate Terraform files"
+              aria-label="Generate"
+            >
+              <GenerateIcon />
+            </button>
+          </>
+        )}
         <button
           type="button"
           className="lace-action-bar__icon-btn"

@@ -32,7 +32,7 @@ type Props = {
 // ── Component ──
 
 export default function ModuleConfigPanel({ instance_id, engine, onClose, onModified }: Props) {
-  const { state, updateView } = useCanvas();
+  const { state, updateView, readOnly } = useCanvas();
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -203,10 +203,11 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     const isWired = currentMode === 'wired';
     // Wired is always disabled (set by connect/disconnect). When the
     // current mode is wired, Lit/Var/Expr are also disabled so the user
-    // can't silently overwrite a live binding.
+    // can't silently overwrite a live binding. In read-only, every
+    // item disables.
     const items = MODE_ITEMS.map((m) => ({
       ...m,
-      disabled: m.value === 'wired' || isWired,
+      disabled: readOnly || m.value === 'wired' || isWired,
     }));
     return (
       <ModeToggle<BindingMode>
@@ -254,15 +255,17 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
         <Badge variant="info" size="md">
           Wired
         </Badge>
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => handleDisconnect(input.name)}
-          title="Disconnect this input"
-          aria-label="Disconnect"
-        >
-          ✕
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => handleDisconnect(input.name)}
+            title="Disconnect this input"
+            aria-label="Disconnect"
+          >
+            ✕
+          </Button>
+        )}
       </div>
     );
   }
@@ -280,6 +283,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
         placeholder="e.g. region"
         fullWidth
         mono
+        readOnly={readOnly}
       />
     );
   }
@@ -294,6 +298,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
         placeholder='e.g. join("-", [var.prefix, var.name])'
         fullWidth
         mono
+        readOnly={readOnly}
       />
     );
   }
@@ -312,6 +317,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
           className="lace-mcp__select"
           value={String(value ?? false)}
           onChange={(e) => updateValue(e.target.value === 'true')}
+          disabled={readOnly}
         >
           <option value="true">True</option>
           <option value="false">False</option>
@@ -326,6 +332,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
           value={String(value ?? '')}
           onChange={(e) => updateValue(e.target.value === '' ? '' : Number(e.target.value))}
           fullWidth
+          readOnly={readOnly}
         />
       );
     }
@@ -351,6 +358,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
           rows={4}
           fullWidth
           mono
+          readOnly={readOnly}
         />
       );
     }
@@ -369,6 +377,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
           updateValue(v);
         }}
         fullWidth
+        readOnly={readOnly}
       />
     );
   }
@@ -401,7 +410,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
     </div>
   );
 
-  const footer = (
+  const footer = readOnly ? undefined : (
     <Button variant="primary" fullWidth onClick={handleSave}>
       Save configuration
     </Button>
@@ -437,6 +446,7 @@ export default function ModuleConfigPanel({ instance_id, engine, onClose, onModi
                   type="checkbox"
                   className="lace-mcp__depends-checkbox"
                   checked={localDependsOn.has(depKey)}
+                  disabled={readOnly}
                   onChange={(e) => {
                     setLocalDependsOn((prev) => {
                       const next = new Set(prev);

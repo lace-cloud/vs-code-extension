@@ -180,7 +180,7 @@ deleting or renaming the canonical ones requires a note in the PR.
 
 **Composites (`Components / *`)** — at least the happy path + one "extreme" state (error, max data, or long text) that catches layout drift:
 
-- `ActionBar` — default, generating, minimap-shown, interactive-toggle
+- `ActionBar` — default, generating, minimap-shown, interactive-toggle, read-only
 - `Toast` — success, error, progress (phase variants are visually identical; one story covers them all)
 - `ContextMenu` — single-node, multi-select, group-right-click
 - `ValidationErrorBanner` — single diagnostic, multiple diagnostics (dialog state covered via Scene)
@@ -193,14 +193,14 @@ deleting or renaming the canonical ones requires a note in the PR.
 
 - `TerraformConfigPanel`, `LocalsPanel`, `ProvidersPanel`, `EnvironmentsPanel` — empty + populated each
 - `EdgeInspectorPanel` — typical (no empty state; only opens with a selected edge)
-- `ModuleConfigPanel` — loading, populated-with-required, wired-inputs
+- `ModuleConfigPanel` — loading, populated-with-required, wired-inputs, read-only
 - `UnifiedSettingsPanel` — loading, populated, empty
 
 **Flows**:
 
 - `Flows / *` — one per seed fixture (empty, iam-role, wired-stack, iam-stack, collapsed-group). `disableSnapshot: true`; Playwright exercises them against the real CLI.
 - `Flows / Mock / *` — mock twins of the live flows, Chromatic-captured.
-- `Flows / Scene / *` — canonical user moments: SaveSuccess, Generating, ValidationError, MiniMapVisible, MiniMapHidden, ConfigOpen, SettingsOpen, EdgeSelected, ContextMenuOpen, ConfirmClear.
+- `Flows / Scene / *` — canonical user moments: SaveSuccess, Generating, ValidationError, MiniMapVisible, MiniMapHidden, ConfigOpen, SettingsOpen, EdgeSelected, ContextMenuOpen, ConfirmClear, ReadOnly.
 
 New primitives, composites, or panels need their canonical entries appended to this list in the same PR that ships them.
 
@@ -228,6 +228,56 @@ Notes:
   `tests/flow/__snapshots__/seed-manifest.json` in the same PR.
 - Locally, set `LACE_CLI_REPO=../lace-cli` (or absolute path) so the
   canary can find lace-cli's `testdata/seeds/*.sha256` canaries.
+
+### Read-only mode
+
+The `@lace/canvas` `App` takes an optional `readOnly?: boolean` prop
+(default `false`) so consumers that show state without letting users
+mutate it — portal's control plane is the driving example — can mount
+the same canvas without re-implementing half of it.
+
+**Semantic contract: view manipulation vs. IR mutation.**
+
+- Allowed: pan, zoom, selection, hover/tooltip inspection, MiniMap
+  toggle + zoom controls, panel inspection (ModuleConfigPanel,
+  UnifiedSettingsPanel, EdgeInspectorPanel in inspection-only shapes),
+  drag-to-reposition (xyflow local state updates; no `syncLayout`
+  round-trip), expand/collapse groups (local override merged into the
+  view before it reaches `useGroupLogic`).
+- Blocked: delete, rename, connect, reconnect, create group, ungroup,
+  edit any input in any panel, Save (Cmd+S), Generate, Undo/Redo,
+  Clear all, copy/cut/paste, context menu.
+
+**Three-layer gating principle** — gate at the layer closest to the
+concern. No belt-and-suspenders.
+
+1. **xyflow native props** for every capability xyflow owns:
+   `nodesConnectable={!readOnly}`, `edgesReconnectable={!readOnly}`,
+   `deleteKeyCode={readOnly ? null : [...]}`. Don't re-implement at the
+   handler layer.
+2. **Conditional handler installation** for window-level listeners.
+   `CANVAS_EVENTS.SAVE` and `CANVAS_EVENTS.GENERATE` handlers, plus
+   `window.__canvasUndo` / `__canvasCopy` / `__canvasCut` /
+   `__canvasPaste`, are skipped when `readOnly`. The host may still
+   dispatch Cmd+S/Z/C/X/V — it falls through to a no-op because nothing
+   is installed. No runtime guard needed.
+3. **Render gates** for UI affordances. ActionBar renders only the
+   MiniMap toggle + Settings gear; ModuleNode / GroupNode hover-delete
+   + ungroup buttons render `null`; panel Save / Disconnect / Add /
+   Remove buttons render `null`; Input / Textarea forwards `readOnly`;
+   ModeToggle items all `disabled`.
+
+**No engine-layer guard.** The hosted backend (portal) rejects via
+authz; canvas's job is not to attempt. UI gate + conditional handler
+install = two independent defenses at the right layers.
+
+**Group collapse in read-only** is the one structural nuance. It's a
+view op that normally persists via `engine.updateGroup({collapsed})`,
+which we must not call in read-only. `CanvasContext` carries a
+`localGroupCollapseOverrides` map; `App` merges it into `view.groups`
+before rendering so `useGroupLogic` (xyflow's child-hiding + external
+pin computation) reads the effective collapsed flag from one source of
+truth.
 
 ## Critical Rules
 

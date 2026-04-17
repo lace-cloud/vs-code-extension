@@ -33,6 +33,12 @@ type Props = {
    * microtask after mount so subscriptions have landed.
    */
   onReady?: (engine: MockCanvasEngine) => void;
+  /**
+   * Forwards to `<App readOnly>`. Scene stories for read-only mode
+   * use this to mount the canvas with every IR-mutating affordance
+   * hidden or gated off.
+   */
+  readOnly?: boolean;
 };
 
 /**
@@ -41,7 +47,7 @@ type Props = {
  * captured by `scripts/capture-fixtures.mjs`. Stories using this decorator
  * snapshot in Chromatic's cloud without any backend.
  */
-export function MockFlowDecorator({ fixture, engineOptions, onReady }: Props) {
+export function MockFlowDecorator({ fixture, engineOptions, onReady, readOnly }: Props) {
   const engine = useMemo(
     () => new MockCanvasEngine(fixture, engineOptions),
     [fixture, engineOptions],
@@ -58,7 +64,7 @@ export function MockFlowDecorator({ fixture, engineOptions, onReady }: Props) {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
-      <App engine={engine} hostBridge={hostBridge} />
+      <App engine={engine} hostBridge={hostBridge} readOnly={readOnly} />
     </div>
   );
 }

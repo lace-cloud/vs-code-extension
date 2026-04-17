@@ -2,6 +2,7 @@
 import { Panel } from '@lace/ui';
 import { useEffect, useState } from 'react';
 import type { CanvasEngine } from '../../engine';
+import { useCanvas } from '../../state/engine-context';
 import type { SettingsConfig } from '../../types/render';
 import AccordionSection from '../AccordionSection';
 import { EnvironmentsContent } from './EnvironmentsPanel';
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props) {
+  const { readOnly } = useCanvas();
   const [settings, setSettings] = useState<SettingsConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +49,7 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
       <AccordionSection title="Terraform Config" defaultOpen>
         <TerraformConfigContent
           terraform={settings.terraform}
+          readOnly={readOnly}
           onSave={async (terraform) => {
             await engine.setTerraform(
               terraform.required_version,
@@ -66,6 +69,7 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
       <AccordionSection title="Providers">
         <ProvidersContent
           providers={settings.providers}
+          readOnly={readOnly}
           onSave={async (providers) => {
             await engine.setProviders(
               providers.map((p) => ({
@@ -82,6 +86,7 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
       <AccordionSection title="Locals">
         <LocalsContent
           locals={settings.locals}
+          readOnly={readOnly}
           onSave={async (locals) => {
             await engine.setLocals(
               locals.map((l) => {
@@ -106,6 +111,7 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
       <AccordionSection title="Environments">
         <EnvironmentsContent
           environments={settings.environments}
+          readOnly={readOnly}
           onSave={async (environments) => {
             await engine.setEnvironments(environments);
             onSaved?.();

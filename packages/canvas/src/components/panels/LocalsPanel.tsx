@@ -51,10 +51,11 @@ const BINDING_MODE_ITEMS = [
 
 type ContentProps = {
   locals: LocalEntry[] | undefined;
+  readOnly?: boolean;
   onSave: (locals: LocalEntry[]) => void | Promise<void>;
 };
 
-export function LocalsContent({ locals, onSave }: ContentProps) {
+export function LocalsContent({ locals, readOnly = false, onSave }: ContentProps) {
   const [rows, setRows] = useState<LocalRow[]>(() => toRows(locals));
 
   const addLocal = useCallback(() => {
@@ -103,15 +104,18 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
               fullWidth
               mono
               error={nameDupes.has(i)}
+              readOnly={readOnly}
             />
-            <button
-              type="button"
-              onClick={() => removeLocal(i)}
-              className="lace-panel-remove-btn"
-              aria-label="Remove local"
-            >
-              ✕
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => removeLocal(i)}
+                className="lace-panel-remove-btn"
+                aria-label="Remove local"
+              >
+                ✕
+              </button>
+            )}
           </div>
           {nameDupes.has(i) && <div className="lace-panel-row-error">Duplicate local name</div>}
 
@@ -119,7 +123,7 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
             <ModeToggle<BindingMode>
               value={row.mode}
               onChange={(next) => switchMode(i, next)}
-              items={BINDING_MODE_ITEMS}
+              items={BINDING_MODE_ITEMS.map((it) => ({ ...it, disabled: readOnly }))}
               aria-label="Local binding mode"
             />
           </div>
@@ -133,6 +137,7 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
                 rows={3}
                 fullWidth
                 mono
+                readOnly={readOnly}
               />
             ) : (
               <Textarea
@@ -142,23 +147,28 @@ export function LocalsContent({ locals, onSave }: ContentProps) {
                 rows={3}
                 fullWidth
                 mono
+                readOnly={readOnly}
               />
             )}
           </div>
         </div>
       ))}
 
-      <button type="button" onClick={addLocal} className="lace-panel-add-btn">
-        + Add local
-      </button>
+      {!readOnly && (
+        <>
+          <button type="button" onClick={addLocal} className="lace-panel-add-btn">
+            + Add local
+          </button>
 
-      <SaveButton
-        status={saveStatus}
-        label="Save locals"
-        onClick={handleSave}
-        disabled={hasErrors}
-        disabledTitle="Fix errors before saving"
-      />
+          <SaveButton
+            status={saveStatus}
+            label="Save locals"
+            onClick={handleSave}
+            disabled={hasErrors}
+            disabledTitle="Fix errors before saving"
+          />
+        </>
+      )}
     </>
   );
 }

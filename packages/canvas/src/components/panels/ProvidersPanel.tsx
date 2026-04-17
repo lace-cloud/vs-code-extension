@@ -52,10 +52,11 @@ function fromRows(rows: ProviderRow[]): ProviderEntry[] {
 
 type ContentProps = {
   providers: ProviderEntry[] | undefined;
+  readOnly?: boolean;
   onSave: (providers: ProviderEntry[]) => void | Promise<void>;
 };
 
-export function ProvidersContent({ providers, onSave }: ContentProps) {
+export function ProvidersContent({ providers, readOnly = false, onSave }: ContentProps) {
   const [rows, setRows] = useState<ProviderRow[]>(() => toRows(providers));
 
   const addProvider = useCallback(() => {
@@ -127,21 +128,25 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
               onChange={(e) => updateField(pi, 'name', e.target.value)}
               placeholder="Provider name (e.g. aws)"
               fullWidth
+              readOnly={readOnly}
             />
             <Input
               value={row.alias}
               onChange={(e) => updateField(pi, 'alias', e.target.value)}
               placeholder="Alias (optional)"
               fullWidth
+              readOnly={readOnly}
             />
-            <button
-              type="button"
-              onClick={() => removeProvider(pi)}
-              className="lace-panel-remove-btn"
-              aria-label="Remove provider"
-            >
-              ✕
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => removeProvider(pi)}
+                className="lace-panel-remove-btn"
+                aria-label="Remove provider"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           <div className="lace-panel-row-sublabel">Config</div>
@@ -152,38 +157,48 @@ export function ProvidersContent({ providers, onSave }: ContentProps) {
                 onChange={(e) => updateConfigEntry(pi, ei, 'key', e.target.value)}
                 placeholder="Key"
                 fullWidth
+                readOnly={readOnly}
               />
               <Input
                 value={entry.value}
                 onChange={(e) => updateConfigEntry(pi, ei, 'value', e.target.value)}
                 placeholder="Value"
                 fullWidth
+                readOnly={readOnly}
               />
-              <button
-                type="button"
-                onClick={() => removeConfigEntry(pi, ei)}
-                className="lace-panel-remove-btn lace-panel-remove-btn--sm"
-                aria-label="Remove config key"
-              >
-                ✕
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => removeConfigEntry(pi, ei)}
+                  className="lace-panel-remove-btn lace-panel-remove-btn--sm"
+                  aria-label="Remove config key"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() => addConfigEntry(pi)}
-            className="lace-panel-add-btn lace-panel-add-btn--sm"
-          >
-            + Add config key
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => addConfigEntry(pi)}
+              className="lace-panel-add-btn lace-panel-add-btn--sm"
+            >
+              + Add config key
+            </button>
+          )}
         </div>
       ))}
 
-      <button type="button" onClick={addProvider} className="lace-panel-add-btn">
-        + Add provider
-      </button>
+      {!readOnly && (
+        <>
+          <button type="button" onClick={addProvider} className="lace-panel-add-btn">
+            + Add provider
+          </button>
 
-      <SaveButton status={saveStatus} label="Save providers" onClick={handleSave} />
+          <SaveButton status={saveStatus} label="Save providers" onClick={handleSave} />
+        </>
+      )}
     </>
   );
 }
