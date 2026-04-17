@@ -3,9 +3,12 @@
  * stories load exactly the same global stylesheets the webview does —
  * any per-component xyflow overrides come in via Canvas.css through
  * the React import chain, not from here.
+ *
+ * No Tailwind: neither @lace/canvas nor @lace/ui use it. Chat-sidebar
+ * stories (when added) will need their own preview.css that imports
+ * Tailwind, because chat-sidebar does use utility classes.
  */
 
-@import "tailwindcss";
 @import "@xyflow/react/dist/style.css" layer(components);
 @import "@lace/design-tokens/tokens.css";
 

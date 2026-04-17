@@ -1,11 +1,12 @@
 // src/webview/components/panels/UnifiedSettingsPanel.tsx
+import { Panel } from '@lace/ui';
 import { useEffect, useState } from 'react';
 import type { CanvasEngine } from '../../engine';
 import type { SettingsConfig } from '../../types/render';
 import AccordionSection from '../AccordionSection';
-import PanelFrame from '../PanelFrame';
 import { EnvironmentsContent } from './EnvironmentsPanel';
 import { LocalsContent } from './LocalsPanel';
+import './panels-shared.css';
 import { ProvidersContent } from './ProvidersPanel';
 import { TerraformConfigContent } from './TerraformConfigPanel';
 
@@ -35,14 +36,14 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
 
   if (loading || !settings) {
     return (
-      <PanelFrame title="Settings" scrollable={false} onClose={onClose}>
-        <div className="text-xs opacity-60">Loading settings...</div>
-      </PanelFrame>
+      <Panel title="Settings" scrollable={false} onClose={onClose}>
+        <div className="lace-panel-hint">Loading settings...</div>
+      </Panel>
     );
   }
 
   return (
-    <PanelFrame title="Settings" scrollable={false} onClose={onClose}>
+    <Panel title="Settings" scrollable={false} onClose={onClose}>
       <AccordionSection title="Terraform Config" defaultOpen>
         <TerraformConfigContent
           terraform={settings.terraform}
@@ -111,6 +112,6 @@ export default function UnifiedSettingsPanel({ engine, onClose, onSaved }: Props
           }}
         />
       </AccordionSection>
-    </PanelFrame>
+    </Panel>
   );
 }

@@ -1,18 +1,16 @@
 /*
  * Canvas webview entry stylesheet.
  *
- * Deliberately thin — just the global stylesheets every canvas build
- * needs. Component-specific styles live *with* the components
- * (Canvas.css, composite/*.css, primitive CSS in @lace/ui). This keeps
- * the Storybook build and the VS Code webview build visually
- * identical: both load these three globals plus whatever CSS each
- * rendered component imports.
+ * Two global imports: xyflow's base stylesheet (component-layer) and
+ * @lace/design-tokens (global html/body defaults + all design tokens).
+ * Component-specific styles live with the components themselves
+ * (Canvas.css, composite/*.css, primitive CSS in @lace/ui) — the React
+ * import chain pulls them into both the webview bundle and Storybook.
  *
- * Layer ordering (Tailwind v4 default): theme, base, components,
- * utilities. xyflow's stylesheet goes into @layer components so our
- * unlayered component-level overrides in Canvas.css beat it.
+ * Tailwind has been fully removed from @lace/canvas. The chat-sidebar
+ * keeps its own Tailwind setup; canvas composites adopt plain CSS +
+ * design tokens + @lace/ui primitives.
  */
 
-@import "tailwindcss";
 @import "@xyflow/react/dist/style.css" layer(components);
 @import "@lace/design-tokens/tokens.css";

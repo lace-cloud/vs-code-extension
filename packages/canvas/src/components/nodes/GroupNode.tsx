@@ -3,6 +3,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CANVAS_EVENTS } from '../../events';
 import { useEngine } from '../../state/engine-context';
+import './GroupNode.css';
 
 // ── Data contract ──
 
@@ -48,8 +49,6 @@ type GroupHeaderProps = {
   onEditChange: (value: string) => void;
   onEditBlur: () => void;
   onEditKeyDown: (e: React.KeyboardEvent) => void;
-  background: string;
-  borderRadius: string;
 };
 
 const GroupHeader: React.FC<GroupHeaderProps> = ({
@@ -66,39 +65,19 @@ const GroupHeader: React.FC<GroupHeaderProps> = ({
   onEditChange,
   onEditBlur,
   onEditKeyDown,
-  background,
-  borderRadius,
 }) => (
   <div
-    style={{
-      height: HEADER_HEIGHT,
-      background,
-      borderTopLeftRadius: borderRadius,
-      borderTopRightRadius: borderRadius,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 6,
-      paddingLeft: 8,
-      paddingRight: 6,
-    }}
+    className={`lace-group-node__header lace-group-node__header--${collapsed ? 'collapsed' : 'expanded'}`}
+    style={{ height: HEADER_HEIGHT }}
   >
     <button
+      type="button"
       onClick={onToggleCollapsed}
-      className="leading-none cursor-pointer"
-      style={{
-        background: 'none',
-        border: 'none',
-        color: 'rgba(206,254,101,0.7)',
-        padding: 0,
-        width: 12,
-        height: 12,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+      className="lace-group-node__collapse-btn"
       title={collapsed ? 'Expand' : 'Collapse'}
+      aria-label={collapsed ? 'Expand' : 'Collapse'}
     >
-      <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
         {collapsed ? <path d="M8 5l8 7-8 7V5z" /> : <path d="M5 8l7 8 7-8H5z" />}
       </svg>
     </button>
@@ -110,37 +89,26 @@ const GroupHeader: React.FC<GroupHeaderProps> = ({
         onChange={(e) => onEditChange(e.target.value)}
         onBlur={onEditBlur}
         onKeyDown={onEditKeyDown}
-        className="bg-[#161616] text-[#CEFE65] border border-[rgba(206,254,101,0.2)] rounded px-1 py-px flex-1"
-        style={{ fontSize: 11 }}
+        className="lace-group-node__rename-input"
         onClick={(e) => e.stopPropagation()}
       />
     ) : (
-      <span
-        className="truncate flex-1"
-        style={{ fontSize: 11, color: '#CEFE65', fontWeight: 500 }}
-        onDoubleClick={onDoubleClick}
-      >
+      <span className="lace-group-node__label" onDoubleClick={onDoubleClick} title={label}>
         {label}
       </span>
     )}
 
-    <span style={{ fontSize: 9, color: 'rgba(206,254,101,0.5)', flexShrink: 0 }}>
+    <span className="lace-group-node__count">
       {collapsed ? `${memberCount} nodes` : memberCount}
     </span>
 
     {hovered && (
       <button
+        type="button"
         onClick={onUngroup}
-        className="rounded-full leading-none cursor-pointer flex items-center justify-center flex-shrink-0"
-        style={{
-          background: 'rgba(155,161,158,0.15)',
-          border: '1px solid rgba(155,161,158,0.4)',
-          color: '#9BA19E',
-          width: 14,
-          height: 14,
-          padding: 0,
-        }}
+        className="lace-group-node__ungroup-btn"
         title="Ungroup"
+        aria-label="Ungroup"
       >
         <svg
           viewBox="0 0 24 24"
@@ -149,6 +117,7 @@ const GroupHeader: React.FC<GroupHeaderProps> = ({
           strokeWidth="2"
           width="8"
           height="8"
+          aria-hidden="true"
         >
           <path d="M18 6L6 18M6 6l12 12" />
         </svg>
@@ -194,10 +163,7 @@ const AggregatedPinRow: React.FC<{ pin: ExternalPin; top: number }> = ({ pin, to
           top: ROW_HEIGHT / 2,
         }}
       />
-      <span
-        className="truncate"
-        style={{ fontSize: 10, color: 'rgba(236,239,237,0.85)', maxWidth: COLLAPSED_WIDTH - 28 }}
-      >
+      <span className="lace-group-node__pin-label" style={{ maxWidth: COLLAPSED_WIDTH - 28 }}>
         {pin.label}
       </span>
     </div>
@@ -277,7 +243,6 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
     [engine, data.groupId],
   );
 
-  // Shared header props
   const headerProps = {
     label: data.label,
     memberCount: data.memberCount,
@@ -306,22 +271,12 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
       <div
         data-group={data.groupId}
         data-collapsed="true"
-        className="relative"
-        style={{
-          width: COLLAPSED_WIDTH,
-          height: HEADER_HEIGHT + bodyHeight,
-          background: '#161616',
-          border: data.hasErrors ? '1px solid #e5484d' : '1px dashed rgba(206, 254, 101, 0.25)',
-          borderRadius: 4,
-          boxShadow: data.hasErrors
-            ? '0 0 10px rgba(229, 72, 77, 0.3)'
-            : '0 2px 6px rgba(0,0,0,0.35)',
-          fontFamily: 'inherit',
-        }}
+        className={`lace-group-node lace-group-node--collapsed${data.hasErrors ? ' lace-group-node--error' : ''}`}
+        style={{ width: COLLAPSED_WIDTH, height: HEADER_HEIGHT + bodyHeight }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        <GroupHeader {...headerProps} background="#1a2a20" borderRadius="4px" />
+        <GroupHeader {...headerProps} />
         {rowCount > 0 && (
           <div style={{ position: 'relative', height: bodyHeight }}>
             {inputPins.map((pin, i) => (
@@ -342,21 +297,17 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
     <div
       data-group={data.groupId}
       data-collapsed="false"
-      className="relative"
+      className="lace-group-node lace-group-node--expanded"
       style={{
         width: '100%',
         height: '100%',
         minWidth: MIN_EXPANDED_WIDTH,
         minHeight: MIN_EXPANDED_HEIGHT,
-        background: 'rgba(206, 254, 101, 0.03)',
-        border: '1px dashed rgba(206, 254, 101, 0.18)',
-        borderRadius: 6,
-        fontFamily: 'inherit',
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <GroupHeader {...headerProps} background="rgba(21, 50, 56, 0.6)" borderRadius="6px" />
+      <GroupHeader {...headerProps} />
     </div>
   );
 };
