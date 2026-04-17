@@ -141,7 +141,9 @@
   font-size: var(--lace-font-size-xs);
   text-align: left;
   text-decoration: underline;
-  text-decoration-color: rgba(136, 136, 136, 0.4);
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
 

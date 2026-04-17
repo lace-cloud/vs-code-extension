@@ -77,28 +77,28 @@ export const Matrix: Story = {
     <div
       style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 12, alignItems: 'center' }}
     >
-      <div style={{ color: '#999', fontSize: 11 }}>literal active</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>literal active</div>
       <ModeToggle<BindingMode>
         value="literal"
         onChange={() => {}}
         items={BINDING_ITEMS}
         aria-label="literal"
       />
-      <div style={{ color: '#999', fontSize: 11 }}>variable active</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>variable active</div>
       <ModeToggle<BindingMode>
         value="variable"
         onChange={() => {}}
         items={BINDING_ITEMS}
         aria-label="variable"
       />
-      <div style={{ color: '#999', fontSize: 11 }}>expression active</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>expression active</div>
       <ModeToggle<BindingMode>
         value="expression"
         onChange={() => {}}
         items={BINDING_ITEMS}
         aria-label="expression"
       />
-      <div style={{ color: '#999', fontSize: 11 }}>wired state</div>
+      <div style={{ color: 'var(--lace-color-text-muted)', fontSize: 11 }}>wired state</div>
       <ModeToggle<BindingMode>
         value="wired"
         onChange={() => {}}

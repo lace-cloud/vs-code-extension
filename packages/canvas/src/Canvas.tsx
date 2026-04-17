@@ -248,11 +248,19 @@ function CompositeEditor({
     [onDragStop, rfNodes, view.groups],
   );
 
-  // ── Grid background styling ──
-  const gridColor = 'rgba(206, 254, 101, 0.04)';
+  // ── Grid + edge defaults ──
+  // Colors reference design tokens via CSS custom properties. Both React
+  // inline `style` and SVG fill/stroke attributes resolve `var(--...)`
+  // at render time, so tokens drive the actual color without a JS round-trip.
+  const gridColor = 'var(--lace-canvas-grid-dot)';
   const defaultEdgeOptions = {
-    style: { stroke: '#CEFE6580', strokeWidth: 1.5 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#CEFE6580', width: 14, height: 14 },
+    style: { stroke: 'var(--lace-canvas-edge-stroke)', strokeWidth: 1.5 },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: 'var(--lace-canvas-edge-stroke)',
+      width: 14,
+      height: 14,
+    },
     animated: false,
   };
 

@@ -160,29 +160,29 @@ function CliMissingBanner() {
   return (
     <div
       style={{
-        padding: 24,
+        padding: 'var(--lace-space-5)',
         maxWidth: 600,
-        color: '#f4f4f4',
-        background: '#262626',
-        border: '1px solid #525252',
-        borderRadius: 6,
-        fontFamily: 'system-ui, sans-serif',
-        lineHeight: 1.5,
+        color: 'var(--lace-color-text-primary)',
+        background: 'var(--lace-color-bg-surface-alt)',
+        border: '1px solid var(--lace-color-border-subtle)',
+        borderRadius: 'var(--lace-radius-md)',
+        fontFamily: 'var(--lace-font-sans)',
+        lineHeight: 'var(--lace-line-height-normal)',
       }}
     >
-      <h2 style={{ marginTop: 0, color: '#ffd7d7' }}>CLI not running</h2>
+      <h2 style={{ marginTop: 0, color: 'var(--lace-color-text-danger-soft)' }}>CLI not running</h2>
       <p>Flow stories need a live Lace engine. Launch Storybook with the CLI attached:</p>
       <pre
         style={{
-          background: '#161616',
-          padding: 12,
-          borderRadius: 4,
+          background: 'var(--lace-color-bg-canvas)',
+          padding: 'var(--lace-space-3)',
+          borderRadius: 'var(--lace-radius-sm)',
           overflowX: 'auto',
         }}
       >
         pnpm run dev:storybook-flows
       </pre>
-      <p style={{ fontSize: 13, color: '#a8a8a8' }}>
+      <p style={{ fontSize: 'var(--lace-font-size-lg)', color: 'var(--lace-color-text-muted)' }}>
         This sets <code>STORYBOOK_LACE_ENGINE_URL</code> and{' '}
         <code>STORYBOOK_LACE_ENGINE_TOKEN</code> from the CLI handshake. Component stories (no CLI
         required) work either way.
@@ -197,16 +197,16 @@ function ConnectionErrorBanner({ message }: { message: string }) {
       role="alert"
       style={{
         position: 'absolute',
-        top: 16,
-        left: 16,
-        right: 16,
-        padding: 12,
-        background: '#4a1515',
-        color: '#ffd7d7',
-        border: '1px solid #a2191f',
-        borderRadius: 4,
-        fontFamily: 'system-ui, sans-serif',
-        zIndex: 1000,
+        top: 'var(--lace-space-4)',
+        left: 'var(--lace-space-4)',
+        right: 'var(--lace-space-4)',
+        padding: 'var(--lace-space-3)',
+        background: 'var(--lace-toast-error-bg)',
+        color: 'var(--lace-color-text-danger-soft)',
+        border: '1px solid var(--lace-color-text-danger)',
+        borderRadius: 'var(--lace-radius-sm)',
+        fontFamily: 'var(--lace-font-sans)',
+        zIndex: 'var(--lace-z-tooltip)',
       }}
     >
       <strong>Engine error:</strong> {message}
