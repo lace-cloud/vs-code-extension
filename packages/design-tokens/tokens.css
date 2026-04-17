@@ -70,6 +70,13 @@
   --lace-mode-toggle-inactive-hover-border: var(--lace-border-input-hover);
   --lace-mode-toggle-inactive-hover-text: var(--lace-grey);
 
+  /* ── ActionBar ── */
+  --lace-action-bar-bg: rgba(30, 30, 30, 0.8);
+  --lace-action-bar-separator: #444444;
+  --lace-action-bar-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --lace-action-bar-generate-bg: var(--lace-accent-green);
+  --lace-action-bar-generate-bg-hover: #3ab550;
+
   /* ── Toast ── */
   --lace-toast-success-bg: #153238;
   --lace-toast-success-border: rgba(206, 254, 101, 0.2);
