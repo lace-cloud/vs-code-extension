@@ -33,7 +33,7 @@ export default function ContextMenu({
       { label: 'Paste', shortcut: 'Ctrl+V', action: onPaste },
     );
     if (contextMenu.selectedCount >= 2) {
-      items.push({ label: 'Group Selected', action: onGroupSelected });
+      items.push({ label: 'Group', action: onGroupSelected });
     }
   }
 
