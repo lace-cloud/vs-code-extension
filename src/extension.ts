@@ -1,15 +1,15 @@
 import { ChatViewProvider } from '@lace/chat-sidebar';
+import { type RegistryModule, ServerManager } from '@lace/host';
 import * as vscode from 'vscode';
 import {
   addModuleToActiveCanvas,
   getLaceDir,
   openCanvas,
   triggerGenerateOnActiveCanvas,
-} from './canvas-panel';
-import { showModuleDetail } from './module-detail-panel';
-import { RegistrySidebarProvider } from './registry-sidebar';
-import { ServerManager } from './server-manager';
-import type { RegistryModule } from './types';
+} from './vscode/canvas-panel';
+import { showModuleDetail } from './vscode/module-detail-panel';
+import { RegistrySidebarProvider } from './vscode/registry-sidebar';
+import { buildWebviewHtml } from './vscode/webview-html';
 
 let server: ServerManager | undefined;
 let engineStatusBar: vscode.StatusBarItem | undefined;
@@ -200,12 +200,20 @@ export async function activate(context: vscode.ExtensionContext) {
   // The provider creates a ChatController per webview resolution;
   // the controller owns a per-instance ToolRegistry and registers
   // its tools internally. No global tool registration here.
-  const chatViewProvider = new ChatViewProvider(context, {
-    getRpcClient: () => server?.transport ?? null,
-    getRegistryModules: () => registryProvider?.getModules() ?? [],
-    getUserOrgs: () => [],
-    getLaceDir,
-  });
+  const chatViewProvider = new ChatViewProvider(
+    context,
+    {
+      getRpcClient: () => server?.transport ?? null,
+      getRegistryModules: () => registryProvider?.getModules() ?? [],
+      getUserOrgs: () => [],
+      getLaceDir,
+    },
+    (webview) =>
+      buildWebviewHtml(context, webview, {
+        scriptFilename: 'chat-sidebar.js',
+        title: 'Lace Chat',
+      }),
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatViewProvider),

@@ -1,7 +1,5 @@
-// packages/host/src/registry-sidebar.ts
+import type { LaceTransport, RegistryModule } from '@lace/host';
 import * as vscode from 'vscode';
-import type { LaceTransport } from './transport';
-import type { RegistryModule } from './types';
 
 // ── Constants ──
 

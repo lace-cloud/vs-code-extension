@@ -1,4 +1,10 @@
-// @lace/host — public API
+// @lace/host — public library API.
+//
+// Vscode-free barrel. The vscode-coupled extension shell (panel
+// classes, webview-html builder, RPC-error toast-shower) lives in
+// vs-code-extension/src/vscode/, not here. Consumers (canvas, chat-
+// core, future portal/JetBrains adapters) import only what they
+// need at runtime — vscode is never loaded as a side-effect.
 
 export { convertCanvasView } from '@lace/proto';
 export { spawnEngine } from './engine-process';
@@ -6,7 +12,7 @@ export { spawnEngine } from './engine-process';
 // type Subscribe stream events (proactivity watcher, etc.).
 export type { EngineEvent } from './generated/service';
 export type { RpcErrorCategory } from './rpc-errors';
-export { classifyRpcError, handleRpcError, RpcError, requireClient } from './rpc-errors';
+export { classifyRpcError, RpcError, requireClient } from './rpc-errors';
 export { ServerManager } from './server-manager';
 export type { SubscribeCallbacks } from './subscribe';
 export { SubscribeHandler } from './subscribe';
@@ -31,5 +37,3 @@ export type {
   SettingsConfig,
   WebviewToHost,
 } from './types';
-export type { WebviewHtmlOptions } from './webview-html';
-export { buildWebviewHtml } from './webview-html';

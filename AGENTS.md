@@ -27,18 +27,27 @@ pnpm workspace with seven packages:
 | Package                | Purpose                                                                                            |
 | ---------------------- | -------------------------------------------------------------------------------------------------- |
 | `@lace/proto`          | Shared proto messages (generated), render POJOs (`./render`). Per-package converters live locally. |
-| `@lace/host`           | Extension host: `LaceTransport` (gRPC-JS), engine lifecycle, canvas/registry/chat view providers   |
+| `@lace/host`           | Vscode-free library: `LaceTransport` (gRPC-JS), `ServerManager`, engine handshake, RpcError + classifier. |
 | `@lace/canvas`         | Webview UI (React, ReactFlow). `PostMessageEngine` + `ConnectWebEngine` implement `CanvasEngine`.  |
-| `@lace/chat-sidebar`   | Chat webview + host controller (agentic tool loop, tools, proactivity)                             |
+| `@lace/chat-sidebar`   | VS Code chat adapter (ChatViewProvider, vscode-adapter, controller)                                |
+| `@lace/chat-core`      | Vscode-free chat machinery (AgentController, ToolRegistry, ProactivityWatcher)                     |
+| `@lace/chat-webview`   | Pure React chat UI                                                                                 |
 | `@lace/design-tokens`  | CSS tokens consumed by canvas + chat + Storybook                                                   |
+| `@lace/ui`             | Design-system primitives (Button, IconButton, etc.)                                                |
 | `@lace/canvas-stories` | Storybook for canvas (component stories + CLI-backed flow stories)                                 |
 | `@lace/host-e2e`       | E2E scaffold (Phase G — placeholder)                                                               |
 
+The extension shell (`src/`) holds all vscode-coupled code that's not
+library-shaped: activation, command registration, the canvas webview
+bootstrap, and the panel classes / HTML scaffold builder / RPC-error
+toast under `src/vscode/`. Everything in `packages/` is library code
+intended to lift cleanly into the `lace-cloud/lace-core` monorepo.
+
 Rspack produces three bundles:
 
-- `out/extension.js` — Node, from `packages/host/src/extension.ts`
+- `out/extension.js` — Node, from `src/extension.ts` (vscode-coupled host primitives in `src/vscode/`)
 - `out/webview.js` — Browser, from `src/canvas-webview-entry.tsx` (VS Code-specific bootstrap; @lace/canvas itself is pure library code)
-- `out/chat-sidebar.js` — Browser, from `packages/chat-sidebar/src/webview/index.tsx`
+- `out/chat-sidebar.js` — Browser, from `packages/chat-sidebar/src/webview-entry.tsx`
 
 ## Build & Test
 
@@ -79,16 +88,22 @@ as a prop and works with either.
 
 ### Host Side (Node, VS Code API)
 
+**Extension shell** (`src/`, vscode-coupled, not published):
+
 - **`extension.ts`** — activation, command registration, view-provider wiring, engine lifecycle
+- **`vscode/canvas-panel.ts`** — canvas webview panel; routes webview messages; starts Subscribe stream for live StateUpdated
+- **`vscode/registry-sidebar.ts`** — WebviewViewProvider for the registry browse panel
+- **`vscode/module-detail-panel.ts`** — detail tab for inspecting a registry module
+- **`vscode/webview-html.ts`** — shared HTML scaffold (CSP, nonce, script include) — used by canvas panel and chat sidebar (chat sidebar receives this as a `BuildWebviewHtml` callback at construction time, so it stays vscode-host-free internally)
+- **`vscode/rpc-error-ui.ts`** — `vscode.window` toast for classified RPC errors
+
+**`@lace/host`** (`packages/host/src/`, vscode-free library):
+
 - **`transport.ts`** — `LaceTransport` class; gRPC-JS client; bearer-token auth via metadata; proto→render converters
 - **`server-manager.ts`** — spawns `lace engine`; watches for exit; restarts on failure; emits handshake
 - **`engine-process.ts`** — parses the 5-line handshake (`LACE_ENGINE_VERSION/PROTOCOL_VERSION/PORT/TOKEN/READY`) from CLI stdout
-- **`canvas-panel.ts`** — canvas webview panel; routes webview messages; starts Subscribe stream for live StateUpdated
-- **`registry-sidebar.ts`** — WebviewViewProvider for the registry browse panel
-- **`module-detail-panel.ts`** — detail tab for inspecting a registry module
-- **`webview-html.ts`** — shared HTML scaffold (CSP, nonce, script include) — used by canvas panel and chat sidebar
 - **`subscribe.ts`** — gRPC Subscribe stream handler (StateUpdated + Generate events)
-- **`rpc-errors.ts`** — `requireClient` guard + error classification
+- **`rpc-errors.ts`** — `RpcError` class + `classifyRpcError` + `requireClient` guard. Pure — the toast-shower (`handleRpcError`) lives in `src/vscode/rpc-error-ui.ts`.
 - **`types.ts`** — host-specific types (`EngineHandshake`, `ServerState`, `WebviewToHost`, `RegistryModule`); re-exports render types from `@lace/proto`
 
 ### Webview: Canvas (React, Browser)

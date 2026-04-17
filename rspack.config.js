@@ -2,8 +2,12 @@ const path = require('node:path');
 
 module.exports = [
   {
-    // Backend (Node.js) — host package
-    entry: './packages/host/src/extension.ts',
+    // Backend (Node.js) — extension activation. Entry lives at the
+    // extension root; vscode-coupled host primitives (panel classes,
+    // webview-html builder, RPC-error UI) live in src/vscode/.
+    // @lace/host is pure library code (transport, server-manager,
+    // proto-gen) — no vscode side effects.
+    entry: './src/extension.ts',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'extension.js',

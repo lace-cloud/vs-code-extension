@@ -14,9 +14,15 @@ importers:
       '@lace/canvas':
         specifier: workspace:*
         version: link:packages/canvas
+      '@lace/chat-sidebar':
+        specifier: workspace:*
+        version: link:packages/chat-sidebar
       '@lace/design-tokens':
         specifier: workspace:*
         version: link:packages/design-tokens
+      '@lace/host':
+        specifier: workspace:*
+        version: link:packages/host
       '@xyflow/react':
         specifier: ^12.10.1
         version: 12.10.2(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
