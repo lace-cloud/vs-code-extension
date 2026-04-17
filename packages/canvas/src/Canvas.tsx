@@ -60,6 +60,7 @@ const nodeTypes = {
 
 type CompositeEditorProps = {
   view: CanvasView;
+  readOnly: boolean;
   isGenerating: boolean;
   erroredNodeIds: Set<string>;
   newNodeIds: Set<string>;
@@ -86,6 +87,7 @@ type CompositeEditorProps = {
 
 function CompositeEditor({
   view,
+  readOnly,
   isGenerating,
   erroredNodeIds,
   newNodeIds,
@@ -278,6 +280,10 @@ function CompositeEditor({
       onNodeDragStop={onNodeDragStop}
       onNodeContextMenu={(e, node) => {
         e.preventDefault();
+        // In read-only we suppress the menu entirely — every current
+        // item is a mutation. Render-gate at the dispatch source so
+        // ContextMenu itself stays dumb.
+        if (readOnly) return;
         const selCount = selectedIdsRef.current.length;
         window.dispatchEvent(
           new CustomEvent(CANVAS_EVENTS.CONTEXT_MENU, {
@@ -293,6 +299,7 @@ function CompositeEditor({
       }}
       onPaneContextMenu={(e) => {
         e.preventDefault();
+        if (readOnly) return;
         const selCount = selectedIdsRef.current.length;
         window.dispatchEvent(
           new CustomEvent(CANVAS_EVENTS.CONTEXT_MENU, {
@@ -310,7 +317,12 @@ function CompositeEditor({
       connectionRadius={30}
       minZoom={0.15}
       maxZoom={2}
-      deleteKeyCode={['Backspace', 'Delete']}
+      // xyflow owns connect / reconnect / key-based delete. Drive its
+      // native props instead of re-implementing the gates at our
+      // handler layer.
+      nodesConnectable={!readOnly}
+      edgesReconnectable={!readOnly}
+      deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
       fitView={false}
       proOptions={{ hideAttribution: true }}
       style={{ background: 'var(--lace-color-bg-canvas)' }}
@@ -337,6 +349,7 @@ function CompositeEditor({
       ) : null}
       <Controls position="bottom-right" showInteractive={false} style={{ bottom: 20, right: 20 }} />
       <ActionBar
+        readOnly={readOnly}
         isGenerating={isGenerating}
         onSave={onSave}
         onUndo={onUndo}
@@ -365,7 +378,7 @@ function CompositeEditor({
 // ══════════════════════════════════════════════════════════════════════
 
 export default function Canvas() {
-  const { state, engine, updateView } = useCanvas();
+  const { state, engine, updateView, readOnly, localGroupCollapseOverrides } = useCanvas();
 
   // Ref to always read the latest view (avoids stale closures in async callbacks)
   const viewRef = useRef(state.view);
@@ -423,6 +436,7 @@ export default function Canvas() {
     useCallback((ids: string[]) => selectNodesRef.current?.(ids), []),
     useCallback(() => contextMenu?.nodeId ?? null, [contextMenu]),
     dismissContextMenu,
+    readOnly,
   );
 
   // ── Listen for openNodeConfig events from ModuleNode ──
@@ -461,20 +475,30 @@ export default function Canvas() {
   }, []);
 
   // ── Expose undo globally for HTML-level Cmd+Z listener ──
+  // In read-only we skip the install: the host may still dispatch
+  // Cmd+Z (VS Code webview routes it), but `window.__canvasUndo` is
+  // undefined, so the host-side handler is a no-op. No runtime guard
+  // needed in the hook itself.
   useEffect(() => {
+    if (readOnly) return;
     window.__canvasUndo = onUndo;
     return () => {
       window.__canvasUndo = undefined;
     };
-  }, [onUndo]);
+  }, [onUndo, readOnly]);
 
   // ── Event: drag stop → sync layout to engine ──
+  // Drag is a view op and remains enabled in read-only. We just
+  // don't persist — xyflow's local `rfNodes` state already has the
+  // new coordinates, so the move is visible until the next view
+  // refresh. xyflow has no "drag but don't fire onNodeDragStop" prop,
+  // so this is the right layer for the gate.
   const onDragStop = useCallback(
     async (positions: Record<string, { x: number; y: number }>) => {
-      if (!engine) return;
+      if (!engine || readOnly) return;
       await engine.syncLayout(positions);
     },
-    [engine],
+    [engine, readOnly],
   );
 
   // ── Event: new connection ──
@@ -622,7 +646,22 @@ export default function Canvas() {
     return <ErrorState message="Engine not available." />;
   }
 
-  const view = state.view;
+  // In read-only, merge local collapse overrides into the view before
+  // handing it to CompositeEditor. useGroupLogic reads `group.collapsed`
+  // as the authoritative source, so overriding it here is the single
+  // seam that makes collapse-as-view-op work end-to-end (chevron icon,
+  // child hiding, external pin computation, edge remapping).
+  const view: CanvasView =
+    readOnly && Object.keys(localGroupCollapseOverrides).length > 0
+      ? {
+          ...state.view,
+          groups: state.view.groups.map((g) =>
+            g.id in localGroupCollapseOverrides
+              ? { ...g, collapsed: localGroupCollapseOverrides[g.id] }
+              : g,
+          ),
+        }
+      : state.view;
 
   // ── Render ──
   // Inline layout instead of Tailwind utilities so this works in Storybook
@@ -662,6 +701,7 @@ export default function Canvas() {
       <div style={{ position: 'relative', flex: '1 1 auto', minHeight: 0 }}>
         <CompositeEditor
           view={view}
+          readOnly={readOnly}
           isGenerating={generating}
           erroredNodeIds={erroredNodeIds}
           newNodeIds={newNodeIds}

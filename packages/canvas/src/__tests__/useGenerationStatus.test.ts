@@ -37,7 +37,16 @@ function wrapper(engine: CanvasEngine) {
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(
       CanvasContext.Provider,
-      { value: { state, engine, updateView: () => {} } },
+      {
+        value: {
+          state,
+          engine,
+          updateView: () => {},
+          readOnly: false,
+          localGroupCollapseOverrides: {},
+          toggleLocalGroupCollapse: () => {},
+        },
+      },
       children,
     );
 }

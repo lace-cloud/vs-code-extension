@@ -35,6 +35,7 @@ describe('useClipboard', () => {
         selectNodes,
         () => null,
         dismissContextMenu,
+        false,
       ),
     );
 
@@ -57,6 +58,7 @@ describe('useClipboard', () => {
         selectNodes,
         () => null,
         dismissContextMenu,
+        false,
       ),
     );
 
@@ -81,6 +83,7 @@ describe('useClipboard', () => {
         selectNodes,
         () => null,
         dismissContextMenu,
+        false,
       ),
     );
 
@@ -113,6 +116,7 @@ describe('useClipboard', () => {
         selectNodes,
         () => null,
         dismissContextMenu,
+        false,
       ),
     );
 

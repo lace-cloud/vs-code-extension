@@ -2,7 +2,7 @@ import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CANVAS_EVENTS } from '../../events';
-import { useEngine } from '../../state/engine-context';
+import { useCanvas, useEngine } from '../../state/engine-context';
 import './GroupNode.css';
 
 // ── Data contract ──
@@ -174,10 +174,18 @@ const AggregatedPinRow: React.FC<{ pin: ExternalPin; top: number }> = ({ pin, to
 
 const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
   const engine = useEngine();
+  const { readOnly, toggleLocalGroupCollapse } = useCanvas();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
   const [hovered, setHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // `data.collapsed` already reflects the effective collapsed state in
+  // both modes — in read-only, App merges the local override into the
+  // groups array before it reaches useGroupLogic, so there's nothing
+  // to derive here. Keep the name local so subsequent references stay
+  // stable.
+  const collapsed = data.collapsed;
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -188,11 +196,12 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
 
   const onDoubleClick = useCallback(
     (e: React.MouseEvent) => {
+      if (readOnly) return;
       e.stopPropagation();
       setEditValue(data.label);
       setEditing(true);
     },
-    [data.label],
+    [data.label, readOnly],
   );
 
   const commitRename = useCallback(async () => {
@@ -220,6 +229,10 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
   const toggleCollapsed = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (readOnly) {
+        toggleLocalGroupCollapse(data.groupId, data.collapsed);
+        return;
+      }
       try {
         const result = await engine.updateGroup(data.groupId, { collapsed: !data.collapsed });
         window.dispatchEvent(new CustomEvent(CANVAS_EVENTS.VIEW_UPDATED, { detail: result }));
@@ -227,7 +240,7 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
         console.error('[GroupNode] toggle collapsed failed:', err);
       }
     },
-    [engine, data.groupId, data.collapsed],
+    [engine, data.groupId, data.collapsed, readOnly, toggleLocalGroupCollapse],
   );
 
   const onUngroup = useCallback(
@@ -246,8 +259,8 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
   const headerProps = {
     label: data.label,
     memberCount: data.memberCount,
-    collapsed: data.collapsed,
-    hovered,
+    collapsed,
+    hovered: hovered && !readOnly,
     editing,
     editValue,
     inputRef,
@@ -261,7 +274,7 @@ const GroupNode: React.FC<NodeProps<GroupNodeNode>> = ({ data }) => {
 
   // ── Collapsed rendering ──
 
-  if (data.collapsed) {
+  if (collapsed) {
     const inputPins = data.externalPins.filter((p) => p.side === 'input');
     const outputPins = data.externalPins.filter((p) => p.side === 'output');
     const rowCount = Math.max(inputPins.length, outputPins.length);

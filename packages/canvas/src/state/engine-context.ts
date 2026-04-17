@@ -15,6 +15,17 @@ export type CanvasContextValue = {
   state: CanvasState;
   engine: CanvasEngine | null;
   updateView: (view: CanvasView) => void;
+  // Read-only mode. In read-only, view-only interactions (drag,
+  // expand/collapse, inspection) remain; IR mutations (delete,
+  // rename, wire, save) are gated off.
+  readOnly: boolean;
+  // In read-only we let users expand/collapse groups as a view op,
+  // but must not persist it via engine.updateGroup. We stash the
+  // override at the provider level so useGroupLogic (which drives
+  // xyflow's child-node hiding) can read the effective collapsed
+  // flag from a single source of truth.
+  localGroupCollapseOverrides: Record<string, boolean>;
+  toggleLocalGroupCollapse: (groupId: string, currentCollapsed: boolean) => void;
 };
 
 export const CanvasContext = createContext<CanvasContextValue>({
@@ -28,6 +39,9 @@ export const CanvasContext = createContext<CanvasContextValue>({
   },
   engine: null,
   updateView: () => {},
+  readOnly: false,
+  localGroupCollapseOverrides: {},
+  toggleLocalGroupCollapse: () => {},
 });
 
 export function useCanvas(): CanvasContextValue {

@@ -76,3 +76,10 @@ export const InteractiveMiniMapToggle: Story = {
     return <ActionBar {...args} showMiniMap={shown} onToggleMiniMap={() => setShown((v) => !v)} />;
   },
 };
+
+// Read-only — only MiniMap toggle + Settings gear render. Save,
+// Clear, Undo, Redo, and Generate are IR-mutating and hidden. Portal
+// and any inspection-only host mount the canvas through this shape.
+export const ReadOnly: Story = {
+  args: { readOnly: true, isGenerating: false, showMiniMap: false, onToggleMiniMap: () => {} },
+};

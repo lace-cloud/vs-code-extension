@@ -2,7 +2,7 @@ import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CANVAS_EVENTS } from '../../events';
-import { useEngine } from '../../state/engine-context';
+import { useCanvas, useEngine } from '../../state/engine-context';
 import type { NodePin, RenderNode } from '../../types/render';
 import './ModuleNode.css';
 import { pinColor } from './pinColor';
@@ -109,6 +109,7 @@ const PinRow: React.FC<PinRowProps> = ({ pin, side, top, isError }) => {
 
 const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
   const engine = useEngine();
+  const { readOnly } = useCanvas();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(id);
   const [hovered, setHovered] = useState(false);
@@ -145,11 +146,12 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
 
   const onDoubleClick = useCallback(
     (e: React.MouseEvent) => {
+      if (readOnly) return;
       e.stopPropagation();
       setEditValue(id);
       setEditing(true);
     },
-    [id],
+    [id, readOnly],
   );
 
   const commitRename = useCallback(async () => {
@@ -287,7 +289,7 @@ const ModuleNode: React.FC<NodeProps<ModuleNodeNode>> = ({ id, data }) => {
           </span>
         )}
 
-        {hovered && (
+        {hovered && !readOnly && (
           <button
             type="button"
             onClick={onDeleteInstance}

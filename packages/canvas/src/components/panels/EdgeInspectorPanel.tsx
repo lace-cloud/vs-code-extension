@@ -1,4 +1,5 @@
 import { Panel } from '@lace/ui';
+import { useCanvas } from '../../state/engine-context';
 import './EdgeInspectorPanel.css';
 
 type Props = {
@@ -18,6 +19,7 @@ export default function EdgeInspectorPanel({
   onDelete,
   onClose,
 }: Props) {
+  const { readOnly } = useCanvas();
   const title = (
     <div>
       <div className="lace-edge-panel__title-eyebrow">Connection</div>
@@ -27,7 +29,7 @@ export default function EdgeInspectorPanel({
     </div>
   );
 
-  const footer = (
+  const footer = readOnly ? undefined : (
     <button type="button" className="lace-edge-panel__delete-btn" onClick={onDelete}>
       Delete connection
     </button>
@@ -41,10 +43,12 @@ export default function EdgeInspectorPanel({
         <div className="lace-edge-panel__wiring-arrow">↓</div>
         {target}.inputs.{targetInput}
       </div>
-      <div className="lace-edge-panel__hint">
-        Delete or press Backspace with the edge selected to remove this connection. Create new edges
-        by dragging between the pins on each node's edge.
-      </div>
+      {!readOnly && (
+        <div className="lace-edge-panel__hint">
+          Delete or press Backspace with the edge selected to remove this connection. Create new
+          edges by dragging between the pins on each node's edge.
+        </div>
+      )}
     </Panel>
   );
 }
