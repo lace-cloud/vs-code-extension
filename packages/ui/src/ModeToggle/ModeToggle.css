@@ -1,0 +1,48 @@
+/* ModeToggle primitive — segmented control used for binding-mode
+ * selectors (literal / variable / expression / wired) in config panels.
+ * Per-item `disabled` lets consumers render state indicators (wired)
+ * that can be active without being clickable. */
+
+.lace-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 0;
+}
+
+.lace-mode-toggle__item {
+  padding: 3px 8px;
+  background: var(--lace-mode-toggle-inactive-bg);
+  border: 1px solid var(--lace-mode-toggle-inactive-border);
+  border-radius: 4px;
+  color: var(--lace-mode-toggle-inactive-text);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.lace-mode-toggle__item:hover:not(:disabled):not([aria-pressed="true"]) {
+  border-color: var(--lace-mode-toggle-inactive-hover-border);
+  color: var(--lace-mode-toggle-inactive-hover-text);
+}
+
+.lace-mode-toggle__item[aria-pressed="true"] {
+  background: var(--lace-mode-toggle-active-bg);
+  border-color: var(--lace-mode-toggle-active-border);
+  color: var(--lace-mode-toggle-active-text);
+  font-weight: 700;
+}
+
+.lace-mode-toggle__item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lace-mode-toggle__item:focus-visible {
+  outline: 2px solid var(--lace-green);
+  outline-offset: 2px;
+}
