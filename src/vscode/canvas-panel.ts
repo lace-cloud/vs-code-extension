@@ -8,7 +8,7 @@ import {
   type ServerManager,
   SubscribeHandler,
   type WebviewToHost,
-} from '@lace/host';
+} from '@lace-cloud/host';
 import * as vscode from 'vscode';
 import { handleRpcError } from './rpc-error-ui';
 import { buildWebviewHtml } from './webview-html';

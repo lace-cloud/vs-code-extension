@@ -4,8 +4,8 @@
 // lace_disconnect, lace_set_input, lace_rename_instance, lace_set_variable, lace_undo.
 // All operations go through RPC to the CLI.
 
-import type { ToolRegistry, ToolResult } from '@lace/chat-core';
-import type { CanvasView, LaceTransport, RegistryModule } from '@lace/host';
+import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
+import type { CanvasView, LaceTransport, RegistryModule } from '@lace-cloud/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type GraphWriteDeps = {

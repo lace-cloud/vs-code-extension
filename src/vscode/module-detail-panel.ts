@@ -1,4 +1,4 @@
-import type { LaceTransport, RegistryModule } from '@lace/host';
+import type { LaceTransport, RegistryModule } from '@lace-cloud/host';
 import * as vscode from 'vscode';
 
 const activePanels = new Map<string, vscode.WebviewPanel>();

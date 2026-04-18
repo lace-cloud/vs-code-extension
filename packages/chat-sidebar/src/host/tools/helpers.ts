@@ -2,8 +2,8 @@
 //
 // Shared helpers for chat tool implementations.
 
-import type { ToolResult } from '@lace/chat-core';
-import type { LaceTransport } from '@lace/host';
+import type { ToolResult } from '@lace-cloud/chat-core';
+import type { LaceTransport } from '@lace-cloud/host';
 
 const ENGINE_NOT_RUNNING: ToolResult = {
   content:

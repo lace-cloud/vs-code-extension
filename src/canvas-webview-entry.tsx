@@ -1,11 +1,11 @@
 // Canvas webview bootstrap (VS Code-specific).
 //
 // rspack consumes this as the `out/webview.js` entry. Lives at the
-// extension root — not in @lace/canvas — so the published canvas
+// extension root — not in @lace-cloud/canvas — so the published canvas
 // package stays portable to Storybook, portal, and JetBrains hosts
 // that don't have `acquireVsCodeApi()`.
 
-import { App, type HostBridge, PostMessageEngine } from '@lace/canvas';
+import { App, type HostBridge, PostMessageEngine } from '@lace-cloud/canvas';
 import { createRoot } from 'react-dom/client';
 import './canvas-webview-entry.css';
 

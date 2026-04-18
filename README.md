@@ -83,6 +83,53 @@ Lace connects to a module registry through its CLI backend. When you add modules
 
 All project files live in a `.lace/` directory at your workspace root. This directory is meant to be version-controlled alongside the rest of your code.
 
+## Developing
+
+This repo is a thin VS Code adapter shell. The library code (`@lace-cloud/canvas`,
+`@lace-cloud/host`, `@lace-cloud/chat-core`, `@lace-cloud/chat-webview`,
+`@lace-cloud/ui`, `@lace-cloud/design-tokens`, `@lace-cloud/proto`) lives in
+[`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core) and is published
+to GitHub Packages.
+
+### Local setup
+
+The `@lace-cloud/*` packages are public, but `npm.pkg.github.com` requires *some*
+GitHub token to download (a GitHub-side quirk, not a permissions issue). Any
+classic PAT with `read:packages` works:
+
+```bash
+# 1. Create a classic PAT with read:packages scope:
+#    https://github.com/settings/tokens/new?scopes=read:packages
+# 2. Export it (add to your shell rc to persist):
+export NODE_AUTH_TOKEN=<your-pat>
+# 3. Install:
+pnpm install
+```
+
+CI uses the workflow's `GITHUB_TOKEN` automatically — no setup needed.
+
+### Build & test
+
+```bash
+pnpm build              # rspack: extension.js + webview.js + chat-sidebar.js
+pnpm test:unit          # vitest (chat-sidebar tests)
+pnpm test:host-e2e      # @vscode/test-electron smoke + command tests
+pnpm lint               # biome check
+npx tsc --noEmit        # typecheck
+```
+
+### Layout
+
+```
+src/                    — extension activation, canvas + chat webview entries, vscode-coupled host primitives
+packages/chat-sidebar/  — VS Code chat adapter (ChatViewProvider, vscode-adapter, controller)
+packages/host-e2e/      — VS Code integration tests
+.github/                — CI (lint + unit + host-e2e), release workflow, GHCR Dockerfile
+```
+
+For `lace-core` development (the libraries themselves), see
+[`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core).
+
 ## Links
 
 - [Documentation](https://lace.cloud)

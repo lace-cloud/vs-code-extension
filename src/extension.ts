@@ -1,5 +1,5 @@
-import { ChatViewProvider } from '@lace/chat-sidebar';
-import { type RegistryModule, ServerManager } from '@lace/host';
+import { ChatViewProvider } from '@lace-cloud/chat-sidebar';
+import { type RegistryModule, ServerManager } from '@lace-cloud/host';
 import * as vscode from 'vscode';
 import {
   addModuleToActiveCanvas,

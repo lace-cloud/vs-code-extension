@@ -1,5 +1,5 @@
 // Thin wire-up between VS Code's webview + extension host and the
-// IDE-agnostic chat machinery in @lace/chat-core.
+// IDE-agnostic chat machinery in @lace-cloud/chat-core.
 //
 // Responsibilities here — and only here:
 //   1. Build the VS Code adapter + webview transport.
@@ -23,9 +23,9 @@ import {
   formatCanvasState,
   ProactivityWatcher,
   type ToolRegistry,
-} from '@lace/chat-core';
-import type { CanvasView, EngineEvent, LaceTransport, RegistryModule } from '@lace/host';
-import { convertCanvasView } from '@lace/host';
+} from '@lace-cloud/chat-core';
+import type { CanvasView, EngineEvent, LaceTransport, RegistryModule } from '@lace-cloud/host';
+import { convertCanvasView } from '@lace-cloud/host';
 import * as vscode from 'vscode';
 import { createVsCodeChatAdapter } from '../vscode-adapter';
 import { createVsCodeWebviewTransport } from '../vscode-webview-transport';

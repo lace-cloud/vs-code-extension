@@ -3,8 +3,8 @@
 // Tools: lace_describe_graph, lace_validate_graph, lace_inspect_node, lace_get_settings
 // All operations go through RPC to the CLI.
 
-import { formatCanvasState, type ToolRegistry, type ToolResult } from '@lace/chat-core';
-import type { CanvasView, LaceTransport } from '@lace/host';
+import { formatCanvasState, type ToolRegistry, type ToolResult } from '@lace-cloud/chat-core';
+import type { CanvasView, LaceTransport } from '@lace-cloud/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type GraphReadDeps = {
