@@ -1,4 +1,4 @@
-import { default as LocalsPanel } from '@lace/canvas/components/panels/LocalsPanel';
+import { LocalsPanel } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { populatedSettings } from '../../mocks/fixtures/configs';
 

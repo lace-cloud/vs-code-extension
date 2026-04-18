@@ -8,7 +8,6 @@ export default defineConfig({
       'packages/chat-sidebar/src/__tests__/**/*.test.{ts,tsx}',
       'packages/canvas-stories/src/__tests__/**/*.test.{ts,tsx}',
     ],
-    setupFiles: ['./vitest.setup.ts'],
     environment: 'node',
     passWithNoTests: true,
   },

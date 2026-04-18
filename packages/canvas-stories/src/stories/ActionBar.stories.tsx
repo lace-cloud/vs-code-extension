@@ -1,4 +1,4 @@
-import ActionBar from '@lace/canvas/components/ActionBar';
+import { ActionBar } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useState } from 'react';

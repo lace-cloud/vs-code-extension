@@ -8,4 +8,4 @@
 // controller, and proactivity watcher).
 
 export type { ChatSidebarDeps } from './host/controller';
-export { ChatViewProvider } from './host/view-provider';
+export { type BuildWebviewHtml, ChatViewProvider } from './host/view-provider';

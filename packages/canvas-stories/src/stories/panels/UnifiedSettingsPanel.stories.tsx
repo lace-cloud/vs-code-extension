@@ -1,4 +1,4 @@
-import { default as UnifiedSettingsPanel } from '@lace/canvas/components/panels/UnifiedSettingsPanel';
+import { UnifiedSettingsPanel } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useMemo } from 'react';
 import { emptyFixture } from '../../mocks/fixtures';

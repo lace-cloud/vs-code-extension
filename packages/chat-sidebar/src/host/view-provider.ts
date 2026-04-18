@@ -1,7 +1,13 @@
 import * as path from 'node:path';
-import { buildWebviewHtml, type CanvasView } from '@lace/host';
+import type { CanvasView } from '@lace/host';
 import * as vscode from 'vscode';
 import { ChatController, type ChatSidebarDeps } from './controller';
+
+// The HTML scaffold (CSP, nonce, script tag) is built by the
+// extension shell — chat-sidebar receives a webview-bound builder
+// at construction time. Keeps this package free of vscode-coupled
+// host primitives and lets the JetBrains adapter supply its own.
+export type BuildWebviewHtml = (webview: vscode.Webview) => string;
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'laceChat';
@@ -11,6 +17,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly externalDeps: ChatSidebarDeps,
+    private readonly buildHtml: BuildWebviewHtml,
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -21,10 +28,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         vscode.Uri.joinPath(this.context.extensionUri, 'images'),
       ],
     };
-    view.webview.html = buildWebviewHtml(this.context, view.webview, {
-      scriptFilename: 'chat-sidebar.js',
-      title: 'Lace Chat',
-    });
+    view.webview.html = this.buildHtml(view.webview);
 
     const controller = new ChatController(this.context, view.webview, this.externalDeps);
     this.controller = controller;

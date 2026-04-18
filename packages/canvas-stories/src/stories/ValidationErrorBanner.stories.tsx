@@ -1,4 +1,4 @@
-import { ValidationErrorBanner } from '@lace/canvas/components/ValidationErrorBanner';
+import { ValidationErrorBanner } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 
 // ValidationErrorBanner has two faces: the persistent top-left banner

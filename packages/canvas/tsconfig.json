@@ -3,8 +3,9 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "composite": false,
+    "noEmit": true
   },
-  "include": ["src/**/*"],
-  "references": [{ "path": "../proto" }]
+  "include": ["src/**/*"]
 }

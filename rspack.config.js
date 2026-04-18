@@ -2,8 +2,12 @@ const path = require('node:path');
 
 module.exports = [
   {
-    // Backend (Node.js) — host package
-    entry: './packages/host/src/extension.ts',
+    // Backend (Node.js) — extension activation. Entry lives at the
+    // extension root; vscode-coupled host primitives (panel classes,
+    // webview-html builder, RPC-error UI) live in src/vscode/.
+    // @lace/host is pure library code (transport, server-manager,
+    // proto-gen) — no vscode side effects.
+    entry: './src/extension.ts',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'extension.js',
@@ -34,9 +38,10 @@ module.exports = [
     devtool: 'source-map',
   },
   {
-    // Frontend (Webview) — canvas package
+    // Frontend (Webview) — canvas. Entry lives at extension root, not
+    // inside @lace/canvas, so the published package is portable.
     mode: 'development',
-    entry: './packages/canvas/src/index.tsx',
+    entry: './src/canvas-webview-entry.tsx',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'webview.js',
@@ -75,9 +80,11 @@ module.exports = [
     devtool: 'source-map',
   },
   {
-    // Frontend (Webview) — chat sidebar
+    // Frontend (Webview) — chat sidebar. Entry lives at extension
+    // root (mirrors canvas-webview-entry); @lace/chat-webview is pure
+    // React, host-agnostic.
     mode: 'development',
-    entry: './packages/chat-sidebar/src/webview-entry.tsx',
+    entry: './src/chat-webview-entry.tsx',
     output: {
       path: path.resolve(__dirname, 'out'),
       filename: 'chat-sidebar.js',

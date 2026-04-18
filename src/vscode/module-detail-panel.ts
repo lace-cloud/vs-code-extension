@@ -1,7 +1,5 @@
-// packages/host/src/module-detail-panel.ts
+import type { LaceTransport, RegistryModule } from '@lace/host';
 import * as vscode from 'vscode';
-import type { LaceTransport } from './transport';
-import type { RegistryModule } from './types';
 
 const activePanels = new Map<string, vscode.WebviewPanel>();
 

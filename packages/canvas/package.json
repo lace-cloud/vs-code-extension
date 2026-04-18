@@ -1,19 +1,44 @@
 {
   "name": "@lace/canvas",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsup",
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "^2.10.2",
     "@lace/proto": "workspace:*",
-    "@lace/ui": "workspace:*",
-    "@bufbuild/protobuf": "^2.10.2"
+    "@lace/ui": "workspace:*"
   },
   "devDependencies": {
+    "tsup": "^8.5.0",
     "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.cjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lace-cloud/lace-core.git",
+    "directory": "packages/canvas"
   }
 }

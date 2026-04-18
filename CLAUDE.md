@@ -13,16 +13,36 @@ verification layer.
 ## Repo Layout (pnpm Workspace)
 
 ```
-packages/
-  proto/          @lace/proto          — shared proto messages + render POJOs (./render) + converters live per-package
-  host/           @lace/host           — extension host: LaceTransport (gRPC-JS), canvas/registry/chat view providers, engine lifecycle
-  canvas/         @lace/canvas         — webview UI (React, ReactFlow). PostMessageEngine (VS Code) + ConnectWebEngine (browser)
-  chat-sidebar/   @lace/chat-sidebar   — chat webview + host controller (agentic tool loop, tools, proactivity)
-  design-tokens/  @lace/design-tokens  — CSS variables / tokens — single source of truth for colors
-  ui/             @lace/ui             — design-system primitives (Button, IconButton, …). Composites consume these instead of re-inventing them.
-  canvas-stories/ @lace/canvas-stories — Storybook for canvas composites + @lace/ui primitives (component + flow stories)
+src/                                — extension shell (VS Code-coupled, not published)
+  extension.ts                      — activation, command registration, view-provider wiring
+  canvas-webview-entry.tsx          — rspack entry for webview.js (canvas)
+  canvas-webview-entry.css          — global stylesheet for the canvas webview bundle
+  chat-webview-entry.tsx            — rspack entry for chat-sidebar.js (chat)
+  vscode/                           — vscode-coupled host primitives
+    canvas-panel.ts                 — canvas WebviewPanel + Subscribe stream bridge
+    module-detail-panel.ts          — module detail tab
+    registry-sidebar.ts             — registry WebviewViewProvider
+    webview-html.ts                 — shared HTML scaffold (CSP, nonce)
+    rpc-error-ui.ts                 — vscode.window error toast for classified RPC errors
+
+packages/                           — workspace packages (will move to lace-core monorepo)
+  proto/          @lace/proto          — shared proto messages + render POJOs + converters
+  host/           @lace/host           — vscode-free library: LaceTransport, ServerManager, engine handshake, RpcError + classifier
+  canvas/         @lace/canvas         — webview UI (React, ReactFlow). PostMessageEngine + ConnectWebEngine
+  chat-sidebar/   @lace/chat-sidebar   — VS Code chat adapter: ChatViewProvider, vscode-adapter, controller
+  chat-core/      @lace/chat-core      — vscode-free agentic loop + tool registry + proactivity rules
+  chat-webview/   @lace/chat-webview   — pure React chat UI
+  design-tokens/  @lace/design-tokens  — CSS variables / tokens
+  ui/             @lace/ui             — design-system primitives (Button, IconButton, …)
+  canvas-stories/ @lace/canvas-stories — Storybook for canvas composites + @lace/ui primitives
   host-e2e/       @lace/host-e2e       — E2E scaffold (Phase G)
 ```
+
+`@lace/host` is intentionally vscode-free: any consumer (chat-core,
+canvas, future portal/JetBrains adapters) can import from it without
+loading vscode at module-load time. The vscode-coupled primitives
+that used to live there (panel classes, webview-html builder, RPC
+error toast) moved to `src/vscode/` — they're not library code.
 
 ### Design system
 
@@ -32,9 +52,9 @@ packages/
 
 Rspack builds three bundles from the workspace:
 
-- `out/extension.js` (Node) — entry `packages/host/src/extension.ts`
-- `out/webview.js` (Browser) — entry `packages/canvas/src/index.tsx`
-- `out/chat-sidebar.js` (Browser) — entry `packages/chat-sidebar/src/webview/index.tsx`
+- `out/extension.js` (Node) — entry `src/extension.ts` (extension activation; vscode-coupled host primitives in `src/vscode/`)
+- `out/webview.js` (Browser) — entry `src/canvas-webview-entry.tsx` (VS Code-specific bootstrap; @lace/canvas itself is pure library code)
+- `out/chat-sidebar.js` (Browser) — entry `src/chat-webview-entry.tsx` (VS Code-specific bootstrap; @lace/chat-webview is pure React)
 
 ## Build & Test
 
@@ -293,11 +313,11 @@ truth.
 
 | Package / Layer                 | Purpose                                                                                 | Environment       |
 | ------------------------------- | --------------------------------------------------------------------------------------- | ----------------- |
-| `host/extension.ts`             | Activation, command registration, view provider wiring                                  | Node              |
+| `src/extension.ts`              | Activation, command registration, view provider wiring                                  | Node              |
 | `host/transport.ts`             | `LaceTransport` — gRPC-JS client; bearer auth; proto→render converters                  | Node              |
 | `host/server-manager`           | Spawns/watches `lace engine`, routes the handshake into a transport                     | Node              |
-| `host/canvas-panel.ts`          | Canvas webview panel + Subscribe stream bridge                                          | Node (mounts DOM) |
-| `host/webview-html.ts`          | Shared HTML scaffold (CSP, nonce) used by canvas + chat sidebar                         | Node              |
+| `src/vscode/canvas-panel.ts`    | Canvas webview panel + Subscribe stream bridge                                          | Node (mounts DOM) |
+| `src/vscode/webview-html.ts`    | Shared HTML scaffold (CSP, nonce) used by canvas + chat sidebar                         | Node              |
 | `chat-sidebar/host/`            | `ChatController` (agentic loop, tool dispatch, proactivity), `ChatViewProvider`         | Node              |
 | `chat-sidebar/webview`          | React chat UI                                                                           | Browser           |
 | `canvas/App.tsx`                | Transport-agnostic canvas root; takes `engine: CanvasEngine` + `hostBridge: HostBridge` | Browser           |

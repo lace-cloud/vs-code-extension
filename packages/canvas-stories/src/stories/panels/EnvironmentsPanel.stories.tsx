@@ -1,4 +1,4 @@
-import { default as EnvironmentsPanel } from '@lace/canvas/components/panels/EnvironmentsPanel';
+import { EnvironmentsPanel } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { populatedSettings } from '../../mocks/fixtures/configs';
 

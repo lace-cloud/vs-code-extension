@@ -1,4 +1,4 @@
-import GroupNode, { type GroupNodeData } from '@lace/canvas/components/nodes/GroupNode';
+import { GroupNode, type GroupNodeData } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { type Node, ReactFlow, ReactFlowProvider } from '@xyflow/react';
 import { MockCanvasContext } from '../mocks/canvas-context';

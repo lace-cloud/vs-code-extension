@@ -1,4 +1,4 @@
-import ModuleNode, { type ModuleNodeData } from '@lace/canvas/components/nodes/ModuleNode';
+import { ModuleNode, type ModuleNodeData } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { type Node, ReactFlow, ReactFlowProvider } from '@xyflow/react';
 import { MockCanvasContext } from '../mocks/canvas-context';

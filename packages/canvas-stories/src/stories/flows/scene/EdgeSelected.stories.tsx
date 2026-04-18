@@ -1,5 +1,4 @@
-import EdgeInspectorPanel from '@lace/canvas/components/panels/EdgeInspectorPanel';
-import SlidePanel from '@lace/canvas/components/SlidePanel';
+import { EdgeInspectorPanel, SlidePanel } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 import { MockFlowDecorator } from '../../../decorators/mock-flow-decorator';
 import { iamStackFixture } from '../../../mocks/fixtures';

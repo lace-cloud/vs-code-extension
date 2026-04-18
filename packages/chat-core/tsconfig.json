@@ -2,8 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "composite": false,
+    "noEmit": true
   },
-  "include": ["src/**/*"],
-  "references": [{ "path": "../proto" }, { "path": "../host" }]
+  "include": ["src/**/*"]
 }

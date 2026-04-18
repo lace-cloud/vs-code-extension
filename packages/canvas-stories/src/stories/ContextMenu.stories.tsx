@@ -1,4 +1,4 @@
-import ContextMenu from '@lace/canvas/components/ContextMenu';
+import { ContextMenu } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 
 const meta: Meta<typeof ContextMenu> = {

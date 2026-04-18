@@ -206,6 +206,11 @@
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.12.6",
+    "@lace/canvas": "workspace:*",
+    "@lace/chat-sidebar": "workspace:*",
+    "@lace/chat-webview": "workspace:*",
+    "@lace/design-tokens": "workspace:*",
+    "@lace/host": "workspace:*",
     "@xyflow/react": "^12.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

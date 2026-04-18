@@ -1,5 +1,4 @@
 import { status as GrpcStatus, type ServiceError } from '@grpc/grpc-js';
-import * as vscode from 'vscode';
 
 // ── Error categories ──
 
@@ -54,28 +53,6 @@ export function classifyRpcError(err: unknown, method: string): RpcError {
   }
 
   return new RpcError(msg, 'server_error', method, err);
-}
-
-// ── Policy application ──
-
-export function handleRpcError(err: unknown, method: string, context: string): RpcError {
-  const classified = err instanceof RpcError ? err : classifyRpcError(err, method);
-
-  console.error(`[RPC] ${method} failed:`, classified.cause ?? classified.message);
-
-  switch (classified.category) {
-    case 'engine_unavailable':
-    case 'timeout':
-      vscode.window.showErrorMessage(
-        'Lace engine is not available. Start it with "Lace: Start Engine".',
-      );
-      break;
-    case 'server_error':
-      vscode.window.showErrorMessage(`Failed to ${context}: ${classified.message}`);
-      break;
-  }
-
-  return classified;
 }
 
 // ── Guard: require non-null client ──

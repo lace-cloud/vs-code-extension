@@ -1,4 +1,4 @@
-import { default as EdgeInspectorPanel } from '@lace/canvas/components/panels/EdgeInspectorPanel';
+import { EdgeInspectorPanel } from '@lace/canvas';
 import type { Meta, StoryObj } from '@storybook/react';
 
 // EdgeInspectorPanel opens in the right dock when an edge is selected.
