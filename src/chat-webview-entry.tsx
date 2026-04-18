@@ -7,8 +7,8 @@
 // the library component. JetBrains (or any other host) would ship
 // its own equivalent entry.
 
-import { App, type WebviewBridge, type WebviewToHost } from '@lace/chat-webview';
-import '@lace/chat-webview/styles.css';
+import { App, type WebviewBridge, type WebviewToHost } from '@lace-cloud/chat-webview';
+import '@lace-cloud/chat-webview/styles.css';
 import { createRoot } from 'react-dom/client';
 
 declare global {

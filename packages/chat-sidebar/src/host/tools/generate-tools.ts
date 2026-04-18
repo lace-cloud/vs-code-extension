@@ -3,8 +3,8 @@
 // Tools: lace_auto_connect, lace_generate
 // All operations go through RPC to the CLI.
 
-import type { ToolRegistry, ToolResult } from '@lace/chat-core';
-import type { CanvasView, LaceTransport } from '@lace/host';
+import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
+import type { CanvasView, LaceTransport } from '@lace-cloud/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type GenerateToolDeps = {

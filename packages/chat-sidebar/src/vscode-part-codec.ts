@@ -1,11 +1,11 @@
-// Conversion between `vscode.LanguageModel*Part` and `@lace/chat-core`
+// Conversion between `vscode.LanguageModel*Part` and `@lace-cloud/chat-core`
 // `Part` / message types.
 //
 // This is the single boundary between VS Code's concrete LM types and
 // chat-core's IDE-agnostic types. Every other file in the adapter
 // uses core types; this one translates at the vscode.lm seam.
 
-import type { ChatMessage, ChatStreamEvent, Part, TextPart } from '@lace/chat-core';
+import type { ChatMessage, ChatStreamEvent, Part, TextPart } from '@lace-cloud/chat-core';
 import * as vscode from 'vscode';
 
 // ── Core → VS Code ──

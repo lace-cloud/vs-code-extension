@@ -5,7 +5,7 @@ module.exports = [
     // Backend (Node.js) — extension activation. Entry lives at the
     // extension root; vscode-coupled host primitives (panel classes,
     // webview-html builder, RPC-error UI) live in src/vscode/.
-    // @lace/host is pure library code (transport, server-manager,
+    // @lace-cloud/host is pure library code (transport, server-manager,
     // proto-gen) — no vscode side effects.
     entry: './src/extension.ts',
     output: {
@@ -39,7 +39,7 @@ module.exports = [
   },
   {
     // Frontend (Webview) — canvas. Entry lives at extension root, not
-    // inside @lace/canvas, so the published package is portable.
+    // inside @lace-cloud/canvas, so the published package is portable.
     mode: 'development',
     entry: './src/canvas-webview-entry.tsx',
     output: {
@@ -81,7 +81,7 @@ module.exports = [
   },
   {
     // Frontend (Webview) — chat sidebar. Entry lives at extension
-    // root (mirrors canvas-webview-entry); @lace/chat-webview is pure
+    // root (mirrors canvas-webview-entry); @lace-cloud/chat-webview is pure
     // React, host-agnostic.
     mode: 'development',
     entry: './src/chat-webview-entry.tsx',

@@ -5,7 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ToolRegistry, ToolResult } from '@lace/chat-core';
+import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
 import * as vscode from 'vscode';
 
 // Files to look for (ordered by priority)

@@ -1,5 +1,5 @@
 {
-  "name": "@lace/host-e2e",
+  "name": "@lace-cloud/host-e2e",
   "version": "0.0.0",
   "private": true,
   "description": "VS Code extension host smoke + command tests (Plan 2 Phase G).",

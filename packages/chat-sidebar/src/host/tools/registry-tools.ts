@@ -3,8 +3,8 @@
 // Tool: lace_search_registry — search the module registry.
 // Tool: lace_inspect_module — get full input/output schema for a specific module.
 
-import type { ToolRegistry, ToolResult } from '@lace/chat-core';
-import type { LaceTransport, RegistryModule } from '@lace/host';
+import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
+import type { LaceTransport, RegistryModule } from '@lace-cloud/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type RegistryToolDeps = {

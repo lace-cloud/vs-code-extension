@@ -1,10 +1,10 @@
 // VS Code-specific UI surface for RPC errors.
 //
-// The pure classifier + RpcError class live in @lace/host and are
+// The pure classifier + RpcError class live in @lace-cloud/host and are
 // portable to non-vscode consumers. The toast-shower belongs to the
 // extension shell.
 
-import { classifyRpcError, RpcError } from '@lace/host';
+import { classifyRpcError, RpcError } from '@lace-cloud/host';
 import * as vscode from 'vscode';
 
 export function handleRpcError(err: unknown, method: string, context: string): RpcError {

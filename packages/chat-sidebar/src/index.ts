@@ -1,4 +1,4 @@
-// @lace/chat-sidebar — VS Code adapter for the chat UI.
+// @lace-cloud/chat-sidebar — VS Code adapter for the chat UI.
 //
 // This package is the VS Code implementation of chat-core's
 // adapter contracts. Public surface is intentionally small: host

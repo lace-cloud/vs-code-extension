@@ -1,5 +1,5 @@
-import { createToolRegistry, type ToolRegistry } from '@lace/chat-core';
-import type { LaceTransport, RegistryModule } from '@lace/host';
+import { createToolRegistry, type ToolRegistry } from '@lace-cloud/chat-core';
+import type { LaceTransport, RegistryModule } from '@lace-cloud/host';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { type RegistryToolDeps, registerRegistryTools } from '../host/tools/registry-tools';
 

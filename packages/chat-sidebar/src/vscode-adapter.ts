@@ -12,7 +12,7 @@ import type {
   ChatModel,
   ChatStreamEvent,
   ToolSchema,
-} from '@lace/chat-core';
+} from '@lace-cloud/chat-core';
 import * as vscode from 'vscode';
 import { abortSignalToToken, toVscodeMessage, vscodeStreamToEvents } from './vscode-part-codec';
 

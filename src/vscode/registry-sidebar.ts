@@ -1,4 +1,4 @@
-import type { LaceTransport, RegistryModule } from '@lace/host';
+import type { LaceTransport, RegistryModule } from '@lace-cloud/host';
 import * as vscode from 'vscode';
 
 // ── Constants ──

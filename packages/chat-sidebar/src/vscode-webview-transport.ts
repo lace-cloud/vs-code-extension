@@ -5,7 +5,12 @@
 // returns a `vscode.Disposable` that matches our structural one. The
 // whole file is thirty lines.
 
-import type { Disposable, HostToWebview, WebviewToHost, WebviewTransport } from '@lace/chat-core';
+import type {
+  Disposable,
+  HostToWebview,
+  WebviewToHost,
+  WebviewTransport,
+} from '@lace-cloud/chat-core';
 import type * as vscode from 'vscode';
 
 export function createVsCodeWebviewTransport(webview: vscode.Webview): WebviewTransport {
