@@ -22,7 +22,8 @@ on:
     branches: [main]
 
 permissions:
-  contents: write  # Required to create tags and releases
+  contents: write   # Required to create tags and releases
+  packages: read    # Required to fetch @lace-cloud/* from GH Packages
 
 jobs:
   version-bumped:
