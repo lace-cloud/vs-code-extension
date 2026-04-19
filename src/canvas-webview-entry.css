@@ -1,0 +1,17 @@
+/*
+ * Canvas webview entry stylesheet (VS Code-specific).
+ *
+ * Two global imports: xyflow's base stylesheet (component-layer) and
+ * @lace-cloud/design-tokens (global html/body defaults + all design tokens).
+ * @lace-cloud/canvas itself is pure library code — no global stylesheet
+ * shipped from the package. Each consumer (this VS Code webview,
+ * Storybook's preview.css, future portal/JetBrains shells) attaches
+ * the global stylesheet it needs.
+ *
+ * Component-specific styles live with the components themselves
+ * (Canvas.css, composite/*.css, primitive CSS in @lace-cloud/ui) — the React
+ * import chain pulls them into both the webview bundle and Storybook.
+ */
+
+@import "@xyflow/react/dist/style.css" layer(components);
+@import "@lace-cloud/design-tokens/tokens.css";

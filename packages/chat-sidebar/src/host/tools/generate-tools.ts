@@ -3,8 +3,8 @@
 // Tools: lace_auto_connect, lace_generate
 // All operations go through RPC to the CLI.
 
-import { registerTool } from '../tool-registry';
-import type { CanvasView, LaceTransport, ToolResult } from '../types';
+import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
+import type { CanvasView, LaceTransport } from '@lace-cloud/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type GenerateToolDeps = {
@@ -13,11 +13,11 @@ export type GenerateToolDeps = {
   getCanvasView: () => CanvasView | null;
 };
 
-export function registerGenerateTools(deps: GenerateToolDeps): void {
+export function registerGenerateTools(registry: ToolRegistry, deps: GenerateToolDeps): void {
   // ─────────────────────────────────────────────
   // lace_auto_connect
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_auto_connect',
       description: 'Automatically wire compatible outputs between two instances.',
@@ -106,7 +106,7 @@ export function registerGenerateTools(deps: GenerateToolDeps): void {
   // ─────────────────────────────────────────────
   // lace_generate
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_generate',
       description: 'Generate Terraform .tf files from the current canvas.',

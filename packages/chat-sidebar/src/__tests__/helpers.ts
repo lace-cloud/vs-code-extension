@@ -1,4 +1,4 @@
-import type { CanvasView, NodePin, RenderEdge, RenderNode } from '@lace/host';
+import type { CanvasView, NodePin, RenderEdge, RenderNode } from '@lace-cloud/host';
 
 // ── CanvasView builders for tests ──
 

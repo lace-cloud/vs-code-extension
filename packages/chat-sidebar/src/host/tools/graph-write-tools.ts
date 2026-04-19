@@ -4,8 +4,8 @@
 // lace_disconnect, lace_set_input, lace_rename_instance, lace_set_variable, lace_undo.
 // All operations go through RPC to the CLI.
 
-import { registerTool } from '../tool-registry';
-import type { CanvasView, LaceTransport, RegistryModule, ToolResult } from '../types';
+import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
+import type { CanvasView, LaceTransport, RegistryModule } from '@lace-cloud/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type GraphWriteDeps = {
@@ -17,11 +17,11 @@ export type GraphWriteDeps = {
 
 // ── Tool Registration ──
 
-export function registerGraphWriteTools(deps: GraphWriteDeps): void {
+export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_add_module
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_add_module',
       description: 'Add a Terraform module to the Lace canvas by name.',
@@ -219,7 +219,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_remove_module
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_remove_module',
       description: 'Remove a module instance from the canvas by instance ID.',
@@ -279,7 +279,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_connect
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_connect',
       description: 'Wire an output from one instance to an input on another.',
@@ -358,7 +358,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_disconnect
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_disconnect',
       description: 'Remove a wire from an input.',
@@ -404,7 +404,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_set_input
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_set_input',
       description:
@@ -507,7 +507,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_rename_instance
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_rename_instance',
       description: 'Rename a module instance.',
@@ -569,7 +569,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_set_variable — add/update a canvas-level variable
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_set_variable',
       description: 'Add or update a canvas-level Terraform variable.',
@@ -640,7 +640,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_undo — undo last canvas change
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_undo',
       description: 'Undo the last change to the canvas.',
@@ -667,7 +667,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_set_local
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_set_local',
       description: 'Add or update a Terraform local value.',
@@ -732,7 +732,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_set_environment
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_set_environment',
       description: 'Define environment-specific variable overrides.',
@@ -790,7 +790,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_create_group
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_create_group',
       description: 'Create a visual group around instances on the canvas.',
@@ -848,7 +848,7 @@ export function registerGraphWriteTools(deps: GraphWriteDeps): void {
   // ─────────────────────────────────────────────
   // lace_ungroup
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_ungroup',
       description: 'Remove a visual group. Instances remain on the canvas.',

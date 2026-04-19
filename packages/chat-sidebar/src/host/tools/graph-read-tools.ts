@@ -3,9 +3,8 @@
 // Tools: lace_describe_graph, lace_validate_graph, lace_inspect_node, lace_get_settings
 // All operations go through RPC to the CLI.
 
-import { registerTool } from '../tool-registry';
-import type { CanvasView, LaceTransport, ToolResult } from '../types';
-import { formatCanvasState } from '../utils/canvas-summary';
+import { formatCanvasState, type ToolRegistry, type ToolResult } from '@lace-cloud/chat-core';
+import type { CanvasView, LaceTransport } from '@lace-cloud/host';
 import { errorMessage, requireEngine } from './helpers';
 
 export type GraphReadDeps = {
@@ -13,11 +12,11 @@ export type GraphReadDeps = {
   getCanvasView: () => CanvasView | null;
 };
 
-export function registerGraphReadTools(deps: GraphReadDeps): void {
+export function registerGraphReadTools(registry: ToolRegistry, deps: GraphReadDeps): void {
   // ─────────────────────────────────────────────
   // lace_describe_graph
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_describe_graph',
       description: 'Get the current canvas state.',
@@ -47,7 +46,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
   // ─────────────────────────────────────────────
   // lace_validate_graph
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_validate_graph',
       description: 'Run graph validation.',
@@ -127,7 +126,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
   // ─────────────────────────────────────────────
   // lace_inspect_node — live config of a placed instance
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_inspect_node',
       description: 'Get live bindings of a placed instance.',
@@ -202,7 +201,7 @@ export function registerGraphReadTools(deps: GraphReadDeps): void {
   // ─────────────────────────────────────────────
   // lace_get_settings — terraform block, providers, locals
   // ─────────────────────────────────────────────
-  registerTool(
+  registry.register(
     {
       name: 'lace_get_settings',
       description: 'Read canvas settings: terraform block, providers, locals, environments.',

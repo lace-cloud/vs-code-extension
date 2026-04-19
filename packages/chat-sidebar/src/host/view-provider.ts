@@ -1,16 +1,13 @@
 import * as path from 'node:path';
-import type { CanvasView, LaceTransport, RegistryModule } from '@lace/host';
-import { buildWebviewHtml } from '@lace/host';
+import type { CanvasView } from '@lace-cloud/host';
 import * as vscode from 'vscode';
-import { ChatController } from './controller';
+import { ChatController, type ChatSidebarDeps } from './controller';
 
-/** External deps provided by the extension — everything the controller needs except getCanvasView. */
-export type ChatSidebarDeps = {
-  getRpcClient: () => LaceTransport | null;
-  getRegistryModules: () => RegistryModule[];
-  getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
-  getLaceDir: () => string | undefined;
-};
+// The HTML scaffold (CSP, nonce, script tag) is built by the
+// extension shell — chat-sidebar receives a webview-bound builder
+// at construction time. Keeps this package free of vscode-coupled
+// host primitives and lets the JetBrains adapter supply its own.
+export type BuildWebviewHtml = (webview: vscode.Webview) => string;
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'laceChat';
@@ -20,7 +17,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly externalDeps: ChatSidebarDeps,
-    private readonly log: (msg: string) => void,
+    private readonly buildHtml: BuildWebviewHtml,
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -31,21 +28,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         vscode.Uri.joinPath(this.context.extensionUri, 'images'),
       ],
     };
-    view.webview.html = buildWebviewHtml(this.context, view.webview, {
-      scriptFilename: 'chat-sidebar.js',
-      title: 'Lace Chat',
-    });
+    view.webview.html = this.buildHtml(view.webview);
 
-    // Create controller first, then wire deps.getCanvasView to its cache.
-    // The lazy arrow captures `this.controller` at call time, so it resolves
-    // after the controller is assigned.
-    let controller: ChatController;
-    const deps = {
-      ...this.externalDeps,
-      getCanvasView: () => controller?.getLatestView() ?? null,
-    };
-    controller = new ChatController(this.context, view.webview, deps, this.log);
+    const controller = new ChatController(this.context, view.webview, this.externalDeps);
     this.controller = controller;
+    void controller.init();
 
     view.onDidDispose(() => {
       this.controller?.dispose();
@@ -62,3 +49,5 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return this.controller?.getLatestView() ?? null;
   }
 }
+
+export type { ChatSidebarDeps } from './controller';

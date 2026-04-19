@@ -1,17 +1,19 @@
 {
-  "name": "@lace/chat-sidebar",
+  "name": "@lace-cloud/chat-sidebar",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@lace/proto": "workspace:*",
-    "@lace/host": "workspace:*",
-    "@lace/design-tokens": "workspace:*",
+    "@lace-cloud/chat-core": "^0.1.1",
+    "@lace-cloud/chat-webview": "^0.1.1",
+    "@lace-cloud/design-tokens": "^0.1.1",
+    "@lace-cloud/host": "^0.1.1",
+    "@lace-cloud/proto": "^0.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

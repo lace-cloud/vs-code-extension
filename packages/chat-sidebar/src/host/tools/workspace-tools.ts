@@ -5,9 +5,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
 import * as vscode from 'vscode';
-import { registerTool } from '../tool-registry';
-import type { ToolResult } from '../types';
 
 // Files to look for (ordered by priority)
 const CONTEXT_FILES = [
@@ -35,8 +34,13 @@ const MAX_FILE_BYTES = 4096;
 const MAX_CONTEXT_FILES = 8;
 
 // ── Project Profile ──
+//
+// Detection helpers exported for unit testing. Composed in
+// `buildProjectProfile`. Pure data functions (`detect*` from
+// `Set`/`Map` inputs) plus one fs-touching helper
+// (`detectExistingModules`) that takes the workspace root.
 
-type ProjectProfile = {
+export type ProjectProfile = {
   languages: string[];
   frameworks: string[];
   runtimes: string[];
@@ -45,7 +49,7 @@ type ProjectProfile = {
   existing_modules: string[];
 };
 
-function detectLanguages(found: Set<string>): string[] {
+export function detectLanguages(found: Set<string>): string[] {
   const langs: string[] = [];
   if (found.has('package.json')) langs.push('typescript/javascript');
   if (found.has('go.mod')) langs.push('go');
@@ -56,7 +60,7 @@ function detectLanguages(found: Set<string>): string[] {
   return langs;
 }
 
-function detectFrameworks(fileContents: Map<string, string>): string[] {
+export function detectFrameworks(fileContents: Map<string, string>): string[] {
   const frameworks: string[] = [];
   const pkg = fileContents.get('package.json');
   if (pkg) {
@@ -89,7 +93,7 @@ function detectFrameworks(fileContents: Map<string, string>): string[] {
   return frameworks;
 }
 
-function detectRuntimes(fileContents: Map<string, string>): string[] {
+export function detectRuntimes(fileContents: Map<string, string>): string[] {
   const runtimes: string[] = [];
   const dockerfile = fileContents.get('Dockerfile') ?? fileContents.get('docker-compose.yml') ?? '';
   const fromMatch = dockerfile.match(/^FROM\s+(\S+)/m);
@@ -107,7 +111,7 @@ function detectRuntimes(fileContents: Map<string, string>): string[] {
   return runtimes;
 }
 
-function detectDatabases(fileContents: Map<string, string>): string[] {
+export function detectDatabases(fileContents: Map<string, string>): string[] {
   const dbs: string[] = [];
   const allContent = [...fileContents.values()].join('\n').toLowerCase();
   if (/postgres|pg|psycopg/i.test(allContent)) dbs.push('postgres');
@@ -118,7 +122,7 @@ function detectDatabases(fileContents: Map<string, string>): string[] {
   return [...new Set(dbs)];
 }
 
-function detectCloudHints(fileContents: Map<string, string>): string[] {
+export function detectCloudHints(fileContents: Map<string, string>): string[] {
   const hints: string[] = [];
   const allContent = [...fileContents.values()].join('\n');
   if (/aws-sdk|@aws-sdk|amazonaws\.com|aws_/i.test(allContent)) hints.push('aws');
@@ -127,7 +131,7 @@ function detectCloudHints(fileContents: Map<string, string>): string[] {
   return [...new Set(hints)];
 }
 
-function detectExistingModules(root: string): string[] {
+export function detectExistingModules(root: string): string[] {
   const laceDir = path.join(root, '.lace');
   const modules: string[] = [];
   try {
@@ -142,7 +146,7 @@ function detectExistingModules(root: string): string[] {
   return modules;
 }
 
-function buildProjectProfile(
+export function buildProjectProfile(
   root: string,
   found: Set<string>,
   fileContents: Map<string, string>,
@@ -159,8 +163,8 @@ function buildProjectProfile(
 
 // ── Tool Registration ──
 
-export function registerWorkspaceTools(): void {
-  registerTool(
+export function registerWorkspaceTools(registry: ToolRegistry): void {
+  registry.register(
     {
       name: 'lace_workspace_context',
       description: "Read the user's project files to understand what they are building.",
