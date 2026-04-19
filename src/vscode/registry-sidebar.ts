@@ -300,29 +300,29 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       flex: 1;
       min-width: 0;
       padding: 5px 8px;
-      border: 1px solid var(--vscode-input-border, #3c3c3c);
-      background: var(--vscode-input-background, #3c3c3c);
-      color: var(--vscode-input-foreground, #ccc);
+      border: 1px solid var(--vscode-input-border);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
       border-radius: 4px;
       font-size: 12px;
       outline: none;
     }
 
     .search-input:focus {
-      border-color: var(--vscode-focusBorder, #007fd4);
+      border-color: var(--vscode-focusBorder);
     }
 
     .search-input::placeholder {
-      color: var(--vscode-input-placeholderForeground, #888);
+      color: var(--vscode-input-placeholderForeground);
     }
 
     .org-picker {
       width: 100%;
       padding: 4px 8px;
       margin-top: 4px;
-      border: 1px solid var(--vscode-input-border, #3c3c3c);
-      background: var(--vscode-input-background, #3c3c3c);
-      color: var(--vscode-input-foreground, #ccc);
+      border: 1px solid var(--vscode-input-border);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
       border-radius: 4px;
       font-size: 11px;
       outline: none;
@@ -330,7 +330,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .org-picker:focus {
-      border-color: var(--vscode-focusBorder, #007fd4);
+      border-color: var(--vscode-focusBorder);
     }
 
     .filter-toggle {
@@ -350,12 +350,12 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .filter-toggle:hover {
-      background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
+      background: var(--vscode-toolbar-hoverBackground);
     }
 
     .filter-toggle.active {
-      background: var(--vscode-badge-background, #4d4d4d);
-      color: var(--vscode-badge-foreground, #fff);
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
     }
 
     /* ── Category chips ── */
@@ -370,20 +370,20 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       padding: 2px 8px;
       font-size: 11px;
       border-radius: 10px;
-      border: 1px solid var(--vscode-badge-background, #4d4d4d);
+      border: 1px solid var(--vscode-badge-background);
       background: transparent;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
       cursor: pointer;
       white-space: nowrap;
     }
 
     .chip:hover {
-      background: var(--vscode-list-hoverBackground, #2a2d2e);
+      background: var(--vscode-list-hoverBackground);
     }
 
     .chip.active {
-      background: var(--vscode-badge-background, #4d4d4d);
-      color: var(--vscode-badge-foreground, #fff);
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
     }
 
     .module-list {
@@ -399,7 +399,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: var(--vscode-sideBarSectionHeader-foreground, #bbb);
+      color: var(--vscode-sideBarSectionHeader-foreground);
       margin-top: 4px;
       cursor: pointer;
       user-select: none;
@@ -407,7 +407,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .system-header:hover {
-      background: var(--vscode-list-hoverBackground, #2a2d2e);
+      background: var(--vscode-list-hoverBackground);
     }
 
     .system-header .chevron {
@@ -429,7 +429,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     .module-count {
       font-weight: 400;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
     }
 
     .module-item {
@@ -443,7 +443,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .module-item:hover {
-      background: var(--vscode-list-hoverBackground, #2a2d2e);
+      background: var(--vscode-list-hoverBackground);
     }
 
     .module-icon {
@@ -451,7 +451,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       width: 26px;
       height: 26px;
       border-radius: 4px;
-      background: var(--vscode-badge-background, #4d4d4d);
+      background: var(--vscode-badge-background);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -483,14 +483,14 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     .module-version {
       font-size: 11px;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
       margin-left: 4px;
       font-weight: 400;
     }
 
     .module-categories {
       font-size: 11px;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -527,18 +527,18 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
 
     .module-star.starred {
       display: flex;
-      color: #e2b340;
+      color: var(--vscode-charts-yellow);
     }
 
     .module-star:hover,
     .module-add:hover {
-      background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
+      background: var(--vscode-toolbar-hoverBackground);
     }
 
     .empty-state {
       padding: 20px 12px;
       text-align: center;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
       font-size: 12px;
       line-height: 1.5;
     }
@@ -546,7 +546,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     .result-count {
       padding: 2px 8px 4px;
       font-size: 11px;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
     }
 
     /* ── Retry button ── */
@@ -558,12 +558,12 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      background: var(--vscode-button-background, #0e639c);
-      color: var(--vscode-button-foreground, #fff);
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
     }
 
     .retry-btn:hover {
-      background: var(--vscode-button-hoverBackground, #1177bb);
+      background: var(--vscode-button-hoverBackground);
     }
 
     /* ── Skeleton loading ── */
@@ -576,7 +576,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       width: 50px;
       margin: 10px 8px 6px;
       border-radius: 3px;
-      background: var(--vscode-badge-background, #4d4d4d);
+      background: var(--vscode-badge-background);
       opacity: 0.4;
     }
 
@@ -592,7 +592,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       width: 26px;
       height: 26px;
       border-radius: 4px;
-      background: linear-gradient(90deg, var(--vscode-badge-background, #4d4d4d) 25%, transparent 50%, var(--vscode-badge-background, #4d4d4d) 75%);
+      background: linear-gradient(90deg, var(--vscode-badge-background) 25%, transparent 50%, var(--vscode-badge-background) 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s infinite;
     }
@@ -608,7 +608,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     .skeleton-line {
       height: 10px;
       border-radius: 3px;
-      background: linear-gradient(90deg, var(--vscode-badge-background, #4d4d4d) 25%, transparent 50%, var(--vscode-badge-background, #4d4d4d) 75%);
+      background: linear-gradient(90deg, var(--vscode-badge-background) 25%, transparent 50%, var(--vscode-badge-background) 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s infinite;
     }
@@ -628,7 +628,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
       height: 22px;
       border: none;
       background: transparent;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
       cursor: pointer;
       border-radius: 4px;
       display: none;
@@ -647,7 +647,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .version-toggle:hover {
-      background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
+      background: var(--vscode-toolbar-hoverBackground);
       color: var(--vscode-foreground);
     }
 
@@ -671,13 +671,13 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .version-row:hover {
-      background: var(--vscode-list-hoverBackground, #2a2d2e);
+      background: var(--vscode-list-hoverBackground);
     }
 
     .version-row-label {
       flex: 1;
       font-size: 11px;
-      color: var(--vscode-descriptionForeground, #888);
+      color: var(--vscode-descriptionForeground);
     }
 
     .version-row-add {
@@ -700,7 +700,7 @@ export class RegistrySidebarProvider implements vscode.WebviewViewProvider {
     }
 
     .version-row-add:hover {
-      background: var(--vscode-toolbar-hoverBackground, #5a5d5e);
+      background: var(--vscode-toolbar-hoverBackground);
     }
   </style>
 </head>

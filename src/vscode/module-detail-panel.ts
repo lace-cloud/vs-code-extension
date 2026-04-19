@@ -110,7 +110,6 @@ function buildHtml(
   fetchError?: string | null,
 ): string {
   const kindBadge = 'Module';
-  const kindColor = '#1f6feb';
 
   const inputsHtml = iface?.inputs?.length
     ? iface.inputs
@@ -155,31 +154,18 @@ function buildHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${esc(mod.name)}</title>
   <style>
-    :root {
-      --bg: #1e1e1e;
-      --surface: #252526;
-      --border: #3c3c3c;
-      --text: #cccccc;
-      --text-muted: #888888;
-      --accent: #4fc1ff;
-      --green: #2ea043;
-      --blue: #1f6feb;
-    }
+    /* VS Code injects --vscode-* theme tokens + body { font-family,
+       font-size, color, background } automatically. We only declare
+       what we override. */
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      padding: 0;
-    }
+    body { line-height: 1.5; }
 
     /* ── Header ── */
     .header {
       padding: 24px 32px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--vscode-widget-border);
       display: flex;
       align-items: flex-start;
       gap: 20px;
@@ -189,7 +175,7 @@ function buildHtml(
       width: 64px;
       height: 64px;
       border-radius: 8px;
-      background: var(--surface);
+      background: var(--vscode-editorWidget-background);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -202,7 +188,6 @@ function buildHtml(
     .header-info h1 {
       font-size: 22px;
       font-weight: 600;
-      color: #fff;
       margin-bottom: 4px;
     }
 
@@ -211,8 +196,13 @@ function buildHtml(
       align-items: center;
       gap: 12px;
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--vscode-descriptionForeground);
       margin-bottom: 12px;
+    }
+
+    .header-description {
+      color: var(--vscode-descriptionForeground);
+      font-size: 14px;
     }
 
     .badge {
@@ -221,7 +211,8 @@ function buildHtml(
       border-radius: 4px;
       font-size: 11px;
       font-weight: 600;
-      color: #fff;
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
     }
 
     .header-actions {
@@ -233,28 +224,37 @@ function buildHtml(
     .btn-primary {
       padding: 8px 20px;
       border-radius: 4px;
-      background: var(--green);
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
       border: none;
-      color: #fff;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
     }
 
-    .btn-primary:hover { background: #3ab653; }
+    .btn-primary:hover { background: var(--vscode-button-hoverBackground); }
+
+    /* ── Error banner ── */
+    .error-banner {
+      padding: 8px 32px;
+      background: var(--vscode-inputValidation-warningBackground);
+      color: var(--vscode-inputValidation-warningForeground);
+      border-bottom: 1px solid var(--vscode-inputValidation-warningBorder);
+      font-size: 13px;
+    }
 
     /* ── Tabs ── */
     .tabs {
       display: flex;
       gap: 0;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--vscode-widget-border);
       padding: 0 32px;
     }
 
     .tab {
       padding: 10px 16px;
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--vscode-descriptionForeground);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       border-bottom: 2px solid transparent;
@@ -262,8 +262,8 @@ function buildHtml(
     }
 
     .tab.active {
-      color: #fff;
-      border-bottom-color: var(--accent);
+      color: var(--vscode-tab-activeForeground);
+      border-bottom-color: var(--vscode-textLink-foreground);
     }
 
     /* ── Content ── */
@@ -279,15 +279,16 @@ function buildHtml(
     .section h2 {
       font-size: 16px;
       font-weight: 600;
-      color: #fff;
       margin-bottom: 12px;
       padding-bottom: 6px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--vscode-widget-border);
     }
 
-    .section p {
-      color: var(--text);
-      font-size: 14px;
+    .section p { font-size: 14px; }
+
+    .examples-hint {
+      color: var(--vscode-descriptionForeground);
+      margin-bottom: 12px;
     }
 
     /* ── Table ── */
@@ -300,9 +301,9 @@ function buildHtml(
     th {
       text-align: left;
       padding: 8px 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
+      background: var(--vscode-editorWidget-background);
+      border: 1px solid var(--vscode-widget-border);
+      color: var(--vscode-descriptionForeground);
       font-weight: 600;
       font-size: 11px;
       text-transform: uppercase;
@@ -311,45 +312,45 @@ function buildHtml(
 
     td {
       padding: 8px 12px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--vscode-widget-border);
       vertical-align: top;
     }
 
     .prop-name {
-      font-family: "SF Mono", "Fira Code", monospace;
-      color: var(--accent);
+      font-family: var(--vscode-editor-font-family);
+      color: var(--vscode-textLink-foreground);
       white-space: nowrap;
     }
 
     .prop-type {
-      font-family: "SF Mono", "Fira Code", monospace;
-      color: #ce9178;
+      font-family: var(--vscode-editor-font-family);
+      color: var(--vscode-textPreformat-foreground);
       font-size: 12px;
     }
 
     .prop-required { text-align: center; }
-    .prop-desc { color: var(--text-muted); }
-    .empty { color: var(--text-muted); font-style: italic; text-align: center; }
+    .prop-desc { color: var(--vscode-descriptionForeground); }
+    .empty { color: var(--vscode-descriptionForeground); font-style: italic; text-align: center; }
 
     /* ── Versions ── */
     .version-tag {
       display: inline-block;
       padding: 3px 10px;
       border-radius: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: var(--vscode-editorWidget-background);
+      border: 1px solid var(--vscode-widget-border);
       font-size: 12px;
-      font-family: "SF Mono", "Fira Code", monospace;
-      color: var(--text-muted);
+      font-family: var(--vscode-editor-font-family);
+      color: var(--vscode-descriptionForeground);
     }
 
     .version-tag.active {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: rgba(79, 193, 255, 0.1);
+      border-color: var(--vscode-textLink-foreground);
+      color: var(--vscode-textLink-foreground);
+      background: var(--vscode-list-activeSelectionBackground);
     }
 
-    .muted { color: var(--text-muted); }
+    .muted { color: var(--vscode-descriptionForeground); }
 
     /* ── Loading ── */
     .loading {
@@ -357,7 +358,7 @@ function buildHtml(
       align-items: center;
       justify-content: center;
       padding: 60px;
-      color: var(--text-muted);
+      color: var(--vscode-descriptionForeground);
       font-size: 14px;
     }
 
@@ -365,8 +366,8 @@ function buildHtml(
       content: '';
       width: 20px;
       height: 20px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
+      border: 2px solid var(--vscode-widget-border);
+      border-top-color: var(--vscode-textLink-foreground);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
       margin-right: 12px;
@@ -376,16 +377,15 @@ function buildHtml(
 
     /* ── Example placeholder ── */
     .code-block {
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: var(--vscode-editorWidget-background);
+      border: 1px solid var(--vscode-widget-border);
       border-radius: 6px;
       padding: 16px;
-      font-family: "SF Mono", "Fira Code", monospace;
+      font-family: var(--vscode-editor-font-family);
       font-size: 13px;
       line-height: 1.6;
       overflow-x: auto;
       white-space: pre;
-      color: var(--text);
     }
   </style>
 </head>
@@ -397,20 +397,20 @@ function buildHtml(
     <div class="header-info">
       <h1>${esc(mod.name)}</h1>
       <div class="header-meta">
-        <span class="badge" style="background:${kindColor}">${kindBadge}</span>
+        <span class="badge">${kindBadge}</span>
         <span>v${esc(mod.version)}</span>
         <span>·</span>
         <span>${esc(mod.system.toUpperCase())}</span>
         ${mod.categories?.length ? `<span>·</span><span>${mod.categories.map(esc).join(', ')}</span>` : ''}
       </div>
-      ${description ? `<p style="color:var(--text-muted); font-size:14px;">${esc(description)}</p>` : ''}
+      ${description ? `<p class="header-description">${esc(description)}</p>` : ''}
     </div>
     <div class="header-actions">
       <button class="btn-primary" id="add-to-canvas" ${loading ? 'disabled' : ''}>Add to Canvas</button>
     </div>
   </div>
 
-  ${fetchError ? `<div style="padding:8px 32px;background:#3b2507;color:#f0a030;font-size:13px;border-bottom:1px solid var(--border);">${esc(fetchError)}</div>` : ''}
+  ${fetchError ? `<div class="error-banner">${esc(fetchError)}</div>` : ''}
 
   <!-- Tabs -->
   <div class="tabs">
@@ -476,7 +476,7 @@ function buildHtml(
     <div id="tab-examples" class="tab-content">
       <div class="section">
         <h2>Usage Example</h2>
-        <p style="color: var(--text-muted); margin-bottom: 12px;">
+        <p class="examples-hint">
           Drop this module onto a canvas, configure its inputs, and connect it to other modules.
         </p>
         <div class="code-block">${buildUsageExample(mod, iface)}</div>

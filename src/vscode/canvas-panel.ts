@@ -131,7 +131,9 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 `.trim();
 
-const CANVAS_BODY_STYLE = `body { margin: 0; padding: 0; height: 100vh; background: #1e1e1e; display: flex; flex-direction: column; }`;
+// Body bg uses the user's editor background so the brief flash before
+// the React canvas mounts theme-matches VS Code (light/dark/HC).
+const CANVAS_BODY_STYLE = `body { margin: 0; padding: 0; height: 100vh; background: var(--vscode-editor-background); display: flex; flex-direction: column; }`;
 
 export async function openCanvas(context: vscode.ExtensionContext, server: ServerManager) {
   if (canvasPanel) {
