@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.0.30",
+  "version": "0.0.31",
   "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
