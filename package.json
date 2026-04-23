@@ -157,6 +157,16 @@
           "type": "string",
           "default": "",
           "description": "Base URL of your Lace portal (e.g., https://portal.lace.cloud). Used for 'Open in portal' deep-links in the Deploy panel. Leave empty to disable."
+        },
+        "lace.organization": {
+          "type": "string",
+          "default": "",
+          "description": "Default organization slug (mirrors the LACE_ORGANIZATION env var / --org flag the CLI uses). Used to construct portal deep-links."
+        },
+        "lace.team": {
+          "type": "string",
+          "default": "",
+          "description": "Default team slug (mirrors the LACE_TEAM env var / --team flag the CLI uses). Used to construct portal deep-links."
         }
       }
     },

@@ -122,4 +122,43 @@ module.exports = [
     },
     devtool: 'source-map',
   },
+  {
+    // Frontend (Webview) — deploy panel. Form-shaped UI (stack picker,
+    // apply button, status card); no React dependency, but built through
+    // the same rspack pipeline so the shared webview-html scaffold can
+    // reference out/deploy-webview.js by filename.
+    mode: 'development',
+    entry: './src/deploy-webview-entry.ts',
+    output: {
+      path: path.resolve(__dirname, 'out'),
+      filename: 'deploy-webview.js',
+    },
+    target: 'web',
+    resolve: {
+      extensions: ['.ts', '.js'],
+    },
+    module: {
+      rules: [
+        {
+          test: /\.ts$/,
+          use: {
+            loader: 'ts-loader',
+            options: {
+              configFile: path.resolve(__dirname, 'tsconfig.json'),
+              compilerOptions: { noEmit: false },
+            },
+          },
+          exclude: /node_modules/,
+        },
+      ],
+    },
+    optimization: {
+      runtimeChunk: false,
+      splitChunks: false,
+    },
+    experiments: {
+      css: false,
+    },
+    devtool: 'source-map',
+  },
 ];
