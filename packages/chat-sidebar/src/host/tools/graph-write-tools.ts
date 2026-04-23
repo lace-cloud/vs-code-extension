@@ -2,17 +2,26 @@
 //
 // Write tools: lace_add_module, lace_remove_module, lace_connect,
 // lace_disconnect, lace_set_input, lace_rename_instance, lace_set_variable, lace_undo.
-// All operations go through RPC to the CLI.
+// All mutations traverse the single ApplyAction RPC on the transport.
 
 import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
-import type { CanvasView, LaceTransport, RegistryModule } from '@lace-cloud/host';
-import { errorMessage, requireEngine } from './helpers';
+import type { LaceTransport, RegistryModule } from '@lace-cloud/host';
+import type { CanvasView } from '@lace-cloud/proto';
+import { modeToInputMode } from '@lace-cloud/proto';
+import {
+  applyAction,
+  applyActionAndAwaitView,
+  applyReason,
+  errorMessage,
+  requireEngine,
+} from './helpers';
 
 export type GraphWriteDeps = {
   getRpcClient: () => LaceTransport | null;
   getRegistryModules: () => RegistryModule[];
   getUserOrgs: () => Array<{ slug: string; name: string; role: string }>;
   getCanvasView: () => CanvasView | null;
+  awaitNextView: () => Promise<CanvasView | null>;
 };
 
 // ── Tool Registration ──
@@ -145,25 +154,35 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        // PlaceModule: single RPC — CLI fetches the bundle, places the module,
-        // and handles layout positioning server-side.
         const existingNodes = deps.getCanvasView()?.nodes ?? [];
         const existingIds = new Set(existingNodes.map((n) => n.id));
 
-        const canvasView = await engineResult.client.placeModule({
-          name: match.name,
-          system: match.system,
-          version: versionToAdd,
-          organization: matchOrg,
-        });
+        const { result, view } = await applyActionAndAwaitView(
+          engineResult.client,
+          {
+            place_module: {
+              name: match.name,
+              system: match.system,
+              version: versionToAdd,
+              organization: matchOrg ?? '',
+              position: undefined,
+            },
+          },
+          deps.awaitNextView,
+        );
 
-        const newNodes = canvasView.nodes.filter((n) => !existingIds.has(n.id));
+        if (!result.success) {
+          return {
+            content: `Failed to add module: ${applyReason(result)}`,
+            isError: true,
+          };
+        }
 
-        // Find the newly added instance ID — try module_key match first, then new node
+        const nodes = view?.nodes ?? [];
+        const newNodes = nodes.filter((n) => !existingIds.has(n.id));
         const instanceId =
-          canvasView.nodes.find((n) => n.module_key?.includes(match?.id))?.id ?? newNodes[0]?.id;
+          nodes.find((n) => n.module_key?.includes(match?.id ?? ''))?.id ?? newNodes[0]?.id;
 
-        // Build response with required inputs so model can set them immediately
         const lines: string[] = [];
 
         if (instanceId) {
@@ -261,7 +280,15 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       }
 
       try {
-        await engineResult.client.deleteInstance({ instance_id: instanceId });
+        const result = await applyAction(engineResult.client, {
+          delete_instance: { instance_id: instanceId },
+        });
+        if (!result.success) {
+          return {
+            content: `Failed to remove instance: ${applyReason(result)}`,
+            isError: true,
+          };
+        }
 
         const lines = [`Removed instance "${instanceId}" from the canvas.`];
         if (warnLines.length > 0) {
@@ -334,21 +361,29 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        await engineResult.client.connect({
-          source: sourceInstance,
-          target: targetInstance,
-          source_output: sourceOutput,
-          target_input: targetInput,
+        const result = await applyAction(engineResult.client, {
+          connect: {
+            source: sourceInstance,
+            target: targetInstance,
+            source_output: sourceOutput,
+            target_input: targetInput,
+          },
         });
+        if (!result.success) {
+          const reason = applyReason(result);
+          const notFound =
+            reason.toLowerCase().includes('not found') || reason.toLowerCase().includes('unknown');
+          return {
+            content: `Failed to connect: ${reason}${notFound ? '\nUse lace_inspect_node on each instance to see exact output/input names. Instance IDs come from the canvas snapshot.' : ''}`,
+            isError: true,
+          };
+        }
         return {
           content: `Connected ${sourceInstance}.${sourceOutput} → ${targetInstance}.${targetInput}`,
         };
       } catch (err: unknown) {
-        const msg = errorMessage(err);
-        const notFound =
-          msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('unknown');
         return {
-          content: `Failed to connect: ${msg}${notFound ? '\nUse lace_inspect_node on each instance to see exact output/input names. Instance IDs come from the canvas snapshot.' : ''}`,
+          content: `Failed to connect: ${errorMessage(err)}`,
           isError: true,
         };
       }
@@ -390,10 +425,12 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        await engineResult.client.disconnect({
-          target: targetInstance,
-          input_name: inputName,
+        const result = await applyAction(engineResult.client, {
+          disconnect: { target: targetInstance, input_name: inputName },
         });
+        if (!result.success) {
+          return { content: `Failed to disconnect: ${applyReason(result)}`, isError: true };
+        }
         return { content: `Disconnected input "${inputName}" on instance "${targetInstance}".` };
       } catch (err: unknown) {
         return { content: `Failed to disconnect: ${errorMessage(err)}`, isError: true };
@@ -456,8 +493,8 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
 
       let mode: string;
       let value: unknown;
-      let variable: string | undefined;
-      let expression: string | undefined;
+      let variable = '';
+      let expression = '';
 
       if (hasValue) {
         mode = 'literal';
@@ -474,14 +511,19 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        await engineResult.client.updateInput({
-          instance_id: instanceId,
-          input_name: inputName,
-          mode,
-          value,
-          variable,
-          expression,
+        const result = await applyAction(engineResult.client, {
+          update_input: {
+            instance_id: instanceId,
+            input_name: inputName,
+            mode: modeToInputMode(mode),
+            value,
+            variable,
+            expression,
+          },
         });
+        if (!result.success) {
+          return { content: `Failed to set input: ${applyReason(result)}`, isError: true };
+        }
 
         const desc =
           mode === 'literal'
@@ -539,7 +581,15 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        await engineResult.client.renameInstance({ old_id: oldId, new_id: newId });
+        const result = await applyAction(engineResult.client, {
+          rename_instance: { old_id: oldId, new_id: newId },
+        });
+        if (!result.success) {
+          return {
+            content: `Failed to rename instance: ${applyReason(result)}`,
+            isError: true,
+          };
+        }
 
         const lines = [`Renamed instance "${oldId}" to "${newId}".`];
 
@@ -605,25 +655,30 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       }
 
       const required = typeof params.required === 'boolean' ? params.required : true;
-      const description = typeof params.description === 'string' ? params.description : undefined;
+      const description = typeof params.description === 'string' ? params.description : '';
       const defaultValue = params.default !== undefined ? params.default : undefined;
 
       const engineResult = requireEngine(deps.getRpcClient);
       if ('error' in engineResult) return engineResult.error;
 
-      // Get existing variables, update or add the one specified
       try {
-        await engineResult.client.setVariables({
-          variables: [
-            {
-              name: varName,
-              type: varType,
-              required,
-              description,
-              default: defaultValue,
-            },
-          ],
+        const result = await applyAction(engineResult.client, {
+          set_variables: {
+            variables: [
+              {
+                name: varName,
+                type: varType,
+                required,
+                description,
+                default_value: defaultValue,
+                validation: undefined,
+              },
+            ],
+          },
         });
+        if (!result.success) {
+          return { content: `Failed to set variable: ${applyReason(result)}`, isError: true };
+        }
 
         const reqLabel = required ? 'required' : 'optional';
         const defLabel =
@@ -654,9 +709,18 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        const canvasView = await engineResult.client.undo();
+        const { result, view } = await applyActionAndAwaitView(
+          engineResult.client,
+          { undo: {} },
+          deps.awaitNextView,
+        );
+        if (!result.success) {
+          return { content: `Failed to undo: ${applyReason(result)}`, isError: true };
+        }
+        const nodeCount = view?.nodes.length ?? 0;
+        const edgeCount = view?.edges.length ?? 0;
         return {
-          content: `Undone. Canvas now has ${canvasView.nodes.length} instance(s) and ${canvasView.edges.length} connection(s).`,
+          content: `Undone. Canvas now has ${nodeCount} instance(s) and ${edgeCount} connection(s).`,
         };
       } catch (err: unknown) {
         return { content: `Failed to undo: ${errorMessage(err)}`, isError: true };
@@ -708,16 +772,35 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       const client = engineResult.client;
 
       try {
-        // Read existing locals, merge, then write back (setLocals replaces the full array)
+        // Read existing locals, merge, then write back (set_locals replaces the full array).
+        // SettingsConfig exposes locals as { name, mode, value_display } (display form);
+        // set_locals' LocalEntry is { name, mode, value, variable, expression }. For
+        // other entries we're preserving, route value_display into the field matching
+        // the mode. Exact round-trip is imperfect for complex literals — a read-typed
+        // surface would be cleaner, but ships the write path correctly in the meantime.
         const settings = await client.querySettings();
-        const existingLocals = (settings.locals ?? []).filter((l) => l.name !== name);
+        const preserved = (settings.locals ?? [])
+          .filter((l) => l.name !== name)
+          .map((l) => ({
+            name: l.name,
+            mode: l.mode,
+            value: l.mode === 'literal' ? (l.value_display as unknown) : undefined,
+            variable: '',
+            expression: l.mode !== 'literal' ? l.value_display : '',
+          }));
         const newLocal = {
           name,
           mode: hasExpression ? 'expression' : 'literal',
           value: hasValue ? value : undefined,
-          expression: hasExpression ? expression : undefined,
+          variable: '',
+          expression: hasExpression ? (expression as string) : '',
         };
-        await client.setLocals({ locals: [...existingLocals, newLocal] });
+        const result = await applyAction(client, {
+          set_locals: { locals: [...preserved, newLocal] },
+        });
+        if (!result.success) {
+          return { content: `Failed to set local: ${applyReason(result)}`, isError: true };
+        }
 
         const display = hasExpression
           ? `expression \`${expression}\``
@@ -775,7 +858,12 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
           ...existingEnvs,
           [environment]: { ...(existingEnvs[environment] ?? {}), ...variables },
         };
-        await client.setEnvironments({ environments: mergedEnvs });
+        const result = await applyAction(client, {
+          set_environments: { environments: mergedEnvs, environment_backends: {} },
+        });
+        if (!result.success) {
+          return { content: `Failed to set environment: ${applyReason(result)}`, isError: true };
+        }
 
         const keys = Object.keys(variables).join(', ');
         return {
@@ -829,12 +917,16 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
 
       try {
         const existingGroupIds = new Set((deps.getCanvasView()?.groups ?? []).map((g) => g.id));
-        const canvasView = await engineResult.client.createGroup({
-          label,
-          node_ids: instanceIds,
-        });
+        const { result, view } = await applyActionAndAwaitView(
+          engineResult.client,
+          { create_group: { label, node_ids: instanceIds } },
+          deps.awaitNextView,
+        );
+        if (!result.success) {
+          return { content: `Failed to create group: ${applyReason(result)}`, isError: true };
+        }
 
-        const newGroup = canvasView.groups.find((g) => !existingGroupIds.has(g.id));
+        const newGroup = view?.groups.find((g) => !existingGroupIds.has(g.id));
         const groupId = newGroup?.id ?? 'unknown';
         return {
           content: `Created group "${label}" (id: ${groupId}) with ${instanceIds.length} instances: ${instanceIds.join(', ')}.`,
@@ -873,7 +965,12 @@ export function registerGraphWriteTools(registry: ToolRegistry, deps: GraphWrite
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        await engineResult.client.deleteGroup({ group_id: groupId });
+        const result = await applyAction(engineResult.client, {
+          delete_group: { group_id: groupId },
+        });
+        if (!result.success) {
+          return { content: `Failed to ungroup: ${applyReason(result)}`, isError: true };
+        }
         return { content: `Removed group "${groupId}". All instances remain on the canvas.` };
       } catch (err: unknown) {
         return { content: `Failed to ungroup: ${errorMessage(err)}`, isError: true };

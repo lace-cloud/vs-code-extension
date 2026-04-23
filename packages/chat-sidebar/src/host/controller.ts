@@ -3,9 +3,11 @@
 //
 // Responsibilities here — and only here:
 //   1. Build the VS Code adapter + webview transport.
-//   2. Maintain the latest CanvasView by consuming the engine's
-//      Subscribe stream (so tools can read it synchronously via
-//      `deps.getCanvasView`).
+//   2. Consume the engine's Subscribe stream (BundleStateEvent), project
+//      BundleState locally into a CanvasView, and expose both:
+//        - `getCanvasView()` — synchronous snapshot of the latest view
+//        - `awaitNextView()` — promise resolving on the next state update
+//      so tools can read synchronously or wait for post-mutation state.
 //   3. Own the engine session lifecycle for the chat (open session,
 //      refresh context summary, mount proactivity).
 //   4. Register the VS Code-side tool set on a per-instance
@@ -13,8 +15,7 @@
 //   5. Delegate the agentic loop to `AgentController` from chat-core.
 //
 // No agentic-loop logic, no message codecs, no rule evaluation. Those
-// live in chat-core. When we port to JetBrains, this file is the
-// shape the JetBrains controller mirrors — the rest is unchanged.
+// live in chat-core.
 
 import {
   AgentController,
@@ -24,8 +25,10 @@ import {
   ProactivityWatcher,
   type ToolRegistry,
 } from '@lace-cloud/chat-core';
-import type { CanvasView, EngineEvent, LaceTransport, RegistryModule } from '@lace-cloud/host';
-import { convertCanvasView } from '@lace-cloud/host';
+import type { BundleState, LaceTransport, RegistryModule } from '@lace-cloud/host';
+import { SubscribeHandler } from '@lace-cloud/host';
+import type { CanvasView } from '@lace-cloud/proto';
+import { parseModuleKey, projectCanvasView } from '@lace-cloud/proto';
 import * as vscode from 'vscode';
 import { createVsCodeChatAdapter } from '../vscode-adapter';
 import { createVsCodeWebviewTransport } from '../vscode-webview-transport';
@@ -49,8 +52,9 @@ export class ChatController {
   private readonly agent: AgentController;
   private readonly outputChannel: vscode.OutputChannel;
   private latestView: CanvasView | null = null;
-  private subscribeHandler: ReturnType<LaceTransport['subscribeStream']> | null = null;
+  private subscribeHandler: SubscribeHandler | null = null;
   private proactivity: ProactivityWatcher | null = null;
+  private stateUpdateWaiters: Array<(view: CanvasView | null) => void> = [];
 
   constructor(
     context: vscode.ExtensionContext,
@@ -94,10 +98,13 @@ export class ChatController {
 
   dispose(): void {
     this.agent.dispose();
-    this.subscribeHandler?.cancel();
+    this.subscribeHandler?.stop();
     this.subscribeHandler = null;
     this.proactivity?.stop();
     this.proactivity = null;
+    // Reject any pending awaiters so callers don't hang on dispose.
+    for (const resolve of this.stateUpdateWaiters) resolve(null);
+    this.stateUpdateWaiters = [];
   }
 
   async clearHistory(): Promise<void> {
@@ -108,12 +115,26 @@ export class ChatController {
     return this.latestView;
   }
 
+  /**
+   * Returns a promise that resolves on the NEXT BundleState arrival on
+   * the Subscribe stream (with the newly-projected CanvasView, or null
+   * if the stream ended / errored before the next event). Tools that
+   * mutate state via applyAction call this BEFORE applyAction to set
+   * up the waiter, then await the promise AFTER applyAction returns.
+   */
+  awaitNextView(): Promise<CanvasView | null> {
+    return new Promise((resolve) => {
+      this.stateUpdateWaiters.push(resolve);
+    });
+  }
+
   // ── Private ──
 
   private registerTools(): void {
     const deps = {
       ...this.externalDeps,
       getCanvasView: () => this.latestView,
+      awaitNextView: () => this.awaitNextView(),
     };
     registerRegistryTools(this.registry, deps);
     registerGraphReadTools(this.registry, deps);
@@ -126,10 +147,6 @@ export class ChatController {
     if (this.subscribeHandler) return;
     const transport = this.externalDeps.getRpcClient();
     if (!transport?.sessionId) {
-      // Attempt a lazy session-open so the Subscribe stream is
-      // available from the first turn. If no workspace is open or
-      // the engine isn't running, the runTurn path surfaces the
-      // error to the webview.
       void this.ensureSession().then(() => this.openSubscribe());
       return;
     }
@@ -145,10 +162,11 @@ export class ChatController {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!laceDir || !workspaceFolder) return null;
 
-    const { session_id } = await transport.sessionOpen({
+    const { session_id, state } = await transport.sessionOpen({
       file_path: laceDir,
       workspace_name: workspaceFolder.name,
     });
+    this.adoptState(state);
     return session_id;
   }
 
@@ -159,15 +177,20 @@ export class ChatController {
       return;
     }
 
-    this.subscribeHandler = transport.subscribeStream(transport.sessionId);
-    this.subscribeHandler.on('data', (event: EngineEvent) => this.handleEngineEvent(event));
-    this.subscribeHandler.on('end', () => {
-      this.subscribeHandler = null;
-    });
-    this.subscribeHandler.on('error', () => {
-      this.subscribeHandler = null;
-      // Avoid tight retry loops — if the engine dies mid-session, the
-      // next user turn will attempt to re-establish the session.
+    this.subscribeHandler = new SubscribeHandler();
+    this.subscribeHandler.start(transport.subscribeStream(transport.sessionId), {
+      onStateUpdated: (state) => this.adoptState(state),
+      onGenerateProgress: () => {},
+      onGenerateSuccess: () => {},
+      onGenerateError: () => {},
+      onEnd: () => {
+        this.subscribeHandler = null;
+      },
+      onError: () => {
+        this.subscribeHandler = null;
+        // Avoid tight retry loops — if the engine dies mid-session, the
+        // next user turn will attempt to re-establish the session.
+      },
     });
 
     this.proactivity = new ProactivityWatcher({
@@ -183,11 +206,21 @@ export class ChatController {
     this.proactivity.start();
   }
 
-  private handleEngineEvent(event: EngineEvent): void {
-    if (event.state_updated?.view) {
-      this.latestView = convertCanvasView(event.state_updated.view);
-      this.postContextSummary();
-    }
+  private adoptState(state: BundleState): void {
+    if (!state.bundle) return;
+    const { id: moduleName } = parseModuleKey(state.bundle.entry);
+    const view = projectCanvasView(state.bundle, state.layouts ?? {}, {
+      moduleName,
+      canUndo: state.can_undo,
+      canRedo: state.can_redo,
+      isDirty: state.is_dirty,
+    });
+    this.latestView = view;
+    this.postContextSummary();
+
+    const waiters = this.stateUpdateWaiters;
+    this.stateUpdateWaiters = [];
+    for (const resolve of waiters) resolve(view);
   }
 
   private postContextSummary(): void {

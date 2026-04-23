@@ -1,34 +1,31 @@
 import { createToolRegistry, type ToolRegistry } from '@lace-cloud/chat-core';
 import type { LaceTransport, RegistryModule, RenderError } from '@lace-cloud/host';
+import type { CanvasView } from '@lace-cloud/proto';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { type GenerateToolDeps, registerGenerateTools } from '../host/tools/generate-tools';
 import { registerGraphReadTools } from '../host/tools/graph-read-tools';
 import { type GraphWriteDeps, registerGraphWriteTools } from '../host/tools/graph-write-tools';
 import { makeCanvasView, makeEdge, makeNode } from './helpers';
 
-// ── Mock RPC client ──
+// ── Mock RPC client (post-P10: single applyAction surface + read queries) ──
 
 function makeMockClient(overrides: Record<string, unknown> = {}) {
   return {
-    placeModule: vi
-      .fn()
-      .mockResolvedValue(makeCanvasView([makeNode('vpc', 'module', 'aws/vpc@v1.0.0')])),
+    applyAction: vi.fn().mockResolvedValue({ success: true, errors: [] }),
     inspectModule: vi.fn().mockResolvedValue({
       name: 'aws/vpc',
       system: 'aws',
       version: 'v1.0.0',
       module_interface: { inputs: [], outputs: [] },
     }),
-    updateInput: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
-    autoConnect: vi
-      .fn()
-      .mockResolvedValue(
-        makeCanvasView(
-          [makeNode('vpc'), makeNode('subnet')],
-          [makeEdge('vpc', 'subnet', 'vpc_id', 'vpc_id')],
-        ),
-      ),
-    syncLayout: vi.fn().mockResolvedValue({}),
+    queryNodeConfig: vi.fn().mockResolvedValue({
+      instance_id: 'vpc',
+      inputs: [],
+      outputs: [],
+      sibling_ids: [],
+      depends_on: [],
+      available_variables: [],
+    }),
     queryValidate: vi.fn().mockResolvedValue({ errors: [] as RenderError[] }),
     querySettings: vi.fn().mockResolvedValue({
       terraform: { required_version: '', required_providers: [] },
@@ -36,14 +33,21 @@ function makeMockClient(overrides: Record<string, unknown> = {}) {
       locals: [],
       environments: {},
     }),
-    setLocals: vi.fn().mockResolvedValue(makeCanvasView([makeNode('vpc')])),
-    setEnvironments: vi.fn().mockResolvedValue({}),
     sessionGenerate: vi.fn().mockResolvedValue({
       files_written: ['main.tf'],
       diagnostics: [],
     }),
     ...overrides,
   };
+}
+
+/**
+ * Next-view stub for tests: tools that call `applyActionAndAwaitView`
+ * receive this view after the applyAction mock resolves. Tests that
+ * need to inspect the post-mutation view override this per-assertion.
+ */
+function makeAwaitNextView(view: CanvasView | null) {
+  return () => Promise.resolve(view);
 }
 
 // ── Registry module fixtures ──
@@ -80,13 +84,16 @@ const testModules: RegistryModule[] = [
 let mockClient: ReturnType<typeof makeMockClient>;
 let registry: ToolRegistry;
 
-function makeWriteDeps(): GraphWriteDeps {
+function makeWriteDeps(
+  nextView: CanvasView | null = makeCanvasView([makeNode('vpc', 'module', 'aws/vpc@v1.0.0')]),
+): GraphWriteDeps {
   mockClient = makeMockClient();
   return {
     getRpcClient: () => mockClient as unknown as LaceTransport,
     getRegistryModules: () => testModules,
     getUserOrgs: () => [],
     getCanvasView: () => null,
+    awaitNextView: makeAwaitNextView(nextView),
   };
 }
 
@@ -102,20 +109,22 @@ describe('write tools', () => {
   });
 
   describe('lace_add_module', () => {
-    test('adds module by exact name via placeModule RPC', async () => {
+    test('adds module by exact name via applyAction RPC', async () => {
       const handler = registry.getHandler('lace_add_module')!;
       const result = await handler({ name: 'aws/vpc' });
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('aws/vpc');
       expect(result.content).toContain('instance **"vpc"**');
-      expect(mockClient.placeModule).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'aws/vpc',
-          system: 'aws',
-          version: 'v1.0.0',
-        }),
-      );
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        {
+          place_module: expect.objectContaining({
+            name: 'aws/vpc',
+            system: 'aws',
+            version: 'v1.0.0',
+          }),
+        },
+      ]);
     });
 
     test('resolves single fuzzy match', async () => {
@@ -124,13 +133,15 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('azure/resource-group');
-      expect(mockClient.placeModule).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'azure/resource-group',
-          system: 'azure',
-          version: 'v2.0.0',
-        }),
-      );
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        {
+          place_module: expect.objectContaining({
+            name: 'azure/resource-group',
+            system: 'azure',
+            version: 'v2.0.0',
+          }),
+        },
+      ]);
     });
 
     test('disambiguates multiple fuzzy matches', async () => {
@@ -141,15 +152,14 @@ describe('write tools', () => {
       expect(result.content).toContain('Multiple modules match');
       expect(result.content).toContain('aws/vpc');
       expect(result.content).toContain('aws/subnet');
-      expect(mockClient.placeModule).not.toHaveBeenCalled();
+      expect(mockClient.applyAction).not.toHaveBeenCalled();
     });
 
     test('passes org provenance when module found in user org', async () => {
-      // Simulate: private module not in local cache, found via RPC in org
       mockClient = makeMockClient({
         listRegistryModules: vi
           .fn()
-          .mockResolvedValueOnce({ modules: [] }) // public: not found
+          .mockResolvedValueOnce({ modules: [] })
           .mockResolvedValueOnce({
             modules: [
               {
@@ -164,9 +174,12 @@ describe('write tools', () => {
 
       const deps: GraphWriteDeps = {
         getRpcClient: () => mockClient as unknown as LaceTransport,
-        getRegistryModules: () => [], // empty local cache — forces RPC search
+        getRegistryModules: () => [],
         getUserOrgs: () => [{ slug: 'acme-corp', name: 'Acme Corp', role: 'member' }],
         getCanvasView: () => null,
+        awaitNextView: makeAwaitNextView(
+          makeCanvasView([makeNode('custom-networking', 'module', 'aws/custom-networking@v1.0.0')]),
+        ),
       };
       registry = createToolRegistry();
       registerGraphWriteTools(registry, deps);
@@ -179,13 +192,16 @@ describe('write tools', () => {
       const result = await handler({ name: 'aws/custom-networking' });
 
       expect(result.isError).toBeFalsy();
-      expect(mockClient.placeModule).toHaveBeenCalledWith(
-        expect.objectContaining({ organization: 'acme-corp' }),
-      );
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        { place_module: expect.objectContaining({ organization: 'acme-corp' }) },
+      ]);
     });
 
-    test('surfaces engine error when placeModule fails', async () => {
-      mockClient.placeModule.mockRejectedValue(new Error('module not found in registry'));
+    test('surfaces engine error when applyAction rejects', async () => {
+      mockClient.applyAction.mockResolvedValue({
+        success: false,
+        errors: [{ instance_id: '', input_name: '', message: 'module not found in registry' }],
+      });
       const handler = registry.getHandler('lace_add_module')!;
       const result = await handler({ name: 'aws/vpc' });
 
@@ -205,14 +221,15 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('literal true');
-      expect(mockClient.updateInput).toHaveBeenCalledWith({
-        instance_id: 'vpc',
-        input_name: 'enable_dns',
-        mode: 'literal',
-        value: true,
-        variable: undefined,
-        expression: undefined,
-      });
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        {
+          update_input: expect.objectContaining({
+            instance_id: 'vpc',
+            input_name: 'enable_dns',
+            value: true,
+          }),
+        },
+      ]);
     });
 
     test('sets variable reference', async () => {
@@ -225,14 +242,15 @@ describe('write tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('variable "vpc_cidr"');
-      expect(mockClient.updateInput).toHaveBeenCalledWith({
-        instance_id: 'vpc',
-        input_name: 'cidr_block',
-        mode: 'variable',
-        value: undefined,
-        variable: 'vpc_cidr',
-        expression: undefined,
-      });
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        {
+          update_input: expect.objectContaining({
+            instance_id: 'vpc',
+            input_name: 'cidr_block',
+            variable: 'vpc_cidr',
+          }),
+        },
+      ]);
     });
 
     test('returns error when no binding type provided', async () => {
@@ -272,6 +290,12 @@ describe('generate tools', () => {
       getRpcClient: () => mockClient as unknown as LaceTransport,
       getLaceDir: () => '/tmp/test-workspace/.lace',
       getCanvasView: () => null,
+      awaitNextView: makeAwaitNextView(
+        makeCanvasView(
+          [makeNode('vpc'), makeNode('subnet')],
+          [makeEdge('vpc', 'subnet', 'vpc_id', 'vpc_id')],
+        ),
+      ),
     };
     registerGenerateTools(registry, deps);
   });
@@ -287,16 +311,21 @@ describe('generate tools', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('Auto-connected 1 wire(s)');
       expect(result.content).toContain('vpc.vpc_id');
-      expect(mockClient.autoConnect).toHaveBeenCalledWith({
-        source: 'vpc',
-        target: 'subnet',
-      });
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        { auto_connect: { source: 'vpc', target: 'subnet' } },
+      ]);
     });
 
     test('reports no match when no edges returned', async () => {
-      mockClient.autoConnect.mockResolvedValue(
-        makeCanvasView([makeNode('vpc'), makeNode('subnet')]),
-      );
+      mockClient = makeMockClient();
+      registry = createToolRegistry();
+      const deps: GenerateToolDeps = {
+        getRpcClient: () => mockClient as unknown as LaceTransport,
+        getLaceDir: () => '/tmp/test-workspace/.lace',
+        getCanvasView: () => null,
+        awaitNextView: makeAwaitNextView(makeCanvasView([makeNode('vpc'), makeNode('subnet')])),
+      };
+      registerGenerateTools(registry, deps);
       const handler = registry.getHandler('lace_auto_connect')!;
       const result = await handler({
         source_instance: 'vpc',
@@ -343,6 +372,7 @@ describe('generate tools', () => {
         getRpcClient: () => mockClient as unknown as LaceTransport,
         getLaceDir: () => undefined,
         getCanvasView: () => null,
+        awaitNextView: makeAwaitNextView(null),
       };
       registry = createToolRegistry();
       registerGenerateTools(registry, deps);
@@ -372,9 +402,19 @@ describe('settings tools', () => {
       expect(result.content).toContain('region');
       expect(result.content).toContain('us-east-1');
       expect(mockClient.querySettings).toHaveBeenCalled();
-      expect(mockClient.setLocals).toHaveBeenCalledWith({
-        locals: [{ name: 'region', mode: 'literal', value: 'us-east-1', expression: undefined }],
-      });
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        {
+          set_locals: {
+            locals: [
+              expect.objectContaining({
+                name: 'region',
+                mode: 'literal',
+                value: 'us-east-1',
+              }),
+            ],
+          },
+        },
+      ]);
     });
 
     test('sets expression local', async () => {
@@ -383,11 +423,19 @@ describe('settings tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content).toContain('expression');
-      expect(mockClient.setLocals).toHaveBeenCalledWith({
-        locals: [
-          { name: 'prefix', mode: 'expression', value: undefined, expression: 'var.project' },
-        ],
-      });
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        {
+          set_locals: {
+            locals: [
+              expect.objectContaining({
+                name: 'prefix',
+                mode: 'expression',
+                expression: 'var.project',
+              }),
+            ],
+          },
+        },
+      ]);
     });
 
     test('returns error when neither value nor expression provided', async () => {
@@ -411,9 +459,13 @@ describe('settings tools', () => {
       expect(result.content).toContain('staging');
       expect(result.content).toContain('region');
       expect(mockClient.querySettings).toHaveBeenCalled();
-      expect(mockClient.setEnvironments).toHaveBeenCalledWith({
-        environments: { staging: { region: 'us-west-2', instance_type: 't3.small' } },
-      });
+      expect(mockClient.applyAction).toHaveBeenCalledWith([
+        {
+          set_environments: expect.objectContaining({
+            environments: { staging: { region: 'us-west-2', instance_type: 't3.small' } },
+          }),
+        },
+      ]);
     });
 
     test('returns error when environment name missing', async () => {
