@@ -47,6 +47,16 @@ jobs:
   host-e2e:
     # VS Code Electron tests need a display; xvfb-run wraps the test
     # command to provide one on the headless CI host.
+    #
+    # Skipped for Dependabot PRs. GitHub withholds Actions secrets from
+    # Dependabot-opened PRs by design (prevents a compromised transitive
+    # dep from exfiltrating credentials). host-e2e pulls the lace CLI
+    # test bundle from a private R2 bucket — without those secrets the
+    # step fails hard. Dependabot bumps only touch action refs and
+    # package versions; lint + unit-tests provide sufficient signal, and
+    # the first human-authored develop push after merge re-runs host-e2e
+    # with full secrets before anything reaches main.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -73,7 +83,7 @@ jobs:
           sudo apt-get install -y xvfb libnss3 libgbm1 libasound2t64
 
       - name: Cache VS Code test download
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: packages/host-e2e/.vscode-test
           key: vscode-test-${{ runner.os }}-stable-v1
@@ -91,9 +101,11 @@ jobs:
     steps:
       - name: Assert upstream jobs succeeded
         run: |
+          # host-e2e is allowed to be 'skipped' (Dependabot PRs only).
+          # lint + unit-tests must always succeed.
           if [ "${{ needs.lint.result }}" != "success" ] || \
              [ "${{ needs.unit-tests.result }}" != "success" ] || \
-             [ "${{ needs.host-e2e.result }}" != "success" ]; then
+             { [ "${{ needs.host-e2e.result }}" != "success" ] && [ "${{ needs.host-e2e.result }}" != "skipped" ]; }; then
             echo "::error::CI failed (lint=${{ needs.lint.result }}, unit-tests=${{ needs.unit-tests.result }}, host-e2e=${{ needs.host-e2e.result }})"
             exit 1
           fi

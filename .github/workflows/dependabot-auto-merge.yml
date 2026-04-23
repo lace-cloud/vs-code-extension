@@ -1,0 +1,39 @@
+name: Dependabot auto-merge
+
+# Auto-merge policy for Dependabot PRs:
+#   - semver-minor + semver-patch: enable auto-merge (squash). GitHub
+#     waits for all required checks + branch-protection rules to
+#     pass before merging; we're not bypassing anything. If CI goes
+#     red, the PR stays open for human review.
+#   - semver-major: leave open for explicit review.
+#
+# Runs on `pull_request_target` so the auto-merge enablement runs
+# with write permissions from the base ref, not the (untrusted) PR
+# head. We don't check out PR code — only fetch metadata + call gh —
+# so the elevated permissions don't touch PR contents.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Enable auto-merge for minor + patch
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --squash --auto "$PR_URL"
