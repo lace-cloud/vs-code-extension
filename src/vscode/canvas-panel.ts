@@ -1,7 +1,6 @@
 import * as path from 'node:path';
 import {
-  type CanvasView,
-  type Diagnostic,
+  type BundleState,
   type HostToWebview,
   type LaceTransport,
   requireClient,
@@ -17,21 +16,7 @@ const LACE_DIR = '.lace';
 
 let canvasPanel: vscode.WebviewPanel | undefined;
 let isGenerating = false;
-let latestCanvasView: CanvasView | undefined;
 let subscribeHandler: SubscribeHandler | null = null;
-
-function isCanvasView(value: unknown): value is CanvasView {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'nodes' in value &&
-    Array.isArray((value as CanvasView).nodes)
-  );
-}
-
-export function getLatestCanvasView(): CanvasView | undefined {
-  return latestCanvasView;
-}
 
 export function getLaceDir(): string | undefined {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -41,11 +26,6 @@ export function getLaceDir(): string | undefined {
 
 function postToWebview(panel: vscode.WebviewPanel, msg: HostToWebview) {
   panel.webview.postMessage(msg);
-}
-
-export function publishCanvasViewToActivePanel(state: CanvasView): void {
-  if (!canvasPanel) return;
-  postToWebview(canvasPanel, { command: 'loadState', state });
 }
 
 function requireTransport(server: ServerManager, action: string): LaceTransport {
@@ -63,19 +43,28 @@ export async function addModuleToActiveCanvas(
     vscode.window.showWarningMessage('No canvas open.');
     return;
   }
-  const panel = canvasPanel;
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: `Adding ${name}...` },
     async () => {
       try {
         const transport = requireTransport(server, 'place module');
-        const view = await transport.placeModule({ name, system, version, organization });
-        latestCanvasView = view;
-        postToWebview(panel, {
-          command: 'loadState',
-          state: view,
-          viewportIntent: { kind: 'fit-all', padding: 0.2, duration: 300 },
-        });
+        const result = await transport.applyAction([
+          {
+            place_module: {
+              name,
+              system,
+              version,
+              organization: organization ?? '',
+              position: undefined,
+            },
+          },
+        ]);
+        if (!result.success) {
+          const reason = result.errors.map((e) => e.message).join('; ') || 'unknown';
+          vscode.window.showErrorMessage(`Add module rejected: ${reason}`);
+        }
+        // Post-mutation BundleState arrives via Subscribe and is
+        // forwarded to the webview automatically; no optimistic push.
       } catch (err: unknown) {
         handleRpcError(err, 'placeModule', 'add module to canvas');
       }
@@ -97,7 +86,7 @@ export async function triggerGenerateOnActiveCanvas(server: ServerManager) {
       output_dir: laceDir,
       options: { dry_run: false, format: true, validate: true, overwrite: true },
     });
-    const errors = (result?.diagnostics ?? []).filter((d: Diagnostic) => d.severity === 'error');
+    const errors = (result?.diagnostics ?? []).filter((d) => d.severity === 'error');
     if (errors.length > 0) {
       postToWebview(panel, {
         command: 'generateError',
@@ -131,8 +120,6 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 `.trim();
 
-// Body bg uses the user's editor background so the brief flash before
-// the React canvas mounts theme-matches VS Code (light/dark/HC).
 const CANVAS_BODY_STYLE = `body { margin: 0; padding: 0; height: 100vh; background: var(--vscode-editor-background); display: flex; flex-direction: column; }`;
 
 export async function openCanvas(context: vscode.ExtensionContext, server: ServerManager) {
@@ -199,25 +186,27 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
   });
   const safetyTimeout = setTimeout(resolveReady!, 10_000);
 
+  function forwardState(state: BundleState) {
+    postToWebview(panel, { command: 'loadState', state });
+  }
+
   panel.webview.onDidReceiveMessage(
     async (msg: WebviewToHost | { command: string; [key: string]: unknown }) => {
       switch (msg.command) {
         case 'webviewReady': {
           try {
             const transport = requireTransport(server, 'session/open');
-            const { view } = await transport.sessionOpen({
+            const { state } = await transport.sessionOpen({
               file_path: laceDir,
               workspace_name: folderName,
             });
-            latestCanvasView = view;
-            postToWebview(panel, { command: 'loadState', state: view });
+            forwardState(state);
             const sessionId = transport.sessionId;
             if (sessionId) {
               subscribeHandler = new SubscribeHandler();
               subscribeHandler.start(transport.subscribeStream(sessionId), {
-                onStateUpdated: (v) => {
-                  latestCanvasView = v;
-                  postToWebview(panel, { command: 'loadState', state: v });
+                onStateUpdated: (nextState) => {
+                  forwardState(nextState);
                 },
                 onGenerateProgress: (stage) => {
                   postToWebview(panel, {
@@ -257,7 +246,6 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
           try {
             const transport = requireTransport(server, method);
             const result = await transport.dispatch(method, params);
-            if (isCanvasView(result)) latestCanvasView = result;
             postToWebview(panel, { command: 'engineResult', requestId, result });
           } catch (err: unknown) {
             postToWebview(panel, {
