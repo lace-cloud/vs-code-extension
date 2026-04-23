@@ -16,7 +16,7 @@ runs:
     # Version comes from package.json "packageManager" field (single
     # source of truth). Specifying it here too would cause
     # pnpm/action-setup to error with "Multiple versions of pnpm".
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v6
 
     - uses: actions/setup-node@v6
       with:
