@@ -41,6 +41,16 @@
           "id": "laceChat",
           "name": "Chat",
           "type": "webview"
+        },
+        {
+          "id": "laceDeploy",
+          "name": "Deploy",
+          "type": "webview"
+        },
+        {
+          "id": "laceDeployRuns",
+          "name": "Recent runs",
+          "type": "tree"
         }
       ]
     },
@@ -102,6 +112,15 @@
       {
         "command": "lace.clearChatHistory",
         "title": "Lace: Clear Chat History"
+      },
+      {
+        "command": "lace.deploy.refreshRuns",
+        "title": "Refresh runs",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lace.deploy.showRun",
+        "title": "Lace: Show run"
       }
     ],
     "configuration": {
@@ -133,6 +152,11 @@
           ],
           "default": "on",
           "description": "Enable rule-based suggestions when state changes between chat turns."
+        },
+        "lace.portalUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of your Lace portal (e.g., https://portal.lace.cloud). Used for 'Open in portal' deep-links in the Deploy panel. Leave empty to disable."
         }
       }
     },
@@ -141,6 +165,11 @@
         {
           "command": "lace.refreshRegistry",
           "when": "view == laceRegistry",
+          "group": "navigation"
+        },
+        {
+          "command": "lace.deploy.refreshRuns",
+          "when": "view == laceDeployRuns",
           "group": "navigation"
         }
       ]
