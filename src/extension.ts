@@ -229,9 +229,9 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(DeployPanelProvider.viewType, deployPanelProvider),
     vscode.window.registerTreeDataProvider('laceDeployRuns', runsTreeProvider),
     vscode.commands.registerCommand('lace.deploy.refreshRuns', () => runsTreeProvider.refresh()),
-    vscode.commands.registerCommand('lace.deploy.showRun', (runId: string) =>
-      deployPanelProvider.showRun(runId),
-    ),
+    vscode.commands.registerCommand('lace.deploy.showRun', (runId: string) => {
+      void deployPanelProvider.showRun(runId);
+    }),
   );
 }
 

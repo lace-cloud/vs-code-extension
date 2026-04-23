@@ -4,9 +4,9 @@
 // recent-runs TreeView lives as a sibling view in the same
 // container.
 //
-// Architecture note: the extension shells out to the CLI for every
-// control-plane operation (see deploy/cli.ts for the rationale).
-// No direct HTTP to the API; auth stays in the CLI.
+// Architecture: the extension shells out to the CLI for every
+// control-plane operation (see deploy/cli.ts). No direct HTTP to
+// the API; auth stays in the CLI.
 
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -21,16 +21,10 @@ import {
   spawnApply,
   streamRunLogs,
 } from './cli';
+import type { DeployHostMessage, DeployPanelMessage, DeployStateSnapshot } from './messages';
 import type { RunsTreeProvider } from './runs-tree-provider';
 
 const POLL_INTERVAL_MS = 2000;
-
-type StateSnapshot = {
-  stacks: Stack[];
-  activeStackId: string | null;
-  activeRun: Run | null;
-  errorMessage: string | null;
-};
 
 export class DeployPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'laceDeploy';
@@ -43,6 +37,7 @@ export class DeployPanelProvider implements vscode.WebviewViewProvider {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private logChannels = new Map<string, vscode.OutputChannel>();
   private logStreams = new Map<string, { dispose: () => void }>();
+  private applyStartedAt: number | null = null;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -57,17 +52,20 @@ export class DeployPanelProvider implements vscode.WebviewViewProvider {
         vscode.Uri.joinPath(this.context.extensionUri, 'images'),
       ],
     };
-    view.webview.html = this.buildHtml(view.webview);
+    view.webview.html = buildWebviewHtml(this.context, view.webview, {
+      scriptFilename: 'deploy-webview.js',
+      title: 'Lace Deploy',
+    });
     this.view = view;
 
-    view.webview.onDidReceiveMessage(async (msg) => {
+    view.webview.onDidReceiveMessage(async (msg: DeployPanelMessage) => {
       switch (msg.command) {
         case 'ready':
           await this.refreshStacks();
           this.postSnapshot();
           break;
         case 'selectStack':
-          this.setActiveStack((msg.stackId as string) || null);
+          this.setActiveStack(msg.stackId);
           break;
         case 'apply':
           this.triggerApply();
@@ -77,7 +75,7 @@ export class DeployPanelProvider implements vscode.WebviewViewProvider {
           this.postSnapshot();
           break;
         case 'openRunInPortal':
-          this.openRunInPortal(msg.runId as string);
+          await this.openRunInPortal(msg.runId);
           break;
       }
     });
@@ -90,131 +88,23 @@ export class DeployPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  showRun(runId: string): void {
-    this.openRunInPortal(runId);
-  }
-
-  private buildHtml(webview: vscode.Webview): string {
-    // Inline a minimal React-free webview — the deploy panel is form-shaped,
-    // no canvas, no shared UI components. Keeping it script-minimal avoids
-    // pulling the rspack chain through another bundle.
-    const nonce = Math.random().toString(36).slice(2);
-    const script = `
-      const vscode = acquireVsCodeApi();
-      const $ = (id) => document.getElementById(id);
-
-      vscode.postMessage({ command: 'ready' });
-
-      window.addEventListener('message', (ev) => {
-        const msg = ev.data;
-        if (msg?.command === 'snapshot') renderSnapshot(msg.state);
-      });
-
-      function renderSnapshot(state) {
-        const picker = $('stack-picker');
-        picker.innerHTML = '';
-        const empty = document.createElement('option');
-        empty.value = '';
-        empty.textContent = '— select a stack —';
-        picker.appendChild(empty);
-        for (const s of state.stacks) {
-          const opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = s.slug + ' — ' + s.name;
-          if (s.id === state.activeStackId) opt.selected = true;
-          picker.appendChild(opt);
-        }
-        $('apply-btn').disabled = !state.activeStackId;
-        const err = $('error');
-        err.style.display = state.errorMessage ? 'block' : 'none';
-        err.textContent = state.errorMessage || '';
-
-        const run = $('active-run');
-        if (state.activeRun) {
-          const r = state.activeRun;
-          run.style.display = 'block';
-          $('run-id').textContent = r.id;
-          $('run-status').textContent = r.status;
-          $('run-kind').textContent = r.kind;
-          const counts = 'adds ' + (r.planResourceAdd || 0) +
-                         ', changes ' + (r.planResourceChange || 0) +
-                         ', destroys ' + (r.planResourceDestroy || 0);
-          $('run-counts').textContent = counts;
-          $('portal-btn').style.display = r.status === 'awaiting_approval' ? 'inline-block' : 'none';
-        } else {
-          run.style.display = 'none';
-        }
+  /**
+   * Loads a run as the panel's active run (pulls its metadata, opens a
+   * log stream, starts polling). Called by the Recent-runs TreeView
+   * when a row is clicked so the user can attach to a historical run
+   * without re-triggering an apply.
+   */
+  async showRun(runId: string): Promise<void> {
+    try {
+      const run = await getRun(runId);
+      this.setActiveRun(run);
+      if (this.activeStackId !== run.stackId) {
+        this.setActiveStack(run.stackId);
       }
-
-      $('stack-picker').addEventListener('change', (ev) => {
-        vscode.postMessage({ command: 'selectStack', stackId: ev.target.value });
-      });
-      $('apply-btn').addEventListener('click', () => {
-        vscode.postMessage({ command: 'apply' });
-      });
-      $('refresh-btn').addEventListener('click', () => {
-        vscode.postMessage({ command: 'refreshStacks' });
-      });
-      $('portal-btn').addEventListener('click', () => {
-        const id = $('run-id').textContent;
-        if (id) vscode.postMessage({ command: 'openRunInPortal', runId: id });
-      });
-    `.trim();
-
-    const body = `
-      <style>
-        body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); }
-        label { display: block; margin-top: 10px; font-size: 12px; color: var(--vscode-descriptionForeground); }
-        select, button { width: 100%; padding: 6px 10px; margin-top: 4px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: 1px solid var(--vscode-contrastBorder, transparent); border-radius: 3px; }
-        button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .row { margin-top: 14px; }
-        .error { background: var(--vscode-inputValidation-errorBackground); border: 1px solid var(--vscode-inputValidation-errorBorder); padding: 6px 8px; margin-top: 10px; font-size: 12px; display: none; }
-        .run { background: var(--vscode-textBlockQuote-background); border: 1px solid var(--vscode-panel-border); padding: 10px; margin-top: 14px; display: none; border-radius: 3px; font-size: 12px; }
-        .run strong { display: block; font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 6px; }
-        .run code { font-family: var(--vscode-editor-font-family); font-size: 11px; }
-        .portal-btn { margin-top: 8px; display: none; }
-      </style>
-      <div>
-        <label for="stack-picker">Stack</label>
-        <select id="stack-picker"></select>
-        <div class="row">
-          <button id="apply-btn" class="primary" disabled>Apply</button>
-        </div>
-        <div class="row">
-          <button id="refresh-btn">Refresh stacks</button>
-        </div>
-        <div class="error" id="error"></div>
-        <div class="run" id="active-run">
-          <strong>Current run</strong>
-          <div><code id="run-id"></code></div>
-          <div>Kind: <code id="run-kind"></code></div>
-          <div>Status: <code id="run-status"></code></div>
-          <div><code id="run-counts"></code></div>
-          <button id="portal-btn" class="portal-btn">Open in portal</button>
-        </div>
-      </div>
-    `.trim();
-
-    // Reuse the extension's shared HTML scaffold for CSP + nonce, but
-    // inline the body + script via a data: URL since buildWebviewHtml
-    // expects a file-backed script. Simpler path: hand-roll the HTML.
-    void buildWebviewHtml;
-    const csp = [
-      "default-src 'none'",
-      `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
-      `img-src ${webview.cspSource} https: data:`,
-      `font-src ${webview.cspSource}`,
-    ].join('; ');
-    return `<!DOCTYPE html><html><head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="${csp}">
-  <title>Lace Deploy</title>
-</head><body>
-  ${body}
-  <script nonce="${nonce}">${script}</script>
-</body></html>`;
+    } catch (err) {
+      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.postSnapshot();
+    }
   }
 
   private async refreshStacks(): Promise<void> {
@@ -243,9 +133,8 @@ export class DeployPanelProvider implements vscode.WebviewViewProvider {
       vscode.window.showErrorMessage('Open a workspace folder first.');
       return;
     }
+    this.applyStartedAt = Date.now();
     const terminal = spawnApply(this.activeStackId, workspaceFolder.uri.fsPath);
-    // The terminal exits when `lace run apply` finishes; we refresh the
-    // runs list on close to pull in the new run row.
     const disposable = vscode.window.onDidCloseTerminal((t) => {
       if (t === terminal) {
         disposable.dispose();
@@ -254,13 +143,26 @@ export class DeployPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  /**
+   * After the apply terminal closes, identify the run we just kicked
+   * off by correlating with the timestamp: the first run on the active
+   * stack with startedAt >= applyStartedAt is ours. If no run matches
+   * (apply errored before run creation), leave activeRun untouched so
+   * the user sees the last known state.
+   */
   private async pickupLatestRun(): Promise<void> {
     if (!this.activeStackId) return;
     await this.runsTree.refresh();
     try {
-      const runs = await listRuns(this.activeStackId, 1);
-      const latest = runs[0] ?? null;
-      if (latest) this.setActiveRun(latest);
+      const runs = await listRuns(this.activeStackId, 5);
+      const deadline = this.applyStartedAt;
+      const ours = deadline
+        ? runs.find((r) => {
+            const started = r.startedAt ? Date.parse(r.startedAt) : NaN;
+            return !Number.isNaN(started) && started >= deadline - 2000;
+          })
+        : runs[0];
+      if (ours) this.setActiveRun(ours);
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);
       this.postSnapshot();
@@ -316,31 +218,53 @@ export class DeployPanelProvider implements vscode.WebviewViewProvider {
     this.logStreams.set(runId, stream);
   }
 
-  private openRunInPortal(runId: string): void {
-    const configured = vscode.workspace.getConfiguration('lace').get<string>('portalUrl', '');
-    if (!configured) {
+  /**
+   * Build the portal route for a run. Portal URL is
+   * `<portalUrl>/<org>/<team>/stacks/<stackId>/runs/<runId>` for
+   * general runs, and `.../change-requests/<crId>` for awaiting-
+   * approval runs where the user is expected to decide. Requires
+   * `lace.portalUrl`, `lace.organization`, and `lace.team` to be
+   * configured (the same values the CLI uses via its env/flags).
+   */
+  private async openRunInPortal(runId: string): Promise<void> {
+    const cfg = vscode.workspace.getConfiguration('lace');
+    const portalUrl = cfg.get<string>('portalUrl', '').replace(/\/$/, '');
+    const org = cfg.get<string>('organization', '');
+    const team = cfg.get<string>('team', '');
+    if (!portalUrl) {
       vscode.window.showInformationMessage(
-        'Set `lace.portalUrl` to your Lace portal URL to enable "Open in portal".',
+        'Set `lace.portalUrl` in settings to enable "Open in portal".',
       );
       return;
     }
-    // The portal route is /{org}/{team}/stacks/{stackId}/runs/{runId}.
-    // We don't know org/team from the run alone; point at the top-level
-    // runs search and let the user navigate. Refinement: resolve
-    // org/team from `lace stack get <stackId>` when we need direct
-    // deep-linking.
-    const base = configured.replace(/\/$/, '');
-    void vscode.env.openExternal(vscode.Uri.parse(`${base}/runs/${runId}`));
+    if (!org || !team) {
+      vscode.window.showInformationMessage(
+        'Set `lace.organization` and `lace.team` in settings to deep-link into the portal.',
+      );
+      return;
+    }
+    try {
+      const run = await getRun(runId);
+      const url = run.changeRequestId
+        ? `${portalUrl}/${org}/${team}/change-requests/${run.changeRequestId}`
+        : `${portalUrl}/${org}/${team}/stacks/${run.stackId}/runs/${run.id}`;
+      void vscode.env.openExternal(vscode.Uri.parse(url));
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        `Could not resolve portal URL: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   private postSnapshot(): void {
     if (!this.view) return;
-    const snapshot: StateSnapshot = {
+    const snapshot: DeployStateSnapshot = {
       stacks: this.stacks,
       activeStackId: this.activeStackId,
       activeRun: this.activeRun,
       errorMessage: this.errorMessage,
     };
-    this.view.webview.postMessage({ command: 'snapshot', state: snapshot });
+    const message: DeployHostMessage = { command: 'snapshot', state: snapshot };
+    this.view.webview.postMessage(message);
   }
 }
