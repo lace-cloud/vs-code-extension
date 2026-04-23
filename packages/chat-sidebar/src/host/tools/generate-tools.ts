@@ -4,13 +4,15 @@
 // All operations go through RPC to the CLI.
 
 import type { ToolRegistry, ToolResult } from '@lace-cloud/chat-core';
-import type { CanvasView, LaceTransport } from '@lace-cloud/host';
-import { errorMessage, requireEngine } from './helpers';
+import type { LaceTransport } from '@lace-cloud/host';
+import type { CanvasView } from '@lace-cloud/proto';
+import { applyActionAndAwaitView, applyReason, errorMessage, requireEngine } from './helpers';
 
 export type GenerateToolDeps = {
   getRpcClient: () => LaceTransport | null;
   getLaceDir: () => string | undefined;
   getCanvasView: () => CanvasView | null;
+  awaitNextView: () => Promise<CanvasView | null>;
 };
 
 export function registerGenerateTools(registry: ToolRegistry, deps: GenerateToolDeps): void {
@@ -49,13 +51,17 @@ export function registerGenerateTools(registry: ToolRegistry, deps: GenerateTool
       if ('error' in engineResult) return engineResult.error;
 
       try {
-        const canvasView = await engineResult.client.autoConnect({
-          source: sourceInstance,
-          target: targetInstance,
-        });
+        const { result, view } = await applyActionAndAwaitView(
+          engineResult.client,
+          { auto_connect: { source: sourceInstance, target: targetInstance } },
+          deps.awaitNextView,
+        );
+        if (!result.success) {
+          return { content: `Failed to auto-connect: ${applyReason(result)}`, isError: true };
+        }
 
         // Count new edges involving these instances
-        const relevantEdges = canvasView.edges.filter(
+        const relevantEdges = (view?.edges ?? []).filter(
           (e) => e.source === sourceInstance && e.target === targetInstance,
         );
 

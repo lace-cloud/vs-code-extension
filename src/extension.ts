@@ -1,6 +1,8 @@
 import { ChatViewProvider } from '@lace-cloud/chat-sidebar';
 import { type RegistryModule, ServerManager } from '@lace-cloud/host';
 import * as vscode from 'vscode';
+import { DeployPanelProvider } from './deploy/deploy-panel-provider';
+import { RunsTreeProvider } from './deploy/runs-tree-provider';
 import {
   addModuleToActiveCanvas,
   getLaceDir,
@@ -218,6 +220,18 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatViewProvider),
     vscode.commands.registerCommand('lace.clearChatHistory', () => chatViewProvider.clearHistory()),
+  );
+
+  // ── Deploy panel (Arc P5) ──
+  const runsTreeProvider = new RunsTreeProvider();
+  const deployPanelProvider = new DeployPanelProvider(context, runsTreeProvider);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(DeployPanelProvider.viewType, deployPanelProvider),
+    vscode.window.registerTreeDataProvider('laceDeployRuns', runsTreeProvider),
+    vscode.commands.registerCommand('lace.deploy.refreshRuns', () => runsTreeProvider.refresh()),
+    vscode.commands.registerCommand('lace.deploy.showRun', (runId: string) => {
+      void deployPanelProvider.showRun(runId);
+    }),
   );
 }
 

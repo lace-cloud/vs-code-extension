@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
@@ -22,7 +23,9 @@ export function buildWebviewHtml(
   webview: vscode.Webview,
   options: WebviewHtmlOptions,
 ): string {
-  const nonce = Math.random().toString(36).substring(2, 15);
+  // CSP nonces must be unpredictable. Math.random() isn't
+  // cryptographically strong; randomBytes is the right primitive.
+  const nonce = randomBytes(16).toString('hex');
   const scriptUri = webview.asWebviewUri(
     vscode.Uri.file(path.join(context.extensionPath, 'out', options.scriptFilename)),
   );

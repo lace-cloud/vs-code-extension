@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
@@ -41,6 +41,16 @@
           "id": "laceChat",
           "name": "Chat",
           "type": "webview"
+        },
+        {
+          "id": "laceDeploy",
+          "name": "Deploy",
+          "type": "webview"
+        },
+        {
+          "id": "laceDeployRuns",
+          "name": "Recent runs",
+          "type": "tree"
         }
       ]
     },
@@ -102,6 +112,15 @@
       {
         "command": "lace.clearChatHistory",
         "title": "Lace: Clear Chat History"
+      },
+      {
+        "command": "lace.deploy.refreshRuns",
+        "title": "Refresh runs",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lace.deploy.showRun",
+        "title": "Lace: Show run"
       }
     ],
     "configuration": {
@@ -133,6 +152,21 @@
           ],
           "default": "on",
           "description": "Enable rule-based suggestions when state changes between chat turns."
+        },
+        "lace.portalUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of your Lace portal (e.g., https://portal.lace.cloud). Used for 'Open in portal' deep-links in the Deploy panel. Leave empty to disable."
+        },
+        "lace.organization": {
+          "type": "string",
+          "default": "",
+          "description": "Default organization slug (mirrors the LACE_ORGANIZATION env var / --org flag the CLI uses). Used to construct portal deep-links."
+        },
+        "lace.team": {
+          "type": "string",
+          "default": "",
+          "description": "Default team slug (mirrors the LACE_TEAM env var / --team flag the CLI uses). Used to construct portal deep-links."
         }
       }
     },
@@ -141,6 +175,11 @@
         {
           "command": "lace.refreshRegistry",
           "when": "view == laceRegistry",
+          "group": "navigation"
+        },
+        {
+          "command": "lace.deploy.refreshRuns",
+          "when": "view == laceDeployRuns",
           "group": "navigation"
         }
       ]
@@ -189,11 +228,14 @@
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.12.6",
-    "@lace-cloud/canvas": "^0.1.1",
-    "@lace-cloud/chat-webview": "^0.1.1",
-    "@lace-cloud/design-tokens": "^0.1.1",
-    "@lace-cloud/host": "^0.1.1",
+    "@lace-cloud/canvas": "0.1.2",
+    "@lace-cloud/chat-core": "0.1.2",
     "@lace-cloud/chat-sidebar": "workspace:*",
+    "@lace-cloud/chat-webview": "0.1.2",
+    "@lace-cloud/design-tokens": "0.1.2",
+    "@lace-cloud/host": "0.1.2",
+    "@lace-cloud/proto": "0.1.2",
+    "@lace-cloud/ui": "0.1.2",
     "@xyflow/react": "^12.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

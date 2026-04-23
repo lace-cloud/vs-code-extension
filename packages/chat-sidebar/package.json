@@ -9,11 +9,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@lace-cloud/chat-core": "^0.1.1",
-    "@lace-cloud/chat-webview": "^0.1.1",
-    "@lace-cloud/design-tokens": "^0.1.1",
-    "@lace-cloud/host": "^0.1.1",
-    "@lace-cloud/proto": "^0.1.1",
+    "@lace-cloud/canvas": "0.1.2",
+    "@lace-cloud/chat-core": "0.1.2",
+    "@lace-cloud/chat-webview": "0.1.2",
+    "@lace-cloud/design-tokens": "0.1.2",
+    "@lace-cloud/host": "0.1.2",
+    "@lace-cloud/proto": "0.1.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

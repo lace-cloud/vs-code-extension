@@ -75,6 +75,26 @@ export function createVscodeMock() {
     }
   }
 
+  // ── TreeView primitives ──
+  // Used by deploy/runs-tree-provider. Instances are compared
+  // structurally in tests; the mock mirrors the shape rather than
+  // any behaviour.
+  class TreeItem {
+    description: string | undefined;
+    tooltip: string | undefined;
+    iconPath: unknown;
+    contextValue: string | undefined;
+    command: unknown;
+    constructor(
+      public label: string,
+      public collapsibleState: number = 0,
+    ) {}
+  }
+  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
+  class ThemeIcon {
+    constructor(public id: string) {}
+  }
+
   return {
     LanguageModelTextPart,
     LanguageModelToolCallPart,
@@ -82,6 +102,9 @@ export function createVscodeMock() {
     LanguageModelChatMessage,
     LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
     EventEmitter,
+    TreeItem,
+    TreeItemCollapsibleState,
+    ThemeIcon,
     workspace: {
       workspaceFolders: undefined as
         | undefined

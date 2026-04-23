@@ -4,7 +4,8 @@
 // All operations go through RPC to the CLI.
 
 import { formatCanvasState, type ToolRegistry, type ToolResult } from '@lace-cloud/chat-core';
-import type { CanvasView, LaceTransport } from '@lace-cloud/host';
+import type { LaceTransport } from '@lace-cloud/host';
+import type { CanvasView } from '@lace-cloud/proto';
 import { errorMessage, requireEngine } from './helpers';
 
 export type GraphReadDeps = {

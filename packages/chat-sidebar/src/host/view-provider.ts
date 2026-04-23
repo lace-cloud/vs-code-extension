@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import type { CanvasView } from '@lace-cloud/host';
+import type { CanvasView } from '@lace-cloud/proto';
 import * as vscode from 'vscode';
 import { ChatController, type ChatSidebarDeps } from './controller';
 
