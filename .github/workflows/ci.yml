@@ -4,14 +4,14 @@ name: CI
 #
 #   lint        → Biome check across the workspace
 #   unit-tests  → Vitest across every package with unit tests
-#   host-e2e    → @vscode/test-electron smoke + command tests
+#   host-e2e    → @vscode/test-electron smoke + command + cli-integration
 #
-# Heavy visual regression (Playwright + Chromatic) lives in ci-visual.yml,
-# which runs on push to develop after a PR merges. That keeps per-PR cycles
-# fast while still gating every integrated state visually before main.
-#
-# host-e2e pulls the lace CLI test binary from a private R2 bucket
-# published by lace-cloud/lace-cli's publish-test-bundle workflow.
+# The cli-integration test in `packages/host-e2e` spawns the public
+# release CLI from releases.lace.cloud and verifies the handshake +
+# gRPC protocol it emits. That is the extension's real integration
+# contract — the binary shipped to users. The lace-internal `-tags=test`
+# bundle is lace's own concern (flow-tests with seed fixtures) and is
+# not consumed here.
 
 on:
   pull_request:
@@ -47,27 +47,14 @@ jobs:
   host-e2e:
     # VS Code Electron tests need a display; xvfb-run wraps the test
     # command to provide one on the headless CI host.
-    #
-    # Skipped for Dependabot PRs. GitHub withholds Actions secrets from
-    # Dependabot-opened PRs by design (prevents a compromised transitive
-    # dep from exfiltrating credentials). host-e2e pulls the lace CLI
-    # test bundle from a private R2 bucket — without those secrets the
-    # step fails hard. Dependabot bumps only touch action refs and
-    # package versions; lint + unit-tests provide sufficient signal, and
-    # the first human-authored develop push after merge re-runs host-e2e
-    # with full secrets before anything reaches main.
-    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
 
-      - uses: ./.github/actions/download-lace-bundle
+      - uses: ./.github/actions/install-release-cli
         with:
-          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
-          r2-bucket: ${{ secrets.R2_TEST_BUNDLE_BUCKET }}
-          r2-access-key-id: ${{ secrets.R2_TEST_BUNDLE_READ_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.R2_TEST_BUNDLE_READ_SECRET_ACCESS_KEY }}
+          artifact: lace-cli-linux-amd64
           install-with-sudo: 'true'
 
       - uses: ./.github/actions/setup-workspace
@@ -101,11 +88,9 @@ jobs:
     steps:
       - name: Assert upstream jobs succeeded
         run: |
-          # host-e2e is allowed to be 'skipped' (Dependabot PRs only).
-          # lint + unit-tests must always succeed.
           if [ "${{ needs.lint.result }}" != "success" ] || \
              [ "${{ needs.unit-tests.result }}" != "success" ] || \
-             { [ "${{ needs.host-e2e.result }}" != "success" ] && [ "${{ needs.host-e2e.result }}" != "skipped" ]; }; then
+             [ "${{ needs.host-e2e.result }}" != "success" ]; then
             echo "::error::CI failed (lint=${{ needs.lint.result }}, unit-tests=${{ needs.unit-tests.result }}, host-e2e=${{ needs.host-e2e.result }})"
             exit 1
           fi
