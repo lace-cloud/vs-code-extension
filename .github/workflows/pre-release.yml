@@ -5,17 +5,23 @@ name: Pre-release
 # Version" in VS Code receive these builds automatically. Stable users
 # are unaffected.
 #
-# Version scheme: ${STABLE_MAJOR}.${STABLE_MINOR}.$((STABLE_PATCH + GITHUB_RUN_NUMBER)).
-# Marketplace caps each version component at 2^31 - 1, so github.run_id
-# (10-digit) doesn't fit. github.run_number is a workflow-local
-# monotonic counter starting at 1; adding the current stable patch
-# gives a pre-release patch that's always > stable patch and stays
-# well within the 32-bit limit for a very long time.
+# Version scheme: VS Code's documented convention — stable uses even
+# minors, pre-release uses odd minors, same major/patch namespace shared
+# with stable but structurally non-overlapping.
 #
-# When stable bumps minor/major, SemVer ordering means the new stable
-# beats all old pre-release patches — pre-release users auto-upgrade to
-# the new stable at that point. When stable patch bumps, the next
-# pre-release recomputes from the new base (higher floor).
+#   https://code.visualstudio.com/api/working-with-extensions/publishing-extension
+#
+#   stable:      <major>.<EVEN>.<patch>          e.g. 0.2.0, 0.2.3, 0.4.0
+#   pre-release: <major>.<EVEN+1>.<run_number>   e.g. 0.3.7, 0.3.8, 0.3.9
+#
+# SemVer ordering gives the user-facing behaviour for free: when
+# stable bumps minor (0.2.x → 0.4.0), pre-release users auto-upgrade
+# because 0.4.0 > 0.3.anything. Stable patch bumps (0.2.x → 0.2.x+1)
+# stay below pre-release, so pre-release users keep the newer build.
+#
+# github.run_number is a workflow-local monotonic counter starting at 1.
+# It gives each pre-release a unique, strictly increasing patch. Stays
+# well within Marketplace's 32-bit-per-component cap for decades.
 #
 # No tests re-run: ci.yml on PRs to develop already validated this
 # commit. Same trust model as lace's libs-publish-next.
@@ -54,10 +60,19 @@ jobs:
       - name: Compute pre-release version
         id: version
         run: |
+          set -euo pipefail
           BASE=$(jq -r .version package.json)
           IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
-          NEW_PATCH=$((PATCH + GITHUB_RUN_NUMBER))
-          PRE_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          # Invariant: stable must live on even minors. If this fails, the
+          # stable-side guard (release-guard.yml) was bypassed and needs
+          # fixing — do not publish a pre-release that would collide with
+          # stable's lane.
+          if [ $((MINOR % 2)) -ne 0 ]; then
+            echo "::error::package.json minor is $MINOR (odd); stable must use even minor per VS Code convention."
+            exit 1
+          fi
+          PRE_MINOR=$((MINOR + 1))
+          PRE_VERSION="${MAJOR}.${PRE_MINOR}.${GITHUB_RUN_NUMBER}"
           echo "base=$BASE"
           echo "prerelease=$PRE_VERSION"
           echo "version=$PRE_VERSION" >> "$GITHUB_OUTPUT"
