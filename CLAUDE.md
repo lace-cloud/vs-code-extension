@@ -83,23 +83,43 @@ The repo is ruleset-gated into a three-step promotion path:
 - **Feature branches** branch off `develop`, PR to `develop`. `ci.yml` runs
   lint + unit-tests + host-e2e + `ci-summary`. `ci-summary` is the required
   status check; direct pushes to `develop` are blocked.
-- **`develop`** is the long-lived integration branch. Visual regression for
-  shared library code (Chromatic) + flow-test integration (Playwright) live
-  in lace-core's CI now — this repo's `develop` push doesn't run them.
+- **`develop`** is the long-lived integration branch. On every push that
+  touches extension source, `pre-release.yml` publishes a Marketplace
+  pre-release (see "Shipping" below). Visual regression for shared
+  library code lives in lace's CI, not here.
 - **`main`** accepts PRs only from `develop`. One required status check:
   `Release / version-bumped` (fails if `package.json` version hasn't moved
   vs `main`). Direct pushes blocked.
 - **Push to `main`** triggers `release.yml`'s release path: build, package,
   tag, `vsce publish`, GitHub Release with `.vsix` attached.
 
-### Shipping a New Version
+### Shipping
 
-1. On your feature branch, run `pnpm version patch` (or `minor` / `major`).
-   Commit the `package.json` change.
-2. PR → `develop`. `ci.yml` runs. Merge.
-3. Open `develop` → `main` PR. `version-bumped` passes (step 1 bumped it).
-   Merge.
-4. `release.yml` auto-ships: tag, Marketplace publish, GitHub Release.
+Two channels, two cadences:
+
+- **Pre-release (automatic)** — every push to develop that changes extension
+  source fires `pre-release.yml`, which publishes
+  `<major>.<minor>.<github.run_id>` to Marketplace's pre-release channel.
+  Users who enable "Switch to Pre-Release Version" on Lace Cloud in VS Code
+  pick it up automatically. No human action required. The version stamp is
+  ephemeral — not committed back to the repo.
+- **Stable (deliberate)** — the normal flow:
+  1. On your feature branch, `pnpm version patch` (or `minor` / `major`).
+     Commit the `package.json` change.
+  2. PR → `develop`. `ci.yml` runs. Merge. (The merge also fires
+     `pre-release.yml`, publishing a pre-release at the bumped base —
+     that's fine, pre-release users get an early look.)
+  3. Open `develop` → `main` PR. `version-bumped` passes (step 1 bumped it).
+     Merge.
+  4. `release.yml` auto-ships: tag, Marketplace stable publish, GitHub
+     Release with `.vsix` attached.
+
+No version convention constraints — `pnpm version` just works. Pre-release
+versions use `github.run_id` as patch (10-digit integers), which is always
+higher than a stable patch (0-999) but loses to any stable minor/major
+bump in SemVer ordering. Marketplace routes users correctly: stable
+channel sees the latest stable; pre-release channel sees the maximum of
+(latest stable, latest pre-release).
 
 ### Bumping `@lace-cloud/*` library versions
 
