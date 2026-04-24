@@ -23,6 +23,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  packages: read  # @lace-cloud/* fetch from GH Packages
+
 jobs:
   lint:
     runs-on: ubuntu-latest
