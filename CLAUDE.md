@@ -32,8 +32,8 @@ packages/                           — only VS Code-specific workspace packages
 
 The library code (`@lace-cloud/canvas`, `@lace-cloud/host`, `@lace-cloud/chat-core`,
 `@lace-cloud/chat-webview`, `@lace-cloud/ui`, `@lace-cloud/design-tokens`,
-`@lace-cloud/proto`) lives in [`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core)
-and ships from GitHub Packages. Edits to those packages happen in lace-core,
+`@lace-cloud/proto`) lives in [`lace-cloud/lace`](https://github.com/lace-cloud/lace)
+and ships from GitHub Packages. Edits to those packages happen in lace,
 get tagged `vX.Y.Z`, and consumers (this repo) bump deps with `pnpm update`.
 
 `@lace-cloud/host` is intentionally vscode-free: it's a Node.js library
@@ -45,9 +45,9 @@ they're the extension's activation surface.
 
 ### Design system
 
-The design system lives in lace-core. This repo consumes it via published
+The design system lives in lace. This repo consumes it via published
 packages — `@lace-cloud/design-tokens` for CSS tokens, `@lace-cloud/ui` for
-primitives. New tokens and components are added in lace-core, not here.
+primitives. New tokens and components are added in lace, not here.
 
 Rspack builds three bundles:
 
@@ -72,7 +72,7 @@ npx tsc --noEmit          # typecheck — must be zero errors
 ```
 
 Library development (canvas, host, chat-core, etc.): see
-[`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core). That repo
+[`lace-cloud/lace`](https://github.com/lace-cloud/lace). That repo
 owns Storybook, Chromatic visual regression, Playwright flow-tests, and the
 proto-gen pipeline.
 
@@ -88,10 +88,11 @@ The repo is ruleset-gated into a three-step promotion path:
   pre-release (see "Shipping" below). Visual regression for shared
   library code lives in lace's CI, not here.
 - **`main`** accepts PRs only from `develop`. One required status check:
-  `Release / version-bumped` (fails if `package.json` version hasn't moved
-  vs `main`). Direct pushes blocked.
-- **Push to `main`** triggers `release.yml`'s release path: build, package,
-  tag, `vsce publish`, GitHub Release with `.vsix` attached.
+  `Release Guard / version-bumped` (fails if `package.json` version
+  hasn't moved vs `main`). Emitted by `release-guard.yml` on every PR
+  to main. Direct pushes blocked.
+- **Push to `main`** triggers `release.yml`: build, package, tag,
+  `vsce publish`, GitHub Release with `.vsix` attached.
 
 ### Shipping
 
@@ -124,7 +125,7 @@ sees the maximum of (latest stable, latest pre-release).
 
 ### Bumping `@lace-cloud/*` library versions
 
-When lace-core publishes a new version (e.g. `v0.2.0`):
+When lace publishes a new version (e.g. `v0.2.0`):
 
 ```bash
 pnpm update '@lace-cloud/*' --latest
@@ -132,19 +133,19 @@ pnpm update '@lace-cloud/*' --latest
 
 Test locally, commit the lockfile bump, PR through develop → main as usual.
 
-### Library-side concerns (live in lace-core)
+### Library-side concerns (live in lace)
 
 Visual regression (Chromatic), Storybook coverage invariants, mock
 fixture regeneration, Playwright flow-tests, scene stories, and the
 canvas read-only contract all live in
-[`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core).
+[`lace-cloud/lace`](https://github.com/lace-cloud/lace).
 This repo doesn't run Chromatic, doesn't run Playwright, and doesn't
 own the canvas's `readOnly` semantics — those concerns moved out
 when the libraries did.
 
 When you change anything that *uses* the canvas/chat libraries (not
 the libraries themselves), you're in the right repo. When you need
-to change the libraries, work happens in lace-core and you bump
+to change the libraries, work happens in lace and you bump
 `@lace-cloud/*` versions here.
 
 ## Critical Rules
@@ -153,7 +154,7 @@ to change the libraries, work happens in lace-core and you bump
 2. **All canvas mutations go through the CLI via RPC.** `LaceTransport` (from `@lace-cloud/host`) is the gRPC-JS client; the canvas webview talks to the host over postMessage and the host relays to LaceTransport. The webview never modifies state directly.
 3. **File I/O is CLI-owned.** Canvas persistence and protobuf encoding happen via `SessionOpen`/`SessionSave`/`SessionClose`.
 4. **No domain knowledge in the extension.** No Terraform parsing, no HCL type inference, no cloud provider logic, no identifier validation. If you need domain logic, add an RPC to the CLI.
-5. **`CanvasEngine` interface** lives in `@lace-cloud/canvas` (lace-core). It's the contract between webview and backend. Both `PostMessageEngine` (VS Code) and `ConnectWebEngine` (browser) implement it.
+5. **`CanvasEngine` interface** lives in `@lace-cloud/canvas` (lace). It's the contract between webview and backend. Both `PostMessageEngine` (VS Code) and `ConnectWebEngine` (browser) implement it.
 6. **Auth is CLI-owned.** The CLI handles `lace login`; the engine process emits a bearer token in its handshake; the extension attaches it to every RPC and never stores credentials.
 7. **Chat is the primary interface.** The chat sidebar's system prompt drives composition through clarification-first workflows.
 
@@ -174,7 +175,7 @@ to change the libraries, work happens in lace-core and you bump
 | `packages/chat-sidebar/host/`       | `ChatController`, `ChatViewProvider` (VS Code chat adapter)          | Node              |
 | `packages/host-e2e/`                | `@vscode/test-electron` smoke + command tests                        | Node              |
 
-**Library code (in lace-core, consumed via `@lace-cloud/*`):**
+**Library code (in lace, consumed via `@lace-cloud/*`):**
 
 | Package                  | Purpose                                                                       |
 | ------------------------ | ----------------------------------------------------------------------------- |
@@ -230,7 +231,7 @@ If a fix requires a special case, a flag, a workaround, or the words "for now" �
 **Proto changes:** the generated TypeScript proto outputs ship inside
 `@lace-cloud/proto`, `@lace-cloud/host`, and `@lace-cloud/canvas` (each
 package has its own `src/generated/`). To change the proto, edit
-`proto/service.proto` in [`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core),
+`proto/service.proto` in [`lace-cloud/lace`](https://github.com/lace-cloud/lace),
 run `pnpm proto:gen` there, publish a new `@lace-cloud/*` version, then
 bump deps here.
 
