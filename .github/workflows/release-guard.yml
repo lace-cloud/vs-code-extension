@@ -1,8 +1,14 @@
 name: Release Guard
 
-# Gate on PRs to main. Fails if package.json version hasn't moved vs
-# the base branch, forcing every develop → main PR to include a
-# `pnpm version` bump. Main's ruleset requires this check.
+# Gate on PRs to main. Two assertions:
+#
+#   1. package.json version was bumped vs the base branch.
+#   2. New version's minor is EVEN. Stable lives on even minors per the
+#      VS Code pre-release convention; pre-release (published from
+#      develop) lives on odd minors. Letting stable publish an odd
+#      minor would burn a future pre-release slot.
+#
+# https://code.visualstudio.com/api/working-with-extensions/publishing-extension
 #
 # Separate from release.yml so each workflow file has one purpose:
 #   release-guard.yml (this) — PR gate, no shipping
@@ -25,13 +31,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Assert package.json version was bumped vs base
+      - name: Assert version was bumped and uses even minor
         run: |
+          set -euo pipefail
           HEAD_VERSION=$(jq -r .version package.json)
           BASE_VERSION=$(git show "origin/${{ github.base_ref }}:package.json" | jq -r .version)
+
           if [ "$HEAD_VERSION" = "$BASE_VERSION" ]; then
             echo "::error::package.json version must be bumped on PRs to main ($HEAD_VERSION unchanged vs ${{ github.base_ref }})."
-            echo "Run \`pnpm version patch\` (or minor/major) on your branch, commit, push."
+            echo "Run \`pnpm version patch\` (or \`pnpm version <M>.<N+2>.0 --no-git-tag-version\` for a minor bump) on your branch, commit, push."
             exit 1
           fi
-          echo "Version bump: $BASE_VERSION → $HEAD_VERSION"
+
+          IFS='.' read -r _ MINOR _ <<< "$HEAD_VERSION"
+          if [ $((MINOR % 2)) -ne 0 ]; then
+            echo "::error::package.json minor is $MINOR (odd). Stable must use even minor per VS Code convention."
+            echo "Odd minors are reserved for the pre-release channel (published from develop)."
+            echo "For a minor bump, run: pnpm version <MAJOR>.$((MINOR + 1)).0 --no-git-tag-version"
+            exit 1
+          fi
+
+          echo "Version bump: $BASE_VERSION → $HEAD_VERSION (minor $MINOR is even, OK)"
