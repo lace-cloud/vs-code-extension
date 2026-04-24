@@ -96,32 +96,50 @@ The repo is ruleset-gated into a three-step promotion path:
 
 ### Shipping
 
-Two channels, two cadences:
+Two channels, two cadences, [VS Code's pre-release convention][vs-pre]:
+**stable uses even minors, pre-release uses odd minors**. Same
+Marketplace version namespace, structurally non-overlapping lanes.
 
-- **Pre-release (automatic)** — every push to develop that changes extension
-  source fires `pre-release.yml`, which publishes
-  `<major>.<minor>.<stable_patch + github.run_number>` to Marketplace's
-  pre-release channel. Users who enable "Switch to Pre-Release Version" on
-  Lace Cloud in VS Code pick it up automatically. No human action required.
-  The version stamp is ephemeral — not committed back to the repo.
+[vs-pre]: https://code.visualstudio.com/api/working-with-extensions/publishing-extension
+
+```
+stable:      0.2.0, 0.2.1, 0.2.2, …    → pnpm version patch
+             0.4.0, 0.4.1, …            → pnpm version 0.4.0 --no-git-tag-version (see below)
+pre-release: 0.3.7, 0.3.8, 0.3.9, …    → automatic, stamped as run_number
+             0.5.1, 0.5.2, …            → starts fresh when stable minor bumps
+```
+
+SemVer ordering does the routing. Pre-release users auto-upgrade to the
+new stable on a minor bump (`0.4.0 > 0.3.anything`). Stable patch bumps
+stay below the pre-release lane (`0.2.1 < 0.3.N`), so pre-release users
+keep the newer build.
+
+- **Pre-release (automatic)** — every push to develop that changes
+  extension source fires `pre-release.yml`, which publishes
+  `<major>.<stable_minor + 1>.<github.run_number>` to Marketplace's
+  pre-release channel. Users who enable "Switch to Pre-Release Version"
+  on Lace Cloud in VS Code pick it up automatically. No human action
+  required. The version stamp is ephemeral — not committed back to the
+  repo.
 - **Stable (deliberate)** — the normal flow:
-  1. On your feature branch, `pnpm version patch` (or `minor` / `major`).
+  1. On your feature branch, bump `package.json`:
+     - Patch: `pnpm version patch` (0.2.5 → 0.2.6).
+     - Minor: `pnpm version <MAJOR>.<MINOR+2>.0 --no-git-tag-version`
+       (e.g. from `0.2.x`, run `pnpm version 0.4.0 --no-git-tag-version`).
+       `pnpm version minor` would produce an odd minor, which is on the
+       pre-release lane — `Release Guard / version-bumped` rejects it.
      Commit the `package.json` change.
   2. PR → `develop`. `ci.yml` runs. Merge. (The merge also fires
-     `pre-release.yml`, publishing a pre-release at the bumped base —
+     `pre-release.yml`, publishing a pre-release on the odd-minor lane —
      that's fine, pre-release users get an early look.)
-  3. Open `develop` → `main` PR. `version-bumped` passes (step 1 bumped it).
-     Merge.
+  3. Open `develop` → `main` PR. `version-bumped` passes (step 1 bumped
+     it to an even minor). Merge.
   4. `release.yml` auto-ships: tag, Marketplace stable publish, GitHub
      Release with `.vsix` attached.
 
-No version convention constraints — `pnpm version` just works. Pre-release
-patch = stable patch + `github.run_number` (workflow-local monotonic
-counter), which is always > stable patch and stays within Marketplace's
-32-bit-int-per-component cap. Stable minor/major bumps beat any old
-pre-release patch in SemVer ordering, so Marketplace routes users
-correctly: stable channel sees the latest stable; pre-release channel
-sees the maximum of (latest stable, latest pre-release).
+`github.run_number` is a workflow-local monotonic counter that gives
+each pre-release a unique, strictly increasing patch; stays well within
+Marketplace's 32-bit-per-component cap for decades.
 
 ### Bumping `@lace-cloud/*` library versions
 
