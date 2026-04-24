@@ -124,7 +124,7 @@ npx tsc --noEmit        # typecheck
 src/                    — extension activation, canvas + chat webview entries, vscode-coupled host primitives
 packages/chat-sidebar/  — VS Code chat adapter (ChatViewProvider, vscode-adapter, controller)
 packages/host-e2e/      — VS Code integration tests
-.github/                — CI (lint + unit + host-e2e), release workflow, GHCR Dockerfile
+.github/                — CI (lint + unit + host-e2e), pre-release + release workflows, GHCR Dockerfile
 ```
 
 For `lace-core` development (the libraries themselves), see

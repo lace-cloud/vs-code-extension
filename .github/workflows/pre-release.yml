@@ -1,0 +1,92 @@
+name: Pre-release
+
+# Publishes a Marketplace pre-release on every develop push that
+# touches extension source. Users who opt into "Switch to Pre-Release
+# Version" in VS Code receive these builds automatically. Stable users
+# are unaffected.
+#
+# Version scheme: ${STABLE_MAJOR}.${STABLE_MINOR}.${GITHUB_RUN_ID}.
+# github.run_id is a 64-bit monotonic counter (~10^10), always higher
+# than any stable patch (0-999). When stable bumps minor/major, SemVer
+# ordering means the new stable beats all old pre-release patches —
+# pre-release users auto-upgrade to the new stable at that point.
+#
+# No tests re-run: ci.yml on PRs to develop already validated this
+# commit. Same trust model as lace's libs-publish-next.
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'src/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'rspack*.config.js'
+      - 'tsconfig*.json'
+      - '.github/workflows/pre-release.yml'
+
+concurrency:
+  group: pre-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-workspace
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute pre-release version
+        id: version
+        run: |
+          BASE=$(jq -r .version package.json)
+          IFS='.' read -r MAJOR MINOR _ <<< "$BASE"
+          PRE_VERSION="${MAJOR}.${MINOR}.${GITHUB_RUN_ID}"
+          echo "base=$BASE"
+          echo "prerelease=$PRE_VERSION"
+          echo "version=$PRE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp pre-release version
+        # Ephemeral — not committed. Same pattern as lace's libs-publish-next.
+        run: pnpm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Build extension bundles
+        run: pnpm run build
+
+      - name: Package .vsix
+        run: |
+          npx @vscode/vsce package --no-dependencies --pre-release \
+            --out "lace-cloud-prerelease-${{ steps.version.outputs.version }}.vsix"
+
+      - name: Publish pre-release to Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          npx @vscode/vsce publish --pre-release \
+            --packagePath "lace-cloud-prerelease-${{ steps.version.outputs.version }}.vsix" \
+            --no-dependencies
+
+      - name: Emit summary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Pre-release published"
+            echo ""
+            echo "Version: \`$VERSION\`"
+            echo "Channel: Pre-Release (opt-in via VS Code Marketplace)"
+            echo ""
+            echo "Install in VS Code:"
+            echo "1. Open the Extensions panel."
+            echo "2. Find \"Lace Cloud\"."
+            echo "3. Dropdown next to Install/Update → \"Switch to Pre-Release Version\"."
+          } >> "$GITHUB_STEP_SUMMARY"
