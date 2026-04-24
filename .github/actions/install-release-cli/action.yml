@@ -1,0 +1,48 @@
+name: Install Lace Release CLI
+description: >
+  Download the public release CLI from releases.lace.cloud, verify its
+  sha256, and install onto the PATH. No authentication needed — the
+  binary is served publicly via Cloudflare CDN.
+
+  Replaces the old download-lace-bundle composite, which fetched the
+  `-tags=test` build from a private R2 bucket. That bundle is
+  lace-monorepo-internal (used by lace's libs-visual flow-tests with
+  seed fixtures); the extension's integration contract should be the
+  same binary real users run.
+
+inputs:
+  artifact:
+    description: Artifact filename at releases.lace.cloud (e.g., lace-cli-linux-amd64).
+    required: false
+    default: lace-cli-linux-amd64
+  install-with-sudo:
+    description: >-
+      'true' on non-root runners (ubuntu-latest), 'false' in containers.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Download + verify release CLI
+      shell: bash
+      env:
+        ARTIFACT: ${{ inputs.artifact }}
+        SUDO: ${{ inputs.install-with-sudo == 'true' && 'sudo' || '' }}
+      run: |
+        set -euo pipefail
+        mkdir -p /tmp/lace-dl
+        # --retry for transient CDN hiccups; --fail to exit non-zero on
+        # any 4xx/5xx so we surface download errors loudly.
+        curl -fsSL --retry 3 --retry-delay 2 \
+          "https://releases.lace.cloud/${ARTIFACT}" \
+          -o "/tmp/lace-dl/${ARTIFACT}"
+        curl -fsSL --retry 3 --retry-delay 2 \
+          "https://releases.lace.cloud/${ARTIFACT}.sha256" \
+          -o "/tmp/lace-dl/${ARTIFACT}.sha256"
+        # sha256sum -c reads the ARTIFACT.sha256 file (which records the
+        # expected hash with a relative filename) and verifies against
+        # the downloaded binary.
+        cd /tmp/lace-dl && sha256sum -c "${ARTIFACT}.sha256"
+        $SUDO install -m 0755 "/tmp/lace-dl/${ARTIFACT}" /usr/local/bin/lace
+        lace --version

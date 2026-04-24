@@ -145,6 +145,9 @@ importers:
 
   packages/host-e2e:
     devDependencies:
+      '@lace-cloud/host':
+        specifier: 0.1.2
+        version: 0.1.2
       '@types/mocha':
         specifier: ^10.0.10
         version: 10.0.10

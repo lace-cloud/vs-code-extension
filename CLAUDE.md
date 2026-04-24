@@ -27,7 +27,7 @@ src/                                — extension shell (VS Code-coupled, not pu
 
 packages/                           — only VS Code-specific workspace packages
   chat-sidebar/   @lace-cloud/chat-sidebar   — VS Code chat adapter: ChatViewProvider, vscode-adapter, controller
-  host-e2e/       @lace-cloud/host-e2e       — VS Code integration tests (smoke + commands)
+  host-e2e/       @lace-cloud/host-e2e       — VS Code integration tests (smoke + commands + release-CLI integration)
 ```
 
 The library code (`@lace-cloud/canvas`, `@lace-cloud/host`, `@lace-cloud/chat-core`,
@@ -66,7 +66,7 @@ pnpm install              # fetches @lace-cloud/* from npm.pkg.github.com
 
 pnpm run build            # rspack build (all three bundles)
 pnpm run test:unit        # vitest (chat-sidebar tests)
-pnpm run test:host-e2e    # @vscode/test-electron smoke + command tests
+pnpm run test:host-e2e    # @vscode/test-electron smoke + command + release-CLI integration tests
 pnpm run lint             # biome check
 npx tsc --noEmit          # typecheck — must be zero errors
 ```
@@ -173,7 +173,7 @@ to change the libraries, work happens in lace and you bump
 | `src/vscode/module-detail-panel.ts` | Module detail tab                                                    | Node              |
 | `src/vscode/rpc-error-ui.ts`        | `vscode.window` toast for classified RPC errors                      | Node              |
 | `packages/chat-sidebar/host/`       | `ChatController`, `ChatViewProvider` (VS Code chat adapter)          | Node              |
-| `packages/host-e2e/`                | `@vscode/test-electron` smoke + command tests                        | Node              |
+| `packages/host-e2e/`                | `@vscode/test-electron` smoke + command + release-CLI integration    | Node              |
 
 **Library code (in lace, consumed via `@lace-cloud/*`):**
 

@@ -207,11 +207,14 @@ mock-engine, etc.) live in [`lace-cloud/lace`](https://github.com/lace-cloud/lac
 `packages/host-e2e/`:
 
 - `smoke.test.ts` — extension activates, canvas panel opens
-- `commands.test.ts` — `lace.startEngine`, `lace.stopEngine`, terraform command palette entries
+- `commands.test.ts` — `lace.startEngine`, `lace.stopEngine`, terraform command palette entries (uses a placeholder binary path; exercises command wiring, not CLI spawn)
+- `cli-integration.test.ts` — spawns the public release CLI from `releases.lace.cloud` via `ServerManager`, drives `initialize` + `authStatus` RPCs through `LaceTransport`. This is the test that catches CLI ↔ extension protocol drift before anything ships to Marketplace.
 
-These exercise the real VS Code extension host; they download a test-tagged
-`lace` CLI from R2 (via the `download-lace-bundle` composite action) so
-`lace.startEngine` etc. can talk to a real engine process.
+CI installs the release binary via the `install-release-cli` composite
+(fetches `lace-cli-linux-amd64` + its sha256 sidecar from the Cloudflare
+CDN). The lace-internal `-tags=test` bundle is lace's concern (flow-tests
+with seed fixtures) and is not consumed here — the extension's contract
+is the same binary real users run.
 
 ### Storybook + Chromatic + Playwright flow-tests
 
