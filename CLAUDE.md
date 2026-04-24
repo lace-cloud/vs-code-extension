@@ -99,10 +99,10 @@ Two channels, two cadences:
 
 - **Pre-release (automatic)** — every push to develop that changes extension
   source fires `pre-release.yml`, which publishes
-  `<major>.<minor>.<github.run_id>` to Marketplace's pre-release channel.
-  Users who enable "Switch to Pre-Release Version" on Lace Cloud in VS Code
-  pick it up automatically. No human action required. The version stamp is
-  ephemeral — not committed back to the repo.
+  `<major>.<minor>.<stable_patch + github.run_number>` to Marketplace's
+  pre-release channel. Users who enable "Switch to Pre-Release Version" on
+  Lace Cloud in VS Code pick it up automatically. No human action required.
+  The version stamp is ephemeral — not committed back to the repo.
 - **Stable (deliberate)** — the normal flow:
   1. On your feature branch, `pnpm version patch` (or `minor` / `major`).
      Commit the `package.json` change.
@@ -115,11 +115,12 @@ Two channels, two cadences:
      Release with `.vsix` attached.
 
 No version convention constraints — `pnpm version` just works. Pre-release
-versions use `github.run_id` as patch (10-digit integers), which is always
-higher than a stable patch (0-999) but loses to any stable minor/major
-bump in SemVer ordering. Marketplace routes users correctly: stable
-channel sees the latest stable; pre-release channel sees the maximum of
-(latest stable, latest pre-release).
+patch = stable patch + `github.run_number` (workflow-local monotonic
+counter), which is always > stable patch and stays within Marketplace's
+32-bit-int-per-component cap. Stable minor/major bumps beat any old
+pre-release patch in SemVer ordering, so Marketplace routes users
+correctly: stable channel sees the latest stable; pre-release channel
+sees the maximum of (latest stable, latest pre-release).
 
 ### Bumping `@lace-cloud/*` library versions
 

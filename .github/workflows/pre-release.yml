@@ -5,11 +5,17 @@ name: Pre-release
 # Version" in VS Code receive these builds automatically. Stable users
 # are unaffected.
 #
-# Version scheme: ${STABLE_MAJOR}.${STABLE_MINOR}.${GITHUB_RUN_ID}.
-# github.run_id is a 64-bit monotonic counter (~10^10), always higher
-# than any stable patch (0-999). When stable bumps minor/major, SemVer
-# ordering means the new stable beats all old pre-release patches —
-# pre-release users auto-upgrade to the new stable at that point.
+# Version scheme: ${STABLE_MAJOR}.${STABLE_MINOR}.$((STABLE_PATCH + GITHUB_RUN_NUMBER)).
+# Marketplace caps each version component at 2^31 - 1, so github.run_id
+# (10-digit) doesn't fit. github.run_number is a workflow-local
+# monotonic counter starting at 1; adding the current stable patch
+# gives a pre-release patch that's always > stable patch and stays
+# well within the 32-bit limit for a very long time.
+#
+# When stable bumps minor/major, SemVer ordering means the new stable
+# beats all old pre-release patches — pre-release users auto-upgrade to
+# the new stable at that point. When stable patch bumps, the next
+# pre-release recomputes from the new base (higher floor).
 #
 # No tests re-run: ci.yml on PRs to develop already validated this
 # commit. Same trust model as lace's libs-publish-next.
@@ -49,8 +55,9 @@ jobs:
         id: version
         run: |
           BASE=$(jq -r .version package.json)
-          IFS='.' read -r MAJOR MINOR _ <<< "$BASE"
-          PRE_VERSION="${MAJOR}.${MINOR}.${GITHUB_RUN_ID}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+          NEW_PATCH=$((PATCH + GITHUB_RUN_NUMBER))
+          PRE_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
           echo "base=$BASE"
           echo "prerelease=$PRE_VERSION"
           echo "version=$PRE_VERSION" >> "$GITHUB_OUTPUT"
