@@ -88,7 +88,7 @@ All project files live in a `.lace/` directory at your workspace root. This dire
 This repo is a thin VS Code adapter shell. The library code (`@lace-cloud/canvas`,
 `@lace-cloud/host`, `@lace-cloud/chat-core`, `@lace-cloud/chat-webview`,
 `@lace-cloud/ui`, `@lace-cloud/design-tokens`, `@lace-cloud/proto`) lives in
-[`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core) and is published
+[`lace-cloud/lace`](https://github.com/lace-cloud/lace) and is published
 to GitHub Packages.
 
 ### Local setup
@@ -124,11 +124,11 @@ npx tsc --noEmit        # typecheck
 src/                    — extension activation, canvas + chat webview entries, vscode-coupled host primitives
 packages/chat-sidebar/  — VS Code chat adapter (ChatViewProvider, vscode-adapter, controller)
 packages/host-e2e/      — VS Code integration tests
-.github/                — CI (lint + unit + host-e2e), pre-release + release workflows, GHCR Dockerfile
+.github/                — CI (lint + unit + host-e2e), pre-release + release-guard + release workflows
 ```
 
-For `lace-core` development (the libraries themselves), see
-[`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core).
+For `lace` development (the libraries themselves), see
+[`lace-cloud/lace`](https://github.com/lace-cloud/lace).
 
 ## Links
 

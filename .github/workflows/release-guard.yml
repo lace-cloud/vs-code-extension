@@ -1,0 +1,37 @@
+name: Release Guard
+
+# Gate on PRs to main. Fails if package.json version hasn't moved vs
+# the base branch, forcing every develop → main PR to include a
+# `pnpm version` bump. Main's ruleset requires this check.
+#
+# Separate from release.yml so each workflow file has one purpose:
+#   release-guard.yml (this) — PR gate, no shipping
+#   release.yml              — push-to-main, actual ship (build .vsix,
+#                              tag, vsce publish, GitHub Release)
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-bumped:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Assert package.json version was bumped vs base
+        run: |
+          HEAD_VERSION=$(jq -r .version package.json)
+          BASE_VERSION=$(git show "origin/${{ github.base_ref }}:package.json" | jq -r .version)
+          if [ "$HEAD_VERSION" = "$BASE_VERSION" ]; then
+            echo "::error::package.json version must be bumped on PRs to main ($HEAD_VERSION unchanged vs ${{ github.base_ref }})."
+            echo "Run \`pnpm version patch\` (or minor/major) on your branch, commit, push."
+            exit 1
+          fi
+          echo "Version bump: $BASE_VERSION → $HEAD_VERSION"

@@ -23,7 +23,7 @@ inspection and verification layer.
 ## Workspace Layout
 
 This repo is a **thin VS Code adapter shell**. The library code lives
-in [`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core)
+in [`lace-cloud/lace`](https://github.com/lace-cloud/lace)
 and ships from GitHub Packages.
 
 **In this repo:**
@@ -34,7 +34,7 @@ and ships from GitHub Packages.
 | `packages/chat-sidebar/`    | VS Code chat adapter — `ChatViewProvider`, `vscode-adapter`, `vscode-part-codec`, `controller`, tool implementations |
 | `packages/host-e2e/`        | `@vscode/test-electron` smoke + command tests                                 |
 
-**Consumed from `@lace-cloud/*` (lives in lace-core):**
+**Consumed from `@lace-cloud/*` (lives in lace):**
 
 | Package                     | Purpose                                                                       |
 | --------------------------- | ----------------------------------------------------------------------------- |
@@ -67,7 +67,7 @@ pnpm run lint                 # biome check
 npx tsc --noEmit              # type-check — must be zero errors
 ```
 
-**Proto changes** happen in [`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core)
+**Proto changes** happen in [`lace-cloud/lace`](https://github.com/lace-cloud/lace)
 (`pnpm proto:gen` there), then a new `@lace-cloud/*` version is published
 and consumers bump deps. This repo doesn't run `protoc` directly.
 
@@ -95,9 +95,9 @@ and consumers bump deps. This repo doesn't run `protoc` directly.
 - **`vscode-part-codec.ts`** — converts between `vscode.LanguageModel*Part` and the chat-core `Part` types
 - **`vscode-webview-transport.ts`** — wraps `vscode.Webview` for chat-core's `WebviewTransport` interface
 
-### Library code (in lace-core, consumed via `@lace-cloud/*`)
+### Library code (in lace, consumed via `@lace-cloud/*`)
 
-These packages live in [`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core).
+These packages live in [`lace-cloud/lace`](https://github.com/lace-cloud/lace).
 This repo doesn't own their source. Notable contracts:
 
 - **`@lace-cloud/host`** — `LaceTransport` (gRPC-JS client; bearer auth; proto→render converters), `ServerManager` (spawns/watches `lace engine`), engine handshake parser, `RpcError` + `classifyRpcError`. **Vscode-free** — Node-only library.
@@ -135,7 +135,7 @@ Host ↔ webview messages live in `@lace-cloud/proto` (`HostToWebview`) and host
 
 ## Engine Interface (`CanvasEngine`)
 
-Defined in `@lace-cloud/canvas` (lace-core). Both transport implementations conform.
+Defined in `@lace-cloud/canvas` (lace). Both transport implementations conform.
 
 - **Session:** `sessionOpen`, `sessionSave`, `sessionClose`, `sessionGenerate`
 - **Registry:** `placeModule` (single RPC — replaces the old `registryGetVersion` + `dropBundle` pair)
@@ -164,11 +164,11 @@ Query response types: `NodeConfig`, `EdgeConfig`, `SettingsConfig`, `RenderError
 
 ### Proto message types and converters
 
-Lives in lace-core's published `@lace-cloud/proto`, `@lace-cloud/host`, and
+Lives in lace's published `@lace-cloud/proto`, `@lace-cloud/host`, and
 `@lace-cloud/canvas` packages — each ships its own `./generated/service` (ts-proto
 emits service stubs differently per output: gRPC-JS for host, generic-definitions
 + JSON codecs for canvas). Converters live in `@lace-cloud/proto`. See
-[lace-core's AGENTS.md](https://github.com/lace-cloud/lace-core) for the
+[lace's AGENTS.md](https://github.com/lace-cloud/lace) for the
 proto-gen pipeline details.
 
 ### Context state (canvas)
@@ -200,7 +200,7 @@ Chat sidebar (`packages/chat-sidebar/src/__tests__/`):
 - `chat-tools.test.ts`, `registry-tools.test.ts` — tool contract tests
 
 Library tests (canvas hooks, chat-core agent loop, proactivity rules,
-mock-engine, etc.) live in [`lace-cloud/lace-core`](https://github.com/lace-cloud/lace-core).
+mock-engine, etc.) live in [`lace-cloud/lace`](https://github.com/lace-cloud/lace).
 
 ### `@vscode/test-electron` host smoke tests
 
@@ -215,7 +215,7 @@ These exercise the real VS Code extension host; they download a test-tagged
 
 ### Storybook + Chromatic + Playwright flow-tests
 
-All three live in lace-core's CI now. This repo doesn't run them.
+All three live in lace's CI now. This repo doesn't run them.
 
 ## Common Gotchas
 
@@ -237,7 +237,7 @@ All three live in lace-core's CI now. This repo doesn't run them.
 ## Dependencies
 
 **Runtime (extension shell):** `@grpc/grpc-js`, `react`, `react-dom`, `@xyflow/react`,
-plus the seven `@lace-cloud/*` packages from lace-core.
+plus the seven `@lace-cloud/*` packages from lace.
 
 **Dev:** `typescript`, `vitest`, `@rspack/cli`, `ts-loader`, `css-loader`,
 `style-loader`, `file-loader`, `postcss`, `postcss-loader`, `@biomejs/biome`,
