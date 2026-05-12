@@ -88,25 +88,16 @@ All project files live in a `.lace/` directory at your workspace root. This dire
 This repo is a thin VS Code adapter shell. The library code (`@lace-cloud/canvas`,
 `@lace-cloud/host`, `@lace-cloud/chat-core`, `@lace-cloud/chat-webview`,
 `@lace-cloud/ui`, `@lace-cloud/design-tokens`, `@lace-cloud/proto`) lives in
-[`lace-cloud/lace`](https://github.com/lace-cloud/lace) and is published
-to GitHub Packages.
+[`lace-cloud/lace`](https://github.com/lace-cloud/lace) and ships to public
+npmjs.org via OIDC trusted publishing.
 
 ### Local setup
 
-The `@lace-cloud/*` packages are public, but `npm.pkg.github.com` requires *some*
-GitHub token to download (a GitHub-side quirk, not a permissions issue). Any
-classic PAT with `read:packages` works:
-
 ```bash
-# 1. Create a classic PAT with read:packages scope:
-#    https://github.com/settings/tokens/new?scopes=read:packages
-# 2. Export it (add to your shell rc to persist):
-export NODE_AUTH_TOKEN=<your-pat>
-# 3. Install:
 pnpm install
 ```
 
-CI uses the workflow's `GITHUB_TOKEN` automatically — no setup needed.
+No auth required — `@lace-cloud/*` packages are public on npmjs.org.
 
 ### Build & test
 

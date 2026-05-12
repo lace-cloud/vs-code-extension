@@ -15,7 +15,6 @@ on:
 
 permissions:
   contents: write   # tag + release
-  packages: read    # @lace-cloud/* from GH Packages
 
 jobs:
   check-version:
@@ -58,8 +57,6 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build extension bundles
         run: pnpm run build

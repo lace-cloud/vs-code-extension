@@ -24,7 +24,7 @@ inspection and verification layer.
 
 This repo is a **thin VS Code adapter shell**. The library code lives
 in [`lace-cloud/lace`](https://github.com/lace-cloud/lace)
-and ships from GitHub Packages.
+and ships to public npmjs.org via OIDC trusted publishing.
 
 **In this repo:**
 
@@ -55,11 +55,7 @@ Rspack produces three bundles:
 ## Build & Test
 
 ```bash
-# NODE_AUTH_TOKEN must be set: any GitHub PAT with read:packages.
-# @lace-cloud/* packages are public on GH Packages but the registry
-# always requires a token (GH-side quirk).
-export NODE_AUTH_TOKEN=<your-pat>
-pnpm install
+pnpm install                  # @lace-cloud/* from public npmjs.org, no auth
 pnpm run build                # rspack build (all three bundles)
 pnpm run test:unit            # vitest (chat-sidebar tests)
 pnpm run test:host-e2e        # @vscode/test-electron smoke + command tests
@@ -227,8 +223,7 @@ All three live in lace's CI now. This repo doesn't run them.
 - **`is_dirty` comes from the CLI**, not tracked locally. Webview posts `markDirty`/`markClean`.
 - **Keyboard shortcuts are HTML-level** (in `src/vscode/canvas-panel.ts`'s prebody script). They call globals (`__canvasUndo`, etc.) set by canvas hooks (defined in `@lace-cloud/canvas`).
 - **`engineResult` routing.** Only PostMessageEngine's pending calls resolve through this bridge; ConnectWebEngine uses fetch directly.
-- **`@lace-cloud/*` versioning is lockstep.** All seven packages publish at the same version (`v0.1.0`, `v0.1.1`, …). When you bump one, bump them all — `pnpm update '@lace-cloud/*' --latest` does this in one shot.
-- **`NODE_AUTH_TOKEN` is required for `pnpm install`.** `@lace-cloud/*` packages are public on GH Packages but the registry requires a token (any classic PAT with `read:packages` works locally; CI uses `GITHUB_TOKEN`).
+- **`@lace-cloud/*` versioning is lockstep.** All seven packages publish at the same version (`v0.6.5`, `v0.6.6`, …). When you bump one, bump them all — `pnpm update '@lace-cloud/*' --latest` does this in one shot.
 
 ## Style Guide
 

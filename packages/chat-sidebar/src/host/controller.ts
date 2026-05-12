@@ -183,6 +183,7 @@ export class ChatController {
       onGenerateProgress: () => {},
       onGenerateSuccess: () => {},
       onGenerateError: () => {},
+      onPolicyResolution: () => {},
       onEnd: () => {
         this.subscribeHandler = null;
       },
