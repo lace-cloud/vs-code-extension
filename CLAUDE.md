@@ -33,8 +33,9 @@ packages/                           — only VS Code-specific workspace packages
 The library code (`@lace-cloud/canvas`, `@lace-cloud/host`, `@lace-cloud/chat-core`,
 `@lace-cloud/chat-webview`, `@lace-cloud/ui`, `@lace-cloud/design-tokens`,
 `@lace-cloud/proto`) lives in [`lace-cloud/lace`](https://github.com/lace-cloud/lace)
-and ships from GitHub Packages. Edits to those packages happen in lace,
-get tagged `vX.Y.Z`, and consumers (this repo) bump deps with `pnpm update`.
+and ships to public npmjs.org via OIDC trusted publishing. Edits to those
+packages happen in lace, get tagged `vX.Y.Z`, and consumers (this repo) bump
+deps with `pnpm update`.
 
 `@lace-cloud/host` is intentionally vscode-free: it's a Node.js library
 (LaceTransport, ServerManager, RpcError + classifier) that any consumer can
@@ -58,11 +59,7 @@ Rspack builds three bundles:
 ## Build & Test
 
 ```
-# Local setup: NODE_AUTH_TOKEN must be a GitHub PAT with read:packages
-# (any classic PAT works; @lace-cloud/* packages are public on GH Packages
-# but the registry still requires a token — GH-side quirk).
-export NODE_AUTH_TOKEN=<your-pat>
-pnpm install              # fetches @lace-cloud/* from npm.pkg.github.com
+pnpm install              # @lace-cloud/* fetched from public npmjs.org, no auth
 
 pnpm run build            # rspack build (all three bundles)
 pnpm run test:unit        # vitest (chat-sidebar tests)

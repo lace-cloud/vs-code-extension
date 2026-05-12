@@ -23,14 +23,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Lint
         run: pnpm run lint
 
@@ -39,8 +40,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run unit tests
         run: pnpm run test:unit
 
@@ -58,8 +57,6 @@ jobs:
           install-with-sudo: 'true'
 
       - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build extension bundles
         run: pnpm run build

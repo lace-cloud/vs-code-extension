@@ -44,7 +44,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   publish:
@@ -54,8 +53,6 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute pre-release version
         id: version

@@ -15,7 +15,6 @@ on:
 
 permissions:
   contents: write   # tag + release
-  packages: read    # @lace-cloud/* from GH Packages
 
 jobs:
   check-version:
@@ -57,12 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # setup-workspace installs deps AND runs proto:gen — the latter is
-      # critical: generated proto is gitignored, so rspack (invoked by
-      # vsce:prepublish) would fail on missing imports without it.
       - uses: ./.github/actions/setup-workspace
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build extension bundles
         run: pnpm run build
@@ -74,11 +68,20 @@ jobs:
 
       - name: Create Git tag
         run: |
+          set -euo pipefail
           VERSION="${{ needs.check-version.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
+          # Idempotent: a prior run may have pushed the tag before
+          # failing on a later step (e.g., Marketplace publish).
+          # A workflow re-run then hits "tag already exists"; skip
+          # cleanly and let the remaining steps re-attempt.
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists locally; skipping tag step."
+          else
+            git tag -a "v$VERSION" -m "Release v$VERSION"
+            git push origin "v$VERSION"
+          fi
 
       - name: Publish to VS Code Marketplace
         run: npx @vscode/vsce publish --packagePath lace-cloud.vsix --no-dependencies

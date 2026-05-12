@@ -220,6 +220,9 @@ export async function openCanvas(context: vscode.ExtensionContext, server: Serve
                 onGenerateError: (message, diagnostics) => {
                   postToWebview(panel, { command: 'generateError', message, diagnostics });
                 },
+                onPolicyResolution: (resolution) => {
+                  postToWebview(panel, { command: 'policyResolution', resolution });
+                },
                 onEnd: () => {
                   subscribeHandler = null;
                 },
