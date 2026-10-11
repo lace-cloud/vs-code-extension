@@ -24,7 +24,7 @@ name: Pre-release
 # well within Marketplace's 32-bit-per-component cap for decades.
 #
 # No tests re-run: ci.yml on PRs to develop already validated this
-# commit. Same trust model as lace's libs-publish-next.
+# commit.
 
 on:
   push:
@@ -75,7 +75,7 @@ jobs:
           echo "version=$PRE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Stamp pre-release version
-        # Ephemeral — not committed. Same pattern as lace's libs-publish-next.
+        # Ephemeral — not committed.
         run: pnpm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
 
       - name: Build extension bundles

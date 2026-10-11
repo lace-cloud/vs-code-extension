@@ -1,13 +1,20 @@
 {
-  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "outDir": "out",
-    "noEmit": true,
-    "composite": false,
-    "declaration": false,
-    "declarationMap": false
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true
   },
-  "include": ["src/**/*", "packages/chat-sidebar/src/**/*"],
-  "exclude": ["node_modules", "out", "packages/*/src/generated", "packages/*/dist"]
+  "include": ["src/**/*.ts", "vitest.config.ts"],
+  "exclude": ["src/canvas-webview/**", "src/registry-webview/**", "src/webview/**"]
 }

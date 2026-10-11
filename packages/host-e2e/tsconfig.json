@@ -1,15 +1,7 @@
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "target": "ES2022",
-    "moduleResolution": "node",
-    "outDir": "out",
-    "rootDir": ".",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "sourceMap": true,
-    "types": ["mocha", "node"]
+    "types": ["node", "mocha"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["window/**/*.ts"]
 }

@@ -1,0 +1,910 @@
+import {
+  COMMANDS,
+  CommandExitError,
+  type CommandFailure,
+  type CommandRun,
+  type LaceReason,
+} from '@lace-cloud/canvas/engine';
+import { describe, expect, test, vi } from 'vitest';
+import type * as vscode from 'vscode';
+import { authoringCommands } from '../../commands/authoring-commands';
+import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
+import { createRunnerHost } from '../../engine/runner-host';
+import { folder, uri } from '../../roots/__tests__/fake-uri';
+import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
+import { createRootState } from '../../state/root-state';
+import { type OfferActions, offeringPresenter } from '../../vscode/offers';
+import { createRunOutput } from '../run-output';
+import { type Row, STACK_COMMANDS, STACKS_STATE, stacksTree } from '../stacks-tree';
+
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+const repo = folder('/work/repo');
+const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
+const staging: AuthoringRoot = { folder: repo, relative: 'infra/staging' };
+
+const stack = (id: string, slug: string) => ({
+  id,
+  orgId: 'org_1',
+  teamId: 'team_1',
+  connectionId: 'conn_1',
+  slug,
+  name: slug[0].toUpperCase() + slug.slice(1),
+  description: null,
+  source: { kind: 'git' as const, repoUrl: 'https://github.com/acme/repo', path: 'infra/prod' },
+  stateSerial: 1,
+  stateLineage: null,
+  stateVersion: null,
+  stateLastWrittenAt: null,
+  lastAppliedRunId: null,
+  lastDriftScanAt: null,
+  lastDriftStatus: null,
+  lastDriftCount: 0,
+  lastDriftStale: false,
+  lastDriftConfirmedAt: null,
+  lastDriftUndeterminedReason: null,
+  chaosLockedByRunId: null,
+  chaosLockedAt: null,
+  createdBy: 'usr_1',
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-09-01T00:00:00Z',
+  archivedAt: null,
+  connection: null,
+  createdByName: null,
+  lastApply: null,
+});
+const stacks = (...items: ReturnType<typeof stack>[]) => ({
+  items,
+  nextCursor: null,
+  hasMore: false,
+});
+
+const TEAM_CREATE_URL = 'https://portal/o/acme/teams/new';
+// `team list` of the current organization: its teams, by slug.
+const teams = (...slugs: string[]) => ({
+  items: slugs.map((slug) => ({
+    id: `team_${slug}`,
+    orgId: 'org_1',
+    name: slug,
+    slug,
+    description: '',
+    createdBy: 'usr_1',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+    role: 'member',
+    memberCount: 1,
+  })),
+  nextCursor: null,
+  hasMore: false,
+  createUrl: TEAM_CREATE_URL,
+});
+
+const run = (id: string, status: string, url?: string) => ({
+  id,
+  stackId: 'stk_1',
+  orgId: 'org_1',
+  teamId: 'team_1',
+  kind: 'apply',
+  status,
+  initiatedByUserId: null,
+  initiatedVia: 'cli',
+  runnerIdentity: null,
+  runnerLocation: null,
+  bundleSnapshotId: null,
+  sourceCommitSha: null,
+  sourceRef: null,
+  sourcePrUrl: null,
+  sourceOverride: false,
+  planResourceAdd: 1,
+  planResourceChange: 2,
+  planResourceDestroy: 0,
+  planLocation: null,
+  planHumanLocation: null,
+  applyLogLocation: null,
+  policyResultsLocation: null,
+  policyPassed: null,
+  policyResolution: null,
+  changeRequestId: null,
+  cancelReason: null,
+  startedAt: null,
+  completedAt: null,
+  errorMessage: null,
+  sourceTreeHash: null,
+  attestationStatus: null,
+  attestedAt: null,
+  attestation: null,
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-09-01T00:00:00Z',
+  ...(url === undefined ? {} : { url }),
+});
+const runs = (...items: ReturnType<typeof run>[]) => ({ items, nextCursor: null, hasMore: false });
+const applyResult = (error: string | null = null) => ({
+  type: 'result',
+  run: run('run_9', error ? 'apply_failed' : 'apply_succeeded'),
+  summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
+  workspaceDir: '/cache',
+  error,
+});
+// A failure document whose message is its reason.
+const refusal = (reason: LaceReason, extra: Partial<CommandFailure> = {}) =>
+  refused({ reason, message: reason, ...extra });
+
+class Emitter<T> {
+  listeners = new Set<(value: T) => void>();
+  event = (listener: (value: T) => void) => {
+    this.listeners.add(listener);
+    return { dispose: () => this.listeners.delete(listener) };
+  };
+  fire(value: T) {
+    for (const listener of [...this.listeners]) listener(value);
+  }
+  dispose() {}
+}
+
+function memento(): vscode.Memento {
+  const kept = new Map<string, unknown>();
+  return {
+    keys: () => [...kept.keys()],
+    get: ((key: string, fallback?: unknown) => (kept.has(key) ? kept.get(key) : fallback)) as never,
+    update: async (key, value) => {
+      kept.set(key, value);
+    },
+  };
+}
+
+type Options = {
+  scripts: Parameters<typeof fakeCommands>[0];
+  root?: AuthoringRoot;
+  // What each message the window shows answers, by its text: now, or once
+  // the promise settles.
+  answers?: Record<string, string | Promise<string>>;
+  picks?: string[];
+  // The shell of the default terminal profile, as `vscode.env.shell` names it.
+  shell?: string;
+  // The Lace CLI, as `lace.binaryPath` names it.
+  binaryPath?: string;
+  // The workspace's Terraform files; two module directories by default.
+  terraformFiles?: string[];
+};
+
+function setup(options: Options) {
+  const commands = fakeCommands(options.scripts);
+  const mapping = commands.commands;
+  let provider: vscode.TreeDataProvider<Row> | undefined;
+  const view = {
+    description: undefined as string | undefined,
+    message: undefined as string | undefined,
+    selection: new Emitter<{ selection: Row[] }>(),
+    visibility: new Emitter<{ visible: boolean }>(),
+    onDidChangeSelection: (l: never) => view.selection.event(l),
+    onDidChangeVisibility: (l: never) => view.visibility.event(l),
+    dispose: vi.fn(),
+  };
+  const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
+  const contexts: unknown[] = [];
+  const messages: { level: string; text: string; buttons: string[] }[] = [];
+  const answer = (level: string) =>
+    vi.fn(async (text: string, ...buttons: string[]) => {
+      messages.push({ level, text, buttons });
+      return options.answers?.[text];
+    });
+  const channels = new Map<string, string[]>();
+  const shownChannels: string[] = [];
+  let content: vscode.TextDocumentContentProvider | undefined;
+  const opened: string[] = [];
+  const progress: { title?: string; reports: string[]; cancel: () => void }[] = [];
+  const activeEditor = new Emitter<unknown>();
+  const api = {
+    window: {
+      createTreeView: (_id: string, { treeDataProvider }: { treeDataProvider: never }) => {
+        provider = treeDataProvider;
+        return view;
+      },
+      showQuickPick: vi.fn(async (items: { stack: { slug: string } }[]) => {
+        const slug = options.picks?.shift();
+        return items.find((item) => item.stack.slug === slug);
+      }),
+      withProgress: vi.fn(
+        async (opts: { title?: string }, task: (p: never, t: never) => unknown) => {
+          const cancelled = new Emitter<void>();
+          const entry = {
+            title: opts.title,
+            reports: [] as string[],
+            cancel: () => cancelled.fire(),
+          };
+          progress.push(entry);
+          return task(
+            { report: ({ message }: { message: string }) => entry.reports.push(message) } as never,
+            { onCancellationRequested: cancelled.event } as never,
+          );
+        },
+      ),
+      showInformationMessage: answer('info'),
+      showWarningMessage: answer('warn'),
+      showErrorMessage: answer('error'),
+      setStatusBarMessage: vi.fn(),
+      onDidChangeActiveTextEditor: activeEditor.event,
+      createTerminal: vi.fn(() => ({
+        show: vi.fn(),
+        sendText: vi.fn((_text: string, _addNewLine?: boolean) => {}),
+      })),
+      showTextDocument: vi.fn(async () => {}),
+      createOutputChannel: (name: string) => {
+        const lines: string[] = [];
+        channels.set(name, lines);
+        return {
+          appendLine: (line: string) => lines.push(line),
+          show: () => shownChannels.push(name),
+          dispose: () => {},
+        };
+      },
+    },
+    workspace: {
+      workspaceFolders: [repo],
+      textDocuments: [],
+      registerTextDocumentContentProvider: (
+        _scheme: string,
+        made: vscode.TextDocumentContentProvider,
+      ) => {
+        content = made;
+        return { dispose: () => {} };
+      },
+      openTextDocument: vi.fn(async (u: { path: string }) => {
+        opened.push(String(content?.provideTextDocumentContent(u as never, {} as never)));
+        return {};
+      }),
+    },
+    commands: {
+      registerCommand: (id: string, run: (...args: unknown[]) => Promise<unknown>) => {
+        handlers.set(id, run);
+        return { dispose: () => {} };
+      },
+      executeCommand: vi.fn(async (_command: string, key: string, value: unknown) => {
+        if (key === STACKS_STATE) contexts.push(value);
+      }),
+    },
+    env: { shell: options.shell ?? '/bin/zsh', openExternal: vi.fn(async () => true) },
+    Uri: {
+      parse: (url: string) => ({ url }),
+      from: ({ scheme, path }: { scheme: string; path: string }) => ({ scheme, path }),
+    },
+    EventEmitter: Emitter,
+    ThemeIcon: class {
+      constructor(readonly id: string) {}
+    },
+    TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+    ProgressLocation: { Notification: 15 },
+  };
+  const offers: OfferActions = {
+    signIn: vi.fn(),
+    selectOrganization: vi.fn(),
+    selectTeam: vi.fn(),
+    openPortal: vi.fn(),
+    install: vi.fn(),
+  };
+  const runOutput = createRunOutput(api.window as never);
+  const ran: CommandRun[] = [];
+  const runner = createRunnerHost({
+    commands: () => mapping.anywhere(),
+    presenter: offeringPresenter(api as never, offers, async () => true, vi.fn()),
+    onRunLog: (line, made) => {
+      ran.push(made);
+      runOutput.append(line, made);
+    },
+  });
+  const rootState = createRootState(memento());
+  const active = new Emitter<AuthoringRoot>();
+  const panels = {
+    tick: vi.fn(),
+    onDidChangeActive: (l: (root: AuthoringRoot) => void) => {
+      const { dispose } = active.event(l);
+      return dispose;
+    },
+  };
+  const sources: RootSources = {
+    folders: () => [repo],
+    activeCanvas: () => options.root,
+    activeTerraformDirectory: () => undefined,
+    terraformFiles: async () =>
+      (
+        options.terraformFiles ?? [
+          '/work/repo/infra/prod/main.tf',
+          '/work/repo/infra/staging/main.tf',
+        ]
+      ).map((path) => uri(path)),
+    pick: async (roots) => {
+      const relative = options.picks?.shift();
+      return roots.find((r) => r.relative === relative);
+    },
+  };
+  const account = new Emitter<void>();
+  const report = vi.fn();
+  // The palette's module commands over the same commands, whose Validate a
+  // notice about a root offers.
+  const log = {
+    lines: [] as string[],
+    appendLine: (line: string) => log.lines.push(line),
+    show: vi.fn(),
+  };
+  const modules = authoringCommands({
+    api: api as never,
+    sources,
+    operations: { save: vi.fn(), generate: vi.fn(), held: () => false },
+    commands: mapping,
+    log,
+    offers,
+  });
+  const tree = stacksTree({
+    api: api as never,
+    commands: mapping,
+    runner,
+    runOutput,
+    account: { onDidChange: (l) => account.event(l).dispose },
+    offers,
+    rootState,
+    panels,
+    sources,
+    validate: modules.validate,
+    binaryPath: () => options.binaryPath ?? '/usr/local/bin/lace',
+    report,
+  });
+  const children = async (row?: Row) => (await provider?.getChildren(row)) ?? [];
+  const redrawn: (Row | undefined)[] = [];
+  provider?.onDidChangeTreeData?.((row) => {
+    redrawn.push(row as Row | undefined);
+  });
+  const item = (row: Row) => provider?.getTreeItem(row) as vscode.TreeItem;
+  const command = (id: string, ...args: unknown[]) => handlers.get(id)?.(...args);
+  return {
+    api,
+    commands,
+    view,
+    tree,
+    children,
+    item,
+    command,
+    contexts,
+    messages,
+    channels,
+    shownChannels,
+    opened,
+    progress,
+    offers,
+    runner,
+    ran,
+    rootState,
+    panels,
+    active,
+    account,
+    report,
+    redrawn,
+    log,
+  };
+}
+
+// What `module validate` reports for a root: its verdict and diagnostics.
+// A loss report stops at its verdict, so what its run never reached (the
+// deviation, Terraform's validate, the resolved children) is absent.
+const validation = (root: string, diagnostics: object[]) => ({
+  root,
+  treeHash: 'h',
+  verdict: 'lossy',
+  residuals: [],
+  exitClass: 'parse',
+  diagnostics,
+});
+
+describe('the stacks of the current root', () => {
+  test('are listed from stack list --source, and the view names the root', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+      },
+    });
+    const rows = await t.children();
+
+    expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
+      ['stack list', { source: '/work/repo/infra/prod' }],
+    ]);
+    expect(t.view.description).toBe('infra/prod');
+    expect(t.contexts).toEqual(['stacks']);
+    expect(rows.map((row) => t.item(row).label)).toEqual(['Prod', 'Qa']);
+    expect(t.item(rows[0])).toMatchObject({
+      description: 'prod',
+      contextValue: 'laceStack',
+      collapsibleState: 1,
+      iconPath: { id: 'layers' },
+    });
+  });
+
+  test('a stack expands to its recent runs; a run with a page offers it', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'run list': {
+          documents: [
+            runs(
+              run('run_1', 'apply_succeeded', 'https://portal/o/t/stacks/stk_1/runs/run_1'),
+              run('run_2', 'plan_failed'),
+            ),
+          ],
+        },
+      },
+    });
+    const [prodRow] = await t.children();
+    const runRows = await t.children(prodRow);
+
+    expect(t.commands.invoked.at(-1)).toMatchObject({
+      path: 'run list',
+      args: { stack: 'stk_1', limit: 10 },
+    });
+    expect(runRows.map((row) => t.item(row))).toMatchObject([
+      {
+        label: 'apply · run_1',
+        description: 'apply_succeeded · +1 ~2 -0',
+        contextValue: 'laceRun portal',
+        iconPath: { id: 'pass-filled' },
+      },
+      { label: 'apply · run_2', contextValue: 'laceRun', iconPath: { id: 'error' } },
+    ]);
+
+    await t.command(STACK_COMMANDS.openInPortal, runRows[0]);
+    expect(t.api.env.openExternal).toHaveBeenCalledWith({
+      url: 'https://portal/o/t/stacks/stk_1/runs/run_1',
+    });
+  });
+
+  test('follows the canvas the developer turns to', async () => {
+    const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
+    await t.children();
+    t.active.fire(staging);
+    expect(t.redrawn).toEqual([undefined]);
+    await t.children();
+    expect(t.view.description).toBe('infra/staging');
+    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/staging' });
+  });
+
+  test('with no root to name, the view offers the pick; the pick shows the chosen root', async () => {
+    const t = setup({
+      scripts: { 'stack list': { documents: [stacks()] } },
+      picks: ['infra/staging'],
+    });
+    expect(await t.children()).toEqual([]);
+    expect(t.contexts).toEqual(['noRoot']);
+    expect(t.commands.invoked).toEqual([]);
+
+    await t.command(STACK_COMMANDS.chooseModule);
+    await t.children();
+    expect(t.view.description).toBe('infra/staging');
+    expect(t.contexts.at(-1)).toBe('noStack');
+  });
+});
+
+describe('a stack command from the palette with no root named', () => {
+  test.each([
+    [STACK_COMMANDS.preview, 'preview a stack of'],
+    [STACK_COMMANDS.apply, 'apply a stack of'],
+    [STACK_COMMANDS.scan, 'scan a stack of'],
+    [STACK_COMMANDS.chooseModule, 'show the stacks of'],
+  ])('%s, in a workspace with no Terraform, says why and runs nothing', async (id, verb) => {
+    const t = setup({ scripts: {}, terraformFiles: [] });
+    await t.command(id);
+    await settled();
+    expect(t.messages).toEqual([
+      {
+        level: 'info',
+        text: `No module to ${verb}: no directory under this workspace holds Terraform files. Start one with Lace: Open Canvas on its folder in the Explorer.`,
+        buttons: [],
+      },
+    ]);
+    expect(t.commands.invoked).toEqual([]);
+  });
+
+  test.each([
+    STACK_COMMANDS.preview,
+    STACK_COMMANDS.apply,
+    STACK_COMMANDS.scan,
+  ])('%s on a module with no stack says so and how one is created, with no empty pick', async (id) => {
+    const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
+    await t.command(id);
+    await settled();
+    expect(t.messages).toEqual([
+      {
+        level: 'info',
+        text: 'No stack is deployed from infra/prod yet. A stack is created once, in a terminal: Create Stack in Terminal in the Stacks view types the command.',
+        buttons: [],
+      },
+    ]);
+    expect(t.api.window.showQuickPick).not.toHaveBeenCalled();
+    expect(t.commands.paths()).toEqual(['stack list']);
+  });
+
+  test.each([
+    STACK_COMMANDS.preview,
+    STACK_COMMANDS.apply,
+    STACK_COMMANDS.scan,
+    STACK_COMMANDS.chooseModule,
+  ])('%s, when the developer dismisses the pick of a module, says nothing and runs nothing', async (id) => {
+    const t = setup({ scripts: {}, picks: [] });
+    await t.command(id);
+    await settled();
+    expect(t.messages).toEqual([]);
+    expect(t.commands.invoked).toEqual([]);
+  });
+});
+
+describe('when the stacks cannot be listed', () => {
+  const stateFor = async (scripts: Options['scripts'], shell?: string) => {
+    const t = setup({ root: prod, scripts, shell });
+    await t.children();
+    return t;
+  };
+
+  test('each refusal shows the welcome its reason names', async () => {
+    expect((await stateFor({ 'stack list': refusal('unauthenticated') })).contexts).toEqual([
+      'signedOut',
+    ]);
+    expect((await stateFor({ 'stack list': refusal('no_organization') })).contexts).toEqual([
+      'noOrganization',
+    ]);
+    expect(
+      (
+        await stateFor({
+          'stack list': refusal('no_team'),
+          'team list': { documents: [teams('platform')] },
+        })
+      ).contexts,
+    ).toEqual(['noTeam']);
+  });
+
+  test('an organization with no team offers the portal page the failure carries', async () => {
+    const t = await stateFor({
+      'stack list': refusal('no_team', { url: TEAM_CREATE_URL }),
+      'team list': { documents: [teams()] },
+    });
+    expect(t.contexts).toEqual(['teamlessOrganization']);
+    await t.command(STACK_COMMANDS.openPortal);
+    expect(t.api.env.openExternal).toHaveBeenCalledWith({ url: TEAM_CREATE_URL });
+  });
+
+  test('a root with no stack types the complete create line into a terminal at the root, unsent, with a placeholder for each required argument', async () => {
+    const t = await stateFor({ 'stack list': { documents: [stacks()] } });
+    expect(t.contexts).toEqual(['noStack']);
+    await t.command(STACK_COMMANDS.createInTerminal);
+    const terminal = t.api.window.createTerminal.mock.results[0].value;
+    expect(t.api.window.createTerminal).toHaveBeenCalledWith({
+      name: 'Lace',
+      cwd: expect.objectContaining({ path: '/work/repo/infra/prod' }),
+    });
+    expect(terminal.show).toHaveBeenCalled();
+    expect(terminal.sendText).toHaveBeenCalledWith(
+      "'/usr/local/bin/lace' stack create SLUG --source . --connection CONNECTION_ID",
+      false,
+    );
+
+    // Every argument `stack create` requires, read from the command
+    // contract, is on the line: each positional as a placeholder, each flag
+    // by its spelling followed by a placeholder. A placeholder is a word
+    // the shell passes through as it is.
+    const line: string = terminal.sendText.mock.calls[0][0];
+    const words = (line.split(' stack create ')[1] ?? '').split(' ');
+    const spec = COMMANDS['stack create'];
+    const dashed = (name: string) => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+    const flags = Object.entries(spec.flags)
+      .filter(([, flag]) => 'required' in flag && flag.required)
+      .map(([name]) => `--${dashed(name)}`);
+    for (const flag of flags) {
+      expect(words).toContain(flag);
+      expect(words[words.indexOf(flag) + 1]).toMatch(/^[A-Z][A-Z_]*$/);
+    }
+    const bare = words.filter(
+      (word, at) => !word.startsWith('--') && !words[at - 1]?.startsWith('--'),
+    );
+    const required = spec.positionals.filter((positional) => positional.kind === 'required');
+    expect(bare).toHaveLength(required.length);
+    for (const word of bare) expect(word).toMatch(/^[A-Z][A-Z_]*$/);
+  });
+
+  test.each([
+    [
+      'PowerShell 7',
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      "& 'C:\\Program Files\\lace\\lace.exe' stack create SLUG --source . --connection CONNECTION_ID",
+    ],
+    [
+      'Command Prompt',
+      'C:\\WINDOWS\\System32\\cmd.exe',
+      '"C:\\Program Files\\lace\\lace.exe" stack create SLUG --source . --connection CONNECTION_ID',
+    ],
+  ])('the create line calls the CLI as %s, the terminal’s shell, calls a program', async (_shell, shell, typed) => {
+    const t = setup({
+      root: prod,
+      scripts: { 'stack list': { documents: [stacks()] } },
+      shell,
+      binaryPath: 'C:\\Program Files\\lace\\lace.exe',
+    });
+    await t.children();
+    await t.command(STACK_COMMANDS.createInTerminal);
+    const terminal = t.api.window.createTerminal.mock.results[0].value;
+    expect(terminal.sendText).toHaveBeenCalledWith(typed, false);
+  });
+
+  test('any other failure says its message, and is read again after a change of account', async () => {
+    const t = await stateFor({ 'stack list': refusal('unspecified') });
+    expect(t.contexts).toEqual(['failed']);
+    expect(t.view.message).toBe('unspecified');
+
+    t.account.fire();
+    expect(t.redrawn).toEqual([undefined]);
+  });
+});
+
+describe('a stack row', () => {
+  const listed = { 'stack list': { documents: [stacks(stack('stk_1', 'prod'))] } };
+
+  test('selected, is the stack picked for its root, and shows so', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    const [row] = await t.children();
+    t.view.selection.fire({ selection: [row] });
+    await settled();
+    expect(t.rootState.stack(prod)).toEqual({
+      id: 'stk_1',
+      slug: 'prod',
+    });
+    expect(t.item(row)).toMatchObject({
+      description: 'prod · on the canvas',
+      iconPath: { id: 'layers-active' },
+    });
+  });
+
+  test("runs the package's bindings over the root and the stack: Preview, Scan, Follow logs, Cancel", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        ...listed,
+        'run list': { documents: [runs(run('run_1', 'applying'))] },
+        'stack preview': {
+          documents: [
+            {
+              stack: { id: 'stk_1', slug: 'prod' },
+              treeHash: 'h1',
+              plan: {
+                summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
+                human: '+ aws_s3_bucket.b',
+              },
+              policy: null,
+            },
+          ],
+        },
+        'stack scan': { documents: [{ triggered: true, reason: null, settled: null }] },
+        'run logs': {
+          documents: [
+            { type: 'log', text: 'line one' },
+            { type: 'result', status: 'apply_succeeded' },
+          ],
+        },
+        'run cancel': { documents: [run('run_1', 'cancelled')] },
+      },
+    });
+    const [row] = await t.children();
+    const [runRow] = await t.children(row);
+
+    await t.command(STACK_COMMANDS.preview, row);
+    await t.command(STACK_COMMANDS.scan, row);
+    await t.command(STACK_COMMANDS.followLogs, runRow);
+    await t.command(STACK_COMMANDS.cancel, runRow);
+    await settled();
+
+    const ran = t.commands.invoked.filter((c) => !c.path.endsWith('list'));
+    expect(ran.map((c) => [c.path, c.args])).toEqual([
+      ['stack preview', { stack: 'stk_1' }],
+      ['stack scan', { stack: 'stk_1', wait: true }],
+      ['run logs', { run: 'run_1', follow: true }],
+      ['run cancel', { run: 'run_1' }],
+    ]);
+    expect(ran.find((c) => c.path === 'stack preview')?.cwd).toBe('/work/repo/infra/prod');
+    expect(t.opened).toEqual([
+      'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n',
+    ]);
+    expect(t.channels.get('Lace: prod')).toEqual(['── lace run logs run_1 ──', 'line one']);
+    expect(t.shownChannels).toContain('Lace: prod');
+  });
+});
+
+describe('an apply', () => {
+  const lines = [
+    { type: 'log', text: 'Preview Advisory:' },
+    { type: 'log', text: '  + aws_s3_bucket.b' },
+    { type: 'log', text: '' },
+    { type: 'phase', name: 'plan' },
+    { type: 'log', text: 'Still creating...' },
+    { type: 'log', text: 'Still creating...' },
+  ];
+
+  test('runs over the root and stack it is given, every log line goes to the stack’s Output channel, and it settles with a notice and a tick', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': { documents: [...lines, applyResult()] },
+      },
+      answers: { 'Applied prod.': 'Show Output' },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+
+    expect(t.commands.invoked.find((c) => c.path === 'stack apply')?.args).toEqual({
+      stack: 'stk_1',
+    });
+    expect(t.ran.every((made) => made.ctx.root === '/work/repo/infra/prod')).toBe(true);
+    expect(t.channels.get('Lace: prod')).toEqual([
+      '── lace stack apply ──',
+      'Preview Advisory:',
+      '  + aws_s3_bucket.b',
+      '',
+      'Still creating...',
+      'Still creating...',
+    ]);
+    expect(t.progress.find((p) => p.title === 'Applying prod')).toBeDefined();
+    expect(t.messages).toContainEqual({
+      level: 'info',
+      text: 'Applied prod.',
+      buttons: ['Show Output'],
+    });
+    expect(t.shownChannels).toEqual(['Lace: prod']);
+    expect(t.panels.tick).toHaveBeenCalledWith(prod);
+    // Each tick asks for the whole tree again.
+    expect(t.redrawn).toContain(undefined);
+  });
+
+  test('refused for no certification on one root offers Validate, which runs the palette’s Validate on that root, whatever ran since, and shows its diagnostics', async () => {
+    let click: (label: string) => void = () => {};
+    const clicked = new Promise<string>((resolve) => {
+      click = resolve;
+    });
+    const t = setup({
+      root: staging,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_s', 'staging'))] },
+        'stack apply': refusal('no_certification'),
+        'stack preview': {
+          documents: [
+            {
+              stack: { id: 'stk_p', slug: 'prod' },
+              treeHash: 'h1',
+              plan: {
+                summary: { resourceAdd: 0, resourceChange: 0, resourceDestroy: 0 },
+                human: '',
+              },
+              policy: null,
+            },
+          ],
+        },
+        'module validate': {
+          documents: [
+            validation('/work/repo/infra/staging', [
+              { severity: 'error', message: 'not set', file: 'main.tf', line: 4, column: 2 },
+            ]),
+          ],
+        },
+      },
+      answers: {
+        'Error: no_certification': clicked,
+        'Validated infra/staging: lossy, 1 diagnostic.': 'Show Report',
+      },
+    });
+    const [row] = await t.children();
+    const applying = t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    expect(t.messages).toContainEqual({
+      level: 'error',
+      text: 'Error: no_certification',
+      buttons: ['Validate', 'Show Output'],
+    });
+
+    // While the notice is up, a stack of another root runs.
+    await t.command(STACK_COMMANDS.preview, {
+      kind: 'stack',
+      root: prod,
+      stack: stack('stk_p', 'prod'),
+    });
+    await settled();
+    click('Validate');
+    await applying;
+    await settled();
+
+    expect(t.commands.invoked.filter((c) => c.path === 'module validate')).toEqual([
+      { cwd: '/work/repo/infra/staging', path: 'module validate', args: {} },
+    ]);
+    expect(t.messages).toContainEqual({
+      level: 'warn',
+      text: 'Validated infra/staging: lossy, 1 diagnostic.',
+      buttons: ['Show Report'],
+    });
+    expect(t.log.lines).toEqual([
+      'Validated infra/staging: lossy, 1 diagnostic.',
+      '  /work/repo/infra/staging/main.tf:4:2: error: not set',
+    ]);
+  });
+
+  test('from the palette, names the root and picks one of its stacks', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+        'stack apply': { documents: [applyResult()] },
+      },
+      picks: ['qa'],
+    });
+    await t.command(STACK_COMMANDS.apply);
+    await settled();
+    expect(t.commands.invoked.find((c) => c.path === 'stack apply')?.args).toEqual({
+      stack: 'stk_2',
+    });
+  });
+
+  test('settled, ticks the canvas of the root it ran in, whatever root the tree acted on since', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': { held: true },
+        'stack preview': {
+          documents: [
+            {
+              stack: { id: 'stk_s', slug: 'staging' },
+              treeHash: 'h1',
+              plan: {
+                summary: { resourceAdd: 0, resourceChange: 0, resourceDestroy: 0 },
+                human: '',
+              },
+              policy: null,
+            },
+          ],
+        },
+      },
+    });
+    const [row] = await t.children();
+    const applying = t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    // The apply's start ticks its own root.
+    expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+
+    await t.command(STACK_COMMANDS.preview, {
+      kind: 'stack',
+      root: staging,
+      stack: stack('stk_s', 'staging'),
+    });
+    await settled();
+    t.commands.held.find((c) => c.path === 'stack apply')?.finish([applyResult()]);
+    await applying;
+    await settled();
+
+    expect(t.panels.tick.mock.calls).toEqual([[prod], [prod]]);
+  });
+
+  test('its Cancel is the run’s explicit cancel', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': { held: true },
+      },
+    });
+    const [row] = await t.children();
+    const applying = t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    t.progress.find((p) => p.title === 'Applying prod')?.cancel();
+    const applyCall = t.commands.held.find((c) => c.path === 'stack apply');
+    expect(applyCall?.cancelled).toBe(1);
+    applyCall?.finish([], new CommandExitError(130, ''));
+    await applying;
+    expect(t.messages).toContainEqual({
+      level: 'info',
+      text: 'Cancelled the apply of prod.',
+      buttons: ['Show Output'],
+    });
+  });
+});
