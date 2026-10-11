@@ -3,22 +3,9 @@ dist
 node_modules
 .vscode-test/
 *.vsix
-.DS_STORE
-*.db
-
-# Package build outputs
-packages/*/dist
-packages/*/out
-packages/canvas-stories/storybook-static
+.DS_Store
 *.tsbuildinfo
 
-# Generated proto (regenerate with: pnpm proto:gen)
-packages/proto/src/generated
-packages/host/src/generated
-packages/canvas/src/generated
-
-# Playwright
-playwright-report/
-test-results/
-# Traces auto-retained on failure
-**/*.webm
+# The `lace` CLI the engine tests and the window e2e run, when a developer
+# puts it here rather than on PATH.
+bin/

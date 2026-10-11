@@ -19,7 +19,16 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
-  "enabledApiProposals": [],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Lace runs the Lace CLI named by a setting and executes Terraform over the folder's content, so it runs only in a trusted folder."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Lace works on module directories on disk through the Lace CLI."
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -38,39 +47,57 @@
           "type": "webview"
         },
         {
-          "id": "laceChat",
-          "name": "Chat",
-          "type": "webview"
-        },
-        {
-          "id": "laceDeploy",
-          "name": "Deploy",
-          "type": "webview"
-        },
-        {
-          "id": "laceDeployRuns",
-          "name": "Recent runs",
-          "type": "tree"
+          "id": "laceStacks",
+          "name": "Stacks"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "laceStacks",
+        "when": "!lace.stacks.state",
+        "contents": "The stacks deployed from a module are listed here, each with its runs."
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == noRoot",
+        "contents": "Choose a module to see the stacks deployed from it.\n[Choose Module](command:lace.stacks.chooseModule)"
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == signedOut",
+        "contents": "Sign in to Lace to see the stacks deployed from this module.\n[Sign In](command:lace.signIn)"
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == noOrganization",
+        "contents": "Select the Lace organization whose stacks to show.\n[Select Organization](command:lace.selectOrganization)"
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == noTeam",
+        "contents": "Select the team whose stacks to show.\n[Select Team](command:lace.selectTeam)"
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == teamlessOrganization",
+        "contents": "This organization has no team yet. Teams are created in the portal.\n[Open Portal](command:lace.stacks.openPortal)"
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == noStack",
+        "contents": "No stack is deployed from this module yet. A stack is created once, in a terminal: `lace stack create` in the module's directory, with the new stack's slug and the ID of the cloud connection it deploys through (`lace connection list`).\n[Create Stack in Terminal](command:lace.stacks.createInTerminal)"
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == failed",
+        "contents": "Lace could not list the stacks of this module.\n[Retry](command:lace.refreshStacks)"
+      }
+    ],
     "commands": [
       {
         "command": "lace.openCanvas",
         "title": "Lace: Open Canvas"
-      },
-      {
-        "command": "lace.addModule",
-        "title": "Lace: Add Module to Canvas"
-      },
-      {
-        "command": "lace.generate",
-        "title": "Lace: Generate Terraform"
-      },
-      {
-        "command": "lace.refreshRegistry",
-        "title": "Refresh Registry",
-        "icon": "$(refresh)"
       },
       {
         "command": "lace.startEngine",
@@ -85,141 +112,561 @@
         "title": "Lace: Restart Engine"
       },
       {
-        "command": "lace.refreshCanvasModules",
-        "title": "Lace: Refresh Canvas Modules",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "lace.terraformValidate",
-        "title": "Lace: Terraform Validate"
-      },
-      {
-        "command": "lace.terraformFmt",
-        "title": "Lace: Terraform Format"
-      },
-      {
-        "command": "lace.terraformScan",
-        "title": "Lace: Terraform Security Scan"
-      },
-      {
-        "command": "lace.terraformDocs",
-        "title": "Lace: Terraform Docs"
-      },
-      {
         "command": "lace.openLogs",
         "title": "Lace: Open Logs"
       },
       {
-        "command": "lace.clearChatHistory",
-        "title": "Lace: Clear Chat History"
+        "command": "lace.signIn",
+        "title": "Lace: Sign In"
       },
       {
-        "command": "lace.deploy.refreshRuns",
-        "title": "Refresh runs",
+        "command": "lace.signOut",
+        "title": "Lace: Sign Out"
+      },
+      {
+        "command": "lace.selectOrganization",
+        "title": "Lace: Select Organization"
+      },
+      {
+        "command": "lace.selectTeam",
+        "title": "Lace: Select Team"
+      },
+      {
+        "command": "lace.refreshStacks",
+        "title": "Lace: Refresh Stacks",
         "icon": "$(refresh)"
       },
       {
-        "command": "lace.deploy.showRun",
-        "title": "Lace: Show run"
+        "command": "lace.stacks.chooseModule",
+        "title": "Lace: Show Stacks of a Module",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "lace.previewStack",
+        "title": "Lace: Preview Stack",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "lace.applyStack",
+        "title": "Lace: Apply Stack"
+      },
+      {
+        "command": "lace.scanStack",
+        "title": "Lace: Scan Stack for Drift"
+      },
+      {
+        "command": "lace.followRunLogs",
+        "title": "Lace: Follow Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "lace.cancelRun",
+        "title": "Lace: Cancel Run"
+      },
+      {
+        "command": "lace.openRunInPortal",
+        "title": "Lace: Open in Portal",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "lace.stacks.openPortal",
+        "title": "Lace: Open Portal"
+      },
+      {
+        "command": "lace.stacks.createInTerminal",
+        "title": "Lace: Create Stack in Terminal"
+      },
+      {
+        "command": "lace.save",
+        "title": "Lace: Save"
+      },
+      {
+        "command": "lace.generate",
+        "title": "Lace: Generate"
+      },
+      {
+        "command": "lace.validateModule",
+        "title": "Lace: Validate Module"
+      },
+      {
+        "command": "lace.convertModule",
+        "title": "Lace: Convert Module"
+      },
+      {
+        "command": "lace.formatModule",
+        "title": "Lace: Format Module"
+      },
+      {
+        "command": "lace.scanModule",
+        "title": "Lace: Scan Module"
+      },
+      {
+        "command": "lace.generateDocs",
+        "title": "Lace: Generate Docs"
+      },
+      {
+        "command": "lace.refreshRegistry",
+        "title": "Lace: Refresh Registry",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lace.addModuleToCanvas",
+        "title": "Lace: Add Module to Canvas"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "lace.openCanvas",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        },
+        {
+          "command": "lace.generateDocs",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "lace.followRunLogs",
+          "when": "false"
+        },
+        {
+          "command": "lace.cancelRun",
+          "when": "false"
+        },
+        {
+          "command": "lace.openRunInPortal",
+          "when": "false"
+        },
+        {
+          "command": "lace.stacks.openPortal",
+          "when": "false"
+        },
+        {
+          "command": "lace.stacks.createInTerminal",
+          "when": "false"
+        },
+        {
+          "command": "lace.save",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.generate",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.validateModule",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.convertModule",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.formatModule",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.scanModule",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.generateDocs",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.addModuleToCanvas",
+          "when": "workspaceFolderCount > 0"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "lace.stacks.chooseModule",
+          "when": "view == laceStacks",
+          "group": "navigation@1"
+        },
+        {
+          "command": "lace.refreshStacks",
+          "when": "view == laceStacks",
+          "group": "navigation@2"
+        },
+        {
+          "command": "lace.refreshRegistry",
+          "when": "view == laceRegistry",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "lace.previewStack",
+          "when": "view == laceStacks && viewItem == laceStack",
+          "group": "inline"
+        },
+        {
+          "command": "lace.previewStack",
+          "when": "view == laceStacks && viewItem == laceStack",
+          "group": "1_stack@1"
+        },
+        {
+          "command": "lace.applyStack",
+          "when": "view == laceStacks && viewItem == laceStack",
+          "group": "1_stack@2"
+        },
+        {
+          "command": "lace.scanStack",
+          "when": "view == laceStacks && viewItem == laceStack",
+          "group": "1_stack@3"
+        },
+        {
+          "command": "lace.openRunInPortal",
+          "when": "view == laceStacks && viewItem =~ /^laceRun portal$/",
+          "group": "inline"
+        },
+        {
+          "command": "lace.followRunLogs",
+          "when": "view == laceStacks && viewItem =~ /^laceRun/",
+          "group": "1_run@1"
+        },
+        {
+          "command": "lace.openRunInPortal",
+          "when": "view == laceStacks && viewItem =~ /^laceRun portal$/",
+          "group": "1_run@2"
+        },
+        {
+          "command": "lace.cancelRun",
+          "when": "view == laceStacks && viewItem =~ /^laceRun/",
+          "group": "2_cancel@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "Lace",
       "properties": {
         "lace.binaryPath": {
           "type": "string",
           "default": "/usr/local/bin/lace",
-          "description": "Path to the lace CLI binary"
-        },
-        "lace.autoStart": {
-          "type": "boolean",
-          "default": true
+          "scope": "machine-overridable",
+          "description": "Path to the Lace CLI binary."
         },
         "lace.autoRestart": {
           "type": "boolean",
-          "default": true
-        },
-        "lace.autoSave": {
-          "type": "boolean",
           "default": true,
-          "description": "Automatically save canvas changes. When disabled, use Cmd+S to save manually."
-        },
-        "lace.chatProactivity": {
-          "type": "string",
-          "enum": [
-            "off",
-            "on"
-          ],
-          "default": "on",
-          "description": "Enable rule-based suggestions when state changes between chat turns."
-        },
-        "lace.portalUrl": {
-          "type": "string",
-          "default": "",
-          "description": "Base URL of your Lace portal (e.g., https://portal.lace.cloud). Used for 'Open in portal' deep-links in the Deploy panel. Leave empty to disable."
-        },
-        "lace.organization": {
-          "type": "string",
-          "default": "",
-          "description": "Default organization slug (mirrors the LACE_ORGANIZATION env var / --org flag the CLI uses). Used to construct portal deep-links."
-        },
-        "lace.team": {
-          "type": "string",
-          "default": "",
-          "description": "Default team slug (mirrors the LACE_TEAM env var / --team flag the CLI uses). Used to construct portal deep-links."
+          "description": "Restart the Lace engine when it exits unexpectedly."
         }
       }
     },
-    "menus": {
-      "view/title": [
-        {
-          "command": "lace.refreshRegistry",
-          "when": "view == laceRegistry",
-          "group": "navigation"
-        },
-        {
-          "command": "lace.deploy.refreshRuns",
-          "when": "view == laceDeployRuns",
-          "group": "navigation"
+    "chatInstructions": [
+      {
+        "path": "./resources/instructions/lace-modules.instructions.md"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "lace_change_module_canvas",
+        "displayName": "Change module canvas",
+        "toolReferenceName": "laceChangeModuleCanvas",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Changes a Lace module canvas. Do not read the canvas before calling it. For each change pass the developer's own words in `request`, one entry per change: this tool resolves which operation, instances, inputs, outputs and registry modules are meant. `request` carries the words and never a literal value: pass each literal the developer gave (an input's value, an instance's new name, the name of the variable an input is bound to) in `value`, one change per entry, each with its own `value`. Lace withholds `value` from what it ranks and keeps, and keeps the words of `request` as written; the tool selects and never writes a value of its own. Every result of this tool carries the current canvas. On every call pass your own reading of each change in `modelReading`: always its `operation`, and any instance, input, output or registry module the developer named, as the canvas lists it once a result has shown you the canvas. Never put a value in `modelReading`. Where the words bear a second reading, pass it in `alternativeReading`. Lace reads the words too and applies its own reading where it is sure, yours otherwise; where the two differ the result says so: tell the developer. When Lace is also sure of your alternative reading, nothing is applied and the result shows both: ask the developer. A change neither reading settles is not applied, and the result names the part and its candidates: send it again naming one as the canvas lists it, with the developer's own words. Do not save or generate unless the developer asked.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "The module's directory: its path in the workspace, such as `infra/prod`, or `.` for the workspace folder itself. In a workspace of several folders the folder's name comes first, such as `api/infra/prod`."
+            },
+            "changes": {
+              "type": "array",
+              "minItems": 1,
+              "description": "The changes, in order, one entry per change.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "string",
+                    "description": "One change, in the developer's own words, and never a literal value: that goes in `value`."
+                  },
+                  "value": {
+                    "description": "The literal the developer gave for this change: an input's value, an instance's new name, or the name of the variable an input is bound to (`var.<name>`). One value per entry: a change with a value of its own is an entry of its own."
+                  },
+                  "modelReading": {
+                    "type": "object",
+                    "properties": {
+                      "operation": {
+                        "type": "string",
+                        "enum": [
+                          "place",
+                          "connect",
+                          "disconnect",
+                          "set",
+                          "bind",
+                          "clear",
+                          "rename",
+                          "delete",
+                          "ungroup"
+                        ],
+                        "description": "place: add a registry module to the canvas as a new instance; connect: wire an output of one instance into an input of another; disconnect: remove the wire into an instance's input; set: give an input of an instance a literal value; bind: make an input of an instance take its value from a variable of the module (`var.<name>`), so the module's caller sets it; clear: unset an input of an instance, removing the value, variable or expression it holds; rename: give an instance a new name; delete: remove an instance from the canvas; ungroup: dissolve a group, moving the instances inside it up beside it"
+                      },
+                      "instance": {
+                        "type": "string",
+                        "description": "The instance a set, bind, clear, disconnect, rename or delete works on, or the group an ungroup dissolves."
+                      },
+                      "input": {
+                        "type": "string",
+                        "description": "The input a set, bind, clear or disconnect works on, or a connect wires into."
+                      },
+                      "sourceInstance": {
+                        "type": "string",
+                        "description": "The instance a connect wires from."
+                      },
+                      "output": {
+                        "type": "string",
+                        "description": "The output a connect wires from."
+                      },
+                      "targetInstance": {
+                        "type": "string",
+                        "description": "The instance a connect wires into."
+                      },
+                      "module": {
+                        "type": "string",
+                        "description": "The registry module a place adds, as `author/name`."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "alternativeReading": {
+                    "type": "object",
+                    "properties": {
+                      "operation": {
+                        "type": "string",
+                        "enum": [
+                          "place",
+                          "connect",
+                          "disconnect",
+                          "set",
+                          "bind",
+                          "clear",
+                          "rename",
+                          "delete",
+                          "ungroup"
+                        ],
+                        "description": "place: add a registry module to the canvas as a new instance; connect: wire an output of one instance into an input of another; disconnect: remove the wire into an instance's input; set: give an input of an instance a literal value; bind: make an input of an instance take its value from a variable of the module (`var.<name>`), so the module's caller sets it; clear: unset an input of an instance, removing the value, variable or expression it holds; rename: give an instance a new name; delete: remove an instance from the canvas; ungroup: dissolve a group, moving the instances inside it up beside it"
+                      },
+                      "instance": {
+                        "type": "string",
+                        "description": "The instance a set, bind, clear, disconnect, rename or delete works on, or the group an ungroup dissolves."
+                      },
+                      "input": {
+                        "type": "string",
+                        "description": "The input a set, bind, clear or disconnect works on, or a connect wires into."
+                      },
+                      "sourceInstance": {
+                        "type": "string",
+                        "description": "The instance a connect wires from."
+                      },
+                      "output": {
+                        "type": "string",
+                        "description": "The output a connect wires from."
+                      },
+                      "targetInstance": {
+                        "type": "string",
+                        "description": "The instance a connect wires into."
+                      },
+                      "module": {
+                        "type": "string",
+                        "description": "The registry module a place adds, as `author/name`."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "request",
+                  "modelReading"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "root",
+            "changes"
+          ],
+          "additionalProperties": false
         }
-      ]
-    }
+      },
+      {
+        "name": "lace_describe_module_canvas",
+        "displayName": "Describe module canvas",
+        "toolReferenceName": "laceDescribeModuleCanvas",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Describes a Lace module canvas (its module instances with their inputs and outputs, the wires between them, the groups, the diagnostics, and whether it holds unsaved or ungenerated edits) for answering questions about it. Not needed before making changes.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "The module's directory: its path in the workspace, such as `infra/prod`, or `.` for the workspace folder itself. In a workspace of several folders the folder's name comes first, such as `api/infra/prod`."
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "name": "lace_save_module_canvas",
+        "displayName": "Save module canvas",
+        "toolReferenceName": "laceSaveModuleCanvas",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Saves a Lace module canvas. Call it only when the developer asks to save.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "The module's directory: its path in the workspace, such as `infra/prod`, or `.` for the workspace folder itself. In a workspace of several folders the folder's name comes first, such as `api/infra/prod`."
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "name": "lace_generate_module_terraform",
+        "displayName": "Generate module Terraform",
+        "toolReferenceName": "laceGenerateModuleTerraform",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Writes the Terraform for a Lace module canvas: the saved canvas rendered to the module's .tf files. Returns the files written, or why Lace did not generate. Call it only when the developer asks to generate.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "The module's directory: its path in the workspace, such as `infra/prod`, or `.` for the workspace folder itself. In a workspace of several folders the folder's name comes first, such as `api/infra/prod`."
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "name": "lace_validate_module_terraform",
+        "displayName": "Validate module Terraform",
+        "toolReferenceName": "laceValidateModuleTerraform",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Runs `lace module validate` on a module's Terraform on disk, not on its canvas: canvas edits reach the Terraform after Save and Generate. Returns the verdict (whether the module is in Lace style) and the diagnostics.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "The module's directory: its path in the workspace, such as `infra/prod`, or `.` for the workspace folder itself. In a workspace of several folders the folder's name comes first, such as `api/infra/prod`."
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "name": "lace_search_module_registry",
+        "displayName": "Search module registry",
+        "toolReferenceName": "laceSearchModuleRegistry",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Searches the Lace module registry. Returns each published module as `author/name` with its latest version, its description, its system and its categories.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "The module's directory: its path in the workspace, such as `infra/prod`, or `.` for the workspace folder itself. In a workspace of several folders the folder's name comes first, such as `api/infra/prod`."
+            },
+            "query": {
+              "type": "string",
+              "description": "Words to find in a module."
+            },
+            "system": {
+              "type": "string",
+              "description": "The system a module is for, such as `aws`."
+            },
+            "category": {
+              "type": "string",
+              "description": "A category a module is listed under."
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "name": "lace_describe_registry_module",
+        "displayName": "Describe registry module",
+        "toolReferenceName": "laceDescribeRegistryModule",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Describes one module of the Lace module registry before it is placed: every input with its type, default and whether it is required, every output, the version and the verdict of its certification.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "The module's directory: its path in the workspace, such as `infra/prod`, or `.` for the workspace folder itself. In a workspace of several folders the folder's name comes first, such as `api/infra/prod`."
+            },
+            "module": {
+              "type": "string",
+              "description": "The module, as `author/name`."
+            },
+            "version": {
+              "type": "string",
+              "description": "A published version. Left out: the latest."
+            }
+          },
+          "required": [
+            "root",
+            "module"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "pnpm run build",
-    "compile": "rspack --config rspack.config.js",
-    "pretest": "npm run compile",
+    "manifest:tools": "LACE_WRITE_MANIFEST=1 vitest run --project unit src/tools/__tests__/lm-tools.manifest.test.ts",
+    "build": "rspack build --config rspack.config.js",
+    "watch": "rspack build --watch --mode development --config rspack.config.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.webview.json && tsc --noEmit -p packages/host-e2e",
+    "lint": "biome check",
     "format": "biome format --write",
     "test": "vitest run",
-    "test:unit": "vitest run",
-    "test:host-e2e": "pnpm --filter @lace-cloud/host-e2e test",
-    "test:watch": "vitest",
-    "lint": "biome check",
-    "build": "rspack --config rspack.config.js",
-    "watch": "rspack --watch --config rspack.config.js",
+    "test:unit": "vitest run --project unit",
+    "test:build": "vitest run --project build",
+    "test:engine": "vitest run --project engine",
+    "test:watch": "vitest --project unit",
     "package": "vsce package",
     "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
     "@rspack/cli": "^1.1.8",
-    "@types/mocha": "^10.0.10",
+    "@rspack/core": "^1.1.8",
     "@types/node": "20.x",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/vscode": "^1.95.0",
-    "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1",
-    "css-loader": "^7.1.2",
-    "file-loader": "^6.2.0",
+    "@types/vscode": "~1.96.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "postcss": "^8.5.6",
-    "postcss-loader": "^8.2.1",
-    "style-loader": "^4.0.0",
-    "ts-loader": "^9.5.1",
     "typescript": "^5.6.3",
-    "vitest": "~3.1.0"
+    "vitest": "^3.2.4"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}": [
@@ -227,23 +674,14 @@
     ]
   },
   "dependencies": {
-    "@grpc/grpc-js": "^1.12.6",
-    "@lace-cloud/canvas": "0.6.5",
-    "@lace-cloud/chat-core": "0.6.5",
-    "@lace-cloud/chat-sidebar": "workspace:*",
-    "@lace-cloud/chat-webview": "0.6.5",
-    "@lace-cloud/design-tokens": "0.6.5",
-    "@lace-cloud/host": "0.6.5",
-    "@lace-cloud/proto": "0.6.5",
-    "@lace-cloud/ui": "0.6.5",
-    "@xyflow/react": "^12.10.1",
+    "@lace-cloud/canvas": "0.20.0",
+    "@lace-cloud/chat-core": "0.20.0",
+    "@lace-cloud/design-tokens": "0.20.0",
+    "@lace-cloud/host": "0.20.0",
+    "@lace-cloud/proto": "0.20.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "protobufjs"
-    ]
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   }
 }

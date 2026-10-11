@@ -6,17 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": [
-      "**",
-      "!out",
-      "!dist",
-      "!data",
-      "!.vscode",
-      "!packages/*/dist",
-      "!packages/*/src/generated",
-      "!package-lock.json",
-      "!pnpm-lock.yaml"
-    ]
+    "includes": ["**", "!.vscode", "!pnpm-lock.yaml"]
   },
   "formatter": {
     "enabled": true,
@@ -42,25 +32,5 @@
         "noNonNullAssertion": "off"
       }
     }
-  },
-  "overrides": [
-    {
-      "includes": ["src/**"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "paths": {
-                  "@connectrpc/connect": "Extension shell uses gRPC-JS via @lace-cloud/host's LaceTransport, not Connect-Web.",
-                  "@connectrpc/connect-web": "Extension shell uses gRPC-JS via @lace-cloud/host's LaceTransport, not Connect-Web."
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  ]
+  }
 }

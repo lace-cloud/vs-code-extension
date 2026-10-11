@@ -1,24 +1,20 @@
 name: CI
 
-# Fast correctness checks on every PR to develop.
+# Lint, typecheck, unit tests, build and the tests over the built bundles,
+# then the tests against a real engine: the engine tests, and the window e2e
+# (packages/host-e2e: the extension in a real VS Code under a virtual
+# display). They run on every PR to develop.
 #
-#   lint        → Biome check across the workspace
-#   unit-tests  → Vitest across every package with unit tests
-#   host-e2e    → @vscode/test-electron smoke + command + cli-integration
-#
-# The cli-integration test in `packages/host-e2e` spawns the public
-# release CLI from releases.lace.cloud and verifies the handshake +
-# gRPC protocol it emits. That is the extension's real integration
-# contract — the binary shipped to users. The lace-internal `-tags=test`
-# bundle is lace's own concern (flow-tests with seed fixtures) and is
-# not consumed here.
+# The libraries are the `@lace-cloud/*` packages from npm at the versions
+# package.json pins. The engine is the released `lace` CLI at the version
+# LACE_CLI_VERSION names, installed by the CLI's published installer, which
+# verifies the release's signature. Nothing here signs in.
 
 on:
   pull_request:
     branches: [develop]
 
-# Supersede in-flight runs when a newer commit lands on the same PR —
-# the most recent push is the only one worth learning from.
+# Supersede in-flight runs when a newer commit lands on the same ref.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -27,68 +23,71 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+
+      # pnpm, Node, and the dependencies from npm.
       - uses: ./.github/actions/setup-workspace
+
+      # The installer refuses a release it cannot verify, so it needs
+      # minisign on PATH.
+      - name: Install the lace CLI that LACE_CLI_VERSION names
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign
+          version="$(grep -v '^#' LACE_CLI_VERSION | tr -d '[:space:]')"
+          curl -fsSL --retry 3 https://releases.lace.cloud/install.sh -o "$RUNNER_TEMP/install.sh"
+          sh "$RUNNER_TEMP/install.sh" --version "$version" --install-dir "$RUNNER_TEMP/lace-cli"
+          echo "$RUNNER_TEMP/lace-cli" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/lace-cli/lace" version
+
       - name: Lint
         run: pnpm run lint
 
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-workspace
-      - name: Run unit tests
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
         run: pnpm run test:unit
 
-  host-e2e:
-    # VS Code Electron tests need a display; xvfb-run wraps the test
-    # command to provide one on the headless CI host.
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: ./.github/actions/install-release-cli
-        with:
-          artifact: lace-cli-linux-amd64
-          install-with-sudo: 'true'
-
-      - uses: ./.github/actions/setup-workspace
-
-      - name: Build extension bundles
+      - name: Build
+        id: build
         run: pnpm run build
 
-      - name: Install xvfb + platform packages for VS Code
+      - name: Bundle tests
+        run: pnpm run test:build
+
+      # The tests against the engine run whenever the build did, so each
+      # reports on its own.
+      - name: Engine tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm run test:engine
+
+      - name: Install a virtual display for VS Code
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
-          sudo apt-get update
           sudo apt-get install -y xvfb libnss3 libgbm1 libasound2t64
 
-      - name: Cache VS Code test download
-        uses: actions/cache@v5
-        with:
-          path: packages/host-e2e/.vscode-test
-          key: vscode-test-${{ runner.os }}-stable-v1
-
-      - name: Run host-e2e tests
-        run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm run test:host-e2e
+      - name: Window e2e
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm --filter @lace-cloud/host-e2e test
 
   ci-summary:
-    # Aggregator job develop's ruleset requires. Succeeds only if every
-    # upstream job succeeded; fails otherwise. Keeps the ruleset stable
-    # as upstream job names evolve.
-    needs: [lint, unit-tests, host-e2e]
+    # The one status check develop's ruleset requires: it succeeds only when
+    # every job above did, so the ruleset names no job that can be renamed.
+    needs: [checks]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Assert upstream jobs succeeded
+        env:
+          CHECKS: ${{ needs.checks.result }}
         run: |
-          if [ "${{ needs.lint.result }}" != "success" ] || \
-             [ "${{ needs.unit-tests.result }}" != "success" ] || \
-             [ "${{ needs.host-e2e.result }}" != "success" ]; then
-            echo "::error::CI failed (lint=${{ needs.lint.result }}, unit-tests=${{ needs.unit-tests.result }}, host-e2e=${{ needs.host-e2e.result }})"
+          if [ "$CHECKS" != "success" ]; then
+            echo "::error::CI failed (checks=$CHECKS)"
             exit 1
           fi
           echo "All CI jobs passed."
