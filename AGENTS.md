@@ -345,10 +345,12 @@ sensitive values are withheld.
 **Cancellation.** `invoke` resolves the call's `root` first, which reads the workspace's files and nothing else. A
 call whose token is cancelled by then, whether before it was invoked or while its root was resolved, throws VS Code's
 `CancellationError`, for every tool and whatever the resolution found (an unknown `root` included): no panel opened, no
-session held, no handler called. Otherwise `invoke` maps the
-`CancellationToken` to an `AbortSignal` (aborted on `onCancellationRequested`, the listener disposed when the call
-settles) and hands it to chat-core's handler: a change cancelled during the call starts nothing further and applies
-nothing after the cancellation, and the module tools stop waiting on their command.
+session held, no handler called. Otherwise `invoke` maps the `CancellationToken` to an `AbortSignal` (aborted on
+`onCancellationRequested`, the listener disposed when the call settles) and hands it to the tool. A canvas tool stops
+at its steps: cancelled while its tab is ensured or its session acquired, it takes no hold (or gives back the one it
+took), runs no handler and throws the same `CancellationError`. Once chat-core's handler runs, the signal is its own: a
+change cancelled during the call starts nothing further and applies nothing after the cancellation, and the module
+tools stop waiting on their command.
 
 **The text level.** `resources/instructions/lace-modules.instructions.md`, contributed through `chatInstructions` and
 applied to `**/*.tf`, tells the developer's coding assistant the rules of editing a Lace module's `.tf` files directly.

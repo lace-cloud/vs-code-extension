@@ -51,9 +51,11 @@
 // A call cancelled by the time its root is resolved (which reads the
 // workspace's files and nothing else) throws VS Code's `CancellationError`,
 // whatever the resolution found, an unknown root included: no panel is
-// opened, no session held, no handler called. A cancellation
-// that arrives after reaches chat-core's handler as an `AbortSignal`: a
-// cancelled change applies nothing further.
+// opened, no session held, no handler called. So does one cancelled while
+// its canvas tab is ensured or its session acquired: it takes no hold, or
+// gives back the one it took, and runs nothing. A cancellation that arrives
+// once the handler runs reaches it as an `AbortSignal`: a cancelled change
+// applies nothing further.
 import { posix } from 'node:path';
 import {
   type CanvasTools,
@@ -107,21 +109,48 @@ export const TOOL_SCHEMAS: readonly ToolSchema[] = [...canvasToolSchemas, ...mod
 const canvasOf = ({ ports }: RootHold): CanvasTools =>
   canvasTools({ source: ports.source, editor: ports.editor, commands: ports.commands });
 
+// A call cancelled between its steps (while its canvas tab was ensured, or
+// its session acquired): it stops there, and the adapter says so as VS
+// Code's cancellation.
+class CallCancelled extends Error {
+  constructor() {
+    super('The call was cancelled.');
+  }
+}
+
+const stopIfCancelled = (signal: AbortSignal | undefined): void => {
+  if (signal?.aborted) throw new CallCancelled();
+};
+
 export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
   const { panels, rootSessions, operations, commands } = ports;
 
-  // A call on the root's session, held for the call's duration.
+  // A call on the root's session, held for the call's duration. A call
+  // cancelled before the session is acquired takes no hold; one cancelled
+  // while it is acquired gives the hold back and runs nothing.
   async function held(
     root: AuthoringRoot,
+    signal: AbortSignal | undefined,
     use: (tools: CanvasTools) => Promise<ToolResult>,
   ): Promise<ToolResult> {
+    stopIfCancelled(signal);
     const hold = await rootSessions.acquire(rootPath(root));
     try {
+      stopIfCancelled(signal);
       return await use(canvasOf(hold));
     } finally {
       await hold.release();
     }
   }
+
+  // What Save and Generate run on the hold their rule takes: nothing, for a
+  // call cancelled while the hold was taken.
+  const onHold =
+    (signal: AbortSignal | undefined, run: (tools: CanvasTools) => Promise<ToolResult>) =>
+    (hold: RootHold): Promise<ToolResult> => {
+      stopIfCancelled(signal);
+      return run(canvasOf(hold));
+    };
 
   // An operation's result: the tool's own, or what the operation that did
   // not run says, as an error when it was asked for and could not run.
@@ -135,22 +164,23 @@ export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
       schema: CHANGE,
       call: async (root, input, signal) => {
         await panels.ensure(root, { preserveFocus: true });
-        return held(root, ([change]) => change.handler(input, signal));
+        return held(root, signal, ([change]) => change.handler(input, signal));
       },
     },
     {
       schema: DESCRIBE,
-      call: (root, input, signal) => held(root, ([, describe]) => describe.handler(input, signal)),
+      call: (root, input, signal) =>
+        held(root, signal, ([, describe]) => describe.handler(input, signal)),
     },
     {
       schema: SAVE,
       call: async (root, input, signal) =>
         resultOf(
           root,
-          await operations.save(root, (hold) => {
-            const [, , save] = canvasOf(hold);
-            return save.handler(input, signal);
-          }),
+          await operations.save(
+            root,
+            onHold(signal, ([, , save]) => save.handler(input, signal)),
+          ),
         ),
     },
     {
@@ -158,10 +188,10 @@ export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
       call: async (root, input, signal) =>
         resultOf(
           root,
-          await operations.generate(root, (hold) => {
-            const [, , , generate] = canvasOf(hold);
-            return generate.handler(input, signal);
-          }),
+          await operations.generate(
+            root,
+            onHold(signal, ([, , , generate]) => generate.handler(input, signal)),
+          ),
         ),
     },
     {
@@ -335,6 +365,9 @@ function languageModelTool(
         const result = await tool.call(root, toolInput(input), cancellation.signal);
         if (result.isError) throw new Error(result.content);
         return new api.LanguageModelToolResult([new api.LanguageModelTextPart(result.content)]);
+      } catch (error) {
+        if (error instanceof CallCancelled) throw new api.CancellationError();
+        throw error;
       } finally {
         cancellation.dispose();
       }

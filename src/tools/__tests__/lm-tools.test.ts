@@ -662,6 +662,74 @@ describe('registration', () => {
     await expect(call).rejects.toBeInstanceOf(UnknownRoot);
   });
 
+  test('a describe cancelled while its session is being acquired rejects as cancelled, runs no handler and keeps no hold', async () => {
+    const { tools, registerTool } = registered();
+    const t = setUp();
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
+    const acquire = t.ports.rootSessions.acquire as ReturnType<typeof vi.fn>;
+    const acquiring = acquire.getMockImplementation();
+    if (acquiring === undefined) throw new Error('the fake root sessions acquire nothing');
+    let proceed = () => {};
+    acquire.mockImplementationOnce(async (root: string) => {
+      await new Promise<void>((resolve) => (proceed = resolve));
+      return acquiring(root);
+    });
+    const cancellation = fakeCancellation();
+    handled.splice(0);
+
+    const call = Promise.resolve(
+      tools
+        .get('lace_describe_module_canvas')
+        ?.invoke(
+          { input: { root: 'infra/prod' }, toolInvocationToken: undefined },
+          cancellation.token,
+        ),
+    );
+    call.catch(() => {});
+    await vi.waitFor(() => expect(acquire).toHaveBeenCalled());
+    cancellation.cancel();
+    proceed();
+
+    await expect(call).rejects.toBeInstanceOf(Cancelled);
+    expect(handled).toEqual([]);
+    expect(t.holders()).toBe(0);
+  });
+
+  test('a change cancelled while its canvas tab is being ensured rejects as cancelled, and holds and runs nothing', async () => {
+    const { tools, registerTool } = registered();
+    const t = setUp();
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
+    const ensuring = t.panels.ensure.getMockImplementation();
+    if (ensuring === undefined) throw new Error('the fake panels ensure nothing');
+    let proceed = () => {};
+    t.panels.ensure.mockImplementationOnce(async (root, options) => {
+      await new Promise<void>((resolve) => (proceed = resolve));
+      return ensuring(root, options);
+    });
+    const cancellation = fakeCancellation();
+    handled.splice(0);
+
+    const call = Promise.resolve(
+      tools
+        .get('lace_change_module_canvas')
+        ?.invoke(
+          { input: { root: 'infra/prod', ...DELETE_DB }, toolInvocationToken: undefined },
+          cancellation.token,
+        ),
+    );
+    call.catch(() => {});
+    await vi.waitFor(() => expect(t.panels.ensure).toHaveBeenCalled());
+    cancellation.cancel();
+    proceed();
+
+    await expect(call).rejects.toBeInstanceOf(Cancelled);
+    expect(handled).toEqual([]);
+    // Only the canvas tab holds the session: the call took no hold.
+    expect(t.acquired).toHaveLength(1);
+    expect(t.holders()).toBe(1);
+    expect(t.fake.editor.apply).not.toHaveBeenCalled();
+  });
+
   test('no tool asks for a confirmation; each says what it runs on', async () => {
     const { tools, registerTool } = registered();
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), setUp().ports, sources);
