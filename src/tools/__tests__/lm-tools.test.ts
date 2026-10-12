@@ -578,6 +578,29 @@ describe('registration', () => {
     expect(t.fake.editor.save).not.toHaveBeenCalled();
   });
 
+  test('a change whose token is cancelled before it starts opens no canvas tab and applies nothing', async () => {
+    const { tools, registerTool } = registered();
+    const t = setUp();
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
+    const cancellation = fakeCancellation();
+    cancellation.cancel();
+
+    const result = (await tools
+      .get('lace_change_module_canvas')
+      ?.invoke(
+        { input: { root: 'infra/prod', ...DELETE_DB }, toolInvocationToken: undefined },
+        cancellation.token,
+      )) as unknown as Result;
+    expect(result.content[0]).toEqual(
+      new TextPart(
+        expect.stringContaining('Change 1: not applied. The call was cancelled before it applied.'),
+      ),
+    );
+    expect(t.panels.ensure).not.toHaveBeenCalled();
+    expect(t.fake.editor.apply).not.toHaveBeenCalled();
+    expect(t.holders()).toBe(0);
+  });
+
   test('no tool asks for a confirmation; each says what it runs on', async () => {
     const { tools, registerTool } = registered();
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), setUp().ports, sources);

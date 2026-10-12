@@ -22,7 +22,9 @@
 //   change             the root's canvas panel first, without taking focus,
 //                      so the edit lands where the developer sees it and a
 //                      visible holder outlives the call; then a hold of its
-//                      own for the call.
+//                      own for the call. A call cancelled before it starts
+//                      opens no panel: its hold reads the canvas chat-core's
+//                      result ends with, and nothing is applied.
 //   describe           a hold for the call: the root's open session, or a new
 //                      one, and no tab.
 //   save, generate     the canvas operations' one rule each, which the
@@ -119,7 +121,7 @@ export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
     {
       schema: CHANGE,
       call: async (root, input, signal) => {
-        await panels.ensure(root, { preserveFocus: true });
+        if (!signal?.aborted) await panels.ensure(root, { preserveFocus: true });
         return held(root, ([change]) => change.handler(input, signal));
       },
     },
