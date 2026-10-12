@@ -11,8 +11,8 @@ The full VS Code host of Lace's module-authoring canvas. The canvas UI element i
 inspectors, settings, Save, Generate, Validate, Convert, undo, groups, diagnostics, the conflict and refused-Terraform
 states, and the badges of the stack picked for the module. The packages carry what a host builds on: the engine mapping,
 the typed command contract, the command bindings with their runner and the reducers (`@lace-cloud/canvas/engine`); the
-tool contract, the tool sets and their one port to Lace's API, `Transport` (`@lace-cloud/chat-core`). The extension supplies every port and
-draws its own UI over that data: the registry sidebar and module detail, the Stacks tree, the palette commands, the
+tool contract and the tool sets (`@lace-cloud/chat-core`). The extension supplies every port and draws its own UI over
+that data: the registry sidebar and module detail, the Stacks tree, the palette commands, the
 Problems panel, sign-in with organization and team, the chat tools. It adds nothing no journey needs.
 
 Three levels work on one module: the `.tf` files, the canvas, and the developer's coding assistant in VS Code's chat.
@@ -36,7 +36,7 @@ module commands with their Validate on a root) and hands the same `Host` to ever
 | registry | the `laceRegistry` webview view, module detail, Refresh Registry, Add Module to Canvas |
 | account | Sign In, Sign Out, Select Organization, Select Team; the selection's status bar item |
 | stacks | the `laceStacks` tree and its commands; the runner's and the run channels' lifetime |
-| tools | the chat tools, where the Language Model Tools API exists, with a canvas tool set on every held session |
+| tools | the chat tools, where the Language Model Tools API exists |
 
 `activate` returns `{engine, rootSessions}`. `deactivate` flushes every held session's autosave, then stops the engine,
 which closes every session and frees every lock. `src/__tests__/manifest.test.ts` holds the manifest and the features to
@@ -48,9 +48,7 @@ each other: every contributed command, view and tool is one a feature registers,
 |---|---|---|
 | The engine process, its state, `lace.binaryPath` and `lace.autoRestart` | `engine/engine.ts` | everything |
 | A root's session: holders, `SessionOpen`, `SessionClose`, and what observers attach to it | `engine/root-sessions.ts` | canvas panels, tools, Save, Generate, placement, Problems, autosave |
-| The developer's credential and the API it is for, read per request | the engine (`ReadCredential`), through `engine/engine.ts` (`credential`) | the chat tools' transport |
-| Which of Lace's API routes the chat tools reach, and with what | `tools/api-transport.ts` | chat-core's canvas tool sets |
-| A session's canvas tool set | `engine/root-sessions.ts` (`observe`), made by `tools/lm-tools.ts` | every canvas tool call on that session |
+| A canvas tool call's tool set, over the ports of its hold's session | `tools/lm-tools.ts` | that call |
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
 | Running a package binding (Stacks rows, stack palette commands) | `engine/runner-host.ts` | the Stacks tree, the offers |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
@@ -75,8 +73,7 @@ extension host that dies takes its engine, sessions and locks with it. The hands
 compatibility: an engine of another protocol is refused with a message that names which side to update. The extension
 host reaches the engine through an in-process bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same
 typed mapping a webview holds over its bridge. `whenRunning` waits for a restart that `lace.autoRestart` or the developer
-starts. The developer's credential is the host's alone: `credential()` reads `ReadCredential` from the running engine on
-every call, never keeps it, and starts no engine; `ReadCredential` is no bridge method, so no webview reaches it.
+starts.
 
 **One session per authoring root, `root-sessions.ts` its only owner.**
 
@@ -88,11 +85,8 @@ every call, never keeps it, and starts no engine; `ReadCredential` is no bridge 
 - A hold follows its root across the end of a session's stream: a `failed` end re-opens (`SessionOpen` joins a live
   session), a `closed` end opens a new session; holders hear it through `renewed`. The end comes from the session
   mapping's `source`, never from a host announcement.
-- Observers (Problems, autosave, the chat's canvas tool sets) attach to every held session and never hold one. What
-  an observer attached is disposed when the root leaves that session (the last release's close, a renewal, `dispose`)
-  or the observation ends; a holder runs on what an observer attached to the session it is on now through the
-  observation (`use(hold, run)`), and an attachment the root leaves while runs use it is disposed when the last of
-  them settles.
+- Observers (Problems, autosave) attach to every held session and never hold one. What an observer attached is disposed
+  when the root leaves that session (the last release's close, a renewal, `dispose`) or the observation ends.
 - **The canvas panel is the one long-lived holder.** It takes its hold when the panel is created, before the page boots.
 - **An edit is never made by the last holder.** Every editing entry point that is not the canvas (the change tool, the
   registry's "+", module detail's Add to Canvas, Add Module to Canvas) first calls
@@ -282,9 +276,10 @@ A failed account command offers the way out its reason names (`vscode/offers.ts`
 
 ## The chat tools
 
-The extension contributes tools to VS Code's own chat and nothing else: no chat view, no participant, no MCP server. The
-tool sets are chat-core's (`canvasTools({source, editor, commands, transport})` and `moduleTools({commands})`), each
-tool a schema and a handler on chat-core's one tool contract.
+The extension contributes tools to VS Code's own chat and nothing else: no chat view, no participant, no MCP server, no
+model of Lace's. The tools run in the developer's own model and reach the engine and the CLI alone; nothing of a chat
+is sent to Lace or kept by it. The tool sets are chat-core's (`canvasTools({source, editor, commands})` and
+`moduleTools({commands})`), each tool a schema and a handler on chat-core's one tool contract.
 
 | Tool | Reference | Runs |
 |---|---|---|
@@ -310,43 +305,20 @@ Registration is feature-detected: where `vscode.lm.registerTool` is absent (Curs
 activates without its tools. No tool returns `confirmationMessages`; the chat shows the row with its invocation message.
 A result chat-core marks as an error is thrown, which is how a Language Model Tool fails.
 
-**One canvas tool set per session.** `canvasTools` composes an outcome observer that reads the session's frames and
-owns the revisions of its own applies, so a set lives as long as its session. `createLaceTools` observes the root
-sessions (`rootSessions.observe`) with a set made over the session's own `source`, `editor` and `commands` and the
-window's transport: the root sessions make one when a session is attached and dispose it when the root leaves that
-session (its close, a renewal) or the tools are dropped. Every canvas tool call (change, describe, save, generate)
-takes its hold by its operation's rule and runs on the set of the session the hold is on (`use(hold, run)`): a set the
-root leaves while a call runs on it is disposed when that call settles, so the call finishes on its set and the set
-reads its frames until then. Where the Language Model Tools API is absent no tool is registered, and no set is made.
+**A canvas tool set per call.** chat-core's `canvasTools` keeps nothing between calls: a tool reads the session's frames
+only while its call runs. Every canvas tool call (change, describe,
+save, generate) takes its hold by its operation's rule and runs on a set made for that call over the ports of the
+session the hold is on (`source`, `editor`, `commands`), so the tools keep nothing per session and observe no session.
+A call under way when its root's session is opened again finishes on the ports it began on; the next call is on the new
+session. Where the Language Model Tools API is absent no tool is registered.
 
-**How a change resolves** (chat-core): the change tool takes the developer's words in `request`, the literal in
-`value`, and the model's own reading in `modelReading` on every call, with `alternativeReading` where the words bear
-another. Each choice the change needs (operation, instance, input, output, registry module, and for a connect the
-output → input pair the engine's matcher scores) is settled in order: an exact name, a unique case-insensitive match,
-otherwise Lace's ranking (through the transport) composed with the model's reading. Lace's pick stands only where the
-ranking is sure of it (its rightness reaches the threshold the reply carries for the kind); everywhere else the model's
-reading decides. Where Lace's sure pick differs from the reading, Lace's applies and the result says both; a sure
-ranking of a different change under the alternative reading applies nothing and returns both. A rank Lace answered
-with a status but no ranking (a 503, say) leaves that question alone to the model's reading. A rank request that
-rejected, got no answer within chat-core's bound, or that the transport carried nothing for leaves that question to the
-model's reading and also gives up every later request of the change call, so its later questions are the model's and
-its decisions are not reported after it; a choice Lace's sure ranking settled earlier in the call stands. Every result
-ends with the current canvas; sensitive values are withheld.
-
-**The transport** (`tools/api-transport.ts`): chat-core's `Transport`, its one port to Lace's API, built from the
-engine's credential (`engine.credential`, the engine's `ReadCredential`). Each request reads the credential afresh, so
-a sign-in, a sign-out or another account takes effect at the next one, and nothing is kept. The request's URL is the
-path resolved against the API's base, `new URL(path, apiBaseUrl)`, as the CLI resolves its own, and only Lace's
-candidates routes are reached (`candidatesUrl`): a URL on another origin, or whose path is not under
-`/api/v1/candidates/` once dot segments and encoded slashes are resolved, is refused and nothing is sent. A developer
-who is signed out holds no key: the transport makes no request and answers that it carried nothing (`{carried: false}`),
-and the change call reads exactly as a tool set with no transport: each choice the words leave open is the model's
-reading, the result says "Lace did not rank" for it, nothing is reported, and nothing in the UI or the log says
-anything. A request is one `fetch` POST of the body as JSON, the key as the bearer, with the `signal` chat-core aborts
-when it gives the request up; the timing is chat-core's, and the extension adds no timer. A request that fails or is
-aborted rejects as `fetch` rejects; a reply goes back to chat-core as it came, its status and its body parsed when it
-is JSON, none otherwise (a 204, an HTML error page). What chat-core sends through it (a rank call per question, the
-decision, each outcome) is chat-core's; the extension adds nothing.
+**How a change resolves** (chat-core): the change tool takes `{changes: [{operation, instance?, input?,
+sourceInstance?, output?, targetInstance?, module?, value?}]}`, one entry per change, each naming what it works on as
+the canvas lists it and the literal the developer gave in `value`. A name resolves exactly, then ignoring case; a name
+that matches nothing or several things, or a slot the operation needs and the change does not state, leaves that
+change unapplied, and the result lists the candidates. A connect that names no pin is the canvas's `auto_connect`, and
+the pairs the engine's matcher leaves tied come back to choose between. The changes apply in order, each as one
+`ApplyAction`. Every result ends with the current canvas; sensitive values are withheld.
 
 **Cancellation.** A Language Model Tool's `invoke` maps VS Code's `CancellationToken` to an `AbortSignal` (aborted on
 `onCancellationRequested`, the listener disposed when the call settles) and hands it to chat-core's handler: a
@@ -368,8 +340,8 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
 - **Fakes for unit tests**: `engine/__tests__/fake-commands.ts` (one commands mapping and home port whose commands a test
   scripts per path, recording each invocation's directory), `engine/__tests__/fake-engine.ts` (an engine at the bridge,
   so the real caller, mapping and codecs run), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root
-  sessions with the real rule for holders and observers, Lace's API as a transport reaches it),
-  `roots/__tests__/fake-uri.ts`, `diagnostics/__tests__/fake-problems-api.ts`.
+  sessions with the real rule for holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
+  `diagnostics/__tests__/fake-problems-api.ts`.
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
   mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is
@@ -377,9 +349,8 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   release `LACE_CLI_VERSION` names: a binary whose `lace version -o json` says another version, any other build of the
   CLI included, is refused before a test runs.
 - **The chat tools end to end**: `tools/__tests__/lm-tools.engine.test.ts` invokes every tool `registerLaceTools`
-  registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel), commands
-  mapping and transport over the engine's credential, signed out: the transport makes no request. A test that needs
-  Lace's ranking gives the tools Lace's API as a fake.
+  registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel) and
+  commands mapping, signed out; a change makes no request of the extension's own beyond the engine.
 - **The window e2e** (`packages/host-e2e/window/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha
   suites, bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the
   engine tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens a fresh git
