@@ -164,7 +164,7 @@ folder itself; in a workspace of several folders, the folder's name first).
 
 **The tools run in your own model.** Your conversation stays between you and the model you chose in VS Code; Lace runs
 no model of its own on it, and the conversation itself is never sent. A tool reaches the network only as the same Lace
-CLI command does in a terminal:
+CLI command does in a terminal, and a request to Lace carries your Lace credential and the organization you selected:
 
 - `lace_search_module_registry` sends Lace's registry the search words, system and category your assistant gave it
   (`lace registry list`).
@@ -173,10 +173,12 @@ CLI command does in a terminal:
 - A change that places a module sends the module's name to Lace's registry to find it, and the module it adds is
   fetched from the registry.
 - `lace_validate_module_terraform`, and `lace_generate_module_terraform` after it writes the Terraform, run Terraform as
-  `lace module validate` does. The Lace CLI fetches Terraform from HashiCorp (it downloads it on first use, and checks
-  HashiCorp's releases on every run), and Terraform checks HashiCorp for a newer version. The module's providers come
-  from Lace's provider mirror, or from the public Terraform registry when your organization has a break-glass grant
-  (signed in, validate asks Lace which grant is active), and its `lace.cloud/` modules from Lace's registry.
+  `lace module validate` does. The Lace CLI checks HashiCorp's releases (`releases.hashicorp.com`) on every run and
+  downloads Terraform from there on first use; Terraform checks HashiCorp for a newer version
+  (`checkpoint-api.hashicorp.com`) only when its last check is stale. The module's providers come from Lace's provider
+  mirror, or from the public Terraform registry when your organization has a break-glass grant; when you are signed in
+  with an organization selected, validate asks Lace which grant is active (the tool names no organization of its own).
+  The module's `lace.cloud/` modules come from Lace's registry.
 
 Describing and saving the canvas, and every change other than placing a module, work only on your files and the Lace
 engine on your machine.

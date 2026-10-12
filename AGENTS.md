@@ -282,24 +282,10 @@ A failed account command offers the way out its reason names (`vscode/offers.ts`
 ## The chat tools
 
 The extension contributes tools to VS Code's own chat and nothing else: no chat view, no participant, no MCP server, no
-model of Lace's. The tools run in the developer's own model, and the conversation itself is never sent. A tool reaches
-the network only as the CLI command it runs does in a terminal:
-
-- search: the query, system and category to Lace's registry (`registry list`);
-- registry describe: the module and version, and it downloads that version's tree from Lace's registry (`registry
-  describe`);
-- a place change: the module's name to Lace's registry (`registry list --query`), and the engine fetches the module it
-  adds;
-- validate, and generate after it writes (it validates the tree it wrote), run Terraform as `lace module validate`
-  does: the CLI reaches `releases.hashicorp.com` on every run and downloads the Terraform it pins from there on first
-  use, and that Terraform calls `checkpoint-api.hashicorp.com` when its update check is stale; `terraform init
-  -backend=false` takes the module's providers from Lace's provider mirror, or from the public Terraform registry under
-  a break-glass grant (signed in, validate asks Lace for the active provider-mirror grant), and its `lace.cloud/`
-  modules from Lace's registry.
-
-Describe, save and every change but a place work on the root's files and the engine alone. The tool sets are
-chat-core's (`canvasTools({source, editor, commands})` and `moduleTools({commands})`), each tool a schema and a handler
-on chat-core's one tool contract.
+model of Lace's. The tools run in the developer's own model; what each one sends over the network is stated once, in
+the README ("The tools run in your own model"), and is what the CLI command the tool runs does in a terminal. The tool
+sets are chat-core's (`canvasTools({source, editor, commands})` and `moduleTools({commands})`), each tool a schema and
+a handler on chat-core's one tool contract.
 
 | Tool | Reference | Runs |
 |---|---|---|
