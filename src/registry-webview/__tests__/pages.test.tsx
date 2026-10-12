@@ -199,16 +199,16 @@ describe('what the registry sidebar says to a screen reader', () => {
     }
   });
 
-  test('the versions toggle is named by its title, which follows whether it is expanded', () => {
+  test('the versions toggle keeps one name, its title, and aria-expanded says whether it is open', () => {
     const shut = namedByTitle(moduleRow(), 'version-toggle');
     const open = namedByTitle(moduleRow({ expanded: true }), 'version-toggle');
     expect(shut).toMatchObject({
       'aria-expanded': 'false',
-      title: 'Show other versions of ACME DB',
+      title: 'Other versions of ACME DB',
     });
     expect(open).toMatchObject({
       'aria-expanded': 'true',
-      title: 'Hide other versions of ACME DB',
+      title: 'Other versions of ACME DB',
     });
     expect(open.class).toBe('version-toggle expanded');
   });
@@ -223,14 +223,19 @@ describe('what the registry sidebar says to a screen reader', () => {
   });
 
   test.each([
-    ['loading', { kind: 'loading' } as SidebarState],
-    ['signed out', { kind: 'signedOut' } as SidebarState],
-    ['failed', { kind: 'failed', message: 'the engine stopped' } as SidebarState],
-    ['empty', loaded()],
-  ])('the filter toggle is disabled with nothing to filter (%s)', (_name, state) => {
+    ['loading', { kind: 'loading' } as SidebarState, 'Filter by category'],
+    ['signed out', { kind: 'signedOut' } as SidebarState, 'Filter by category'],
+    [
+      'failed',
+      { kind: 'failed', message: 'the engine stopped' } as SidebarState,
+      'Filter by category',
+    ],
+    ['empty', loaded(), 'No categories to filter'],
+  ])('the filter toggle is disabled with nothing to filter (%s), and its title says so', (_name, state, title) => {
     expect(attributesOf(sidebar(state), 'filter-toggle')).toMatchObject({
       disabled: '',
       'aria-expanded': 'false',
+      title,
     });
   });
 

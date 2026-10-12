@@ -9,7 +9,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import type { RegistryRow, SendSidebarMessage, SidebarState } from '../protocol/registry-protocol';
 import { moduleKey } from '../protocol/registry-protocol';
 import { CategoryChips } from './CategoryChips';
-import { bySystem, categoriesOf, inOrganization, shownRows } from './filter';
+import { bySystem, categoryFilter, inOrganization, shownRows } from './filter';
 import { ModuleRow } from './ModuleRow';
 
 type Loaded = Extract<SidebarState, { kind: 'loaded' }>;
@@ -28,22 +28,21 @@ export function Sidebar({ state, send }: { state: SidebarState; send: SendSideba
   }, [typed]);
 
   const searching = query.trim() !== '';
-  // The categories there are to filter by: none while the registry is not
-  // listed or a search is under way, when the filter toggle is disabled.
-  const categories = state.kind === 'loaded' && !searching ? categoriesOf(state.rows) : [];
-  // What the filter toggle shows, says (pressed, expanded) and applies is one
-  // value: the chips drawn under the search box. Closing the filter clears
-  // what was chosen, so no filter is ever applied unseen.
-  const chipsShown = filtersShown && categories.length > 0;
-  const applied = chipsShown ? chosen : [];
+  // The chips, what they apply and the filter toggle, from one pure rule
+  // (filter.ts): closing the chips keeps the choice, and the toggle stays
+  // pressed, named for what applies, while it does.
+  const filter = categoryFilter({
+    rows: state.kind === 'loaded' ? state.rows : undefined,
+    chosen,
+    open: filtersShown,
+    searching,
+  });
   const toggle = (category: string) =>
-    setChosen((now) =>
-      now.includes(category) ? now.filter((c) => c !== category) : [...now, category],
+    setChosen(
+      filter.chosen.includes(category)
+        ? filter.chosen.filter((c) => c !== category)
+        : [...filter.chosen, category],
     );
-  const toggleFilters = () => {
-    if (filtersShown) setChosen([]);
-    setFiltersShown(!filtersShown);
-  };
 
   return (
     <>
@@ -59,11 +58,11 @@ export function Sidebar({ state, send }: { state: SidebarState; send: SendSideba
           />
           <button
             type="button"
-            className={`filter-toggle${chipsShown ? ' active' : ''}`}
-            title="Filter by category"
-            aria-expanded={chipsShown}
-            disabled={categories.length === 0}
-            onClick={toggleFilters}
+            className={`filter-toggle${filter.toggle.pressed ? ' active' : ''}`}
+            title={filter.toggle.name}
+            aria-expanded={filter.toggle.expanded}
+            disabled={filter.toggle.disabled}
+            onClick={() => setFiltersShown((open) => !open)}
           >
             <span aria-hidden="true">{'▽'}</span>
           </button>
@@ -79,9 +78,11 @@ export function Sidebar({ state, send }: { state: SidebarState; send: SendSideba
           </button>
         )}
       </div>
-      {chipsShown && <CategoryChips categories={categories} chosen={chosen} onToggle={toggle} />}
+      {filter.chipsShown && (
+        <CategoryChips categories={filter.categories} chosen={filter.chosen} onToggle={toggle} />
+      )}
       <div id="content">
-        <Content state={state} send={send} query={query} chosen={applied} />
+        <Content state={state} send={send} query={query} chosen={filter.applied} />
       </div>
     </>
   );

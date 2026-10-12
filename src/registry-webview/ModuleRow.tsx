@@ -60,7 +60,7 @@ export function ModuleRow({
             <button
               type="button"
               className={`version-toggle${expanded ? ' expanded' : ''}`}
-              title={`${expanded ? 'Hide' : 'Show'} other versions of ${label}`}
+              title={`Other versions of ${label}`}
               aria-expanded={expanded}
               onClick={onExpand}
             >
