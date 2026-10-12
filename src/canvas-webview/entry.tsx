@@ -23,9 +23,7 @@ async function boot(): Promise<void> {
     const page = canvasPage(host);
     const contributions = hostContributions(host);
     page.onDidChangePorts((ports) =>
-      root.render(
-        <App ports={ports} results={page.results} contributions={contributions} embedded />,
-      ),
+      root.render(<App ports={ports} results={page.results} contributions={contributions} />),
     );
     const booted = await host.call('boot', {});
     const ports = await canvasPorts(bridgeCaller(engine), host, booted);
