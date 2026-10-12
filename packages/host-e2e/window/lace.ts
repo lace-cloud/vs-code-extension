@@ -3,8 +3,8 @@
 // tabs, and waiting for what the window does.
 import * as assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import type { CanvasSource, EditorPort } from '@lace-cloud/canvas/engine';
 import { InputMode } from '@lace-cloud/canvas/engine';
 import * as vscode from 'vscode';
@@ -43,14 +43,13 @@ export type Module = {
   file: (name: string) => string;
 };
 
-let made = 0;
-
 // A module directory of its own in the workspace's repository holding
-// `files` (name → content), committed.
+// `files` (name → content), committed. Its name is made unique in the
+// repository itself: each test file is a bundle of its own, with its own
+// copy of this module.
 export function moduleDirectory(files: Record<string, string>): Module {
-  made += 1;
-  const name = `module-${made}`;
-  const path = join(workspace(), name);
+  const path = mkdtempSync(join(workspace(), 'module-'));
+  const name = basename(path);
   for (const [file, content] of Object.entries(files)) {
     mkdirSync(dirname(join(path, file)), { recursive: true });
     writeFileSync(join(path, file), content);
