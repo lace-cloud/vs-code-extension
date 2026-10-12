@@ -1,13 +1,6 @@
 import { ConnectError, Reason } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
-import {
-  createRootSessions,
-  NotObservedError,
-  type Observation,
-  type RootHold,
-  type RootSession,
-  RootSessionsDisposedError,
-} from '../root-sessions';
+import { createRootSessions, type RootSession, RootSessionsDisposedError } from '../root-sessions';
 import { type FakeEngine, fakeEngine, settled } from './fake-engine';
 
 // `flush` is what an observer's attachment to each session does when it is
@@ -614,121 +607,6 @@ describe('observers', () => {
     const hold = await rootSessions.acquire('/repo/infra');
     expect(reports.map((r) => r.error)).toEqual([failure]);
     expect(events).toEqual([`attach ${hold.sessionId}`]);
-  });
-
-  // What a hold runs on now.
-  const runOn = <A extends { dispose: () => void }>(
-    observation: Observation<A>,
-    hold: RootHold,
-  ): Promise<A> => observation.use(hold, async (attachment) => attachment);
-
-  test('a hold runs on what the observer attached to its session, until the root leaves it', async () => {
-    const { window, rootSessions } = setup();
-    const observation = rootSessions.observe((session) => ({
-      sessionId: session.sessionId,
-      dispose: () => {},
-    }));
-    const hold = await rootSessions.acquire('/repo/infra');
-    const joined = await rootSessions.acquire('/repo/infra');
-    const first = await runOn(observation, hold);
-
-    expect(first).toMatchObject({ sessionId: hold.sessionId });
-    expect(await runOn(observation, joined)).toBe(first);
-
-    await joined.release();
-    expect(await runOn(observation, hold)).toBe(first);
-    await hold.release();
-    expect(closes(window.engine)).toEqual([first.sessionId]);
-    await expect(runOn(observation, hold)).rejects.toBeInstanceOf(NotObservedError);
-  });
-
-  test('each hold runs on what the observer attached to its own session', async () => {
-    const { rootSessions } = setup();
-    const observation = rootSessions.observe((session) => ({
-      sessionId: session.sessionId,
-      dispose: () => {},
-    }));
-    const a = await rootSessions.acquire('/repo/a');
-    const b = await rootSessions.acquire('/repo/b');
-
-    expect(await runOn(observation, a)).toMatchObject({ sessionId: a.sessionId });
-    expect(await runOn(observation, b)).toMatchObject({ sessionId: b.sessionId });
-  });
-
-  test('after a renewal a hold runs on what the observer attached to the session it is on now', async () => {
-    const { window, rootSessions } = setup();
-    const disposed: string[] = [];
-    const observation = rootSessions.observe((session) => ({
-      sessionId: session.sessionId,
-      dispose: () => disposed.push(session.sessionId),
-    }));
-    const hold = await rootSessions.acquire('/repo/infra');
-    const gone = hold.sessionId;
-
-    window.engine.closeFromElsewhere(gone);
-    await settled();
-
-    expect(hold.sessionId).not.toBe(gone);
-    expect(await runOn(observation, hold)).toMatchObject({ sessionId: hold.sessionId });
-    expect(disposed).toEqual([gone]);
-  });
-
-  test('a renewal while a run uses an attachment disposes it only when the run settles', async () => {
-    const { window, rootSessions } = setup();
-    const disposed: string[] = [];
-    const observation = rootSessions.observe((session) => ({
-      sessionId: session.sessionId,
-      dispose: () => disposed.push(session.sessionId),
-    }));
-    const hold = await rootSessions.acquire('/repo/infra');
-    const gone = hold.sessionId;
-    let finish = () => {};
-    const running = observation.use(hold, async (attachment) => {
-      await new Promise<void>((resolve) => (finish = resolve));
-      return attachment;
-    });
-    await settled();
-
-    window.engine.closeFromElsewhere(gone);
-    await settled();
-    expect(hold.sessionId).not.toBe(gone);
-    expect(disposed).toEqual([]);
-    expect(await runOn(observation, hold)).toMatchObject({ sessionId: hold.sessionId });
-
-    finish();
-    expect(await running).toMatchObject({ sessionId: gone });
-    expect(disposed).toEqual([gone]);
-  });
-
-  test('the close the last release sends while a run is under way disposes the attachment when the run settles', async () => {
-    const { rootSessions } = setup();
-    const disposed: string[] = [];
-    const observation = rootSessions.observe((session) => ({
-      dispose: () => disposed.push(session.sessionId),
-    }));
-    const hold = await rootSessions.acquire('/repo/infra');
-    let finish = () => {};
-    const running = observation.use(hold, () => new Promise<void>((resolve) => (finish = resolve)));
-    await settled();
-
-    await hold.release();
-    expect(disposed).toEqual([]);
-    finish();
-    await running;
-    expect(disposed).toEqual([hold.sessionId]);
-  });
-
-  test('an ended observation has nothing for a hold, and disposed every attachment', async () => {
-    const { rootSessions } = setup();
-    const disposed: string[] = [];
-    const observation = rootSessions.observe((session) => ({
-      dispose: () => disposed.push(session.sessionId),
-    }));
-    const hold = await rootSessions.acquire('/repo/infra');
-
-    observation.dispose();
-    await expect(runOn(observation, hold)).rejects.toBeInstanceOf(NotObservedError);
-    expect(disposed).toEqual([hold.sessionId]);
   });
 
   test('dispose detaches every observer', async () => {

@@ -2,8 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { described, LOGO, record, row, vendor } from '../../protocol/__tests__/registry-fixtures';
 import type { DetailState, SidebarState } from '../../protocol/registry-protocol';
+import { CategoryChips } from '../CategoryChips';
 import { Interface, ModuleDetail, usageExample, Versions } from '../ModuleDetail';
 import { FALLBACK_GLYPH } from '../ModuleIcon';
+import { ModuleRow } from '../ModuleRow';
 import { Sidebar } from '../Sidebar';
 
 const nothing = () => {};
@@ -26,7 +28,37 @@ const VPC = row({ vendor: vendor(LOGO) });
 const DB = row({ name: 'db', displayName: 'ACME DB', system: 'gcp', categories: ['data'] });
 const PRIVATE = row({ name: 'net', displayName: 'Org Net', visibility: 'org_private' });
 
+// The deepest a <button> sits inside another in `html`: 1 when none holds
+// another.
+const buttonDepth = (html: string): number => {
+  let depth = 0;
+  let deepest = 0;
+  for (const [tag] of html.matchAll(/<\/?button\b/g)) {
+    depth += tag === '<button' ? 1 : -1;
+    deepest = Math.max(deepest, depth);
+  }
+  return deepest;
+};
+
+// The first class of each button in `html`, in order.
+const buttonClasses = (html: string): string[] =>
+  [...html.matchAll(/<button type="button" class="([^" ]+)/g)].map(([, name]) => name);
+
 describe('the registry sidebar page', () => {
+  test('makes every control a button of its own, so each is announced and reached as one', () => {
+    const html = sidebar(loaded({ rows: [VPC, DB], favourites: ['acme/db'] }));
+    expect(html).not.toContain('role="button"');
+    expect(buttonDepth(html)).toBe(1);
+  });
+
+  test('a row opens its detail from a button of its own, with its versions toggle, "+" and star beside it', () => {
+    const html = sidebar(loaded({ rows: [VPC] }));
+    expect(
+      buttonClasses(html).filter((name) => name.startsWith('module-') || name === 'version-toggle'),
+    ).toEqual(['module-open', 'version-toggle', 'module-add', 'module-star']);
+    expect(html).toContain('title="Add ACME VPC v2.0.0 to the canvas"');
+  });
+
   test('draws each row: label, version, categories, under its system and its registry', () => {
     const html = sidebar(loaded({ rows: [VPC, DB, PRIVATE], organization: 'acme-org' }));
     for (const text of ['ACME VPC', 'v2.0.0', 'networking', 'ACME DB', 'data', 'Org Net']) {
@@ -90,6 +122,152 @@ describe('the registry sidebar page', () => {
   });
 });
 
+// The text an element of `html` holds, found by its id, with its tags
+// dropped.
+const textOf = (html: string, id: string | undefined): string | undefined => {
+  if (id === undefined) return undefined;
+  const at = html.indexOf(`id="${id}"`);
+  if (at < 0) return undefined;
+  const open = html.lastIndexOf('<', at);
+  const tag = html.slice(open + 1).match(/^\w+/)?.[0];
+  let depth = 0;
+  for (const match of html.slice(open).matchAll(new RegExp(`<(/?)${tag}\\b[^>]*>`, 'g'))) {
+    depth += match[1] === '/' ? -1 : 1;
+    if (depth === 0) {
+      return html
+        .slice(open, open + (match.index ?? 0))
+        .replace(/<[^>]*>/g, '')
+        .trim();
+    }
+  }
+  return undefined;
+};
+
+// The attributes of the first tag in `html` whose class list starts with
+// `name`.
+const attributesOf = (html: string, name: string): Record<string, string> => {
+  const tag = html.match(new RegExp(`<\\w+[^>]*class="${name}[" ][^>]*>`))?.[0] ?? '';
+  return Object.fromEntries(
+    [...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, key, value]) => [key, value]),
+  );
+};
+
+const moduleRow = (props: Partial<Parameters<typeof ModuleRow>[0]> = {}) =>
+  renderToStaticMarkup(
+    <ModuleRow
+      row={DB}
+      starred={false}
+      versions={undefined}
+      expanded={false}
+      onExpand={nothing}
+      send={nothing}
+      {...props}
+    />,
+  );
+
+describe('what the registry sidebar says to a screen reader', () => {
+  test("a module button is named by the module's name and version, and described by its categories", () => {
+    const html = moduleRow();
+    const open = attributesOf(html, 'module-open');
+    expect(textOf(html, open['aria-labelledby'])).toBe('ACME DB v2.0.0');
+    expect(textOf(html, open['aria-describedby'])).toBe('data');
+  });
+
+  // A row action is named by its title alone, its glyph hidden: its tooltip
+  // is its name.
+  const namedByTitle = (html: string, name: string) => {
+    const action = attributesOf(html, name);
+    expect(action).not.toHaveProperty('aria-label');
+    expect(html).toMatch(
+      new RegExp(`class="${name}[^>]*><span aria-hidden="true">[^<]+</span></button>`),
+    );
+    return action;
+  };
+
+  test('the "+" is named by its title, which says what it adds', () => {
+    expect(namedByTitle(moduleRow(), 'module-add')).toMatchObject({
+      title: 'Add ACME DB v2.0.0 to the canvas',
+    });
+  });
+
+  test('the star keeps one name, its title, and says whether it is pressed', () => {
+    for (const starred of [false, true]) {
+      expect(namedByTitle(moduleRow({ starred }), 'module-star')).toMatchObject({
+        title: 'Favorite ACME DB',
+        'aria-pressed': String(starred),
+      });
+    }
+  });
+
+  test('the versions toggle keeps one name, its title, and aria-expanded says whether it is open', () => {
+    const shut = namedByTitle(moduleRow(), 'version-toggle');
+    const open = namedByTitle(moduleRow({ expanded: true }), 'version-toggle');
+    expect(shut).toMatchObject({
+      'aria-expanded': 'false',
+      title: 'Other versions of ACME DB',
+    });
+    expect(open).toMatchObject({
+      'aria-expanded': 'true',
+      title: 'Other versions of ACME DB',
+    });
+    expect(open.class).toBe('version-toggle expanded');
+  });
+
+  test('the filter toggle is named once, by its title, and says whether the categories are shown; its glyph is hidden', () => {
+    const html = sidebar(loaded({ rows: [VPC] }));
+    const toggle = attributesOf(html, 'filter-toggle');
+    expect(toggle).toMatchObject({ title: 'Filter by category', 'aria-expanded': 'false' });
+    expect(toggle).not.toHaveProperty('aria-label');
+    expect(toggle).not.toHaveProperty('disabled');
+    expect(html).toMatch(/class="filter-toggle[^>]*><span aria-hidden="true">▽<\/span><\/button>/);
+  });
+
+  test.each([
+    ['loading', { kind: 'loading' } as SidebarState, 'Filter by category'],
+    ['signed out', { kind: 'signedOut' } as SidebarState, 'Filter by category'],
+    [
+      'failed',
+      { kind: 'failed', message: 'the engine stopped' } as SidebarState,
+      'Filter by category',
+    ],
+    ['empty', loaded(), 'No categories to filter'],
+  ])('the filter toggle is disabled with nothing to filter (%s), and its title says so', (_name, state, title) => {
+    expect(attributesOf(sidebar(state), 'filter-toggle')).toMatchObject({
+      disabled: '',
+      'aria-expanded': 'false',
+      title,
+    });
+  });
+
+  test('a category chip says whether it is chosen, and a chosen one leads with a hidden check mark', () => {
+    const html = renderToStaticMarkup(
+      <CategoryChips categories={['data', 'networking']} chosen={['data']} onToggle={nothing} />,
+    );
+    expect(html).toContain(
+      'aria-pressed="true"><span class="chip-check" aria-hidden="true">✓</span>data</button>',
+    );
+    expect(html).toContain('aria-pressed="false">networking</button>');
+  });
+
+  test("headings' glyphs are hidden, and the favourites heading is no control", () => {
+    const html = sidebar(
+      loaded({ rows: [VPC, DB], favourites: ['acme/vpc'], recents: ['acme/db'] }),
+    );
+    expect(html).toContain('<span class="chevron" aria-hidden="true">▾</span>');
+    expect(html).toContain('<span aria-hidden="true">\u{1F552}</span>');
+    expect(html).toContain(
+      '<div class="list-heading"><span aria-hidden="true">★</span> FAVORITES</div>',
+    );
+    expect(html).not.toMatch(/<div class="system-header/);
+  });
+});
+
+// The name of each scroll box in `html`, in order.
+const scrollBoxes = (html: string): string[] =>
+  [
+    ...html.matchAll(/class="scroll-box[^"]*" tabindex="0" role="region" aria-label="([^"]+)"/g),
+  ].map(([, name]) => name);
+
 const detail = (over: Partial<DetailState> = {}): DetailState => ({
   row: VPC,
   record: { kind: 'loaded', value: record({ readme: '# Usage\n\nPlace it **once**.' }) },
@@ -111,6 +289,51 @@ describe('the module detail page', () => {
     const html = renderToStaticMarkup(<ModuleDetail state={detail()} send={nothing} />);
     expect(html).toContain('<h1>Usage</h1>');
     expect(html).toContain('<strong>once</strong>');
+  });
+
+  test('every box that scrolls sideways is a named region in the Tab order: each table, the README code', () => {
+    const readme =
+      '| Input | Type |\n|---|---|\n| `cidr` | `string` |\n\n```hcl\nmodule "vpc" {}\n```';
+    const details = renderToStaticMarkup(
+      <ModuleDetail
+        state={detail({ record: { kind: 'loaded', value: record({ readme }) } })}
+        send={nothing}
+      />,
+    );
+    expect(scrollBoxes(details)).toEqual(['README table', 'README code block', 'Quick Reference']);
+    expect(details).toContain('aria-label="README table"><table>');
+    expect(details).toMatch(
+      /<pre class="scroll-box" tabindex="0" role="region" aria-label="README code block"><code/,
+    );
+    const inputs = renderToStaticMarkup(<Interface read={{ kind: 'loaded', value: described }} />);
+    expect(scrollBoxes(inputs)).toEqual(['Inputs', 'Outputs']);
+  });
+
+  test('the tabs follow the WAI-ARIA tabs pattern: a named list, one panel they control, only the selected tab in the Tab order', () => {
+    const html = renderToStaticMarkup(<ModuleDetail state={detail()} send={nothing} />);
+    expect(html).toContain('role="tablist" aria-label="ACME VPC sections"');
+    const tabs = [
+      ...html.matchAll(
+        /role="tab" id="([^"]+)" aria-selected="(\w+)" aria-controls="([^"]+)" tabindex="(-?\d)"/g,
+      ),
+    ];
+    expect(tabs.map(([, , selected, , tabindex]) => [selected, tabindex])).toEqual([
+      ['true', '0'],
+      ['false', '-1'],
+      ['false', '-1'],
+      ['false', '-1'],
+    ]);
+    const panel = html.match(
+      /<div class="content" role="tabpanel" id="([^"]+)" aria-labelledby="([^"]+)" tabindex="0">/,
+    );
+    expect(new Set(tabs.map(([, , , controls]) => controls))).toEqual(new Set([panel?.[1]]));
+    expect(panel?.[2]).toBe(tabs[0][1]);
+  });
+
+  test("the meta row's separators belong to the item each introduces, and are not text", () => {
+    const html = renderToStaticMarkup(<ModuleDetail state={detail()} send={nothing} />);
+    expect(html).toContain('<span>v2.0.0</span><span class="meta-next">AWS</span>');
+    expect(html).not.toContain('·');
   });
 
   test("a README's raw HTML is not run as markup", () => {
@@ -139,6 +362,10 @@ describe('the module detail page', () => {
   test("Interface draws the described inputs and outputs; a refusal is the banner's message", () => {
     const html = renderToStaticMarkup(<Interface read={{ kind: 'loaded', value: described }} />);
     for (const text of ['cidr', 'string', 'The VPC range', 'vpc_id']) expect(html).toContain(text);
+    // Required: a mark in the table's column, a word where the table is stacked.
+    expect(html).toContain(
+      '<span class="required-mark">✓</span><span class="required-word">required</span>',
+    );
 
     const refused = renderToStaticMarkup(
       <ModuleDetail

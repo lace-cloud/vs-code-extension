@@ -21,9 +21,8 @@ The code and the docs use Lace's own vocabulary:
   file (`root` in code). Not the workspace folder.
 - **authoring session**: the engine's session of one authoring root, where "session" could be read as a chat session.
 - **diagnostic**: what the engine, Validate, Convert and Scan report about the Terraform. Not "finding".
-- **the developer's coding assistant** (or "the developer's model"): the model a developer already uses in chat. Not
-  "agent"; VS Code's own names ("agent mode") stay VS Code's.
-- **threshold**: what decides whether Lace's ranking is sure of a pick.
+- **the developer's coding assistant** (or "the developer's model"): the model a developer already uses in chat, the one
+  model the chat tools run in. Not "agent"; VS Code's own names ("agent mode") stay VS Code's.
 - The canvas **shows the edit**; "preview" is the stack command.
 - Public text describes the canvas tools' resolution by what it does: "how Lace's canvas tools resolve what you ask
   for".
@@ -46,10 +45,10 @@ src/
   diagnostics/            the Problems panel
   state/                  what the window keeps per root: the picked stack, the canvas arrangement
   autosave/               when a canvas saves, from files.autoSave
-  tools/                  the chat tools as Language Model Tools, and their transport to Lace's API
+  tools/                  the chat tools as Language Model Tools
   protocol/               the webview ↔ host protocols, shared by both bundles
   vscode/                 command registration, dialogs, notices with their offers, webview HTML, a terminal's command line
-  webview/                the page side of a webview's postMessage pair
+  webview/                the page side of a webview: its postMessage pair; the canvas's theme from VS Code's
 resources/instructions/   the text-level instructions contributed to the developer's coding assistant
 packages/host-e2e/        the window e2e (a real VS Code against a real engine)
 LACE_CLI_VERSION          the released `lace` CLI the engine tests and the window e2e run

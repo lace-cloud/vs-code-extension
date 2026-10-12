@@ -142,6 +142,17 @@ export function outcomeNotice(
   }
 }
 
+// A preview's policy verdict: its mode, policy and rule, then the reason it
+// gives when it gives one, the rules fired and the approval it asks for.
+function policyText(policy: NonNullable<JsonOf<'stack preview'>['policy']>): string {
+  const reason = policy.reason.trim();
+  return [
+    `Policy: ${policy.mode} (${policy.policyId}, rule ${policy.ruleId})${reason === '' ? '' : `: ${reason}`}`,
+    ...(policy.rulesFired.length > 0 ? [`Rules fired: ${policy.rulesFired.join(', ')}`] : []),
+    ...(policy.approvalMode === null ? [] : [`Approval: ${policy.approvalMode}`]),
+  ].join('\n');
+}
+
 // A preview as a read-only document: the plan and the policy verdict.
 export function previewText(preview: JsonOf<'stack preview'>): string {
   const { summary, human } = preview.plan;
@@ -152,9 +163,7 @@ export function previewText(preview: JsonOf<'stack preview'>): string {
     '',
     human,
     '',
-    policy === null
-      ? 'Policy: none applies'
-      : `Policy: ${policy.mode} (${policy.policyId}, rule ${policy.ruleId}): ${policy.reason}${policy.rulesFired.length > 0 ? `\nRules fired: ${policy.rulesFired.join(', ')}` : ''}${policy.approvalMode === null ? '' : `\nApproval: ${policy.approvalMode}`}`,
+    policy === null ? 'Policy: none applies' : policyText(policy),
     '',
   ].join('\n');
 }

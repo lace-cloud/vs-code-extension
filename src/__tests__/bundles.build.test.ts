@@ -30,6 +30,10 @@ describe('the canvas webview bundle', () => {
   test('holds the canvas', () => {
     expect(copiesOf('@lace-cloud/canvas', modules)).toHaveLength(1);
   });
+
+  test("follows VS Code's theme, which its design tokens read", () => {
+    expect(modules.some((module) => module.endsWith('/src/webview/theme.ts'))).toBe(true);
+  });
 });
 
 describe.each([
@@ -45,6 +49,56 @@ describe.each([
   test('holds no canvas and no engine', () => {
     expect(copiesOf('@lace-cloud/canvas', modules)).toEqual([]);
     expect(copiesOf('@lace-cloud/host', modules)).toEqual([]);
+  });
+});
+
+// The registry sidebar's built stylesheet, as the browser reads it, which
+// these tests read no further than its rules' selectors and declarations:
+// whether Tab reaches a row's actions and focus shows is the browser's.
+describe("the registry sidebar's stylesheet", () => {
+  const rules = readFileSync(join(OUT, 'registry-sidebar.css'), 'utf8')
+    .split('}')
+    .map((rule) => rule.split('{'))
+    .map(([selectors = '', declarations = '']) => ({
+      selectors,
+      declarations: declarations.replace(/\s/g, ''),
+    }));
+  // A row's actions and what holds them.
+  const IN_A_ROW =
+    /\.(module-add|module-star|version-toggle|version-row-add|module-actions|version-row)\b/;
+
+  test('never takes a row action, or what holds it, out of the tab order with display: none or visibility: hidden', () => {
+    const hiding = rules.filter(
+      ({ selectors, declarations }) =>
+        IN_A_ROW.test(selectors) && /display:none|visibility:hidden/.test(declarations),
+    );
+    expect(hiding).toEqual([]);
+  });
+
+  test("shows each of a row's actions, at full width, while keyboard focus is in the row", () => {
+    // Whether a rule for `action` under keyboard focus in its row declares
+    // every one of `declarations`.
+    const revealed = (action: string, ...declarations: string[]) =>
+      rules.some(
+        (rule) =>
+          rule.selectors.includes(':has(:focus-visible)') &&
+          rule.selectors.includes(action) &&
+          declarations.every((declaration) => rule.declarations.includes(declaration)),
+      );
+    for (const action of ['.module-star', '.module-add', '.version-toggle']) {
+      expect(revealed(action, 'width:22px', 'opacity:1'), action).toBe(true);
+    }
+    expect(revealed('.version-row-add', 'opacity:1')).toBe(true);
+  });
+
+  test('draws keyboard focus with the focus border', () => {
+    expect(
+      rules.some(
+        ({ selectors, declarations }) =>
+          selectors.includes(':focus-visible') &&
+          declarations.includes('var(--vscode-focusBorder)'),
+      ),
+    ).toBe(true);
   });
 });
 

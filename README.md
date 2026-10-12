@@ -20,8 +20,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
-- A Lace account for the registry, the stacks and the tools' resolving of your words. Sign in from VS Code with
-  **Lace: Sign In**.
+- A Lace account for the registry and the stacks. Sign in from VS Code with **Lace: Sign In**.
 - For **Lace: Generate Docs**, [terraform-docs](https://terraform-docs.io). Without it, the notification names it with an
   **Install** link; Lace does not install it. **Lace: Scan Module** needs nothing of yours: `lace module scan` runs
   [tfsec](https://github.com/aquasecurity/tfsec) at the version Lace pins, the one on `PATH` when it is that version,
@@ -158,14 +157,40 @@ pick says so.
 
 ## Lace in VS Code's chat
 
-Lace adds tools to VS Code's own chat. There is no Lace chat view: your coding assistant, in agent mode, calls Lace's
-tools as it calls any other, and you can name one with `#` (for example `#laceChangeModuleCanvas`). Every tool takes
-`root`, the module directory, as its path in the workspace (`infra/prod`, or `.` for the workspace folder itself; in a
-workspace of several folders, the folder's name first).
+Lace adds tools to VS Code's own chat. There is no Lace chat view and no model of Lace's: your coding assistant, in agent
+mode, calls Lace's tools as it calls any other, and you can name one with `#` (for example `#laceChangeModuleCanvas`).
+Every tool takes `root`, the module directory, as its path in the workspace (`infra/prod`, or `.` for the workspace
+folder itself; in a workspace of several folders, the folder's name first).
+
+**The tools run in your own model.** Your conversation stays between you and the model you chose in VS Code; Lace runs
+no model of its own on it, and the conversation itself is never sent. A tool reaches the network only as the same Lace
+CLI command does in a terminal. A request the Lace CLI makes to Lace carries your Lace credential and the organization
+you selected; the requests Terraform makes carry no credential of yours (see validate below):
+
+- `lace_search_module_registry` sends Lace's registry the search words, system and category your assistant gave it
+  (`lace registry list`).
+- `lace_describe_registry_module` sends the module and version, and downloads that version from Lace's registry to
+  describe it (`lace registry describe`).
+- A change that places a module sends the module's name to Lace's registry to find it, and the module it adds is fetched
+  from the registry.
+- `lace_validate_module_terraform`, and `lace_generate_module_terraform` after it writes the Terraform, run Terraform as
+  `lace module validate` does. On first use the Lace CLI downloads Terraform from HashiCorp's releases
+  (`releases.hashicorp.com`) and keeps it under `~/.lace/bin`; later runs do not contact HashiCorp's releases. Terraform
+  checks HashiCorp for a newer version (`checkpoint-api.hashicorp.com`) when it runs, which can happen on every validate
+  when another Terraform version is on your PATH; `CHECKPOINT_DISABLE=1` in the environment turns that off. The module's
+  providers come from Lace's provider mirror, or from the public Terraform registry when your organization has a
+  break-glass grant; when you are signed in with an organization selected, validate asks Lace which grant is active (the
+  tool names no organization of its own). The module's `lace.cloud/` modules come from Lace's registry. Terraform's
+  requests to Lace's provider mirror and registry carry no credential of yours: the CLI keeps your Lace credential out
+  of Terraform's environment, and Terraform reaches the registry with a read token the CLI mints for your selected
+  organization, only when the module calls a `lace.cloud/` module (`lace module validate --help`).
+
+Describing and saving the canvas, and every change other than placing a module, work only on your files and the Lace
+engine on your machine.
 
 | Tool                             | Reference                      | What it does                                                                                                                                                             |
 | -------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `lace_change_module_canvas`      | `#laceChangeModuleCanvas`      | Changes the canvas from your words, one change per entry: place a registry module, connect, disconnect, set or clear an input, bind it to a variable, rename, delete, ungroup. |
+| `lace_change_module_canvas`      | `#laceChangeModuleCanvas`      | Changes the canvas, one change per entry: place a registry module, connect, disconnect, set or clear an input, bind it to a variable, rename, delete, ungroup. |
 | `lace_describe_module_canvas`    | `#laceDescribeModuleCanvas`    | Describes the canvas: instances with their inputs and outputs, wires, groups, diagnostics, and whether it holds unsaved or ungenerated edits.                             |
 | `lace_save_module_canvas`        | `#laceSaveModuleCanvas`        | Saves the canvas, when you ask.                                                                                                                                          |
 | `lace_generate_module_terraform` | `#laceGenerateModuleTerraform` | Generates the saved canvas to Terraform, when you ask, and reports the files written or why Lace did not generate.                                                      |
@@ -173,22 +198,21 @@ workspace of several folders, the folder's name first).
 | `lace_search_module_registry`    | `#laceSearchModuleRegistry`    | Searches the Lace registry by words, system and category.                                                                                                                |
 | `lace_describe_registry_module`  | `#laceDescribeRegistryModule`  | Describes a registry module before it is placed: inputs, outputs, version and certification verdict.                                                                    |
 
-**How Lace's canvas tools resolve what you ask for.** Your assistant passes your words, one entry per change, with its
-own reading of each: the operation it understood and the names you used as the canvas lists them, never a value, and its
-other reading where your words could mean two changes. Lace lists what the canvas offers for every choice a change needs
-(which operation, instance, input or output, registry module, and for a connection which output feeds which input) and
-settles each choice in order: a name you used settles it first, exactly or ignoring case; otherwise Lace's ranking, run
-by Lace, and your assistant's reading are combined, and Lace's pick stands only where its ranking is sure of it. The tool
-then applies the change, and its result says what was applied and how each choice was made.
+**How Lace's canvas tools resolve what you ask for.** Your assistant reads what you ask and states each change as the
+canvas lists it: the operation (place, connect, disconnect, set, bind, clear, rename, delete, ungroup), the instance,
+input, output or registry module it works on by the name the canvas gives it, and the literal you gave (an input's
+value, a new name, the variable an input is bound to) in a slot of its own. Each name settles in order: exactly, then
+ignoring case. The changes apply in the order given, each on the canvas the one before it left, and the result says
+what was applied.
 
-- Where Lace's ranking was not sure, your assistant's reading stood, and the result marks each such choice.
-- Where Lace's ranking was sure and your assistant read another candidate, Lace's pick is applied and the result says
-  both, so your assistant can tell you. The edit is on the canvas, one undo away.
-- When neither settles a choice, nothing is applied for that change, and the result names the choice and its candidates.
-- When your assistant gave a second reading and Lace's ranking is sure it means another change, nothing is applied and
-  the result shows both readings, so your assistant asks you which you meant.
-- Signed out, or when Lace's ranking cannot be reached, your assistant's reading alone decides each choice your words
-  leave open.
+- A name that matches nothing, a name that fits several things, or a choice the change leaves open applies nothing for
+  that change, and the result lists the candidates the canvas offers, so your assistant can ask you or send the change
+  again naming one. The call's other changes still apply.
+- A place whose module the registry lists nothing for applies nothing and lists no candidates: the result points your
+  assistant to `lace_search_module_registry` to find the module.
+- A connection that names no output and no input wires the two instances as the canvas does when you drag one onto the
+  other; pairs that tie come back for you to choose between.
+- A registry module named with a version (`author/name@version`) is placed at that version.
 
 - The change tool opens or brings forward the module's canvas tab without taking focus, so every edit lands where you can
   see it, one undo step each.
@@ -196,15 +220,6 @@ then applies the change, and its result says what was applied and how each choic
 - No tool asks for confirmation. The save and generate tools tell your assistant to call them only when you ask.
   Describe and Generate open no tab; Save acts only on a canvas that is open, since unsaved edits exist only there.
 - The validate tool and the two registry tools run as commands and take no session.
-
-**What Lace learns from.** Signed in, each question Lace's ranking is asked is kept by Lace as it was asked, to train
-the ranking: your words with every value you gave replaced by a placeholder, your assistant's readings held the same
-way, and the candidates Lace weighed (the canvas's own names and descriptions, never what an input is set to), with
-their scores. A change whose words still hold one of those values inside a longer word is not sent to Lace's ranking at
-all. Once the tool's call settles, the decision for each change your words did not settle by name alone is reported:
-how each choice was made, and what was applied, every value replaced. What happened to the change next is reported too,
-each once: undone, changed to another choice through the tool or by hand, saved, or generated. Each request carries
-your Lace credential, read for that request from the Lace CLI. Signed out, nothing is sent.
 
 Where VS Code's Language Model Tools API is not available (Cursor and other forks), the extension runs without its
 tools; your assistant works on the `.tf` files and with the `lace` CLI, and the canvas follows the files.

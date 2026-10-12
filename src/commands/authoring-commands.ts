@@ -183,10 +183,18 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
   }
 
   // A Generate of `root` wrote `written`: Show Changes opens Source Control,
-  // where git shows the diff.
+  // where git shows the diff. A Generate that wrote no file says so, and has
+  // no change to show.
   async function generated(root: AuthoringRoot, written: readonly string[]): Promise<void> {
+    const label = rootLabel(root);
+    if (written.length === 0) {
+      void api.window.showInformationMessage(
+        `Generated the Terraform of ${label}: nothing was written.`,
+      );
+      return;
+    }
     const answer = await api.window.showInformationMessage(
-      `Generated the Terraform of ${rootLabel(root)}: ${written.join(', ')}.`,
+      `Generated the Terraform of ${label}: ${written.join(', ')}.`,
       SHOW_CHANGES,
     );
     if (answer === SHOW_CHANGES) await api.commands.executeCommand('workbench.view.scm');

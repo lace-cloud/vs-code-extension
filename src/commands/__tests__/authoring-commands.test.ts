@@ -681,6 +681,17 @@ describe('Generate', () => {
     expect(api.commands.executeCommand).toHaveBeenCalledWith('workbench.view.scm');
   });
 
+  test('a Generate that wrote no file says plainly that nothing was written, and offers no changes to show', async () => {
+    const editor = generating([{ type: 'success', written: [], validate: {} as never }]);
+    const { table, api } = setup({}, { open: false, editor, answer: 'Show Changes' });
+    await table[GENERATE_CANVAS]();
+
+    expect(api.window.showInformationMessage).toHaveBeenCalledWith(
+      'Generated the Terraform of infra/prod: nothing was written.',
+    );
+    expect(api.commands.executeCommand).not.toHaveBeenCalled();
+  });
+
   test('a buffer that does not save generates nothing', async () => {
     const editor = generating([]);
     const { table, api, textDocuments, sessions } = setup({}, { editor });

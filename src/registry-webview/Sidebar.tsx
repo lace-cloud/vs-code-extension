@@ -1,36 +1,22 @@
-// The registry sidebar: search with category chips, favourites, recently
-// used, the organization's modules and the public ones, each by system,
-// every row with its versions on expand, its "+" and its star. The
-// organization shown is the CLI's selection; its picker runs the
-// extension's Select Organization.
-import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from 'react';
-import type {
-  Read,
-  RegistryRow,
-  RegistryVersion,
-  SidebarMessage,
-  SidebarState,
-} from '../protocol/registry-protocol';
-import { moduleKey, moduleLabel } from '../protocol/registry-protocol';
-import { bySystem, categoriesOf, inOrganization, shownRows } from './filter';
-import { ModuleIcon } from './ModuleIcon';
+// The registry sidebar: search with category chips (CategoryChips),
+// favourites, recently used, the organization's modules and the public ones,
+// each by system, every row (ModuleRow) with its versions on expand, its "+"
+// and its star. The organization shown is the CLI's selection; its picker
+// runs the extension's Select Organization. Every control is a button of its
+// own, none inside another, so each is reached by Tab, activated by Enter
+// and Space, and announced as a control.
+import { type ReactNode, useEffect, useState } from 'react';
+import type { RegistryRow, SendSidebarMessage, SidebarState } from '../protocol/registry-protocol';
+import { moduleKey } from '../protocol/registry-protocol';
+import { CategoryChips } from './CategoryChips';
+import { bySystem, categoryFilter, inOrganization, shownRows } from './filter';
+import { ModuleRow } from './ModuleRow';
 
-type Send = (message: SidebarMessage) => void;
 type Loaded = Extract<SidebarState, { kind: 'loaded' }>;
 
 const SEARCH_DEBOUNCE_MS = 150;
 
-// Activates on Enter and Space as on a click, for an element that is not a
-// button.
-const onKey =
-  (run: () => void) =>
-  (event: KeyboardEvent): void => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    run();
-  };
-
-export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
+export function Sidebar({ state, send }: { state: SidebarState; send: SendSidebarMessage }) {
   const [typed, setTyped] = useState('');
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<readonly string[]>([]);
@@ -41,12 +27,21 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
     return () => clearTimeout(timer);
   }, [typed]);
 
-  const rows = state.kind === 'loaded' ? state.rows : [];
   const searching = query.trim() !== '';
-  const chips = filtersShown && !searching && rows.length > 0 ? categoriesOf(rows) : [];
+  // The chips, what they apply and the filter toggle, from one pure rule
+  // (filter.ts): closing the chips keeps the choice, and the toggle stays
+  // pressed, named for what applies, while it does.
+  const filter = categoryFilter({
+    rows: state.kind === 'loaded' ? state.rows : undefined,
+    chosen,
+    open: filtersShown,
+    searching,
+  });
   const toggle = (category: string) =>
-    setChosen((now) =>
-      now.includes(category) ? now.filter((c) => c !== category) : [...now, category],
+    setChosen(
+      filter.chosen.includes(category)
+        ? filter.chosen.filter((c) => c !== category)
+        : [...filter.chosen, category],
     );
 
   return (
@@ -63,11 +58,13 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
           />
           <button
             type="button"
-            className={`filter-toggle${filtersShown || chosen.length > 0 ? ' active' : ''}`}
-            title="Toggle filters"
-            onClick={() => setFiltersShown((shown) => !shown)}
+            className={`filter-toggle${filter.toggle.pressed ? ' active' : ''}`}
+            title={filter.toggle.name}
+            aria-expanded={filter.toggle.expanded}
+            disabled={filter.toggle.disabled}
+            onClick={() => setFiltersShown((open) => !open)}
           >
-            {'▽'}
+            <span aria-hidden="true">{'▽'}</span>
           </button>
         </div>
         {state.kind === 'loaded' && (
@@ -81,22 +78,11 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
           </button>
         )}
       </div>
-      {chips.length > 0 && (
-        <div id="chips">
-          {chips.map((category) => (
-            <button
-              type="button"
-              key={category}
-              className={`chip${chosen.includes(category) ? ' active' : ''}`}
-              onClick={() => toggle(category)}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
+      {filter.chipsShown && (
+        <CategoryChips categories={filter.categories} chosen={filter.chosen} onToggle={toggle} />
       )}
       <div id="content">
-        <Content state={state} send={send} query={query} chosen={searching ? [] : chosen} />
+        <Content state={state} send={send} query={query} chosen={filter.applied} />
       </div>
     </>
   );
@@ -125,7 +111,7 @@ function Content({
   chosen,
 }: {
   state: SidebarState;
-  send: Send;
+  send: SendSidebarMessage;
   query: string;
   chosen: readonly string[];
 }) {
@@ -168,7 +154,7 @@ function Modules({
   chosen,
 }: {
   state: Loaded;
-  send: Send;
+  send: SendSidebarMessage;
   query: string;
   chosen: readonly string[];
 }) {
@@ -242,14 +228,17 @@ function Modules({
     <>
       {favourites.length > 0 && (
         <div className="module-list">
-          <div className="system-header">{'★'} FAVORITES</div>
+          <div className="list-heading">
+            <span aria-hidden="true">{'★'}</span> FAVORITES
+          </div>
           {favourites.map((module) => row(module, false))}
         </div>
       )}
       {recents.length > 0 && (
         <Section
           id="__recent__"
-          title={'\u{1F552} RECENTLY USED'}
+          icon={'\u{1F552}'}
+          title="RECENTLY USED"
           count={recents.length}
           collapsed={collapsed}
           onToggle={collapse}
@@ -295,6 +284,7 @@ function Modules({
 
 function Section({
   id,
+  icon,
   title,
   count,
   collapsed,
@@ -303,6 +293,8 @@ function Section({
   children,
 }: {
   id: string;
+  // A glyph before the title, which a screen reader skips.
+  icon?: string;
   title: string;
   count: number;
   collapsed: ReadonlySet<string>;
@@ -312,15 +304,22 @@ function Section({
 }) {
   const closed = collapsed.has(id) ? ' collapsed' : '';
   const header = (
-    <div
+    <button
+      type="button"
       className={`system-header${closed}`}
-      role="button"
-      tabIndex={0}
+      aria-expanded={!collapsed.has(id)}
       onClick={() => onToggle(id)}
-      onKeyDown={onKey(() => onToggle(id))}
     >
-      <span className="chevron">{'▾'}</span> {title} <span className="module-count">({count})</span>
-    </div>
+      <span className="chevron" aria-hidden="true">
+        {'▾'}
+      </span>{' '}
+      {icon && (
+        <>
+          <span aria-hidden="true">{icon}</span>{' '}
+        </>
+      )}
+      {title} <span className="module-count">({count})</span>
+    </button>
   );
   const body = <div className={`system-body${closed}`}>{children}</div>;
   if (nested) {
@@ -335,120 +334,6 @@ function Section({
     <div className="module-list">
       {header}
       {body}
-    </div>
-  );
-}
-
-function ModuleRow({
-  row,
-  starred,
-  versions,
-  expanded,
-  onExpand,
-  send,
-}: {
-  row: RegistryRow;
-  starred: boolean;
-  versions: Read<readonly RegistryVersion[]> | undefined;
-  expanded: boolean;
-  onExpand: (() => void) | undefined;
-  send: Send;
-}) {
-  const key = moduleKey(row);
-  const stop =
-    (run: () => void) =>
-    (event: MouseEvent): void => {
-      event.stopPropagation();
-      run();
-    };
-  const detail = () => send({ op: 'showDetail', key });
-  return (
-    <>
-      <div
-        className="module-item"
-        role="button"
-        tabIndex={0}
-        onClick={detail}
-        onKeyDown={onKey(detail)}
-      >
-        <ModuleIcon vendor={row.vendor} className="module-icon" />
-        <div className="module-info">
-          <div className="module-name">
-            {moduleLabel(row)}
-            <span className="module-version">{row.version}</span>
-          </div>
-          {row.categories.length > 0 && (
-            <div className="module-categories">{row.categories.join(', ')}</div>
-          )}
-        </div>
-        <div className="module-actions">
-          {onExpand && (
-            <button
-              type="button"
-              className={`version-toggle${expanded ? ' has-versions' : ''}`}
-              title="Show all versions"
-              onClick={stop(onExpand)}
-            >
-              {expanded ? '▾' : '▸'}
-            </button>
-          )}
-          <button
-            type="button"
-            className="module-add"
-            title="Add to canvas"
-            onClick={stop(() => send({ op: 'place', key, version: row.version }))}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className={`module-star${starred ? ' starred' : ''}`}
-            title={starred ? 'Unfavorite' : 'Favorite'}
-            onClick={stop(() => send({ op: 'toggleFavourite', key }))}
-          >
-            {starred ? '★' : '☆'}
-          </button>
-        </div>
-      </div>
-      {expanded && <OlderVersions row={row} versions={versions} send={send} />}
-    </>
-  );
-}
-
-function OlderVersions({
-  row,
-  versions,
-  send,
-}: {
-  row: RegistryRow;
-  versions: Read<readonly RegistryVersion[]> | undefined;
-  send: Send;
-}) {
-  const note = (text: string) => (
-    <div className="version-row">
-      <span className="version-row-label">{text}</span>
-    </div>
-  );
-  const older =
-    versions?.kind === 'loaded' ? versions.value.filter((v) => v.version !== row.version) : [];
-  return (
-    <div className="version-children open">
-      {(versions === undefined || versions.kind === 'loading') && note('Loading versions…')}
-      {versions?.kind === 'failed' && note(versions.message)}
-      {versions?.kind === 'loaded' && older.length === 0 && note('No other versions')}
-      {older.map((v) => (
-        <div className="version-row" key={v.version}>
-          <span className="version-row-label">{v.version}</span>
-          <button
-            type="button"
-            className="version-row-add"
-            title={`Add ${v.version} to canvas`}
-            onClick={() => send({ op: 'place', key: moduleKey(row), version: v.version })}
-          >
-            +
-          </button>
-        </div>
-      ))}
     </div>
   );
 }

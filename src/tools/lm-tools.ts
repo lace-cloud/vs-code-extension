@@ -12,15 +12,12 @@
 //     sets' schemas (`canvasToolSchemas`, `moduleToolSchemas`), which
 //     `__tests__/lm-tools.manifest.test.ts` holds the manifest to.
 //
-// The canvas tools of a session are one tool set, chat-core's `canvasTools`
-// over the session's own ports and the transport to Lace's API, made once
-// for each session of a root when the session is attached and disposed when
-// the root leaves it (its close, a renewal) or when the tools are dropped:
-// the set's outcome observer reads the session's frames for as long as the
-// session lasts, and owns the revisions of its own applies. The root
-// sessions keep the sets with their sessions (`observe`), and every canvas
-// tool call runs on the set of the session its hold is on (`use`): a set
-// the root leaves while a call runs on it is disposed when the call settles.
+// The tools run in the developer's own model; what each one sends over the
+// network is the README's to say ("The tools run in your own model").
+//
+// A canvas tool call runs on chat-core's `canvasTools`, made for that call
+// over the ports of the session its hold is on: the set keeps nothing
+// between calls, so nothing is kept here per session either.
 //
 // How a call reaches what its tool works on, one rule per operation:
 //
@@ -42,8 +39,14 @@
 // Nothing asks: no tool returns `confirmationMessages`, and the chat shows
 // the tool's row with its invocation message. A result chat-core marks as an
 // error is thrown, which is how a Language Model Tool says its call failed.
-// VS Code's cancellation of a call reaches chat-core's handler as an
-// `AbortSignal`: a cancelled change applies nothing further.
+// A call cancelled by the time its root is resolved (which reads the
+// workspace's files and nothing else) throws VS Code's `CancellationError`,
+// whatever the resolution found, an unknown root included: no panel is
+// opened, no session held, no handler called. So does one cancelled while
+// its canvas tab is ensured or its session acquired: it takes no hold, or
+// gives back the one it took, and runs nothing. A cancellation that arrives
+// once the handler runs reaches it as an `AbortSignal`: a cancelled change
+// applies nothing further.
 import { posix } from 'node:path';
 import {
   type CanvasTools,
@@ -53,13 +56,12 @@ import {
   moduleTools,
   type ToolResult,
   type ToolSchema,
-  type Transport,
 } from '@lace-cloud/chat-core';
 import type * as vscode from 'vscode';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { type CanvasOperations, notDoneText, type Operated } from '../commands/canvas-operations';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import type { RootSessions } from '../engine/root-sessions';
+import type { RootHold, RootSessions } from '../engine/root-sessions';
 import {
   type AuthoringRoot,
   type RootSources,
@@ -81,17 +83,9 @@ export type LaceTool = {
 
 export type LaceToolPorts = {
   panels: Pick<CanvasPanels, 'ensure'>;
-  rootSessions: Pick<RootSessions, 'acquire' | 'observe'>;
+  rootSessions: Pick<RootSessions, 'acquire'>;
   operations: CanvasOperations;
   commands: CommandsMapping;
-  // chat-core's port to Lace's API, which every canvas tool set shares.
-  transport: Transport;
-};
-
-// The tools, and what drops them: every session's canvas tool set.
-export type LaceTools = {
-  readonly tools: readonly LaceTool[];
-  dispose: () => void;
 };
 
 // The tool sets' schemas, as chat-core states them as data: what the
@@ -102,28 +96,48 @@ const [VALIDATE, SEARCH_REGISTRY, DESCRIBE_REGISTRY_MODULE] = moduleToolSchemas;
 // Every tool's schema, in the order the manifest lists them.
 export const TOOL_SCHEMAS: readonly ToolSchema[] = [...canvasToolSchemas, ...moduleToolSchemas];
 
-export function createLaceTools(ports: LaceToolPorts): LaceTools {
-  const { panels, rootSessions, operations, commands, transport } = ports;
+// The canvas tools over the ports of the session `hold` is on now.
+const canvasOf = ({ ports }: RootHold): CanvasTools =>
+  canvasTools({ source: ports.source, editor: ports.editor, commands: ports.commands });
 
-  // Each held session's canvas tool set.
-  const canvas = rootSessions.observe((session) =>
-    canvasTools({
-      source: session.ports.source,
-      editor: session.ports.editor,
-      commands: session.ports.commands,
-      transport,
-    }),
-  );
+// A call cancelled between its steps (while its canvas tab was ensured, or
+// its session acquired): it stops there, and the adapter says so as VS
+// Code's cancellation.
+class CallCancelled extends Error {
+  constructor() {
+    super('The call was cancelled.');
+  }
+}
 
-  // A call on the root's session, held for the call's duration and run on
-  // the session's tool set, which lives until the call settles.
+const stopIfCancelled = (signal: AbortSignal | undefined): void => {
+  if (signal?.aborted) throw new CallCancelled();
+};
+
+// What Save and Generate run on the hold their rule takes: nothing, for a
+// call cancelled while the hold was taken.
+const onHold =
+  (signal: AbortSignal | undefined, run: (tools: CanvasTools) => Promise<ToolResult>) =>
+  (hold: RootHold): Promise<ToolResult> => {
+    stopIfCancelled(signal);
+    return run(canvasOf(hold));
+  };
+
+export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
+  const { panels, rootSessions, operations, commands } = ports;
+
+  // A call on the root's session, held for the call's duration. A call
+  // cancelled before the session is acquired takes no hold; one cancelled
+  // while it is acquired gives the hold back and runs nothing.
   async function held(
     root: AuthoringRoot,
+    signal: AbortSignal | undefined,
     use: (tools: CanvasTools) => Promise<ToolResult>,
   ): Promise<ToolResult> {
+    stopIfCancelled(signal);
     const hold = await rootSessions.acquire(rootPath(root));
     try {
-      return await canvas.use(hold, use);
+      stopIfCancelled(signal);
+      return await use(canvasOf(hold));
     } finally {
       await hold.release();
     }
@@ -136,25 +150,27 @@ export function createLaceTools(ports: LaceToolPorts): LaceTools {
       ? outcome.value
       : { content: notDoneText(root, outcome), isError: outcome.kind === 'bufferNotSaved' };
 
-  const tools: readonly LaceTool[] = [
+  return [
     {
       schema: CHANGE,
       call: async (root, input, signal) => {
         await panels.ensure(root, { preserveFocus: true });
-        return held(root, ([change]) => change.handler(input, signal));
+        return held(root, signal, ([change]) => change.handler(input, signal));
       },
     },
     {
       schema: DESCRIBE,
-      call: (root, input, signal) => held(root, ([, describe]) => describe.handler(input, signal)),
+      call: (root, input, signal) =>
+        held(root, signal, ([, describe]) => describe.handler(input, signal)),
     },
     {
       schema: SAVE,
       call: async (root, input, signal) =>
         resultOf(
           root,
-          await operations.save(root, (hold) =>
-            canvas.use(hold, ([, , save]) => save.handler(input, signal)),
+          await operations.save(
+            root,
+            onHold(signal, ([, , save]) => save.handler(input, signal)),
           ),
         ),
     },
@@ -163,8 +179,9 @@ export function createLaceTools(ports: LaceToolPorts): LaceTools {
       call: async (root, input, signal) =>
         resultOf(
           root,
-          await operations.generate(root, (hold) =>
-            canvas.use(hold, ([, , , generate]) => generate.handler(input, signal)),
+          await operations.generate(
+            root,
+            onHold(signal, ([, , , generate]) => generate.handler(input, signal)),
           ),
         ),
     },
@@ -190,7 +207,6 @@ export function createLaceTools(ports: LaceToolPorts): LaceTools {
       },
     },
   ];
-  return { tools, dispose: canvas.dispose };
 }
 
 // ── The `root` input ──
@@ -291,6 +307,7 @@ export type LanguageModelApi = {
   lm?: Partial<Pick<typeof vscode.lm, 'registerTool'>>;
   LanguageModelToolResult: typeof vscode.LanguageModelToolResult;
   LanguageModelTextPart: typeof vscode.LanguageModelTextPart;
+  CancellationError: typeof vscode.CancellationError;
 };
 
 function rootOf(input: Input): string {
@@ -304,10 +321,10 @@ const toolInput = (input: Input): Input =>
   Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'root'));
 
 // An `AbortSignal` that aborts when VS Code asks to cancel the call, until
-// the returned `dispose` stops listening.
+// the returned `dispose` stops listening. The call's token is not cancelled
+// yet: `invoke` has thrown for one that is.
 function abortOn(token: vscode.CancellationToken): { signal: AbortSignal; dispose: () => void } {
   const cancelled = new AbortController();
-  if (token.isCancellationRequested) cancelled.abort();
   const listening = token.onCancellationRequested(() => cancelled.abort());
   return { signal: cancelled.signal, dispose: () => listening.dispose() };
 }
@@ -322,12 +339,26 @@ function languageModelTool(
       invocationMessage: `${tool.schema.title}: ${String(input.root)}`,
     }),
     invoke: async ({ input }, token) => {
+      // Resolving the root reads the workspace's files and nothing else. A
+      // call cancelled by the time it settles is cancelled, whatever it
+      // found: an unknown root included.
+      let root: AuthoringRoot | undefined;
+      let unresolved: unknown;
+      try {
+        root = await rootNamed(sources, rootOf(input));
+      } catch (error) {
+        unresolved = error;
+      }
+      if (token.isCancellationRequested) throw new api.CancellationError();
+      if (root === undefined) throw unresolved;
       const cancellation = abortOn(token);
       try {
-        const root = await rootNamed(sources, rootOf(input));
         const result = await tool.call(root, toolInput(input), cancellation.signal);
         if (result.isError) throw new Error(result.content);
         return new api.LanguageModelToolResult([new api.LanguageModelTextPart(result.content)]);
+      } catch (error) {
+        if (error instanceof CallCancelled) throw new api.CancellationError();
+        throw error;
       } finally {
         cancellation.dispose();
       }
@@ -337,9 +368,8 @@ function languageModelTool(
 
 // Makes the tools and registers every one with VS Code's chat, until the
 // returned disposable drops them. A host without the Language Model Tools
-// API (Cursor and the other forks) runs the extension without its tools,
-// and so without a canvas tool set; their developers' assistants work at the
-// text level.
+// API (Cursor and the other forks) runs the extension without its tools;
+// their developers' assistants work at the text level.
 export function registerLaceTools(
   api: LanguageModelApi,
   ports: LaceToolPorts,
@@ -347,14 +377,12 @@ export function registerLaceTools(
 ): vscode.Disposable {
   const register = api.lm?.registerTool?.bind(api.lm);
   if (register === undefined) return { dispose: () => {} };
-  const lace = createLaceTools(ports);
-  const registrations = lace.tools.map((tool) =>
+  const registrations = createLaceTools(ports).map((tool) =>
     register(tool.schema.name, languageModelTool(api, tool, sources)),
   );
   return {
     dispose() {
       for (const registration of registrations) registration.dispose();
-      lace.dispose();
     },
   };
 }
