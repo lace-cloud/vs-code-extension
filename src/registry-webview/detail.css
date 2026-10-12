@@ -111,6 +111,14 @@ body {
   outline-offset: 2px;
 }
 
+/* High contrast, both themes: a hovered tab or button is outlined, as the
+ * sidebar's rows are; the outline weighs no more than :hover, so a focus
+ * ring wins. */
+:where(.vscode-high-contrast, .vscode-high-contrast-light) :where(.tab, .btn-primary):hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder);
+  outline-offset: -1px;
+}
+
 /* ── Error banner ── */
 .error-banner {
   padding: 8px 32px;
@@ -321,12 +329,14 @@ th.property {
   color: var(--vscode-textLink-foreground);
 }
 /* Inline code, in the README and in the interface's types: the theme's
- * preformatted text on its own background, the pair VS Code gives them. */
+ * preformatted text on its own background, the pair VS Code gives them, and
+ * its border where the theme has one (High Contrast Dark). */
 .readme code,
 .prop-type code {
   font-family: var(--vscode-editor-font-family);
   color: var(--vscode-textPreformat-foreground);
   background: var(--vscode-textPreformat-background);
+  border: 1px solid var(--vscode-textPreformat-border, transparent);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -342,5 +352,6 @@ th.property {
 .readme pre code {
   color: inherit;
   background: none;
+  border: none;
   padding: 0;
 }
