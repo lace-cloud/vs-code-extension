@@ -211,7 +211,9 @@ export function Interface({ read }: { read: Read<ModuleInterface> }) {
               inputs.map((input) => (
                 <tr key={input.name}>
                   <td className="prop-name">{input.name}</td>
-                  <td className="prop-type">{input.type || 'any'}</td>
+                  <td className="prop-type">
+                    <code>{input.type || 'any'}</code>
+                  </td>
                   <td className="prop-required">{input.required ? '✓' : '—'}</td>
                   <td className="prop-desc">{input.description}</td>
                 </tr>

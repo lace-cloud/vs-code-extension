@@ -64,10 +64,13 @@ body {
   font-size: 14px;
 }
 
+/* Edged with the theme's contrast border, which only the high contrast
+ * themes have, where the badge's fill is the page's own. */
 .badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
   font-size: 11px;
   font-weight: 600;
   background: var(--vscode-badge-background);
@@ -80,12 +83,14 @@ body {
   align-items: center;
 }
 
+/* Edged with the theme's button border, as VS Code's buttons are: in high
+ * contrast the fill is the page's own and the border is the button. */
 .btn-primary {
   padding: 8px 20px;
   border-radius: 4px;
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
-  border: none;
+  border: 1px solid var(--vscode-button-border, transparent);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -93,6 +98,17 @@ body {
 
 .btn-primary:hover {
   background: var(--vscode-button-hoverBackground);
+}
+
+/* Keyboard focus: one ring, the theme's focus border, on every control; a
+ * filled button takes it outside its edge. */
+:is(button, a):focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.btn-primary:focus-visible {
+  outline-offset: 2px;
 }
 
 /* ── Error banner ── */
@@ -196,8 +212,6 @@ td {
 }
 
 .prop-type {
-  font-family: var(--vscode-editor-font-family);
-  color: var(--vscode-textPreformat-foreground);
   font-size: 12px;
 }
 
@@ -306,20 +320,27 @@ th.property {
 .readme a {
   color: var(--vscode-textLink-foreground);
 }
-.readme code {
+/* Inline code, in the README and in the interface's types: the theme's
+ * preformatted text on its own background, the pair VS Code gives them. */
+.readme code,
+.prop-type code {
   font-family: var(--vscode-editor-font-family);
-  background: var(--vscode-textCodeBlock-background);
+  color: var(--vscode-textPreformat-foreground);
+  background: var(--vscode-textPreformat-background);
   padding: 1px 4px;
   border-radius: 3px;
 }
+/* A fenced block: the editor's text on the theme's code block background. */
 .readme pre {
-  background: var(--vscode-editorWidget-background);
+  background: var(--vscode-textCodeBlock-background);
+  color: var(--vscode-editor-foreground);
   border: 1px solid var(--vscode-widget-border);
   border-radius: 6px;
   padding: 12px;
   overflow-x: auto;
 }
 .readme pre code {
+  color: inherit;
   background: none;
   padding: 0;
 }
