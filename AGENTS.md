@@ -222,8 +222,9 @@ sources with no pick, and a root it cannot name is its `noRoot` state.
 
 - **Save** and **Generate** run `canvas-operations.ts`, the same functions the chat tools run. Generate first saves the
   root's dirty `.tf` editors, holds the session for the call with no tab, shows its progress, and ends with the files
-  written (`generated`: **Show Changes** opens Source Control, the notice the canvas's own Generate ends with too) or
-  the engine's refusal (an unsaved canvas offers **Save**).
+  written (`generated`: **Show Changes** opens Source Control, the notice the canvas's own Generate ends with too; a
+  Generate that wrote no file says that nothing was written and offers nothing) or the engine's refusal (an unsaved
+  canvas offers **Save**).
 - **Validate**, **Format**, **Scan** and **Generate Docs** run `module validate`, `module fmt`, `module scan`, `module
   docs` through `commands.at(root)`, with no session. **Convert Module** (`lace.convertModule`) runs `module convert` the
   same way and reports as Validate does, with no confirmation (the canvas action has none); an open canvas picks the
