@@ -2,9 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { described, LOGO, record, row, vendor } from '../../protocol/__tests__/registry-fixtures';
 import type { DetailState, SidebarState } from '../../protocol/registry-protocol';
+import { CategoryChips } from '../CategoryChips';
 import { Interface, ModuleDetail, usageExample, Versions } from '../ModuleDetail';
 import { FALLBACK_GLYPH } from '../ModuleIcon';
-import { CategoryChips, ModuleRow, Sidebar } from '../Sidebar';
+import { ModuleRow } from '../ModuleRow';
+import { Sidebar } from '../Sidebar';
 
 const nothing = () => {};
 
@@ -181,20 +183,27 @@ describe('what the registry sidebar says to a screen reader', () => {
     }
   });
 
-  test('the versions toggle says whether it is expanded, and its title follows', () => {
+  test('the versions toggle keeps one name, says whether it is expanded, and its title follows', () => {
     const shut = attributesOf(moduleRow(), 'version-toggle');
     const open = attributesOf(moduleRow({ expanded: true }), 'version-toggle');
-    expect(shut).toMatchObject({ 'aria-expanded': 'false', title: 'Show all versions' });
-    expect(open).toMatchObject({ 'aria-expanded': 'true', title: 'Hide other versions' });
+    expect(shut).toMatchObject({
+      'aria-label': 'Other versions of ACME DB',
+      'aria-expanded': 'false',
+      title: 'Show other versions',
+    });
+    expect(open).toMatchObject({
+      'aria-label': 'Other versions of ACME DB',
+      'aria-expanded': 'true',
+      title: 'Hide other versions',
+    });
     expect(open.class).toBe('version-toggle expanded');
   });
 
-  test('the filter toggle is named and says whether the categories are shown; its glyph is hidden', () => {
+  test('the filter toggle is named once, by its title, and says whether the categories are shown; its glyph is hidden', () => {
     const html = sidebar(loaded({ rows: [VPC] }));
-    expect(attributesOf(html, 'filter-toggle')).toMatchObject({
-      'aria-label': 'Filter by category',
-      'aria-expanded': 'false',
-    });
+    const toggle = attributesOf(html, 'filter-toggle');
+    expect(toggle).toMatchObject({ title: 'Filter by category', 'aria-expanded': 'false' });
+    expect(toggle).not.toHaveProperty('aria-label');
     expect(html).toMatch(/class="filter-toggle[^>]*><span aria-hidden="true">▽<\/span><\/button>/);
   });
 
@@ -215,7 +224,6 @@ describe('what the registry sidebar says to a screen reader', () => {
     expect(html).toContain(
       '<div class="list-heading"><span aria-hidden="true">★</span> FAVORITES</div>',
     );
-    expect(html).not.toContain('class="system-header"><');
     expect(html).not.toMatch(/<div class="system-header/);
   });
 });

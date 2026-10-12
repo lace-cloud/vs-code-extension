@@ -1,21 +1,16 @@
-// The registry sidebar: search with category chips, favourites, recently
-// used, the organization's modules and the public ones, each by system,
-// every row with its versions on expand, its "+" and its star. The
-// organization shown is the CLI's selection; its picker runs the
-// extension's Select Organization. Every control is a button of its own,
+// The registry sidebar: search with category chips (CategoryChips),
+// favourites, recently used, the organization's modules and the public ones,
+// each by system, every row (ModuleRow) with its versions on expand, its "+"
+// and its star. The organization shown is the CLI's selection; its picker
+// runs the extension's Select Organization. Every control is a button of its own,
 // none inside another, so each is reached by Tab, activated by Enter and
 // Space, and announced as a control.
-import { type ReactNode, useEffect, useId, useState } from 'react';
-import type {
-  Read,
-  RegistryRow,
-  RegistryVersion,
-  SidebarMessage,
-  SidebarState,
-} from '../protocol/registry-protocol';
-import { moduleKey, moduleLabel } from '../protocol/registry-protocol';
+import { type ReactNode, useEffect, useState } from 'react';
+import type { RegistryRow, SidebarMessage, SidebarState } from '../protocol/registry-protocol';
+import { moduleKey } from '../protocol/registry-protocol';
+import { CategoryChips } from './CategoryChips';
 import { bySystem, categoriesOf, inOrganization, shownRows } from './filter';
-import { ModuleIcon } from './ModuleIcon';
+import { ModuleRow } from './ModuleRow';
 
 type Send = (message: SidebarMessage) => void;
 type Loaded = Extract<SidebarState, { kind: 'loaded' }>;
@@ -35,7 +30,10 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
 
   const rows = state.kind === 'loaded' ? state.rows : [];
   const searching = query.trim() !== '';
-  const chips = filtersShown && !searching && rows.length > 0 ? categoriesOf(rows) : [];
+  // The categories shown under the search box: what the filter toggle says
+  // is expanded is exactly what is drawn.
+  const chips = filtersShown && !searching ? categoriesOf(rows) : [];
+  const chipsShown = chips.length > 0;
   const toggle = (category: string) =>
     setChosen((now) =>
       now.includes(category) ? now.filter((c) => c !== category) : [...now, category],
@@ -57,8 +55,7 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
             type="button"
             className={`filter-toggle${filtersShown || chosen.length > 0 ? ' active' : ''}`}
             title="Filter by category"
-            aria-label="Filter by category"
-            aria-expanded={filtersShown}
+            aria-expanded={chipsShown}
             onClick={() => setFiltersShown((shown) => !shown)}
           >
             <span aria-hidden="true">{'▽'}</span>
@@ -75,38 +72,11 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
           </button>
         )}
       </div>
-      {chips.length > 0 && <CategoryChips categories={chips} chosen={chosen} onToggle={toggle} />}
+      {chipsShown && <CategoryChips categories={chips} chosen={chosen} onToggle={toggle} />}
       <div id="content">
         <Content state={state} send={send} query={query} chosen={searching ? [] : chosen} />
       </div>
     </>
-  );
-}
-
-// The categories to filter by, each a toggle that says whether it is chosen.
-export function CategoryChips({
-  categories,
-  chosen,
-  onToggle,
-}: {
-  categories: readonly string[];
-  chosen: readonly string[];
-  onToggle: (category: string) => void;
-}) {
-  return (
-    <div id="chips">
-      {categories.map((category) => (
-        <button
-          type="button"
-          key={category}
-          className={`chip${chosen.includes(category) ? ' active' : ''}`}
-          aria-pressed={chosen.includes(category)}
-          onClick={() => onToggle(category)}
-        >
-          {category}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -356,127 +326,6 @@ function Section({
     <div className="module-list">
       {header}
       {body}
-    </div>
-  );
-}
-
-// One module's row: the module itself, a button named by its name and
-// version and described by its categories, which opens its detail and whose
-// hit area is the whole row; then its actions, side by side.
-export function ModuleRow({
-  row,
-  starred,
-  versions,
-  expanded,
-  onExpand,
-  send,
-}: {
-  row: RegistryRow;
-  starred: boolean;
-  versions: Read<readonly RegistryVersion[]> | undefined;
-  expanded: boolean;
-  onExpand: (() => void) | undefined;
-  send: Send;
-}) {
-  const key = moduleKey(row);
-  const label = moduleLabel(row);
-  const id = useId();
-  return (
-    <>
-      <div className="module-item">
-        <button
-          type="button"
-          className="module-open"
-          aria-labelledby={`${id}-name`}
-          aria-describedby={row.categories.length > 0 ? `${id}-categories` : undefined}
-          onClick={() => send({ op: 'showDetail', key })}
-        >
-          <ModuleIcon vendor={row.vendor} className="module-icon" />
-          <span className="module-info">
-            <span className="module-name" id={`${id}-name`}>
-              {label} <span className="module-version">{row.version}</span>
-            </span>
-            {row.categories.length > 0 && (
-              <span className="module-categories" id={`${id}-categories`}>
-                {row.categories.join(', ')}
-              </span>
-            )}
-          </span>
-        </button>
-        <div className="module-actions">
-          {onExpand && (
-            <button
-              type="button"
-              className={`version-toggle${expanded ? ' expanded' : ''}`}
-              title={expanded ? 'Hide other versions' : 'Show all versions'}
-              aria-label={`Versions of ${label}`}
-              aria-expanded={expanded}
-              onClick={onExpand}
-            >
-              {expanded ? '▾' : '▸'}
-            </button>
-          )}
-          <button
-            type="button"
-            className="module-add"
-            title="Add to canvas"
-            aria-label={`Add ${label} ${row.version} to the canvas`}
-            onClick={() => send({ op: 'place', key, version: row.version })}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className={`module-star${starred ? ' starred' : ''}`}
-            title="Favorite"
-            aria-label={`Favorite ${label}`}
-            aria-pressed={starred}
-            onClick={() => send({ op: 'toggleFavourite', key })}
-          >
-            {starred ? '★' : '☆'}
-          </button>
-        </div>
-      </div>
-      {expanded && <OlderVersions row={row} versions={versions} send={send} />}
-    </>
-  );
-}
-
-function OlderVersions({
-  row,
-  versions,
-  send,
-}: {
-  row: RegistryRow;
-  versions: Read<readonly RegistryVersion[]> | undefined;
-  send: Send;
-}) {
-  const note = (text: string) => (
-    <div className="version-row">
-      <span className="version-row-label">{text}</span>
-    </div>
-  );
-  const older =
-    versions?.kind === 'loaded' ? versions.value.filter((v) => v.version !== row.version) : [];
-  return (
-    <div className="version-children">
-      {(versions === undefined || versions.kind === 'loading') && note('Loading versions…')}
-      {versions?.kind === 'failed' && note(versions.message)}
-      {versions?.kind === 'loaded' && older.length === 0 && note('No other versions')}
-      {older.map((v) => (
-        <div className="version-row" key={v.version}>
-          <span className="version-row-label">{v.version}</span>
-          <button
-            type="button"
-            className="version-row-add"
-            title={`Add ${v.version} to canvas`}
-            aria-label={`Add ${moduleLabel(row)} ${v.version} to the canvas`}
-            onClick={() => send({ op: 'place', key: moduleKey(row), version: v.version })}
-          >
-            +
-          </button>
-        </div>
-      ))}
     </div>
   );
 }
