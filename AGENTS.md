@@ -291,7 +291,7 @@ on chat-core's one tool contract.
 
 | Tool | Reference | Runs |
 |---|---|---|
-| `lace_change_module_canvas` | `#laceChangeModuleCanvas` | `ensure` without focus (none for a call cancelled before it starts), then a hold for the call; each change one `ApplyAction` |
+| `lace_change_module_canvas` | `#laceChangeModuleCanvas` | `ensure` without focus, then a hold for the call; each change one `ApplyAction` |
 | `lace_describe_module_canvas` | `#laceDescribeModuleCanvas` | a hold for the call, no tab |
 | `lace_save_module_canvas` | `#laceSaveModuleCanvas` | Save's rule: the open session only |
 | `lace_generate_module_terraform` | `#laceGenerateModuleTerraform` | Generate's rule: dirty `.tf` editors saved, a hold for the call, no tab |
@@ -330,10 +330,11 @@ A connect that names no pin is the canvas's `auto_connect`, and the pairs the en
 choose between. The changes apply in order, each as one `ApplyAction`. Every result ends with the current canvas;
 sensitive values are withheld.
 
-**Cancellation.** A Language Model Tool's `invoke` maps VS Code's `CancellationToken` to an `AbortSignal` (aborted on
-`onCancellationRequested`, the listener disposed when the call settles) and hands it to chat-core's handler: a
-cancelled change starts nothing further and applies nothing after the cancellation, and the module tools stop waiting
-on their command.
+**Cancellation.** A Language Model Tool invoked with a token already cancelled throws VS Code's `CancellationError`
+before anything else, for every tool: no root is resolved, no panel opened, no session held, no handler called.
+Otherwise `invoke` maps the `CancellationToken` to an `AbortSignal` (aborted on `onCancellationRequested`, the listener
+disposed when the call settles) and hands it to chat-core's handler: a change cancelled during the call starts nothing
+further and applies nothing after the cancellation, and the module tools stop waiting on their command.
 
 **The text level.** `resources/instructions/lace-modules.instructions.md`, contributed through `chatInstructions` and
 applied to `**/*.tf`, tells the developer's coding assistant the rules of editing a Lace module's `.tf` files directly.

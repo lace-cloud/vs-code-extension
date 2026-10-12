@@ -106,6 +106,7 @@ class ToolResult {
 class TextPart {
   constructor(readonly value: string) {}
 }
+class Cancelled extends Error {}
 
 // The window's tools over the real engine, registered as VS Code registers
 // them.
@@ -173,6 +174,7 @@ function toolsWindow() {
     } as LanguageModelApi['lm'],
     LanguageModelToolResult: ToolResult as unknown as typeof vscode.LanguageModelToolResult,
     LanguageModelTextPart: TextPart as unknown as typeof vscode.LanguageModelTextPart,
+    CancellationError: Cancelled as unknown as typeof vscode.CancellationError,
   };
   const registration = registerLaceTools(language, ports, {
     folders: () => [folder(repository)],

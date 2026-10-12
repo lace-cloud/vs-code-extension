@@ -24,9 +24,7 @@
 //   change             the root's canvas panel first, without taking focus,
 //                      so the edit lands where the developer sees it and a
 //                      visible holder outlives the call; then a hold of its
-//                      own for the call. A call cancelled before it starts
-//                      opens no panel: its hold reads the canvas chat-core's
-//                      result ends with, and nothing is applied.
+//                      own for the call.
 //   describe           a hold for the call: the root's open session, or a new
 //                      one, and no tab.
 //   save, generate     the canvas operations' one rule each, which the
@@ -41,8 +39,11 @@
 // Nothing asks: no tool returns `confirmationMessages`, and the chat shows
 // the tool's row with its invocation message. A result chat-core marks as an
 // error is thrown, which is how a Language Model Tool says its call failed.
-// VS Code's cancellation of a call reaches chat-core's handler as an
-// `AbortSignal`: a cancelled change applies nothing further.
+// A call whose token is already cancelled when it is invoked throws VS
+// Code's `CancellationError` before anything runs: no root is resolved, no
+// panel opened, no session held, no handler called. A cancellation that
+// arrives during the call reaches chat-core's handler as an `AbortSignal`:
+// a cancelled change applies nothing further.
 import { posix } from 'node:path';
 import {
   type CanvasTools,
@@ -123,7 +124,7 @@ export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
     {
       schema: CHANGE,
       call: async (root, input, signal) => {
-        if (!signal?.aborted) await panels.ensure(root, { preserveFocus: true });
+        await panels.ensure(root, { preserveFocus: true });
         return held(root, ([change]) => change.handler(input, signal));
       },
     },
@@ -275,6 +276,7 @@ export type LanguageModelApi = {
   lm?: Partial<Pick<typeof vscode.lm, 'registerTool'>>;
   LanguageModelToolResult: typeof vscode.LanguageModelToolResult;
   LanguageModelTextPart: typeof vscode.LanguageModelTextPart;
+  CancellationError: typeof vscode.CancellationError;
 };
 
 function rootOf(input: Input): string {
@@ -288,10 +290,10 @@ const toolInput = (input: Input): Input =>
   Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'root'));
 
 // An `AbortSignal` that aborts when VS Code asks to cancel the call, until
-// the returned `dispose` stops listening.
+// the returned `dispose` stops listening. The call's token is not cancelled
+// yet: `invoke` has thrown for one that is.
 function abortOn(token: vscode.CancellationToken): { signal: AbortSignal; dispose: () => void } {
   const cancelled = new AbortController();
-  if (token.isCancellationRequested) cancelled.abort();
   const listening = token.onCancellationRequested(() => cancelled.abort());
   return { signal: cancelled.signal, dispose: () => listening.dispose() };
 }
@@ -306,6 +308,7 @@ function languageModelTool(
       invocationMessage: `${tool.schema.title}: ${String(input.root)}`,
     }),
     invoke: async ({ input }, token) => {
+      if (token.isCancellationRequested) throw new api.CancellationError();
       const cancellation = abortOn(token);
       try {
         const root = await rootNamed(sources, rootOf(input));

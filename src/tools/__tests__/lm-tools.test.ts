@@ -381,6 +381,7 @@ describe('registration', () => {
   class TextPart {
     constructor(readonly value: string) {}
   }
+  class Cancelled extends Error {}
   const sources = {
     folders: () => [repo],
     terraformFiles: async () => [uri('/work/repo/infra/prod/main.tf')],
@@ -391,6 +392,7 @@ describe('registration', () => {
       lm,
       LanguageModelToolResult: Result as unknown as typeof vscode.LanguageModelToolResult,
       LanguageModelTextPart: TextPart as unknown as typeof vscode.LanguageModelTextPart,
+      CancellationError: Cancelled as unknown as typeof vscode.CancellationError,
     };
   }
 
@@ -554,51 +556,34 @@ describe('registration', () => {
     ]);
   });
 
-  test('a call whose token is cancelled before it starts starts nothing: a save is not sent', async () => {
+  test.each(
+    NAMES,
+  )('%s, invoked with a token already cancelled, rejects as cancelled and opens, holds and runs nothing', async (name) => {
     const { tools, registerTool } = registered();
     const t = setUp();
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
+    // The canvas is open, so a save would have a session to run on.
     await t.panels.ensure(prod);
+    t.panels.ensure.mockClear();
+    const holds = t.acquired.length;
     const cancellation = fakeCancellation();
     cancellation.cancel();
+    handled.splice(0);
 
-    const result = (await tools
-      .get('lace_save_module_canvas')
-      ?.invoke(
-        { input: { root: 'infra/prod' }, toolInvocationToken: undefined },
-        cancellation.token,
-      )) as unknown as Result;
-    expect(result.content[0]).toEqual(
-      new TextPart(
-        expect.stringContaining(
-          'The call was cancelled before the save was sent: nothing was done.',
-        ),
-      ),
+    const call = tools.get(name)?.invoke(
+      {
+        input: { root: 'infra/prod', ...DELETE_DB, query: 'vpc', module: 'acme/vpc' },
+        toolInvocationToken: undefined,
+      },
+      cancellation.token,
     );
-    expect(t.fake.editor.save).not.toHaveBeenCalled();
-  });
-
-  test('a change whose token is cancelled before it starts opens no canvas tab and applies nothing', async () => {
-    const { tools, registerTool } = registered();
-    const t = setUp();
-    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
-    const cancellation = fakeCancellation();
-    cancellation.cancel();
-
-    const result = (await tools
-      .get('lace_change_module_canvas')
-      ?.invoke(
-        { input: { root: 'infra/prod', ...DELETE_DB }, toolInvocationToken: undefined },
-        cancellation.token,
-      )) as unknown as Result;
-    expect(result.content[0]).toEqual(
-      new TextPart(
-        expect.stringContaining('Change 1: not applied. The call was cancelled before it applied.'),
-      ),
-    );
+    await expect(call).rejects.toBeInstanceOf(Cancelled);
     expect(t.panels.ensure).not.toHaveBeenCalled();
-    expect(t.fake.editor.apply).not.toHaveBeenCalled();
-    expect(t.holders()).toBe(0);
+    expect(t.acquired).toHaveLength(holds);
+    expect(handled).toEqual([]);
+    expect(t.commands.at).not.toHaveBeenCalled();
+    expect(t.commands.anywhere).not.toHaveBeenCalled();
+    expect(cancellation.listening()).toBe(0);
   });
 
   test('no tool asks for a confirmation; each says what it runs on', async () => {
