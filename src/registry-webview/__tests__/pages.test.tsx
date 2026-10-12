@@ -26,7 +26,37 @@ const VPC = row({ vendor: vendor(LOGO) });
 const DB = row({ name: 'db', displayName: 'ACME DB', system: 'gcp', categories: ['data'] });
 const PRIVATE = row({ name: 'net', displayName: 'Org Net', visibility: 'org_private' });
 
+// The deepest a <button> sits inside another in `html`: 1 when none holds
+// another.
+const buttonDepth = (html: string): number => {
+  let depth = 0;
+  let deepest = 0;
+  for (const [tag] of html.matchAll(/<\/?button\b/g)) {
+    depth += tag === '<button' ? 1 : -1;
+    deepest = Math.max(deepest, depth);
+  }
+  return deepest;
+};
+
+// The first class of each button in `html`, in order.
+const buttonClasses = (html: string): string[] =>
+  [...html.matchAll(/<button type="button" class="([^" ]+)/g)].map(([, name]) => name);
+
 describe('the registry sidebar page', () => {
+  test('makes every control a button of its own, so each is announced and reached as one', () => {
+    const html = sidebar(loaded({ rows: [VPC, DB], favourites: ['acme/db'] }));
+    expect(html).not.toContain('role="button"');
+    expect(buttonDepth(html)).toBe(1);
+  });
+
+  test('a row opens its detail from a button of its own, with its versions toggle, "+" and star beside it', () => {
+    const html = sidebar(loaded({ rows: [VPC] }));
+    expect(
+      buttonClasses(html).filter((name) => name.startsWith('module-') || name === 'version-toggle'),
+    ).toEqual(['module-open', 'version-toggle', 'module-add', 'module-star']);
+    expect(html).toContain('aria-label="Add ACME VPC v2.0.0 to the canvas"');
+  });
+
   test('draws each row: label, version, categories, under its system and its registry', () => {
     const html = sidebar(loaded({ rows: [VPC, DB, PRIVATE], organization: 'acme-org' }));
     for (const text of ['ACME VPC', 'v2.0.0', 'networking', 'ACME DB', 'data', 'Org Net']) {

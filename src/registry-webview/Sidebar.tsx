@@ -2,8 +2,10 @@
 // used, the organization's modules and the public ones, each by system,
 // every row with its versions on expand, its "+" and its star. The
 // organization shown is the CLI's selection; its picker runs the
-// extension's Select Organization.
-import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
+// extension's Select Organization. Every control is a button of its own,
+// none inside another, so each is reached by Tab, activated by Enter and
+// Space, and announced as a control.
+import { type ReactNode, useEffect, useState } from 'react';
 import type {
   Read,
   RegistryRow,
@@ -13,7 +15,6 @@ import type {
 } from '../protocol/registry-protocol';
 import { moduleKey, moduleLabel } from '../protocol/registry-protocol';
 import { bySystem, categoriesOf, inOrganization, shownRows } from './filter';
-import { onKey } from './keys';
 import { ModuleIcon } from './ModuleIcon';
 
 type Send = (message: SidebarMessage) => void;
@@ -303,15 +304,14 @@ function Section({
 }) {
   const closed = collapsed.has(id) ? ' collapsed' : '';
   const header = (
-    <div
+    <button
+      type="button"
       className={`system-header${closed}`}
-      role="button"
-      tabIndex={0}
+      aria-expanded={!collapsed.has(id)}
       onClick={() => onToggle(id)}
-      onKeyDown={onKey(() => onToggle(id))}
     >
       <span className="chevron">{'▾'}</span> {title} <span className="module-count">({count})</span>
-    </div>
+    </button>
   );
   const body = <div className={`system-body${closed}`}>{children}</div>;
   if (nested) {
@@ -346,39 +346,37 @@ function ModuleRow({
   send: Send;
 }) {
   const key = moduleKey(row);
-  const stop =
-    (run: () => void) =>
-    (event: MouseEvent): void => {
-      event.stopPropagation();
-      run();
-    };
-  const detail = () => send({ op: 'showDetail', key });
+  const label = moduleLabel(row);
+  // The row holds its controls side by side: the module itself, which opens
+  // its detail and whose hit area is the whole row, then its actions.
   return (
     <>
-      <div
-        className="module-item"
-        role="button"
-        tabIndex={0}
-        onClick={detail}
-        onKeyDown={onKey(detail)}
-      >
-        <ModuleIcon vendor={row.vendor} className="module-icon" />
-        <div className="module-info">
-          <div className="module-name">
-            {moduleLabel(row)}
-            <span className="module-version">{row.version}</span>
-          </div>
-          {row.categories.length > 0 && (
-            <div className="module-categories">{row.categories.join(', ')}</div>
-          )}
-        </div>
+      <div className="module-item">
+        <button
+          type="button"
+          className="module-open"
+          onClick={() => send({ op: 'showDetail', key })}
+        >
+          <ModuleIcon vendor={row.vendor} className="module-icon" />
+          <span className="module-info">
+            <span className="module-name">
+              {label}
+              <span className="module-version">{row.version}</span>
+            </span>
+            {row.categories.length > 0 && (
+              <span className="module-categories">{row.categories.join(', ')}</span>
+            )}
+          </span>
+        </button>
         <div className="module-actions">
           {onExpand && (
             <button
               type="button"
               className={`version-toggle${expanded ? ' has-versions' : ''}`}
               title="Show all versions"
-              onClick={stop(onExpand)}
+              aria-label={`Show all versions of ${label}`}
+              aria-expanded={expanded}
+              onClick={onExpand}
             >
               {expanded ? '▾' : '▸'}
             </button>
@@ -387,7 +385,8 @@ function ModuleRow({
             type="button"
             className="module-add"
             title="Add to canvas"
-            onClick={stop(() => send({ op: 'place', key, version: row.version }))}
+            aria-label={`Add ${label} ${row.version} to the canvas`}
+            onClick={() => send({ op: 'place', key, version: row.version })}
           >
             +
           </button>
@@ -395,7 +394,9 @@ function ModuleRow({
             type="button"
             className={`module-star${starred ? ' starred' : ''}`}
             title={starred ? 'Unfavorite' : 'Favorite'}
-            onClick={stop(() => send({ op: 'toggleFavourite', key }))}
+            aria-label={`Favorite ${label}`}
+            aria-pressed={starred}
+            onClick={() => send({ op: 'toggleFavourite', key })}
           >
             {starred ? '★' : '☆'}
           </button>
@@ -434,6 +435,7 @@ function OlderVersions({
             type="button"
             className="version-row-add"
             title={`Add ${v.version} to canvas`}
+            aria-label={`Add ${moduleLabel(row)} ${v.version} to the canvas`}
             onClick={() => send({ op: 'place', key: moduleKey(row), version: v.version })}
           >
             +
