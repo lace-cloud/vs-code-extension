@@ -1,26 +1,32 @@
 import { describe, expect, test } from 'vitest';
-import { followTheme, themeOf, type WatchClass } from '../theme';
+import { followTheme } from '../theme';
+
+type Watch = NonNullable<Parameters<typeof followTheme>[1]>;
 
 // A page whose <body> carries VS Code's theme classes, and whose class
 // changes reach the watcher `followTheme` is given, as a MutationObserver
-// tells them.
+// tells them. The unit tests run with no DOM, so the page is a stand-in
+// typed as the document's two elements.
 function page(...classes: string[]) {
   let current = new Set(classes);
   const attributes = new Map<string, string>();
   const watchers = new Set<() => void>();
   const body = { classList: { contains: (name: string) => current.has(name) } };
-  const watch: WatchClass = (element, changed) => {
+  const document = {
+    documentElement: {
+      setAttribute: (name: string, value: string) => attributes.set(name, value),
+    },
+    body,
+  } as unknown as Pick<Document, 'documentElement' | 'body'>;
+  const watch: Watch = (element, changed) => {
     expect(element).toBe(body);
     watchers.add(changed);
-    return () => watchers.delete(changed);
+    return () => {
+      watchers.delete(changed);
+    };
   };
   return {
-    document: {
-      documentElement: {
-        setAttribute: (name: string, value: string) => attributes.set(name, value),
-      },
-      body,
-    },
+    document,
     watch,
     theme: () => attributes.get('data-theme'),
     watching: () => watchers.size,
@@ -32,7 +38,7 @@ function page(...classes: string[]) {
   };
 }
 
-describe("a page's theme", () => {
+describe("the canvas page's theme", () => {
   test.each([
     [['vscode-light'], 'light'],
     [['vscode-dark'], 'dark'],
@@ -40,18 +46,10 @@ describe("a page's theme", () => {
     // VS Code puts the high-contrast class beside the light one.
     [['vscode-high-contrast', 'vscode-high-contrast-light'], 'light'],
     [['vscode-high-contrast-light'], 'light'],
-  ])('under %j is %s', (classes, theme) => {
-    expect(themeOf({ contains: (name) => classes.includes(name) })).toBe(theme);
-  });
-
-  test("is set on <html> as data-theme from VS Code's class on <body>", () => {
-    const light = page('vscode-light');
-    followTheme(light.document, light.watch);
-    expect(light.theme()).toBe('light');
-
-    const dark = page('vscode-dark');
-    followTheme(dark.document, dark.watch);
-    expect(dark.theme()).toBe('dark');
+  ])("under %j is %s, set on <html> as data-theme from VS Code's class on <body>", (classes, theme) => {
+    const shown = page(...classes);
+    followTheme(shown.document, shown.watch);
+    expect(shown.theme()).toBe(theme);
   });
 
   test('follows each theme switch until it is stopped', () => {

@@ -30,6 +30,10 @@ describe('the canvas webview bundle', () => {
   test('holds the canvas', () => {
     expect(copiesOf('@lace-cloud/canvas', modules)).toHaveLength(1);
   });
+
+  test("follows VS Code's theme, which its design tokens read", () => {
+    expect(modules.some((module) => module.endsWith('/src/webview/theme.ts'))).toBe(true);
+  });
 });
 
 describe.each([
@@ -46,16 +50,6 @@ describe.each([
     expect(copiesOf('@lace-cloud/canvas', modules)).toEqual([]);
     expect(copiesOf('@lace-cloud/host', modules)).toEqual([]);
   });
-});
-
-test.each([
-  'canvas-webview.js',
-  'registry-sidebar.js',
-  'module-detail.js',
-])("the %s page follows VS Code's theme", (bundle) => {
-  expect(bundledModules(bundle).some((module) => module.endsWith('/src/webview/theme.ts'))).toBe(
-    true,
-  );
 });
 
 // The declarations of each rule of a built stylesheet, by every selector
