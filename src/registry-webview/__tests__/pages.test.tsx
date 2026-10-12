@@ -4,7 +4,7 @@ import { described, LOGO, record, row, vendor } from '../../protocol/__tests__/r
 import type { DetailState, SidebarState } from '../../protocol/registry-protocol';
 import { Interface, ModuleDetail, usageExample, Versions } from '../ModuleDetail';
 import { FALLBACK_GLYPH } from '../ModuleIcon';
-import { Sidebar } from '../Sidebar';
+import { CategoryChips, ModuleRow, Sidebar } from '../Sidebar';
 
 const nothing = () => {};
 
@@ -117,6 +117,106 @@ describe('the registry sidebar page', () => {
 
   test('a list that filled its limit says so', () => {
     expect(sidebar(loaded({ rows: [VPC], truncated: true }))).toContain('Showing the first 1');
+  });
+});
+
+// The text an element of `html` holds, found by its id, with its tags
+// dropped.
+const textOf = (html: string, id: string | undefined): string | undefined => {
+  if (id === undefined) return undefined;
+  const at = html.indexOf(`id="${id}"`);
+  if (at < 0) return undefined;
+  const open = html.lastIndexOf('<', at);
+  const tag = html.slice(open + 1).match(/^\w+/)?.[0];
+  let depth = 0;
+  for (const match of html.slice(open).matchAll(new RegExp(`<(/?)${tag}\\b[^>]*>`, 'g'))) {
+    depth += match[1] === '/' ? -1 : 1;
+    if (depth === 0) {
+      return html
+        .slice(open, open + (match.index ?? 0))
+        .replace(/<[^>]*>/g, '')
+        .trim();
+    }
+  }
+  return undefined;
+};
+
+// The attributes of the first tag in `html` whose class list starts with
+// `name`.
+const attributesOf = (html: string, name: string): Record<string, string> => {
+  const tag = html.match(new RegExp(`<\\w+[^>]*class="${name}[" ][^>]*>`))?.[0] ?? '';
+  return Object.fromEntries(
+    [...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, key, value]) => [key, value]),
+  );
+};
+
+const moduleRow = (props: Partial<Parameters<typeof ModuleRow>[0]> = {}) =>
+  renderToStaticMarkup(
+    <ModuleRow
+      row={DB}
+      starred={false}
+      versions={undefined}
+      expanded={false}
+      onExpand={nothing}
+      send={nothing}
+      {...props}
+    />,
+  );
+
+describe('what the registry sidebar says to a screen reader', () => {
+  test("a module button is named by the module's name and version, and described by its categories", () => {
+    const html = moduleRow();
+    const open = attributesOf(html, 'module-open');
+    expect(textOf(html, open['aria-labelledby'])).toBe('ACME DB v2.0.0');
+    expect(textOf(html, open['aria-describedby'])).toBe('data');
+  });
+
+  test('the star keeps one name and title, and says whether it is pressed', () => {
+    for (const starred of [false, true]) {
+      expect(attributesOf(moduleRow({ starred }), 'module-star')).toMatchObject({
+        'aria-label': 'Favorite ACME DB',
+        title: 'Favorite',
+        'aria-pressed': String(starred),
+      });
+    }
+  });
+
+  test('the versions toggle says whether it is expanded, and its title follows', () => {
+    const shut = attributesOf(moduleRow(), 'version-toggle');
+    const open = attributesOf(moduleRow({ expanded: true }), 'version-toggle');
+    expect(shut).toMatchObject({ 'aria-expanded': 'false', title: 'Show all versions' });
+    expect(open).toMatchObject({ 'aria-expanded': 'true', title: 'Hide other versions' });
+    expect(open.class).toBe('version-toggle expanded');
+  });
+
+  test('the filter toggle is named and says whether the categories are shown; its glyph is hidden', () => {
+    const html = sidebar(loaded({ rows: [VPC] }));
+    expect(attributesOf(html, 'filter-toggle')).toMatchObject({
+      'aria-label': 'Filter by category',
+      'aria-expanded': 'false',
+    });
+    expect(html).toMatch(/class="filter-toggle[^>]*><span aria-hidden="true">▽<\/span><\/button>/);
+  });
+
+  test('a category chip says whether it is chosen', () => {
+    const html = renderToStaticMarkup(
+      <CategoryChips categories={['data', 'networking']} chosen={['data']} onToggle={nothing} />,
+    );
+    expect(html).toContain('aria-pressed="true">data</button>');
+    expect(html).toContain('aria-pressed="false">networking</button>');
+  });
+
+  test("headings' glyphs are hidden, and the favourites heading is no control", () => {
+    const html = sidebar(
+      loaded({ rows: [VPC, DB], favourites: ['acme/vpc'], recents: ['acme/db'] }),
+    );
+    expect(html).toContain('<span class="chevron" aria-hidden="true">▾</span>');
+    expect(html).toContain('<span aria-hidden="true">\u{1F552}</span>');
+    expect(html).toContain(
+      '<div class="list-heading"><span aria-hidden="true">★</span> FAVORITES</div>',
+    );
+    expect(html).not.toContain('class="system-header"><');
+    expect(html).not.toMatch(/<div class="system-header/);
   });
 });
 

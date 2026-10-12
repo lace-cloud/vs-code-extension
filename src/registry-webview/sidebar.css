@@ -89,11 +89,13 @@ body {
   padding: 6px 8px 2px;
 }
 
+/* Edged with the theme's contrast border where it has one (high contrast),
+ * else with the badge's colour. */
 .chip {
   padding: 2px 8px;
   font-size: 11px;
   border-radius: 10px;
-  border: 1px solid var(--vscode-badge-background);
+  border: 1px solid var(--vscode-contrastBorder, var(--vscode-badge-background));
   background: transparent;
   color: var(--vscode-descriptionForeground);
   cursor: pointer;
@@ -113,25 +115,31 @@ body {
   padding: 0 4px 8px;
 }
 
+/* A heading over a list of modules: a section's, which is a button that
+ * folds the section, or the favourites', which is only a heading. */
+.list-heading,
 .system-header {
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 100%;
   padding: 6px 8px 4px;
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  line-height: inherit;
-  text-align: left;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--vscode-sideBarSectionHeader-foreground);
   margin-top: 4px;
-  cursor: pointer;
   user-select: none;
+}
+
+.system-header {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
   border-radius: 4px;
 }
 
@@ -244,7 +252,6 @@ body {
 .module-version {
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
-  margin-left: 4px;
   font-weight: 400;
 }
 
@@ -326,8 +333,11 @@ body {
   background: var(--vscode-button-hoverBackground);
 }
 
-/* ── Skeleton loading ── */
+/* ── Skeleton loading ──
+ * Drawn in the badge's colour, and in high contrast (where the badge is the
+ * page's own black) in the contrast border's. */
 .skeleton-group {
+  --skeleton-fill: var(--vscode-badge-background);
   padding: 0 4px;
 }
 
@@ -336,7 +346,7 @@ body {
   width: 50px;
   margin: 10px 8px 6px;
   border-radius: 3px;
-  background: var(--vscode-badge-background);
+  background: var(--skeleton-fill);
   opacity: 0.4;
 }
 
@@ -354,9 +364,9 @@ body {
   border-radius: 4px;
   background: linear-gradient(
     90deg,
-    var(--vscode-badge-background) 25%,
+    var(--skeleton-fill) 25%,
     transparent 50%,
-    var(--vscode-badge-background) 75%
+    var(--skeleton-fill) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
@@ -375,9 +385,9 @@ body {
   border-radius: 3px;
   background: linear-gradient(
     90deg,
-    var(--vscode-badge-background) 25%,
+    var(--skeleton-fill) 25%,
     transparent 50%,
-    var(--vscode-badge-background) 75%
+    var(--skeleton-fill) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
@@ -424,12 +434,7 @@ body {
 }
 
 .version-children {
-  display: none;
   padding-left: 34px;
-}
-
-.version-children.open {
-  display: block;
 }
 
 .version-row {
@@ -488,7 +493,7 @@ body {
 .module-item:hover :is(.module-star, .module-add, .version-toggle),
 .module-item:has(:focus-visible) :is(.module-star, .module-add, .version-toggle),
 .module-star.starred,
-.version-toggle.has-versions {
+.version-toggle.expanded {
   width: 22px;
   opacity: 1;
 }
@@ -496,7 +501,7 @@ body {
 /* Shown actions sit 2px apart; a collapsed one takes no gap. */
 .module-item:hover .module-actions > * + *,
 .module-item:has(:focus-visible) .module-actions > * + *,
-.version-toggle.has-versions ~ .module-star.starred {
+.version-toggle.expanded ~ .module-star.starred {
   margin-left: 2px;
 }
 
@@ -505,14 +510,24 @@ body {
   opacity: 1;
 }
 
-/* ── High contrast: a hovered row or action is outlined, as VS Code's lists
- * and toolbars are; body carries vscode-high-contrast in both high contrast
- * themes. Of no more weight than :hover, so a focus ring wins over it. ── */
-:where(.vscode-high-contrast)
+/* ── High contrast, both themes ── */
+
+/* A hovered row or heading is outlined, with no fill, as VS Code's lists
+ * are; the outline weighs no more than :hover, so a focus ring wins. */
+:is(.vscode-high-contrast, .vscode-high-contrast-light)
+  :is(.module-item, button.system-header, .version-row):hover {
+  background: transparent;
+}
+
+:where(.vscode-high-contrast, .vscode-high-contrast-light)
+  :where(.module-item, button.system-header, .version-row):hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder);
+  outline-offset: -1px;
+}
+
+/* A hovered action is outlined as VS Code's toolbar actions are. */
+:where(.vscode-high-contrast, .vscode-high-contrast-light)
   :where(
-    .module-item,
-    button.system-header,
-    .version-row,
     .module-star,
     .module-add,
     .version-toggle,
@@ -520,8 +535,22 @@ body {
     .filter-toggle,
     .chip
   ):hover {
-  outline: 1px dashed var(--vscode-contrastActiveBorder);
+  outline: 1px dashed var(--vscode-toolbar-hoverOutline);
   outline-offset: -1px;
+}
+
+:is(.vscode-high-contrast, .vscode-high-contrast-light) .skeleton-group {
+  --skeleton-fill: var(--vscode-contrastBorder);
+}
+
+/* High Contrast Dark fills the badge with the page's own black, so a chosen
+ * chip and the active filter toggle take VS Code's toggled-option colours
+ * and the theme's active border instead of the badge. (High Contrast
+ * Light's badge is a colour of its own and stays.) */
+.vscode-high-contrast:not(.vscode-high-contrast-light) :is(.chip.active, .filter-toggle.active) {
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground);
+  border: 1px solid var(--vscode-contrastActiveBorder);
 }
 
 /* ── Keyboard focus: one ring for every control, the theme's focus border.

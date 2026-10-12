@@ -5,7 +5,7 @@
 // extension's Select Organization. Every control is a button of its own,
 // none inside another, so each is reached by Tab, activated by Enter and
 // Space, and announced as a control.
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useId, useState } from 'react';
 import type {
   Read,
   RegistryRow,
@@ -56,10 +56,12 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
           <button
             type="button"
             className={`filter-toggle${filtersShown || chosen.length > 0 ? ' active' : ''}`}
-            title="Toggle filters"
+            title="Filter by category"
+            aria-label="Filter by category"
+            aria-expanded={filtersShown}
             onClick={() => setFiltersShown((shown) => !shown)}
           >
-            {'▽'}
+            <span aria-hidden="true">{'▽'}</span>
           </button>
         </div>
         {state.kind === 'loaded' && (
@@ -73,24 +75,38 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
           </button>
         )}
       </div>
-      {chips.length > 0 && (
-        <div id="chips">
-          {chips.map((category) => (
-            <button
-              type="button"
-              key={category}
-              className={`chip${chosen.includes(category) ? ' active' : ''}`}
-              onClick={() => toggle(category)}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
-      )}
+      {chips.length > 0 && <CategoryChips categories={chips} chosen={chosen} onToggle={toggle} />}
       <div id="content">
         <Content state={state} send={send} query={query} chosen={searching ? [] : chosen} />
       </div>
     </>
+  );
+}
+
+// The categories to filter by, each a toggle that says whether it is chosen.
+export function CategoryChips({
+  categories,
+  chosen,
+  onToggle,
+}: {
+  categories: readonly string[];
+  chosen: readonly string[];
+  onToggle: (category: string) => void;
+}) {
+  return (
+    <div id="chips">
+      {categories.map((category) => (
+        <button
+          type="button"
+          key={category}
+          className={`chip${chosen.includes(category) ? ' active' : ''}`}
+          aria-pressed={chosen.includes(category)}
+          onClick={() => onToggle(category)}
+        >
+          {category}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -234,14 +250,17 @@ function Modules({
     <>
       {favourites.length > 0 && (
         <div className="module-list">
-          <div className="system-header">{'★'} FAVORITES</div>
+          <div className="list-heading">
+            <span aria-hidden="true">{'★'}</span> FAVORITES
+          </div>
           {favourites.map((module) => row(module, false))}
         </div>
       )}
       {recents.length > 0 && (
         <Section
           id="__recent__"
-          title={'\u{1F552} RECENTLY USED'}
+          icon={'\u{1F552}'}
+          title="RECENTLY USED"
           count={recents.length}
           collapsed={collapsed}
           onToggle={collapse}
@@ -287,6 +306,7 @@ function Modules({
 
 function Section({
   id,
+  icon,
   title,
   count,
   collapsed,
@@ -295,6 +315,8 @@ function Section({
   children,
 }: {
   id: string;
+  // A glyph before the title, which a screen reader skips.
+  icon?: string;
   title: string;
   count: number;
   collapsed: ReadonlySet<string>;
@@ -310,7 +332,15 @@ function Section({
       aria-expanded={!collapsed.has(id)}
       onClick={() => onToggle(id)}
     >
-      <span className="chevron">{'▾'}</span> {title} <span className="module-count">({count})</span>
+      <span className="chevron" aria-hidden="true">
+        {'▾'}
+      </span>{' '}
+      {icon && (
+        <>
+          <span aria-hidden="true">{icon}</span>{' '}
+        </>
+      )}
+      {title} <span className="module-count">({count})</span>
     </button>
   );
   const body = <div className={`system-body${closed}`}>{children}</div>;
@@ -330,7 +360,10 @@ function Section({
   );
 }
 
-function ModuleRow({
+// One module's row: the module itself, a button named by its name and
+// version and described by its categories, which opens its detail and whose
+// hit area is the whole row; then its actions, side by side.
+export function ModuleRow({
   row,
   starred,
   versions,
@@ -347,24 +380,26 @@ function ModuleRow({
 }) {
   const key = moduleKey(row);
   const label = moduleLabel(row);
-  // The row holds its controls side by side: the module itself, which opens
-  // its detail and whose hit area is the whole row, then its actions.
+  const id = useId();
   return (
     <>
       <div className="module-item">
         <button
           type="button"
           className="module-open"
+          aria-labelledby={`${id}-name`}
+          aria-describedby={row.categories.length > 0 ? `${id}-categories` : undefined}
           onClick={() => send({ op: 'showDetail', key })}
         >
           <ModuleIcon vendor={row.vendor} className="module-icon" />
           <span className="module-info">
-            <span className="module-name">
-              {label}
-              <span className="module-version">{row.version}</span>
+            <span className="module-name" id={`${id}-name`}>
+              {label} <span className="module-version">{row.version}</span>
             </span>
             {row.categories.length > 0 && (
-              <span className="module-categories">{row.categories.join(', ')}</span>
+              <span className="module-categories" id={`${id}-categories`}>
+                {row.categories.join(', ')}
+              </span>
             )}
           </span>
         </button>
@@ -372,9 +407,9 @@ function ModuleRow({
           {onExpand && (
             <button
               type="button"
-              className={`version-toggle${expanded ? ' has-versions' : ''}`}
-              title="Show all versions"
-              aria-label={`Show all versions of ${label}`}
+              className={`version-toggle${expanded ? ' expanded' : ''}`}
+              title={expanded ? 'Hide other versions' : 'Show all versions'}
+              aria-label={`Versions of ${label}`}
               aria-expanded={expanded}
               onClick={onExpand}
             >
@@ -393,7 +428,7 @@ function ModuleRow({
           <button
             type="button"
             className={`module-star${starred ? ' starred' : ''}`}
-            title={starred ? 'Unfavorite' : 'Favorite'}
+            title="Favorite"
             aria-label={`Favorite ${label}`}
             aria-pressed={starred}
             onClick={() => send({ op: 'toggleFavourite', key })}
@@ -424,7 +459,7 @@ function OlderVersions({
   const older =
     versions?.kind === 'loaded' ? versions.value.filter((v) => v.version !== row.version) : [];
   return (
-    <div className="version-children open">
+    <div className="version-children">
       {(versions === undefined || versions.kind === 'loading') && note('Loading versions…')}
       {versions?.kind === 'failed' && note(versions.message)}
       {versions?.kind === 'loaded' && older.length === 0 && note('No other versions')}
