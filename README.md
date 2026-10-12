@@ -176,10 +176,11 @@ you selected; the requests Terraform makes carry no credential of yours (see val
 - `lace_validate_module_terraform`, and `lace_generate_module_terraform` after it writes the Terraform, run Terraform as
   `lace module validate` does. On first use the Lace CLI downloads Terraform from HashiCorp's releases
   (`releases.hashicorp.com`) and keeps it under `~/.lace/bin`; later runs do not contact HashiCorp's releases. Terraform
-  checks HashiCorp for a newer version (`checkpoint-api.hashicorp.com`) only when its cached check is stale. The
-  module's providers come from Lace's provider mirror, or from the public Terraform registry when your organization has
-  a break-glass grant; when you are signed in with an organization selected, validate asks Lace which grant is active
-  (the tool names no organization of its own). The module's `lace.cloud/` modules come from Lace's registry. Terraform's
+  checks HashiCorp for a newer version (`checkpoint-api.hashicorp.com`) when it runs, which can happen on every validate
+  when another Terraform version is on your PATH; `CHECKPOINT_DISABLE=1` in the environment turns that off. The module's
+  providers come from Lace's provider mirror, or from the public Terraform registry when your organization has a
+  break-glass grant; when you are signed in with an organization selected, validate asks Lace which grant is active (the
+  tool names no organization of its own). The module's `lace.cloud/` modules come from Lace's registry. Terraform's
   requests to Lace's provider mirror and registry carry no credential of yours: the CLI keeps your Lace credential out
   of Terraform's environment, and Terraform reaches the registry with a read token the CLI mints for your selected
   organization, only when the module calls a `lace.cloud/` module (`lace module validate --help`).
