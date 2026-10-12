@@ -56,29 +56,42 @@ body {
   cursor: pointer;
 }
 
+/* ── Toggles: the filter toggle and the category chips ──
+ * Drawn as VS Code draws its own toggles (the search box's match case, say):
+ * off, no edge and no fill, the toggle's hover fill under the pointer; on,
+ * the toggled option's background, border and foreground. One mechanism in
+ * every theme: in high contrast the on state is the border alone, which
+ * differs from the focus ring's colour. */
+.filter-toggle,
+.chip {
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.filter-toggle:hover,
+.chip:hover {
+  background: var(--vscode-inputOption-hoverBackground);
+}
+
+.filter-toggle.active,
+.chip.active {
+  border-color: var(--vscode-inputOption-activeBorder);
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground);
+}
+
 .filter-toggle {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
-  border: none;
-  background: transparent;
   color: var(--vscode-foreground);
-  cursor: pointer;
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
   padding: 0;
-}
-
-.filter-toggle:hover {
-  background: var(--vscode-toolbar-hoverBackground);
-}
-
-.filter-toggle.active {
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
 }
 
 /* ── Category chips ── */
@@ -89,26 +102,12 @@ body {
   padding: 6px 8px 2px;
 }
 
-/* Edged with the theme's contrast border where it has one (high contrast),
- * else with the badge's colour. */
 .chip {
   padding: 2px 8px;
   font-size: 11px;
   border-radius: 10px;
-  border: 1px solid var(--vscode-contrastBorder, var(--vscode-badge-background));
-  background: transparent;
   color: var(--vscode-descriptionForeground);
-  cursor: pointer;
   white-space: nowrap;
-}
-
-.chip:hover {
-  background: var(--vscode-list-hoverBackground);
-}
-
-.chip.active {
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
 }
 
 .module-list {
@@ -510,22 +509,22 @@ body {
   opacity: 1;
 }
 
-/* ── High contrast, both themes ── */
-
-/* A hovered row or heading is outlined, with no fill, as VS Code's lists
- * are; the outline weighs no more than :hover, so a focus ring wins. */
-:is(.vscode-high-contrast, .vscode-high-contrast-light)
-  :is(.module-item, button.system-header, .version-row):hover {
-  background: transparent;
-}
-
+/* ── High contrast, both themes ──
+ * As VS Code 1.141 draws a hovered list row: the list's hover background
+ * (--vscode-list-hoverBackground, which the rows' own :hover rules set in
+ * every theme) under a dashed outline in the contrast active border (the
+ * list's hover outline; VS Code exposes no --vscode-list-hoverOutline).
+ * Every hovered action and toggle is outlined as VS Code outlines a hovered
+ * toolbar action, in --vscode-toolbar-hoverOutline. A control with an edge
+ * or a fill of its own (a toggle, the retry button) takes the outline
+ * outside it, where it can be seen. The outlines weigh no more than :hover,
+ * so a focus ring wins over them. */
 :where(.vscode-high-contrast, .vscode-high-contrast-light)
   :where(.module-item, button.system-header, .version-row):hover {
   outline: 1px dashed var(--vscode-contrastActiveBorder);
   outline-offset: -1px;
 }
 
-/* A hovered action is outlined as VS Code's toolbar actions are. */
 :where(.vscode-high-contrast, .vscode-high-contrast-light)
   :where(
     .module-star,
@@ -533,35 +532,32 @@ body {
     .version-toggle,
     .version-row-add,
     .filter-toggle,
-    .chip
+    .chip,
+    .retry-btn
   ):hover {
   outline: 1px dashed var(--vscode-toolbar-hoverOutline);
   outline-offset: -1px;
+}
+
+:where(.vscode-high-contrast, .vscode-high-contrast-light)
+  :where(.filter-toggle, .chip, .retry-btn):hover {
+  outline-offset: 2px;
 }
 
 :is(.vscode-high-contrast, .vscode-high-contrast-light) .skeleton-group {
   --skeleton-fill: var(--vscode-contrastBorder);
 }
 
-/* High Contrast Dark fills the badge with the page's own black, so a chosen
- * chip and the active filter toggle take VS Code's toggled-option colours
- * and the theme's active border instead of the badge. (High Contrast
- * Light's badge is a colour of its own and stays.) */
-.vscode-high-contrast:not(.vscode-high-contrast-light) :is(.chip.active, .filter-toggle.active) {
-  background: var(--vscode-inputOption-activeBackground);
-  color: var(--vscode-inputOption-activeForeground);
-  border: 1px solid var(--vscode-contrastActiveBorder);
-}
-
 /* ── Keyboard focus: one ring for every control, the theme's focus border.
- * A filled button takes it outside its edge; the module button draws it on
- * its row. ── */
+ * A control with an edge or a fill of its own (a toggle, the retry button)
+ * takes it outside, so it is not lost in that edge; the module button draws
+ * it on its row. ── */
 :is(button, input):focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
 }
 
-.retry-btn:focus-visible {
+:is(.filter-toggle, .chip, .retry-btn):focus-visible {
   outline-offset: 2px;
 }
 
