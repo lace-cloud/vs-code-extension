@@ -12,14 +12,17 @@
 //     sets' schemas (`canvasToolSchemas`, `moduleToolSchemas`), which
 //     `__tests__/lm-tools.manifest.test.ts` holds the manifest to.
 //
-// The tools run in the developer's own model. Describe, save and every
-// change but a place work on the engine alone. Through the CLI, the search
-// tool sends Lace's registry its query, system and category, the registry
-// describe tool the module and version, and a place the module's name;
-// validate, and generate after it writes, fetch the module's providers from
-// Lace's provider mirror and its lace.cloud/ modules from the registry, as
-// `lace module validate` does in a terminal, and send nothing from the chat.
-// Nothing else from the chat leaves the machine.
+// The tools run in the developer's own model, and the conversation itself
+// is never sent. A tool reaches the network only as its CLI command does in
+// a terminal: the search tool sends Lace's registry its query, system and
+// category; the registry describe tool the module and version, downloading
+// that version; a place the module's name, the engine fetching the module.
+// Validate, and generate after it writes, run Terraform as `lace module
+// validate` does: Terraform from HashiCorp (fetched by the CLI, which checks
+// HashiCorp's releases each run; Terraform checks HashiCorp for updates),
+// providers from Lace's mirror (the public registry under a break-glass
+// grant), lace.cloud/ modules from Lace's registry. Describe, save and every
+// change but a place work on the engine alone.
 //
 // A canvas tool call runs on chat-core's `canvasTools`, made for that call
 // over the ports of the session its hold is on: the set keeps nothing

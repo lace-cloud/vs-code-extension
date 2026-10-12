@@ -163,19 +163,23 @@ Every tool takes `root`, the module directory, as its path in the workspace (`in
 folder itself; in a workspace of several folders, the folder's name first).
 
 **The tools run in your own model.** Your conversation stays between you and the model you chose in VS Code; Lace runs
-no model of its own on it. What reaches Lace goes through the Lace CLI and engine, as the same commands do in a
-terminal:
+no model of its own on it, and the conversation itself is never sent. A tool reaches the network only as the same Lace
+CLI command does in a terminal:
 
-- `lace_search_module_registry` sends Lace's registry its search words, system and category (`lace registry list`), and
-  `lace_describe_registry_module` the module and version it describes (`lace registry describe`).
-- A change that places a module sends the module's name to the registry to find it (`lace registry list`), and the
-  module it adds is fetched from the registry.
-- `lace_validate_module_terraform`, and `lace_generate_module_terraform` after it writes the Terraform, validate the
-  module as `lace module validate` does: they fetch its providers from Lace's provider mirror and its `lace.cloud/`
-  modules from Lace's registry, and send nothing from the chat.
+- `lace_search_module_registry` sends Lace's registry the search words, system and category your assistant gave it
+  (`lace registry list`).
+- `lace_describe_registry_module` sends the module and version, and downloads that version from Lace's registry to
+  describe it (`lace registry describe`).
+- A change that places a module sends the module's name to Lace's registry to find it, and the module it adds is
+  fetched from the registry.
+- `lace_validate_module_terraform`, and `lace_generate_module_terraform` after it writes the Terraform, run Terraform as
+  `lace module validate` does. The Lace CLI fetches Terraform from HashiCorp (it downloads it on first use, and checks
+  HashiCorp's releases on every run), and Terraform checks HashiCorp for a newer version. The module's providers come
+  from Lace's provider mirror, or from the public Terraform registry when your organization has a break-glass grant
+  (signed in, validate asks Lace which grant is active), and its `lace.cloud/` modules from Lace's registry.
 
-Nothing else from the chat leaves your machine: describing and saving the canvas, and every change other than placing
-a module, work only on your files and the Lace engine on your machine.
+Describing and saving the canvas, and every change other than placing a module, work only on your files and the Lace
+engine on your machine.
 
 | Tool                             | Reference                      | What it does                                                                                                                                                             |
 | -------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
