@@ -281,13 +281,16 @@ A failed account command offers the way out its reason names (`vscode/offers.ts`
 ## The chat tools
 
 The extension contributes tools to VS Code's own chat and nothing else: no chat view, no participant, no MCP server, no
-model of Lace's. The tools run in the developer's own model and reach the engine and the CLI alone; nothing of a chat
-is sent to Lace or kept by it. The tool sets are chat-core's (`canvasTools({source, editor, commands})` and
-`moduleTools({commands})`), each tool a schema and a handler on chat-core's one tool contract.
+model of Lace's. The tools run in the developer's own model. What leaves the machine is what the CLI sends Lace's
+registry: the search tool's query, system and category (`registry list`), the describe tool's module and version
+(`registry describe`), and a place change's module name (`registry list --query`), with the module a place adds
+fetched by the engine. Every other tool and change works on the root's files and the engine alone. The tool sets are
+chat-core's (`canvasTools({source, editor, commands})` and `moduleTools({commands})`), each tool a schema and a handler
+on chat-core's one tool contract.
 
 | Tool | Reference | Runs |
 |---|---|---|
-| `lace_change_module_canvas` | `#laceChangeModuleCanvas` | `ensure` without focus, then a hold for the call; each change one `ApplyAction` |
+| `lace_change_module_canvas` | `#laceChangeModuleCanvas` | `ensure` without focus (none for a call cancelled before it starts), then a hold for the call; each change one `ApplyAction` |
 | `lace_describe_module_canvas` | `#laceDescribeModuleCanvas` | a hold for the call, no tab |
 | `lace_save_module_canvas` | `#laceSaveModuleCanvas` | Save's rule: the open session only |
 | `lace_generate_module_terraform` | `#laceGenerateModuleTerraform` | Generate's rule: dirty `.tf` editors saved, a hold for the call, no tab |
@@ -310,19 +313,21 @@ activates without its tools. No tool returns `confirmationMessages`; the chat sh
 A result chat-core marks as an error is thrown, which is how a Language Model Tool fails.
 
 **A canvas tool set per call.** chat-core's `canvasTools` keeps nothing between calls: a tool reads the session's frames
-only while its call runs. Every canvas tool call (change, describe,
-save, generate) takes its hold by its operation's rule and runs on a set made for that call over the ports of the
-session the hold is on (`source`, `editor`, `commands`), so the tools keep nothing per session and observe no session.
-A call under way when its root's session is opened again finishes on the ports it began on; the next call is on the new
-session. Where the Language Model Tools API is absent no tool is registered.
+only while its call runs. Every canvas tool call (change, describe, save, generate) takes its hold by its operation's
+rule and runs on a set made for that call over the ports of the session the hold is on (`source`, `editor`,
+`commands`), so the tools keep nothing per session and observe no session. A call under way when its root's session is
+opened again finishes on the ports it began on; the next call is on the new session. Where the Language Model Tools API
+is absent no tool is registered.
 
 **How a change resolves** (chat-core): the change tool takes `{changes: [{operation, instance?, input?,
 sourceInstance?, output?, targetInstance?, module?, value?}]}`, one entry per change, each naming what it works on as
 the canvas lists it and the literal the developer gave in `value`. A name resolves exactly, then ignoring case; a name
 that matches nothing or several things, or a slot the operation needs and the change does not state, leaves that
-change unapplied, and the result lists the candidates. A connect that names no pin is the canvas's `auto_connect`, and
-the pairs the engine's matcher leaves tied come back to choose between. The changes apply in order, each as one
-`ApplyAction`. Every result ends with the current canvas; sensitive values are withheld.
+change unapplied, and the result lists the candidates. A place resolves `module` among what `registry list --query`
+lists; a module that listing does not hold lists no candidates, and the result points to `lace_search_module_registry`.
+A connect that names no pin is the canvas's `auto_connect`, and the pairs the engine's matcher leaves tied come back to
+choose between. The changes apply in order, each as one `ApplyAction`. Every result ends with the current canvas;
+sensitive values are withheld.
 
 **Cancellation.** A Language Model Tool's `invoke` maps VS Code's `CancellationToken` to an `AbortSignal` (aborted on
 `onCancellationRequested`, the listener disposed when the call settles) and hands it to chat-core's handler: a

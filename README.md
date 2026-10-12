@@ -162,11 +162,11 @@ mode, calls Lace's tools as it calls any other, and you can name one with `#` (f
 Every tool takes `root`, the module directory, as its path in the workspace (`infra/prod`, or `.` for the workspace
 folder itself; in a workspace of several folders, the folder's name first).
 
-**The tools run in your own model, and Lace keeps nothing from chat.** Your conversation stays between you and the
-model you chose in VS Code; Lace runs no model of its own on it. A tool call reaches the Lace engine on your machine and
-the Lace CLI, nothing else: the canvas tools work on the module's authoring session, the validate tool runs
-`lace module validate`, and the two registry tools run `lace registry list` and `lace registry describe`, as in a
-terminal.
+**The tools run in your own model.** Your conversation stays between you and the model you chose in VS Code; Lace runs
+no model of its own on it. The registry tools, and a change that places a module, send their search words or the
+module's name to Lace's registry through the Lace CLI, as `lace registry list` and `lace registry describe` do in a
+terminal, and the module a place adds is fetched from the registry. Nothing else from the chat leaves your machine:
+every other tool and change works only on your files and the Lace engine on your machine.
 
 | Tool                             | Reference                      | What it does                                                                                                                                                             |
 | -------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -188,6 +188,8 @@ what was applied.
 - A name that matches nothing, a name that fits several things, or a choice the change leaves open applies nothing for
   that change, and the result lists the candidates the canvas offers, so your assistant can ask you or send the change
   again naming one. The call's other changes still apply.
+- A place whose module the registry lists nothing for applies nothing and lists no candidates: the result points your
+  assistant to `lace_search_module_registry` to find the module.
 - A connection that names no output and no input wires the two instances as the canvas does when you drag one onto the
   other; pairs that tie come back for you to choose between.
 - A registry module named with a version (`author/name@version`) is placed at that version.
