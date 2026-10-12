@@ -65,12 +65,13 @@ body {
 }
 
 /* Edged with the theme's contrast border, which only the high contrast
- * themes have, where the badge's fill is the page's own. */
+ * themes have, where the badge's fill is the page's own; drawn inside the
+ * box, so the edge takes no space. */
 .badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px solid var(--vscode-contrastBorder, transparent);
+  box-shadow: inset 0 0 0 1px var(--vscode-contrastBorder, transparent);
   font-size: 11px;
   font-weight: 600;
   background: var(--vscode-badge-background);
@@ -111,12 +112,17 @@ body {
   outline-offset: 2px;
 }
 
-/* High contrast, both themes: a hovered tab or button is outlined, as the
- * sidebar's rows are; the outline weighs no more than :hover, so a focus
- * ring wins. */
+/* High contrast, both themes: a hovered tab or button is outlined dashed in
+ * the theme's active border, as VS Code outlines a hovered list row or
+ * button; the filled button takes it outside its fill, where it can be seen.
+ * The outline weighs no more than :hover, so a focus ring wins. */
 :where(.vscode-high-contrast, .vscode-high-contrast-light) :where(.tab, .btn-primary):hover {
   outline: 1px dashed var(--vscode-contrastActiveBorder);
   outline-offset: -1px;
+}
+
+:where(.vscode-high-contrast, .vscode-high-contrast-light) :where(.btn-primary):hover {
+  outline-offset: 2px;
 }
 
 /* ── Error banner ── */
@@ -136,6 +142,11 @@ body {
   padding: 0 32px;
 }
 
+/* Styled as VS Code styles its panel's tabs: the inactive label in the panel
+ * title's inactive colour, taking the active colour on hover; the active
+ * tab in the active colour, underlined in the panel title's active border.
+ * (Light Modern gives both labels one colour, so there, as in VS Code, the
+ * underline alone marks the active tab.) */
 .tab {
   background: none;
   border: none;
@@ -143,16 +154,20 @@ body {
   font-family: inherit;
   padding: 10px 16px;
   font-size: 13px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--vscode-panelTitle-inactiveForeground);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 2px solid transparent;
   cursor: pointer;
 }
 
+.tab:hover,
 .tab.active {
-  color: var(--vscode-tab-activeForeground);
-  border-bottom-color: var(--vscode-textLink-foreground);
+  color: var(--vscode-panelTitle-activeForeground);
+}
+
+.tab.active {
+  border-bottom-color: var(--vscode-panelTitle-activeBorder);
 }
 
 /* ── Content ── */
@@ -221,6 +236,12 @@ td {
 
 .prop-type {
   font-size: 12px;
+}
+
+/* A type's code takes the space of its text alone: its padding reaches into
+ * the cell's own, so the table lays out as for the bare type. */
+.prop-type code {
+  margin: 0 -4px;
 }
 
 .prop-required {
@@ -330,13 +351,14 @@ th.property {
 }
 /* Inline code, in the README and in the interface's types: the theme's
  * preformatted text on its own background, the pair VS Code gives them, and
- * its border where the theme has one (High Contrast Dark). */
+ * its edge where the theme has one (High Contrast Dark), drawn inside the box
+ * so it takes no space. */
 .readme code,
 .prop-type code {
   font-family: var(--vscode-editor-font-family);
   color: var(--vscode-textPreformat-foreground);
   background: var(--vscode-textPreformat-background);
-  border: 1px solid var(--vscode-textPreformat-border, transparent);
+  box-shadow: inset 0 0 0 1px var(--vscode-textPreformat-border, transparent);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -352,6 +374,6 @@ th.property {
 .readme pre code {
   color: inherit;
   background: none;
-  border: none;
+  box-shadow: none;
   padding: 0;
 }
