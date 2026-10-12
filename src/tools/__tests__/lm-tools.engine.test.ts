@@ -3,14 +3,10 @@
 // directory, over the window's root sessions, commands mapping and canvas
 // panels, for a developer signed out (a home of the test's own). The canvas
 // panels are the extension's own over a stand-in for VS Code's webview
-// panel, so a panel holds its root's session as a canvas tab does. The
-// canvas tool sets reach Lace's API through the window's transport, over the
-// engine's credential and a fetch that records each request, unless a test
-// gives them Lace's API as a fake.
+// panel, so a panel holds its root's session as a canvas tab does.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { BoundPath, CommandsPort } from '@lace-cloud/canvas/engine';
-import { canvasTools, type Transport } from '@lace-cloud/chat-core';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { createCanvasPanels } from '../../canvas/canvas-panels';
@@ -25,9 +21,8 @@ import {
 import type { CommandsMapping } from '../../engine/commands-mapping';
 import { folder, uri } from '../../roots/__tests__/fake-uri';
 import { createRootState } from '../../state/root-state';
-import { apiTransport } from '../api-transport';
 import { type LanguageModelApi, registerLaceTools, TOOL_SCHEMAS } from '../lm-tools';
-import { fakeCancellation, fakeLaceApi } from './fake-session';
+import { fakeCancellation } from './fake-session';
 
 // The module `infra`: a root module calling two local modules.
 //   net  outputs id
@@ -113,9 +108,8 @@ class TextPart {
 }
 
 // The window's tools over the real engine, registered as VS Code registers
-// them. Their transport is the window's, over the engine's credential and a
-// recording fetch, unless the test gives one.
-function toolsWindow(transport?: Transport) {
+// them.
+function toolsWindow() {
   const home = signedOutHome();
   const { repository, root } = moduleDirectory({});
   for (const [file, content] of Object.entries(MODULE)) {
@@ -126,9 +120,6 @@ function toolsWindow(transport?: Transport) {
   const report = (what: string, error: unknown) => reports.push({ what, error });
   const { engine, rootSessions, commands } = realEngine({ home });
   const lace = recording(commands, home);
-  const fetched = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-    Response.json({}),
-  );
 
   const opened: { title: string; preserveFocus: boolean }[] = [];
   const panels = createCanvasPanels({
@@ -171,7 +162,6 @@ function toolsWindow(transport?: Transport) {
       rootSessions,
     }),
     commands: lace.mapping,
-    transport: transport ?? apiTransport({ credential: engine.credential, fetch: fetched }),
   };
   const registered = new Map<string, vscode.LanguageModelTool<Record<string, unknown>>>();
   const language: LanguageModelApi = {
@@ -225,7 +215,6 @@ function toolsWindow(transport?: Transport) {
     panels,
     opened,
     invoked: lace.invoked,
-    fetched,
     reports,
     registered,
     invoke,
@@ -241,15 +230,7 @@ const VALIDATE = 'lace_validate_module_terraform';
 const SEARCH_REGISTRY = 'lace_search_module_registry';
 const DESCRIBE_REGISTRY_MODULE = 'lace_describe_registry_module';
 
-const RENAME_NET = {
-  changes: [
-    {
-      request: 'rename net',
-      value: 'network',
-      modelReading: { operation: 'rename', instance: 'net' },
-    },
-  ],
-};
+const RENAME_NET = { changes: [{ operation: 'rename', instance: 'net', value: 'network' }] };
 
 // The names of the instances the root module calls, sorted.
 const instanceNames = (frame: { bundle: { entry: string; modules: Record<string, unknown> } }) =>
@@ -307,13 +288,7 @@ describe('the change tool on the real engine', () => {
     // A second change sees the first, on the same tab.
     const set = await window.invoke(CHANGE, {
       root: ROOT,
-      changes: [
-        {
-          request: 'set name of app',
-          value: 'api',
-          modelReading: { operation: 'set', instance: 'app', input: 'name' },
-        },
-      ],
+      changes: [{ operation: 'set', instance: 'app', input: 'name', value: 'api' }],
     });
     expect(set).toContain('Change 1: applied. set app.name = "api".');
     expect(set).toContain('- network: module modules/net@0.0.1');
@@ -321,67 +296,21 @@ describe('the change tool on the real engine', () => {
     expect(window.rootSessions.held()).toMatchObject([{ holders: 1 }]);
   });
 
-  test("a change Lace's ranking is sure of is applied on the open canvas, and its decision reported", async () => {
-    const api = fakeLaceApi(['delete', 'net']);
-    const window = toolsWindow(api.transport);
-
-    const result = await window.invoke(CHANGE, {
-      root: ROOT,
-      changes: [
-        { request: 'remove the network', modelReading: { operation: 'delete', instance: 'net' } },
-      ],
-    });
-    expect(result).toContain('Change 1: applied. deleted net.');
-    expect(window.opened).toEqual([{ title: ROOT, preserveFocus: true }]);
-    expect(instanceNames(window.frame())).toEqual(['app']);
-    expect(api.requests.map((request) => request.path)).toContain('/api/v1/candidates/decisions');
-  });
-
-  test("where Lace's ranking is sure of another instance than the model's reading, Lace's pick is applied and the result says both", async () => {
-    const api = fakeLaceApi(['delete', 'net']);
-    const window = toolsWindow(api.transport);
-
-    const result = await window.invoke(CHANGE, {
-      root: ROOT,
-      changes: [
-        { request: 'remove the network', modelReading: { operation: 'delete', instance: 'app' } },
-      ],
-    });
-    expect(result).toContain('Change 1: applied. deleted net.');
-    expect(result).toContain("Lace's reading differed from yours and stood");
-    expect(result).toContain('your reading named app');
-    expect(instanceNames(window.frame())).toEqual(['app']);
-  });
-
-  test("for a developer who is signed out, the change reads exactly as with no transport: the model's reading decides, no request is made and nothing is logged", async () => {
+  test('a change reaches the engine and nothing else: the extension makes no request of its own and logs nothing', async () => {
+    const fetched = vi.spyOn(globalThis, 'fetch');
+    afterTest(() => fetched.mockRestore());
     const window = toolsWindow();
-    const removing = {
-      changes: [
-        { request: 'remove the network', modelReading: { operation: 'delete', instance: 'net' } },
-      ],
-    };
 
-    const result = await window.invoke(CHANGE, { root: ROOT, ...removing });
-    expect(result).toContain('Change 1: applied. deleted net.');
-    expect(result).toContain('Lace did not rank');
-
-    // The same change on the same module, by chat-core's tool set with no
-    // transport.
-    const untransported = toolsWindow();
-    const hold = await untransported.rootSessions.acquire(untransported.root);
-    const [change] = canvasTools({
-      source: hold.ports.source,
-      editor: hold.ports.editor,
-      commands: hold.ports.commands,
+    const result = await window.invoke(CHANGE, {
+      root: ROOT,
+      changes: [{ operation: 'delete', instance: 'net' }],
     });
-    const alone = await change.handler(removing);
-    await hold.release();
-    expect(result).toBe(alone.content);
+    expect(result).toContain('Change 1: applied. deleted net.');
     expect(instanceNames(window.frame())).toEqual(['app']);
     await window.invoke(SAVE, { root: ROOT });
     await until('the saved frame', () => !window.frame().unsaved);
 
-    expect(window.fetched).not.toHaveBeenCalled();
+    expect(fetched).not.toHaveBeenCalled();
     expect(window.reports).toEqual([]);
   });
 

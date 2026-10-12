@@ -12,15 +12,10 @@
 //     sets' schemas (`canvasToolSchemas`, `moduleToolSchemas`), which
 //     `__tests__/lm-tools.manifest.test.ts` holds the manifest to.
 //
-// The canvas tools of a session are one tool set, chat-core's `canvasTools`
-// over the session's own ports and the transport to Lace's API, made once
-// for each session of a root when the session is attached and disposed when
-// the root leaves it (its close, a renewal) or when the tools are dropped:
-// the set's outcome observer reads the session's frames for as long as the
-// session lasts, and owns the revisions of its own applies. The root
-// sessions keep the sets with their sessions (`observe`), and every canvas
-// tool call runs on the set of the session its hold is on (`use`): a set
-// the root leaves while a call runs on it is disposed when the call settles.
+// The tools run in the developer's own model, and reach the engine and the
+// CLI alone. A canvas tool call runs on chat-core's `canvasTools`, made for
+// that call over the ports of the session its hold is on: the set keeps
+// nothing between calls, so nothing is kept here per session either.
 //
 // How a call reaches what its tool works on, one rule per operation:
 //
@@ -53,13 +48,12 @@ import {
   moduleTools,
   type ToolResult,
   type ToolSchema,
-  type Transport,
 } from '@lace-cloud/chat-core';
 import type * as vscode from 'vscode';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { type CanvasOperations, notDoneText, type Operated } from '../commands/canvas-operations';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import type { RootSessions } from '../engine/root-sessions';
+import type { RootHold, RootSessions } from '../engine/root-sessions';
 import {
   type AuthoringRoot,
   type RootSources,
@@ -81,17 +75,9 @@ export type LaceTool = {
 
 export type LaceToolPorts = {
   panels: Pick<CanvasPanels, 'ensure'>;
-  rootSessions: Pick<RootSessions, 'acquire' | 'observe'>;
+  rootSessions: Pick<RootSessions, 'acquire'>;
   operations: CanvasOperations;
   commands: CommandsMapping;
-  // chat-core's port to Lace's API, which every canvas tool set shares.
-  transport: Transport;
-};
-
-// The tools, and what drops them: every session's canvas tool set.
-export type LaceTools = {
-  readonly tools: readonly LaceTool[];
-  dispose: () => void;
 };
 
 // The tool sets' schemas, as chat-core states them as data: what the
@@ -102,28 +88,21 @@ const [VALIDATE, SEARCH_REGISTRY, DESCRIBE_REGISTRY_MODULE] = moduleToolSchemas;
 // Every tool's schema, in the order the manifest lists them.
 export const TOOL_SCHEMAS: readonly ToolSchema[] = [...canvasToolSchemas, ...moduleToolSchemas];
 
-export function createLaceTools(ports: LaceToolPorts): LaceTools {
-  const { panels, rootSessions, operations, commands, transport } = ports;
+// The canvas tools over the ports of the session `hold` is on now.
+const canvasOf = ({ ports }: RootHold): CanvasTools =>
+  canvasTools({ source: ports.source, editor: ports.editor, commands: ports.commands });
 
-  // Each held session's canvas tool set.
-  const canvas = rootSessions.observe((session) =>
-    canvasTools({
-      source: session.ports.source,
-      editor: session.ports.editor,
-      commands: session.ports.commands,
-      transport,
-    }),
-  );
+export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
+  const { panels, rootSessions, operations, commands } = ports;
 
-  // A call on the root's session, held for the call's duration and run on
-  // the session's tool set, which lives until the call settles.
+  // A call on the root's session, held for the call's duration.
   async function held(
     root: AuthoringRoot,
     use: (tools: CanvasTools) => Promise<ToolResult>,
   ): Promise<ToolResult> {
     const hold = await rootSessions.acquire(rootPath(root));
     try {
-      return await canvas.use(hold, use);
+      return await use(canvasOf(hold));
     } finally {
       await hold.release();
     }
@@ -136,7 +115,7 @@ export function createLaceTools(ports: LaceToolPorts): LaceTools {
       ? outcome.value
       : { content: notDoneText(root, outcome), isError: outcome.kind === 'bufferNotSaved' };
 
-  const tools: readonly LaceTool[] = [
+  return [
     {
       schema: CHANGE,
       call: async (root, input, signal) => {
@@ -153,9 +132,10 @@ export function createLaceTools(ports: LaceToolPorts): LaceTools {
       call: async (root, input, signal) =>
         resultOf(
           root,
-          await operations.save(root, (hold) =>
-            canvas.use(hold, ([, , save]) => save.handler(input, signal)),
-          ),
+          await operations.save(root, (hold) => {
+            const [, , save] = canvasOf(hold);
+            return save.handler(input, signal);
+          }),
         ),
     },
     {
@@ -163,9 +143,10 @@ export function createLaceTools(ports: LaceToolPorts): LaceTools {
       call: async (root, input, signal) =>
         resultOf(
           root,
-          await operations.generate(root, (hold) =>
-            canvas.use(hold, ([, , , generate]) => generate.handler(input, signal)),
-          ),
+          await operations.generate(root, (hold) => {
+            const [, , , generate] = canvasOf(hold);
+            return generate.handler(input, signal);
+          }),
         ),
     },
     {
@@ -190,7 +171,6 @@ export function createLaceTools(ports: LaceToolPorts): LaceTools {
       },
     },
   ];
-  return { tools, dispose: canvas.dispose };
 }
 
 // ── The `root` input ──
@@ -337,9 +317,8 @@ function languageModelTool(
 
 // Makes the tools and registers every one with VS Code's chat, until the
 // returned disposable drops them. A host without the Language Model Tools
-// API (Cursor and the other forks) runs the extension without its tools,
-// and so without a canvas tool set; their developers' assistants work at the
-// text level.
+// API (Cursor and the other forks) runs the extension without its tools;
+// their developers' assistants work at the text level.
 export function registerLaceTools(
   api: LanguageModelApi,
   ports: LaceToolPorts,
@@ -347,14 +326,12 @@ export function registerLaceTools(
 ): vscode.Disposable {
   const register = api.lm?.registerTool?.bind(api.lm);
   if (register === undefined) return { dispose: () => {} };
-  const lace = createLaceTools(ports);
-  const registrations = lace.tools.map((tool) =>
+  const registrations = createLaceTools(ports).map((tool) =>
     register(tool.schema.name, languageModelTool(api, tool, sources)),
   );
   return {
     dispose() {
       for (const registration of registrations) registration.dispose();
-      lace.dispose();
     },
   };
 }

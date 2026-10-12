@@ -25,7 +25,6 @@ import { type RootSources, workspaceRootSources } from './roots/authoring-roots'
 import { createRunOutput, type RunOutput } from './stacks/run-output';
 import { stacksTree } from './stacks/stacks-tree';
 import { createRootState, type RootState } from './state/root-state';
-import { apiTransport } from './tools/api-transport';
 import { registerLaceTools } from './tools/lm-tools';
 import { registerCommands } from './vscode/commands';
 import { createConfirm } from './vscode/dialogs';
@@ -210,13 +209,11 @@ function stacks(host: Host): vscode.Disposable {
   };
 }
 
-// The Lace tools in VS Code's chat, their canvas tool sets reaching Lace's
-// API with the credential the engine holds. A host without the Language
-// Model Tools API runs without them.
+// The Lace tools in VS Code's chat, run by the developer's own model. A host
+// without the Language Model Tools API runs without them.
 function tools(host: Host): vscode.Disposable {
-  const { api, engine, panels, rootSessions, operations, commands, sources } = host;
-  const transport = apiTransport({ credential: engine.credential, fetch });
-  return registerLaceTools(api, { panels, rootSessions, operations, commands, transport }, sources);
+  const { api, panels, rootSessions, operations, commands, sources } = host;
+  return registerLaceTools(api, { panels, rootSessions, operations, commands }, sources);
 }
 
 export const FEATURES: readonly Feature[] = [

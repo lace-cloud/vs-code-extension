@@ -1,8 +1,7 @@
 // The engine for this window: one `lace engine` process, started on demand
 // and reached two ways — a webview's bridge is served over it, and the
 // extension host calls it through a bridge of its own, so both sides hold the
-// same typed mapping. The developer's credential is read from it by the host
-// alone: `ReadCredential` is no bridge method, so no webview reaches it.
+// same typed mapping.
 //
 // The process is `ServerManager`'s. It is spawned with a stdin pipe the
 // manager holds, and the engine exits when that pipe reaches end of file, so
@@ -10,10 +9,8 @@
 // with it.
 import { type BridgeEngineCaller, bridgeCaller } from '@lace-cloud/canvas/engine';
 import {
-  type EngineCredential,
   EngineProtocolMismatchError,
   type EngineTransport,
-  type LaceTransport,
   ServerManager,
   type ServerState,
   serveEngineBridge,
@@ -72,23 +69,15 @@ export type Engine = {
   // Serves a webview's bridge over the running engine, starting it when it
   // is not running, until the returned function is called.
   serve: (bridge: MessageBridge) => Promise<() => void>;
-  // The credential the running engine holds now (no key when the developer
-  // is signed out) and the base URL of the API it is for, read afresh on
-  // every call. Rejects when no engine runs, and starts none.
-  credential: () => Promise<EngineCredential>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
   restart: () => Promise<void>;
 };
 
-// The connection to a running engine: the calls a bridge forwards, and the
-// host's own `readCredential`.
-export type HostTransport = EngineTransport & Pick<LaceTransport, 'readCredential'>;
-
 // What the engine reads from its process manager; `ServerManager` is one.
 export type EngineManager = {
   readonly currentState: ServerState;
-  readonly transport: HostTransport | null;
+  readonly transport: EngineTransport | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
   on: (event: 'state', listener: (state: ServerState) => void) => unknown;
@@ -167,7 +156,7 @@ export function createEngine(manager: EngineManager, settings: EngineSettings): 
     return own.caller;
   }
 
-  const running = (): HostTransport | null =>
+  const running = (): EngineTransport | null =>
     manager.currentState === 'running' ? manager.transport : null;
 
   // Resolves with the transport at the next `running`; with `orStopped`,
@@ -222,11 +211,6 @@ export function createEngine(manager: EngineManager, settings: EngineSettings): 
       return ownCaller(await nextRunning(false));
     },
     serve: async (bridge) => serveEngineBridge(bridge, await demand()),
-    credential: async () => {
-      const transport = running();
-      if (!transport) throw new EngineStoppedError();
-      return transport.readCredential();
-    },
     start,
     stop: async () => {
       await manager.stop();

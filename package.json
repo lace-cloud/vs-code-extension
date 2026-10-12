@@ -368,7 +368,7 @@
         "displayName": "Change module canvas",
         "toolReferenceName": "laceChangeModuleCanvas",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Changes a Lace module canvas. Do not read the canvas before calling it. For each change pass the developer's own words in `request`, one entry per change: this tool resolves which operation, instances, inputs, outputs and registry modules are meant. `request` carries the words and never a literal value: pass each literal the developer gave (an input's value, an instance's new name, the name of the variable an input is bound to) in `value`, one change per entry, each with its own `value`. Lace withholds `value` from what it ranks and keeps, and keeps the words of `request` as written; the tool selects and never writes a value of its own. Every result of this tool carries the current canvas. On every call pass your own reading of each change in `modelReading`: always its `operation`, and any instance, input, output or registry module the developer named, as the canvas lists it once a result has shown you the canvas. Never put a value in `modelReading`. Where the words bear a second reading, pass it in `alternativeReading`. Lace reads the words too and applies its own reading where it is sure, yours otherwise; where the two differ the result says so: tell the developer. When Lace is also sure of your alternative reading, nothing is applied and the result shows both: ask the developer. A change neither reading settles is not applied, and the result names the part and its candidates: send it again naming one as the canvas lists it, with the developer's own words. Do not save or generate unless the developer asked.",
+        "modelDescription": "Changes a Lace module canvas: places registry modules, wires and unwires instances, sets, binds and clears inputs, and renames, deletes and ungroups instances. State each change as the canvas lists it: its `operation`, and each instance, input, output and registry module it works on by the name the canvas gives it. Pass each literal the developer gave (an input's value, an instance's new name, the variable an input is bound to) in `value`, one change per entry. A connect that names no `output` and no `input` wires the two instances as the canvas does when one is dragged onto the other. A change that names nothing on the canvas, or a name that fits several things, is not applied, and the result lists its candidates: ask the developer which is meant, or send the change again naming one. A place whose module the registry lists nothing for points to lace_search_module_registry. Every result carries the current canvas. Do not save or generate unless the developer asked.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -383,107 +383,51 @@
               "items": {
                 "type": "object",
                 "properties": {
-                  "request": {
+                  "operation": {
                     "type": "string",
-                    "description": "One change, in the developer's own words, and never a literal value: that goes in `value`."
+                    "enum": [
+                      "place",
+                      "connect",
+                      "disconnect",
+                      "set",
+                      "bind",
+                      "clear",
+                      "rename",
+                      "delete",
+                      "ungroup"
+                    ],
+                    "description": "place: add a registry module to the canvas as a new instance; connect: wire an output of one instance into an input of another; disconnect: remove the wire into an instance's input; set: give an input of an instance a literal value; bind: make an input of an instance take its value from a variable of the module (`var.<name>`), so the module's caller sets it; clear: unset an input of an instance, removing the value, variable or expression it holds; rename: give an instance a new name; delete: remove an instance from the canvas; ungroup: dissolve a group, moving the instances inside it up beside it"
+                  },
+                  "instance": {
+                    "type": "string",
+                    "description": "The instance a set, bind, clear, disconnect, rename or delete works on, or the group an ungroup dissolves: its canvas path (`group.child`) or its own id."
+                  },
+                  "input": {
+                    "type": "string",
+                    "description": "The input a set, bind, clear or disconnect works on, or a connect wires into."
+                  },
+                  "sourceInstance": {
+                    "type": "string",
+                    "description": "The instance a connect wires from."
+                  },
+                  "output": {
+                    "type": "string",
+                    "description": "The output a connect wires from."
+                  },
+                  "targetInstance": {
+                    "type": "string",
+                    "description": "The instance a connect wires into."
+                  },
+                  "module": {
+                    "type": "string",
+                    "description": "The registry module a place adds, as `author/name`, and `author/name@version` to place a version other than the one the registry lists."
                   },
                   "value": {
-                    "description": "The literal the developer gave for this change: an input's value, an instance's new name, or the name of the variable an input is bound to (`var.<name>`). One value per entry: a change with a value of its own is an entry of its own."
-                  },
-                  "modelReading": {
-                    "type": "object",
-                    "properties": {
-                      "operation": {
-                        "type": "string",
-                        "enum": [
-                          "place",
-                          "connect",
-                          "disconnect",
-                          "set",
-                          "bind",
-                          "clear",
-                          "rename",
-                          "delete",
-                          "ungroup"
-                        ],
-                        "description": "place: add a registry module to the canvas as a new instance; connect: wire an output of one instance into an input of another; disconnect: remove the wire into an instance's input; set: give an input of an instance a literal value; bind: make an input of an instance take its value from a variable of the module (`var.<name>`), so the module's caller sets it; clear: unset an input of an instance, removing the value, variable or expression it holds; rename: give an instance a new name; delete: remove an instance from the canvas; ungroup: dissolve a group, moving the instances inside it up beside it"
-                      },
-                      "instance": {
-                        "type": "string",
-                        "description": "The instance a set, bind, clear, disconnect, rename or delete works on, or the group an ungroup dissolves."
-                      },
-                      "input": {
-                        "type": "string",
-                        "description": "The input a set, bind, clear or disconnect works on, or a connect wires into."
-                      },
-                      "sourceInstance": {
-                        "type": "string",
-                        "description": "The instance a connect wires from."
-                      },
-                      "output": {
-                        "type": "string",
-                        "description": "The output a connect wires from."
-                      },
-                      "targetInstance": {
-                        "type": "string",
-                        "description": "The instance a connect wires into."
-                      },
-                      "module": {
-                        "type": "string",
-                        "description": "The registry module a place adds, as `author/name`."
-                      }
-                    },
-                    "additionalProperties": false
-                  },
-                  "alternativeReading": {
-                    "type": "object",
-                    "properties": {
-                      "operation": {
-                        "type": "string",
-                        "enum": [
-                          "place",
-                          "connect",
-                          "disconnect",
-                          "set",
-                          "bind",
-                          "clear",
-                          "rename",
-                          "delete",
-                          "ungroup"
-                        ],
-                        "description": "place: add a registry module to the canvas as a new instance; connect: wire an output of one instance into an input of another; disconnect: remove the wire into an instance's input; set: give an input of an instance a literal value; bind: make an input of an instance take its value from a variable of the module (`var.<name>`), so the module's caller sets it; clear: unset an input of an instance, removing the value, variable or expression it holds; rename: give an instance a new name; delete: remove an instance from the canvas; ungroup: dissolve a group, moving the instances inside it up beside it"
-                      },
-                      "instance": {
-                        "type": "string",
-                        "description": "The instance a set, bind, clear, disconnect, rename or delete works on, or the group an ungroup dissolves."
-                      },
-                      "input": {
-                        "type": "string",
-                        "description": "The input a set, bind, clear or disconnect works on, or a connect wires into."
-                      },
-                      "sourceInstance": {
-                        "type": "string",
-                        "description": "The instance a connect wires from."
-                      },
-                      "output": {
-                        "type": "string",
-                        "description": "The output a connect wires from."
-                      },
-                      "targetInstance": {
-                        "type": "string",
-                        "description": "The instance a connect wires into."
-                      },
-                      "module": {
-                        "type": "string",
-                        "description": "The registry module a place adds, as `author/name`."
-                      }
-                    },
-                    "additionalProperties": false
+                    "description": "The literal the developer gave for this change: an input's value, an instance's new name, or the name of the variable an input is bound to (`var.<name>`)."
                   }
                 },
                 "required": [
-                  "request",
-                  "modelReading"
+                  "operation"
                 ],
                 "additionalProperties": false
               }
@@ -501,7 +445,7 @@
         "displayName": "Describe module canvas",
         "toolReferenceName": "laceDescribeModuleCanvas",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Describes a Lace module canvas (its module instances with their inputs and outputs, the wires between them, the groups, the diagnostics, and whether it holds unsaved or ungenerated edits) for answering questions about it. Not needed before making changes.",
+        "modelDescription": "Describes a Lace module canvas: its module instances with their inputs and outputs, the wires between them, the groups, the diagnostics, and whether it holds unsaved or ungenerated edits. Read it before a change when you do not know the names the canvas gives its instances, inputs and outputs.",
         "inputSchema": {
           "type": "object",
           "properties": {

@@ -15,17 +15,13 @@
 // holders are on when the last one releases, and never for a session whose
 // stream ended `closed`.
 //
-// An observer (the Problems panel, the autosave keeper, the chat's canvas
-// tool sets) attaches to every session that has a holder, and again to the
-// session a renewal puts the root on; it never holds one. What it returns is
-// disposed when the root leaves that session: at the close the last release
-// sends, at a renewal, at dispose, or when the observation ends. A holder
-// runs on what an observer attached to the session it is on now through the
-// observation (`use`), so what lives as long as a session is kept here, with
-// the session; an attachment the root leaves while runs use it is disposed
-// when the last of them settles. An attachment that keeps unsaved work
-// carries a `flush`, and the session is closed or forgotten only once every
-// flush has settled.
+// An observer (the Problems panel, the autosave keeper) attaches to every
+// session that has a holder, and again to the session a renewal puts the
+// root on; it never holds one. What it returns is disposed when the root
+// leaves that session: at the close the last release sends, at a renewal, at
+// dispose, or when the observation ends. An attachment that keeps unsaved
+// work carries a `flush`, and the session is closed or forgotten only once
+// every flush has settled.
 //
 // `SessionOpen` and `SessionClose` are sent one at a time. An open that
 // overtook a close on its way would be answered with the session the close
@@ -67,35 +63,17 @@ export type SessionAttachment = {
 };
 
 // Called with a session when it is attached.
-export type SessionObserver<A extends SessionAttachment = SessionAttachment> = (
-  session: RootSession,
-) => A;
+export type SessionObserver = (session: RootSession) => SessionAttachment;
 
-// An observer attached to the held sessions.
-export type Observation<A extends SessionAttachment> = {
-  // Runs `run` on what the observer attached to the session `hold` is on
-  // now. The attachment is not disposed while `run` is under way, though the
-  // root leave that session meanwhile: it is disposed once the last run on
-  // it settles. Rejects with `NotObservedError` when nothing is attached to
-  // that session: the root left it, or the observer threw for it.
-  use: <T>(hold: RootHold, run: (attachment: A) => Promise<T>) => Promise<T>;
-  // Detaches the observer from every session, disposing each attachment no
-  // run uses, and each other when its last run settles.
-  dispose: () => void;
-};
-
-// A hold's session has nothing attached by an observation.
-export class NotObservedError extends Error {
-  constructor(readonly root: string) {
-    super(`The session of ${root} is not observed.`);
-  }
-}
+// An observer attached to the held sessions, until `dispose` detaches it
+// from every session and disposes each attachment.
+export type Observation = { dispose: () => void };
 
 export type RootSessions = {
   acquire: (root: string) => Promise<RootHold>;
   // Attaches `observer` to every held session, now and as each is attached,
   // until the observation is disposed.
-  observe: <A extends SessionAttachment>(observer: SessionObserver<A>) => Observation<A>;
+  observe: (observer: SessionObserver) => Observation;
   // The sessions that have a holder.
   held: () => readonly (RootSession & { holders: number })[];
   // Flushes every attachment of every held session, then forgets them all
@@ -144,9 +122,6 @@ export function createRootSessions(options: RootSessionsOptions): RootSessions {
   const { engine, report } = options;
   const entries = new Map<string, Entry>();
   const watchers = new Set<Watcher>();
-  // The internal hold behind each hold a caller has. Its entry is the one
-  // the hold is on now: it moves when the holders join another entry.
-  const internalHold = new WeakMap<RootHold, Hold>();
   let disposed = false;
 
   // One `SessionOpen` or `SessionClose` at a time, in the order asked.
@@ -175,19 +150,8 @@ export function createRootSessions(options: RootSessionsOptions): RootSessions {
   // Attaches `observer` to every held session, keeping what it returned for
   // each entry, for the session the entry is on, until the observation is
   // disposed.
-  function observe<A extends SessionAttachment>(observer: SessionObserver<A>): Observation<A> {
-    const attached = new Map<Entry, A>();
-    // How many runs use each attachment, and the attachments whose session
-    // the root left while runs used them.
-    const using = new Map<A, number>();
-    const retired = new Set<A>();
-    const disposeOf = (root: string, attachment: A): void => {
-      try {
-        attachment.dispose();
-      } catch (error) {
-        report(`detaching from the session of ${root}`, error);
-      }
-    };
+  function observe(observer: SessionObserver): Observation {
+    const attached = new Map<Entry, SessionAttachment>();
     const watcher: Watcher = {
       watch(entry) {
         try {
@@ -199,9 +163,11 @@ export function createRootSessions(options: RootSessionsOptions): RootSessions {
       unwatch(entry) {
         const attachment = attached.get(entry);
         attached.delete(entry);
-        if (attachment === undefined) return;
-        if (using.has(attachment)) retired.add(attachment);
-        else disposeOf(entry.root, attachment);
+        try {
+          attachment?.dispose();
+        } catch (error) {
+          report(`detaching from the session of ${entry.root}`, error);
+        }
       },
       flush: (entry) => attached.get(entry)?.flush?.(),
     };
@@ -210,22 +176,6 @@ export function createRootSessions(options: RootSessionsOptions): RootSessions {
       if (entry.holds.size > 0) watcher.watch(entry);
     }
     return {
-      async use(hold, run) {
-        const entry = internalHold.get(hold)?.entry;
-        const attachment = entry && attached.get(entry);
-        if (entry === undefined || attachment === undefined) throw new NotObservedError(hold.root);
-        using.set(attachment, (using.get(attachment) ?? 0) + 1);
-        try {
-          return await run(attachment);
-        } finally {
-          const left = (using.get(attachment) ?? 1) - 1;
-          if (left > 0) using.set(attachment, left);
-          else {
-            using.delete(attachment);
-            if (retired.delete(attachment)) disposeOf(entry.root, attachment);
-          }
-        }
-      },
       dispose() {
         watchers.delete(watcher);
         for (const entry of [...attached.keys()]) watcher.unwatch(entry);
@@ -368,7 +318,7 @@ export function createRootSessions(options: RootSessionsOptions): RootSessions {
     const hold: Hold = { entry, listeners: new Set() };
     entry.holds.add(hold);
     let released = false;
-    const rootHold: RootHold = {
+    return {
       get root() {
         return hold.entry.root;
       },
@@ -392,8 +342,6 @@ export function createRootSessions(options: RootSessionsOptions): RootSessions {
         await close(held);
       },
     };
-    internalHold.set(rootHold, hold);
-    return rootHold;
   }
 
   return {

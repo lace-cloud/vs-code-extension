@@ -1,6 +1,5 @@
 // Fakes for the tools' tests: an authoring session over a small Bundle, the
-// root sessions that hold it and keep what is attached to it, and Lace's API
-// as chat-core's transport reaches it.
+// root sessions that hold it, and VS Code's cancellation of a tool call.
 import {
   type Action,
   type ApplyResult,
@@ -10,19 +9,11 @@ import {
   parseBound,
   type SourcePort,
 } from '@lace-cloud/canvas/engine';
-import type { Candidate, Ranked, Transport } from '@lace-cloud/chat-core';
 import { Bundle } from '@lace-cloud/proto';
 import { vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { fakeCommands } from '../../engine/__tests__/fake-commands';
-import {
-  NotObservedError,
-  type Observation,
-  type RootHold,
-  type RootSession,
-  type SessionAttachment,
-  type SessionObserver,
-} from '../../engine/root-sessions';
+import type { RootHold, RootSession } from '../../engine/root-sessions';
 
 // `module validate`'s report of a tree in Lace style, as the CLI prints one.
 export const VALIDATED = {
@@ -122,10 +113,10 @@ function reduce(bundle: Bundle, action: Action): Bundle {
   return next;
 }
 
-// A session of the fixture's canvas, whose commands run on `commands`.
-// Every frame it publishes is at the next revision, and the editor's apply,
-// save and generate resolve once their frame is delivered, the apply naming
-// the revision it produced, as the engine mapping's do.
+// A session of the fixture's canvas, whose commands run on `commands`. The
+// editor's apply, save and generate resolve once their frame is delivered,
+// as the engine mapping's do, and a Generate holds the session's one
+// Generate (`generating`) from its first frame to its last.
 export function fakeSession(sessionId = 'session-1', commands = fakeCommands({}).port) {
   let state: CanvasSource = {
     bundle: fixtureBundle(),
@@ -135,16 +126,15 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
     ungenerated: false,
     conflict: null,
     sourceRefused: false,
+    generating: false,
     diagnostics: [],
     treeHash: 'tree-0',
-    revision: 1,
   };
   const history: CanvasSource[] = [];
   const listeners = new Set<(frame: CanvasSource) => void>();
-  const publish = (next: Omit<CanvasSource, 'revision'>): number => {
-    state = { ...next, revision: state.revision + 1 };
+  const publish = (next: CanvasSource): void => {
+    state = next;
     for (const listener of [...listeners]) listener(state);
-    return state.revision;
   };
 
   const source: SourcePort = {
@@ -160,20 +150,21 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
   const editor = {
     apply: vi.fn(async (actions: readonly Action[]): Promise<ApplyResult> => {
       history.push(state);
-      const revision = publish({
+      publish({
         ...state,
         bundle: actions.reduce(reduce, state.bundle),
         unsaved: true,
         canUndo: true,
       });
-      return { success: true, errors: [], created: [], ties: [], revision };
+      return { success: true, errors: [], created: [], ties: [] };
     }),
     save: vi.fn(async () => {
       publish({ ...state, unsaved: false, ungenerated: true });
     }),
     generate: vi.fn(() =>
       (async function* (): AsyncGenerator<GenerateEvent> {
-        publish({ ...state, ungenerated: false });
+        publish({ ...state, generating: true });
+        publish({ ...state, generating: false, ungenerated: false });
         yield {
           type: 'success',
           written: ['main.tf'],
@@ -203,27 +194,17 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
 }
 
 // Root sessions holding one root's fake session, with the root sessions'
-// rule for holders and observers: the first holder opens the session and
-// attaches every observer to it, the last release closes it and disposes
-// each attachment, and a renewal moves the holders and the observers to the
-// session the root is opened on again. An attachment runs use is disposed
-// when the last of them settles.
+// rule for holders: every hold is on the session the root is on now, the
+// last release closes it, and a renewal moves the holders to the session the
+// root is opened on again.
 export function fakeRootSessions(first: RootSession) {
   const acquired: string[] = [];
   let session = first;
   let holders = 0;
-  const watchers = new Set<{ attach: () => void; detach: () => void }>();
-  const attachAll = () => {
-    for (const watcher of watchers) watcher.attach();
-  };
-  const detachAll = () => {
-    for (const watcher of watchers) watcher.detach();
-  };
   const rootSessions = {
     acquire: vi.fn(async (root: string): Promise<RootHold> => {
       acquired.push(root);
       holders += 1;
-      if (holders === 1) attachAll();
       let released = false;
       return {
         get root() {
@@ -240,48 +221,9 @@ export function fakeRootSessions(first: RootSession) {
           if (released) return;
           released = true;
           holders -= 1;
-          if (holders === 0) detachAll();
         },
       };
     }),
-    observe<A extends SessionAttachment>(observer: SessionObserver<A>): Observation<A> {
-      let attached: A | undefined;
-      const using = new Map<A, number>();
-      const retired = new Set<A>();
-      const watcher = {
-        attach: () => {
-          attached = observer(session);
-        },
-        detach: () => {
-          if (attached !== undefined && using.has(attached)) retired.add(attached);
-          else attached?.dispose();
-          attached = undefined;
-        },
-      };
-      watchers.add(watcher);
-      if (holders > 0) watcher.attach();
-      return {
-        async use(hold, run) {
-          const on = attached;
-          if (on === undefined) throw new NotObservedError(hold.root);
-          using.set(on, (using.get(on) ?? 0) + 1);
-          try {
-            return await run(on);
-          } finally {
-            const left = (using.get(on) ?? 1) - 1;
-            if (left > 0) using.set(on, left);
-            else {
-              using.delete(on);
-              if (retired.delete(on)) on.dispose();
-            }
-          }
-        },
-        dispose: () => {
-          watchers.delete(watcher);
-          watcher.detach();
-        },
-      };
-    },
     held: () => (holders > 0 ? [{ ...session, holders }] : []),
   };
   return {
@@ -290,59 +232,9 @@ export function fakeRootSessions(first: RootSession) {
     holders: () => holders,
     // The root's session ended and the root was opened again on `next`.
     renew(next: RootSession): void {
-      if (holders > 0) detachAll();
       session = next;
-      if (holders > 0) attachAll();
     },
   };
-}
-
-// The candidates of a rank call's body.
-function candidatesOf(body: unknown): readonly Candidate[] {
-  return typeof body === 'object' && body !== null && 'candidates' in body
-    ? Array.isArray(body.candidates)
-      ? body.candidates
-      : []
-    : [];
-}
-
-// A request chat-core's transport made of Lace's API.
-export type ApiRequest = { path: string; body: unknown };
-
-// Lace's API as chat-core reaches it: the ranking puts the first candidate
-// of each question whose id is in `prefer` on top, sure of it, and every
-// report is accepted. Each request is recorded.
-export function fakeLaceApi(prefer: readonly string[]) {
-  const requests: ApiRequest[] = [];
-  let captures = 0;
-  const ranked = (candidates: readonly Candidate[]): Ranked => {
-    const first = candidates.filter((candidate) => prefer.includes(candidate.id)).slice(0, 1);
-    const others = candidates.filter((candidate) => !first.includes(candidate));
-    captures += 1;
-    return {
-      capture_id: `capture-${captures}`,
-      head: 'head-1',
-      scores: [
-        ...first.map((candidate) => ({ id: candidate.id, score: 9, rightness: 0.95 })),
-        ...others.map((candidate) => ({ id: candidate.id, score: 1, rightness: 0.01 })),
-      ],
-      thresholds: {
-        operation: { from: 0.9 },
-        instance: { from: 0.9 },
-        input: { from: 0.9 },
-        module: { from: 0.9 },
-        connection: { from: 0.9 },
-        steps: { from: 0.9 },
-      },
-    };
-  };
-  const transport: Transport = async (path, { body }) => {
-    requests.push({ path, body });
-    if (path === '/api/v1/candidates/rank')
-      return { status: 200, body: ranked(candidatesOf(body)) };
-    return { status: 201, body: {} };
-  };
-  return { transport, requests };
 }
 
 // Lets every pending promise callback run.
@@ -370,19 +262,4 @@ export function fakeCancellation() {
       for (const listener of [...listeners]) listener(undefined);
     },
   };
-}
-
-// Lace's API that answers no rank: each rank request waits until the signal
-// chat-core gives it aborts, then rejects as an aborted fetch rejects.
-export function silentLaceApi() {
-  const requests: ApiRequest[] = [];
-  const transport: Transport = (path, { body, signal }) => {
-    requests.push({ path, body });
-    return new Promise((_resolve, reject) => {
-      signal.addEventListener('abort', () =>
-        reject(new DOMException('This operation was aborted', 'AbortError')),
-      );
-    });
-  };
-  return { transport, requests };
 }

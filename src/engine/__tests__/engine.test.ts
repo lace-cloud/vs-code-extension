@@ -1,6 +1,6 @@
 import {
-  type EngineCredential,
   EngineProtocolMismatchError,
+  type EngineTransport,
   type ServerState,
 } from '@lace-cloud/host';
 import type { BridgeRequest, BridgeResponse } from '@lace-cloud/proto';
@@ -12,20 +12,14 @@ import {
   EngineStoppedError,
   engineControls,
   engineSettings,
-  type HostTransport,
 } from '../engine';
 
-const SIGNED_OUT: EngineCredential = { apiKey: undefined, apiBaseUrl: 'https://lace.example' };
-
 // A transport that answers every unary call with its own name, so a test can
-// tell which engine a call reached, and reads the credential the engine
-// holds at the moment it is asked.
-function fakeTransport(name: string, holds: () => EngineCredential) {
-  const calls: string[] = [];
-  const transport: HostTransport = {
+// tell which engine a call reached.
+function fakeTransport(name: string): EngineTransport {
+  return {
     client: {
-      makeUnaryRequest(path, _serialize, _deserialize, _argument, _metadata, callback) {
-        calls.push(path);
+      makeUnaryRequest(_path, _serialize, _deserialize, _argument, _metadata, callback) {
         callback(null, { server_version: name, command_paths: [] });
       },
       makeServerStreamRequest() {
@@ -33,12 +27,7 @@ function fakeTransport(name: string, holds: () => EngineCredential) {
       },
     },
     metadata: () => undefined as never,
-    readCredential: async () => {
-      calls.push('readCredential');
-      return holds();
-    },
   };
-  return { transport, calls };
 }
 
 function fakeManager() {
@@ -46,11 +35,7 @@ function fakeManager() {
   let engines = 0;
   const manager = {
     currentState: 'stopped' as ServerState,
-    transport: null as HostTransport | null,
-    // What each engine's transport calls, in order; the credential the
-    // engine's developer home holds.
-    calls: [] as string[],
-    credential: SIGNED_OUT,
+    transport: null as EngineTransport | null,
     starts: 0,
     // What the next start does once `come` is called.
     failure: undefined as Error | undefined,
@@ -64,9 +49,7 @@ function fakeManager() {
     },
     run() {
       engines += 1;
-      const fake = fakeTransport(`engine${engines}`, () => manager.credential);
-      manager.transport = fake.transport;
-      manager.calls = fake.calls;
+      manager.transport = fakeTransport(`engine${engines}`);
       manager.enter('running');
     },
     async start() {
@@ -243,53 +226,6 @@ describe("serving a webview's bridge", () => {
     dispose();
     toHost(ask('2'));
     expect(answers).toHaveLength(1);
-  });
-
-  test('refuses a page that asks for the credential, which never reaches the engine', async () => {
-    const manager = fakeManager();
-    const engine = createEngine(manager, settings);
-    manager.enter('starting');
-    manager.run();
-    manager.credential = { apiKey: 'lace_key', apiBaseUrl: 'https://lace.example' };
-
-    const answers: BridgeResponse[] = [];
-    let toHost: (frame: unknown) => void = () => {};
-    await engine.serve({
-      post: (frame) => answers.push(frame as BridgeResponse),
-      onMessage: (listener) => {
-        toHost = listener;
-        return () => {};
-      },
-    });
-    toHost({ kind: 'unary', id: '1', method: 'ReadCredential', request: {} });
-    await tick();
-
-    expect(answers).toMatchObject([{ kind: 'error', id: '1' }]);
-    expect(JSON.stringify(answers)).not.toContain('lace_key');
-    expect(manager.calls).toEqual([]);
-  });
-});
-
-describe("the developer's credential", () => {
-  test('is read from the running engine on every call, so a sign-in between two calls shows at the second', async () => {
-    const manager = fakeManager();
-    const engine = createEngine(manager, settings);
-    manager.enter('starting');
-    manager.run();
-
-    expect(await engine.credential()).toEqual(SIGNED_OUT);
-    manager.credential = { apiKey: 'lace_key', apiBaseUrl: 'https://lace.example' };
-    expect(await engine.credential()).toEqual(manager.credential);
-    expect(manager.calls).toEqual(['readCredential', 'readCredential']);
-  });
-
-  test('is refused while no engine runs, and starts none', async () => {
-    const manager = fakeManager();
-    const engine = createEngine(manager, settings);
-
-    await expect(engine.credential()).rejects.toBeInstanceOf(EngineStoppedError);
-    expect(manager.starts).toBe(0);
-    expect(manager.currentState).toBe('stopped');
   });
 });
 

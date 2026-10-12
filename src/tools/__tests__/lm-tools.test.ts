@@ -26,11 +26,9 @@ import {
 } from '../lm-tools';
 import {
   fakeCancellation,
-  fakeLaceApi,
   fakeRootSessions,
   fakeSession,
   settled,
-  silentLaceApi,
   VALIDATED,
 } from './fake-session';
 
@@ -70,38 +68,16 @@ const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
 
 const NAMES = TOOL_SCHEMAS.map((schema) => schema.name);
 
-const DELETE_DB = {
-  changes: [{ request: 'delete db', modelReading: { operation: 'delete', instance: 'db' } }],
-};
-const RENAME_APP = {
-  changes: [
-    {
-      request: 'rename app',
-      value: 'frontend',
-      modelReading: { operation: 'rename', instance: 'app' },
-    },
-  ],
-};
-// A change whose words name neither the operation nor the instance, so Lace's
-// ranking is asked, and its decision reported.
-const REMOVE_THE_DATABASE = {
-  changes: [
-    { request: 'remove the database', modelReading: { operation: 'delete', instance: 'db' } },
-  ],
-};
-
-// The id a decision report carries.
-const idOf = (body: unknown): unknown =>
-  typeof body === 'object' && body !== null && 'id' in body ? body.id : undefined;
+const DELETE_DB = { changes: [{ operation: 'delete', instance: 'db' }] };
+const RENAME_APP = { changes: [{ operation: 'rename', instance: 'app', value: 'frontend' }] };
 
 // The canvas a call's result ends with lists each instance as `- <name>:`.
 const instancesIn = (content: string): string[] =>
   [...content.matchAll(/^- (\w+): module/gm)].map(([, name]) => name);
 
-// `prefer`: the candidates Lace's ranking is sure of; `scripts`: commands
-// scripted beyond the validate and registry listing every call can make.
-function setUp(prefer: readonly string[] = [], scripts: Scripts = {}) {
-  const fake = fakeSession();
+// `scripts`: commands scripted beyond the validate and registry listing
+// every call can make; `fake`: the root's session.
+function setUp(scripts: Scripts = {}, fake = fakeSession()) {
   const { rootSessions, acquired, holders, renew } = fakeRootSessions(fake.session);
   const order: string[] = [];
   rootSessions.acquire.mockImplementation(
@@ -133,7 +109,6 @@ function setUp(prefer: readonly string[] = [], scripts: Scripts = {}) {
     ...scripts,
   });
   const commands = { at: vi.fn(lace.commands.at), anywhere: vi.fn(lace.commands.anywhere) };
-  const api = fakeLaceApi(prefer);
   // The editors' documents: what a Generate saves first.
   const textDocuments: { uri: vscode.Uri; isDirty: boolean; save: () => Promise<boolean> }[] = [];
   const ports: LaceToolPorts = {
@@ -144,11 +119,10 @@ function setUp(prefer: readonly string[] = [], scripts: Scripts = {}) {
       rootSessions,
     }),
     commands,
-    transport: api.transport,
   };
   const laceTools = createLaceTools(ports);
   const tool = (name: string): LaceTool => {
-    const found = laceTools.tools.find((each) => each.schema.name === name);
+    const found = laceTools.find((each) => each.schema.name === name);
     if (!found) throw new Error(`no tool ${name}`);
     return found;
   };
@@ -161,8 +135,6 @@ function setUp(prefer: readonly string[] = [], scripts: Scripts = {}) {
     holders,
     renew,
     order,
-    api,
-    laceTools,
     tool,
     lace,
     textDocuments,
@@ -203,12 +175,7 @@ describe('the tools', () => {
     const renamed = await change.call(prod, RENAME_APP);
     expect(renamed.content).toContain('renamed app to frontend');
     const deleted = await change.call(prod, {
-      changes: [
-        {
-          request: 'delete frontend',
-          modelReading: { operation: 'delete', instance: 'frontend' },
-        },
-      ],
+      changes: [{ operation: 'delete', instance: 'frontend' }],
     });
     expect(deleted.content).toContain('Change 1: applied. deleted frontend.');
   });
@@ -294,77 +261,52 @@ describe('the tools', () => {
   });
 });
 
-describe("a session's canvas tool set", () => {
-  test('is made once for the session: every call on it runs on the one set', async () => {
+describe("a canvas tool call's tool set", () => {
+  test('is made for the call over the ports of the session its hold is on, and nothing is made beside the calls', async () => {
     const { tool, fake, panels } = setUp();
     const made = vi.mocked(canvasTools);
     made.mockClear();
-    // The canvas tab holds the session, and the set is made for it.
+    // The canvas tab holds the session; no tool set is made for it.
     await panels.ensure(prod);
-    expect(made).toHaveBeenCalledOnce();
-    const [attached] = made.mock.results;
-    if (attached?.type !== 'return') throw new Error('no canvas tool set was made');
-    const ran = attached.value.map((registration) => vi.spyOn(registration, 'handler'));
+    expect(made).not.toHaveBeenCalled();
 
     await tool('lace_change_module_canvas').call(prod, RENAME_APP);
     await tool('lace_describe_module_canvas').call(prod, {});
     await tool('lace_save_module_canvas').call(prod, {});
     await tool('lace_generate_module_terraform').call(prod, {});
 
-    for (const handler of ran) expect(handler).toHaveBeenCalledOnce();
-    expect(made).toHaveBeenCalledOnce();
-    // The set is the session's one reader besides the calls.
-    expect(fake.listeners()).toBe(1);
+    expect(made).toHaveBeenCalledTimes(4);
+    for (const [ports] of made.mock.calls) {
+      expect(ports).toEqual({
+        source: fake.session.ports.source,
+        editor: fake.session.ports.editor,
+        commands: fake.session.ports.commands,
+      });
+    }
   });
 
-  test('reads what happened next to a change it reported, between calls, and reports each outcome once', async () => {
-    const { tool, fake, api } = setUp(['delete', 'db']);
-    const removed = await tool('lace_change_module_canvas').call(prod, REMOVE_THE_DATABASE);
-    expect(removed.content).toContain('Change 1: applied. deleted db.');
-    const [decision] = api.requests.filter(
-      (request) => request.path === '/api/v1/candidates/decisions',
-    );
-    expect(decision?.body).toMatchObject({ surface: 'canvas' });
-
-    // The canvas's own Save, after the call.
-    await fake.editor.save();
-    await fake.editor.save();
-    const outcomes = api.requests.filter((request) => request.path.endsWith('/outcomes'));
-    expect(outcomes).toEqual([
-      {
-        path: `/api/v1/candidates/decisions/${idOf(decision?.body)}/outcomes`,
-        body: { event: 'saved' },
-      },
-    ]);
-  });
-
-  test('is disposed when the session closes', async () => {
-    const { tool, fake, closePanel, holders } = setUp();
-    await tool('lace_describe_module_canvas').call(prod, {});
-    expect(holders()).toBe(0);
-    expect(fake.listeners()).toBe(0);
-
+  test('keeps no reader of the session once its call settles', async () => {
+    const { tool, fake, holders } = setUp();
     await tool('lace_change_module_canvas').call(prod, RENAME_APP);
-    expect(fake.listeners()).toBe(1);
-    await closePanel();
+    await tool('lace_describe_module_canvas').call(prod, {});
+    // The change's canvas tab still holds the session.
+    expect(holders()).toBe(1);
     expect(fake.listeners()).toBe(0);
   });
 
-  test("a call after the root's session is opened again runs on the new session's set", async () => {
-    const { tool, fake, renew } = setUp();
+  test("a call after the root's session is opened again runs on the new session", async () => {
+    const { tool, renew } = setUp();
     const renamed = await tool('lace_change_module_canvas').call(prod, RENAME_APP);
     expect(instancesIn(renamed.content)).toEqual(['net', 'frontend', 'db']);
 
     const next = fakeSession('session-2');
     renew(next.session);
-    expect(fake.listeners()).toBe(0);
     const described = await tool('lace_describe_module_canvas').call(prod, {});
     expect(instancesIn(described.content)).toEqual(['net', 'app', 'db']);
-    expect(next.listeners()).toBe(1);
   });
 
-  test('a renewal during a call disposes the set the call runs on only when the call settles', async () => {
-    const { tool, fake, renew, api } = setUp(['delete', 'db']);
+  test('a call under way when the session is opened again finishes on the session it began on', async () => {
+    const { tool, fake, renew } = setUp();
     const applying = fake.editor.apply.getMockImplementation();
     if (applying === undefined) throw new Error('the fake session applies nothing');
     let land = () => {};
@@ -372,31 +314,16 @@ describe("a session's canvas tool set", () => {
       await new Promise<void>((resolve) => (land = resolve));
       return applying(actions);
     });
-    const removing = tool('lace_change_module_canvas').call(prod, REMOVE_THE_DATABASE);
+    const deleting = tool('lace_change_module_canvas').call(prod, DELETE_DB);
     while (fake.editor.apply.mock.calls.length === 0) await settled();
 
     const next = fakeSession('session-2');
     renew(next.session);
-    // The call's set still reads the session it runs on; the new session
-    // has a set of its own.
-    expect(fake.listeners()).toBe(1);
-    expect(next.listeners()).toBe(1);
-
     land();
-    const removed = await removing;
-    expect(removed.content).toContain('Change 1: applied. deleted db.');
-    expect(api.requests.map((request) => request.path)).toContain('/api/v1/candidates/decisions');
-    expect(fake.listeners()).toBe(0);
-    expect(next.listeners()).toBe(1);
-  });
-
-  test('every set is disposed when the tools are dropped', async () => {
-    const { tool, fake, laceTools } = setUp();
-    await tool('lace_change_module_canvas').call(prod, RENAME_APP);
-    expect(fake.listeners()).toBe(1);
-
-    laceTools.dispose();
-    expect(fake.listeners()).toBe(0);
+    const deleted = await deleting;
+    expect(deleted.content).toContain('Change 1: applied. deleted db.');
+    expect(instancesIn(deleted.content)).toEqual(['net', 'app']);
+    expect(next.editor.apply).not.toHaveBeenCalled();
   });
 });
 
@@ -481,57 +408,45 @@ describe('registration', () => {
 
   const { token } = fakeCancellation();
 
-  test('registers every tool where the Language Model Tools API exists, and disposes them with their canvas tool sets', async () => {
+  test('registers every tool where the Language Model Tools API exists, and disposes them', () => {
     const { tools, dispose, registerTool } = registered();
-    const { ports, fake, laceTools } = setUp();
-    laceTools.dispose();
+    const { ports } = setUp();
     const disposable = registerLaceTools(
       language({ registerTool } as LanguageModelApi['lm']),
       ports,
       sources,
     );
     expect([...tools.keys()]).toEqual(NAMES);
-    await ports.rootSessions.acquire('/work/repo/infra/prod');
-    expect(fake.listeners()).toBe(1);
 
     disposable.dispose();
     expect(dispose).toHaveBeenCalledTimes(NAMES.length);
-    expect(fake.listeners()).toBe(0);
   });
 
   test.each([
     ['no `lm` namespace', undefined],
     ['an `lm` namespace without registerTool', {}],
-  ])('is skipped on a host with %s, which then has no canvas tool set', async (_name, lm) => {
-    const { ports, fake, laceTools } = setUp();
-    laceTools.dispose();
+  ])('is skipped on a host with %s', (_name, lm) => {
+    const { ports } = setUp();
     const disposable = registerLaceTools(language(lm as LanguageModelApi['lm']), ports, sources);
-    await ports.rootSessions.acquire('/work/repo/infra/prod');
-    expect(fake.listeners()).toBe(0);
     expect(() => disposable.dispose()).not.toThrow();
   });
 
-  test('a change VS Code cancels while Lace ranks applies nothing, and the call stops listening once it settles', async () => {
+  test('a change VS Code cancels before it applies applies nothing, and the call stops listening once it settles', async () => {
     const { tools, registerTool } = registered();
-    const { ports, fake, laceTools } = setUp();
-    laceTools.dispose();
-    const lace = silentLaceApi();
-    registerLaceTools(
-      language({ registerTool } as LanguageModelApi['lm']),
-      { ...ports, transport: lace.transport },
-      sources,
-    );
+    // The session's own commands: the registry listing a place reads is held.
+    const sessionCommands = fakeCommands({ 'registry list': { held: true } });
+    const { ports, fake } = setUp({}, fakeSession('session-1', sessionCommands.port));
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), ports, sources);
     const cancellation = fakeCancellation();
 
-    const call = tools
-      .get('lace_change_module_canvas')
-      ?.invoke(
-        { input: { root: 'infra/prod', ...REMOVE_THE_DATABASE }, toolInvocationToken: undefined },
-        cancellation.token,
-      );
-    await vi.waitFor(() =>
-      expect(lace.requests.map((request) => request.path)).toContain('/api/v1/candidates/rank'),
+    const call = tools.get('lace_change_module_canvas')?.invoke(
+      {
+        input: { root: 'infra/prod', changes: [{ operation: 'place', module: 'acme/vpc' }] },
+        toolInvocationToken: undefined,
+      },
+      cancellation.token,
     );
+    await vi.waitFor(() => expect(sessionCommands.held).toHaveLength(1));
     expect(cancellation.listening()).toBe(1);
     cancellation.cancel();
     const said = await Promise.resolve(call).then(
@@ -592,12 +507,11 @@ describe('registration', () => {
     waiting,
   )('%s, cancelled while it waits, stops waiting and stops listening', async (name, wait) => {
     const { tools, registerTool } = registered();
-    const t = setUp([], {
+    const t = setUp({
       'module validate': { held: true },
       'registry list': { held: true },
       'registry describe': { held: true },
     });
-    t.laceTools.dispose();
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
     const reached = await wait(t);
     const cancellation = fakeCancellation();
@@ -622,7 +536,6 @@ describe('registration', () => {
   test('describe is handed the call’s signal', async () => {
     const { tools, registerTool } = registered();
     const t = setUp();
-    t.laceTools.dispose();
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
     const cancellation = fakeCancellation();
     handled.splice(0);
@@ -644,7 +557,6 @@ describe('registration', () => {
   test('a call whose token is cancelled before it starts starts nothing: a save is not sent', async () => {
     const { tools, registerTool } = registered();
     const t = setUp();
-    t.laceTools.dispose();
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
     await t.panels.ensure(prod);
     const cancellation = fakeCancellation();
