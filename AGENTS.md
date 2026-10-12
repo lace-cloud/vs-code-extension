@@ -145,6 +145,9 @@ its `RunCtx` and reads it when the store notifies.
   Convert are the CLI's writers.
 - The page reports its focus, which `onFocusChange` autosave reads. The canvas package's keymap handles its own keys;
   the extension contributes no keybinding.
+- Every page (the canvas and the registry pages) follows VS Code's theme (`webview/theme.ts`): `data-theme` on `<html>`
+  is `light` while `<body>` carries `vscode-light` or `vscode-high-contrast-light` and `dark` otherwise, which the design
+  tokens read, and a theme switch, a change of that class, sets it again.
 
 ## Protocols
 

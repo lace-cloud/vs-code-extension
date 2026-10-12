@@ -48,7 +48,7 @@ src/
   tools/                  the chat tools as Language Model Tools
   protocol/               the webview ↔ host protocols, shared by both bundles
   vscode/                 command registration, dialogs, notices with their offers, webview HTML, a terminal's command line
-  webview/                the page side of a webview's postMessage pair
+  webview/                the page side of a webview: its postMessage pair, and its theme from VS Code's
 resources/instructions/   the text-level instructions contributed to the developer's coding assistant
 packages/host-e2e/        the window e2e (a real VS Code against a real engine)
 LACE_CLI_VERSION          the released `lace` CLI the engine tests and the window e2e run

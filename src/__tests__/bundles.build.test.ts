@@ -48,6 +48,16 @@ describe.each([
   });
 });
 
+test.each([
+  'canvas-webview.js',
+  'registry-sidebar.js',
+  'module-detail.js',
+])("the %s page follows VS Code's theme", (bundle) => {
+  expect(bundledModules(bundle).some((module) => module.endsWith('/src/webview/theme.ts'))).toBe(
+    true,
+  );
+});
+
 // The declarations of each rule of a built stylesheet, by every selector
 // the rule lists.
 function rules(stylesheet: string): Map<string, string[]> {
