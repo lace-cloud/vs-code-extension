@@ -91,6 +91,15 @@ html {
   font-size: 14px;
 }
 
+/* The meta row's separators: each item after the version leads with its
+ * own dot, so a wrapped line may start with one but never ends with one,
+ * and no dot stands alone. Screen readers skip it (its alternative text is
+ * empty). */
+.meta-next::before {
+  content: "·" / "";
+  margin-right: 12px;
+}
+
 /* Edged with the theme's contrast border, which only the high contrast
  * themes have, where the badge's fill is the page's own; drawn inside the
  * box, so the edge takes no space. */
@@ -130,9 +139,11 @@ html {
   background: var(--vscode-button-hoverBackground);
 }
 
-/* Keyboard focus: one ring, the theme's focus border, on every control; a
- * filled button takes it outside its edge. */
-:is(button, a):focus-visible {
+/* Keyboard focus: one ring, the theme's focus border, on every control, the
+ * tab panel and every scroll box, drawn inside the edge, where a box that
+ * clips its content does not clip it; a filled button takes it outside its
+ * edge. */
+:is(button, a, .scroll-box, [role="tabpanel"]):focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
 }
@@ -164,15 +175,14 @@ html {
 }
 
 /* ── Tabs ──
- * Narrower than its tabs, the bar scrolls sideways on a thin scrollbar, as
- * VS Code's editor tabs do, and the page does not. */
+ * Narrower than its tabs, the bar wraps them onto another line, so every
+ * tab is always whole; the rule spans the bar, under its last line. */
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0;
   border-bottom: 1px solid var(--vscode-widget-border);
   padding: 0 32px;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 
 /* Styled as VS Code styles its panel's tabs: the inactive label in the panel
@@ -181,7 +191,6 @@ html {
  * (Light Modern gives both labels one colour, so there, as in VS Code, the
  * underline alone marks the active tab.) */
 .tab {
-  flex: none;
   background: none;
   border: none;
   border-radius: 0;
@@ -278,14 +287,20 @@ td {
   font-size: 12px;
 }
 
-/* A type's code takes the space of its text alone: its padding reaches into
- * the cell's own, so the table lays out as for the bare type. */
+/* A type's code takes the space of its text alone: its 3px of padding and
+ * 1px border reach into the cell's own padding, so the table lays out as for
+ * the bare type. */
 .prop-type code {
   margin: 0 -4px;
 }
 
 .prop-required {
   text-align: center;
+}
+/* Whether an input is required: a mark in the table's Required column, a
+ * word where the table is stacked (below). */
+.required-word {
+  display: none;
 }
 .prop-desc {
   color: var(--vscode-descriptionForeground);
@@ -294,6 +309,81 @@ td {
   color: var(--vscode-descriptionForeground);
   font-style: italic;
   text-align: center;
+}
+
+/* ── Interface, narrow ──
+ * Narrower than 480px, the Inputs and Outputs tables no longer fit their
+ * columns, so each input or output is a block of its own: its name, type
+ * and whether it is required on one line, its description below at the
+ * full width. The column headings are hidden from view (screen readers
+ * still read the table). At 480px and wider, the table is the table. */
+.interface {
+  container: interface / inline-size;
+}
+
+@container interface (width < 480px) {
+  .interface-table,
+  .interface-table tbody,
+  .interface-table tr,
+  .interface-table td {
+    display: block;
+  }
+
+  .interface-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .interface-table tr {
+    padding: 8px 12px;
+    border: 1px solid var(--vscode-widget-border);
+    border-top-width: 0;
+  }
+
+  .interface-table tbody tr:first-child {
+    border-top-width: 1px;
+  }
+
+  .interface-table td {
+    padding: 0;
+    border: none;
+  }
+
+  .interface-table :is(.prop-name, .prop-type, .prop-required) {
+    display: inline-block;
+    margin-right: 12px;
+    vertical-align: baseline;
+  }
+
+  .interface-table .prop-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .interface-table .prop-type code {
+    margin: 0;
+  }
+
+  .interface-table .required-mark {
+    display: none;
+  }
+
+  .interface-table .required-word {
+    display: inline;
+    color: var(--vscode-descriptionForeground);
+  }
+
+  .interface-table .prop-desc {
+    margin-top: 4px;
+  }
+
+  .interface-table .prop-desc:empty {
+    display: none;
+  }
 }
 
 /* ── Versions ── */

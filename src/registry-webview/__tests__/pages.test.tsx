@@ -262,6 +262,12 @@ describe('what the registry sidebar says to a screen reader', () => {
   });
 });
 
+// The name of each scroll box in `html`, in order.
+const scrollBoxes = (html: string): string[] =>
+  [
+    ...html.matchAll(/class="scroll-box[^"]*" tabindex="0" role="region" aria-label="([^"]+)"/g),
+  ].map(([, name]) => name);
+
 const detail = (over: Partial<DetailState> = {}): DetailState => ({
   row: VPC,
   record: { kind: 'loaded', value: record({ readme: '# Usage\n\nPlace it **once**.' }) },
@@ -285,19 +291,49 @@ describe('the module detail page', () => {
     expect(html).toContain('<strong>once</strong>');
   });
 
-  test("every table scrolls sideways in its own box, the README's included", () => {
-    const readme = '| Input | Type |\n|---|---|\n| `cidr` | `string` |';
+  test('every box that scrolls sideways is a named region in the Tab order: each table, the README code', () => {
+    const readme =
+      '| Input | Type |\n|---|---|\n| `cidr` | `string` |\n\n```hcl\nmodule "vpc" {}\n```';
     const details = renderToStaticMarkup(
       <ModuleDetail
         state={detail({ record: { kind: 'loaded', value: record({ readme }) } })}
         send={nothing}
       />,
     );
+    expect(scrollBoxes(details)).toEqual(['README table', 'README code block', 'Quick Reference']);
+    expect(details).toContain('aria-label="README table"><table>');
+    expect(details).toMatch(
+      /<pre class="scroll-box" tabindex="0" role="region" aria-label="README code block"><code/,
+    );
     const inputs = renderToStaticMarkup(<Interface read={{ kind: 'loaded', value: described }} />);
-    for (const html of [details, inputs]) {
-      expect(html.match(/<table>/g)).toHaveLength(2);
-      expect(html.match(/<div class="table-scroll"><table>/g)).toHaveLength(2);
-    }
+    expect(scrollBoxes(inputs)).toEqual(['Inputs', 'Outputs']);
+  });
+
+  test('the tabs follow the WAI-ARIA tabs pattern: a named list, one panel they control, only the selected tab in the Tab order', () => {
+    const html = renderToStaticMarkup(<ModuleDetail state={detail()} send={nothing} />);
+    expect(html).toContain('role="tablist" aria-label="ACME VPC sections"');
+    const tabs = [
+      ...html.matchAll(
+        /role="tab" id="([^"]+)" aria-selected="(\w+)" aria-controls="([^"]+)" tabindex="(-?\d)"/g,
+      ),
+    ];
+    expect(tabs.map(([, , selected, , tabindex]) => [selected, tabindex])).toEqual([
+      ['true', '0'],
+      ['false', '-1'],
+      ['false', '-1'],
+      ['false', '-1'],
+    ]);
+    const panel = html.match(
+      /<div class="content" role="tabpanel" id="([^"]+)" aria-labelledby="([^"]+)" tabindex="0">/,
+    );
+    expect(new Set(tabs.map(([, , , controls]) => controls))).toEqual(new Set([panel?.[1]]));
+    expect(panel?.[2]).toBe(tabs[0][1]);
+  });
+
+  test("the meta row's separators belong to the item each introduces, and are not text", () => {
+    const html = renderToStaticMarkup(<ModuleDetail state={detail()} send={nothing} />);
+    expect(html).toContain('<span>v2.0.0</span><span class="meta-next">AWS</span>');
+    expect(html).not.toContain('·');
   });
 
   test("a README's raw HTML is not run as markup", () => {
@@ -326,6 +362,10 @@ describe('the module detail page', () => {
   test("Interface draws the described inputs and outputs; a refusal is the banner's message", () => {
     const html = renderToStaticMarkup(<Interface read={{ kind: 'loaded', value: described }} />);
     for (const text of ['cidr', 'string', 'The VPC range', 'vpc_id']) expect(html).toContain(text);
+    // Required: a mark in the table's column, a word where the table is stacked.
+    expect(html).toContain(
+      '<span class="required-mark">✓</span><span class="required-word">required</span>',
+    );
 
     const refused = renderToStaticMarkup(
       <ModuleDetail
