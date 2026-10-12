@@ -636,6 +636,32 @@ describe('registration', () => {
     expect(cancellation.listening()).toBe(0);
   });
 
+  test.each([
+    ['an unknown root', 'nowhere'],
+    ['a root that is no string', 7],
+  ])('a cancelled call naming %s rejects as cancelled, not with the root’s error', async (_name, root) => {
+    const { tools, registerTool } = registered();
+    const t = setUp();
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
+    const cancellation = fakeCancellation();
+    cancellation.cancel();
+
+    const call = tools
+      .get('lace_describe_module_canvas')
+      ?.invoke({ input: { root }, toolInvocationToken: undefined }, cancellation.token);
+    await expect(call).rejects.toBeInstanceOf(Cancelled);
+    expect(t.acquired).toEqual([]);
+  });
+
+  test('an uncancelled call naming an unknown root still fails with the roots listed', async () => {
+    const { tools, registerTool } = registered();
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), setUp().ports, sources);
+    const call = tools
+      .get('lace_describe_module_canvas')
+      ?.invoke({ input: { root: 'nowhere' }, toolInvocationToken: undefined }, token);
+    await expect(call).rejects.toBeInstanceOf(UnknownRoot);
+  });
+
   test('no tool asks for a confirmation; each says what it runs on', async () => {
     const { tools, registerTool } = registered();
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), setUp().ports, sources);

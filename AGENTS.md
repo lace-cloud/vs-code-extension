@@ -339,7 +339,8 @@ sensitive values are withheld.
 
 **Cancellation.** `invoke` resolves the call's `root` first, which reads the workspace's files and nothing else. A
 call whose token is cancelled by then, whether before it was invoked or while its root was resolved, throws VS Code's
-`CancellationError`, for every tool: no panel opened, no session held, no handler called. Otherwise `invoke` maps the
+`CancellationError`, for every tool and whatever the resolution found (an unknown `root` included): no panel opened, no
+session held, no handler called. Otherwise `invoke` maps the
 `CancellationToken` to an `AbortSignal` (aborted on `onCancellationRequested`, the listener disposed when the call
 settles) and hands it to chat-core's handler: a change cancelled during the call starts nothing further and applies
 nothing after the cancellation, and the module tools stop waiting on their command.
