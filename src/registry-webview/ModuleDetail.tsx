@@ -3,8 +3,8 @@
 // Interface is the certified interface `registry describe` reads, which
 // loads after the header because describing a version downloads and
 // certifies it.
-import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { type ReactNode, useState } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {
   DetailMessage,
@@ -26,6 +26,21 @@ const TABS = [
 type Tab = (typeof TABS)[number][0];
 
 const KIND = 'Module';
+
+// A table wider than the page scrolls sideways in its own box, as a fenced
+// code block does, so the page itself never scrolls sideways.
+function TableScroll({ children }: { children: ReactNode }) {
+  return <div className="table-scroll">{children}</div>;
+}
+
+// The README's tables, each in its own TableScroll.
+const README_COMPONENTS: Components = {
+  table: ({ node: _node, ...props }) => (
+    <TableScroll>
+      <table {...props} />
+    </TableScroll>
+  ),
+};
 
 const loaded = <T,>(read: Read<T>): T | undefined =>
   read.kind === 'loaded' ? read.value : undefined;
@@ -151,7 +166,9 @@ function Details({
         {state.record.kind === 'loading' && <Loading what="module details" />}
         {latest?.readme ? (
           <div className="readme">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{latest.readme}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={README_COMPONENTS}>
+              {latest.readme}
+            </ReactMarkdown>
           </div>
         ) : (
           state.record.kind !== 'loading' && (
@@ -164,22 +181,24 @@ function Details({
       </div>
       <div className="section">
         <h2>Quick Reference</h2>
-        <table>
-          <thead>
-            <tr>
-              <th className="property">Property</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reference.map(([property, value]) => (
-              <tr key={property}>
-                <td>{property}</td>
-                <td>{value}</td>
+        <TableScroll>
+          <table>
+            <thead>
+              <tr>
+                <th className="property">Property</th>
+                <th>Value</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {reference.map(([property, value]) => (
+                <tr key={property}>
+                  <td>{property}</td>
+                  <td>{value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableScroll>
       </div>
     </div>
   );
@@ -193,65 +212,69 @@ export function Interface({ read }: { read: Read<ModuleInterface> }) {
     <div className="tab-content active">
       <div className="section">
         <h2>Inputs</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Required</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inputs.length === 0 ? (
+        <TableScroll>
+          <table>
+            <thead>
               <tr>
-                <td colSpan={4} className="empty">
-                  No inputs defined
-                </td>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
               </tr>
-            ) : (
-              inputs.map((input) => (
-                <tr key={input.name}>
-                  <td className="prop-name">{input.name}</td>
-                  <td className="prop-type">
-                    <code>{input.type || 'any'}</code>
+            </thead>
+            <tbody>
+              {inputs.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="empty">
+                    No inputs defined
                   </td>
-                  <td className="prop-required">{input.required ? '✓' : '—'}</td>
-                  <td className="prop-desc">{input.description}</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                inputs.map((input) => (
+                  <tr key={input.name}>
+                    <td className="prop-name">{input.name}</td>
+                    <td className="prop-type">
+                      <code>{input.type || 'any'}</code>
+                    </td>
+                    <td className="prop-required">{input.required ? '✓' : '—'}</td>
+                    <td className="prop-desc">{input.description}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </TableScroll>
       </div>
       <div className="section">
         <h2>Outputs</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th colSpan={3}>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {outputs.length === 0 ? (
+        <TableScroll>
+          <table>
+            <thead>
               <tr>
-                <td colSpan={4} className="empty">
-                  No outputs defined
-                </td>
+                <th>Name</th>
+                <th colSpan={3}>Description</th>
               </tr>
-            ) : (
-              outputs.map((output) => (
-                <tr key={output.name}>
-                  <td className="prop-name">{output.name}</td>
-                  <td className="prop-desc" colSpan={3}>
-                    {output.description}
+            </thead>
+            <tbody>
+              {outputs.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="empty">
+                    No outputs defined
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                outputs.map((output) => (
+                  <tr key={output.name}>
+                    <td className="prop-name">{output.name}</td>
+                    <td className="prop-desc" colSpan={3}>
+                      {output.description}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </TableScroll>
       </div>
     </div>
   );

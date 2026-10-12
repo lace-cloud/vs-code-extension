@@ -280,6 +280,21 @@ describe('the module detail page', () => {
     expect(html).toContain('<strong>once</strong>');
   });
 
+  test("every table scrolls sideways in its own box, the README's included", () => {
+    const readme = '| Input | Type |\n|---|---|\n| `cidr` | `string` |';
+    const details = renderToStaticMarkup(
+      <ModuleDetail
+        state={detail({ record: { kind: 'loaded', value: record({ readme }) } })}
+        send={nothing}
+      />,
+    );
+    const inputs = renderToStaticMarkup(<Interface read={{ kind: 'loaded', value: described }} />);
+    for (const html of [details, inputs]) {
+      expect(html.match(/<table>/g)).toHaveLength(2);
+      expect(html.match(/<div class="table-scroll"><table>/g)).toHaveLength(2);
+    }
+  });
+
   test("a README's raw HTML is not run as markup", () => {
     const readme = 'Hi <script>alert(1)</script><img src=x onerror="alert(2)">';
     const html = renderToStaticMarkup(

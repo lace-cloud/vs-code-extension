@@ -163,12 +163,16 @@ html {
   font-size: 13px;
 }
 
-/* ── Tabs ── */
+/* ── Tabs ──
+ * Narrower than its tabs, the bar scrolls sideways on a thin scrollbar, as
+ * VS Code's editor tabs do, and the page does not. */
 .tabs {
   display: flex;
   gap: 0;
   border-bottom: 1px solid var(--vscode-widget-border);
   padding: 0 32px;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 /* Styled as VS Code styles its panel's tabs: the inactive label in the panel
@@ -177,6 +181,7 @@ html {
  * (Light Modern gives both labels one colour, so there, as in VS Code, the
  * underline alone marks the active tab.) */
 .tab {
+  flex: none;
   background: none;
   border: none;
   border-radius: 0;
@@ -233,6 +238,12 @@ html {
 }
 
 /* ── Table ── */
+/* A table wider than the page scrolls sideways in this box, as a fenced
+ * code block does, so the page does not. */
+.table-scroll {
+  overflow-x: auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -365,7 +376,7 @@ th.property {
 .readme ul,
 .readme ol,
 .readme pre,
-.readme table {
+.readme .table-scroll {
   margin-bottom: 12px;
 }
 .readme ul,
