@@ -37,6 +37,11 @@ const MODULE = {
 
 const ROOT = 'infra';
 
+// What a Generate of `infra` reports: the root module's Terraform, and each
+// module it calls written at the directory its id names.
+const GENERATED =
+  'Generated the Terraform. Files written: main.tf, modules/app/main.tf, modules/app/outputs.tf, modules/app/variables.tf, modules/net/main.tf, modules/net/outputs.tf.';
+
 // The Terraform files under `directory`, as the workspace's file search
 // finds them.
 const terraformFiles = (directory: string): vscode.Uri[] =>
@@ -252,9 +257,7 @@ describe('the chat tools on the real engine', () => {
       '- network: module modules/net@0.0.1',
     );
     expect(await window.invoke(SAVE, { root: ROOT })).toContain('Saved the canvas.');
-    expect(await window.invoke(GENERATE, { root: ROOT })).toContain(
-      'Generated the Terraform. Files written: main.tf.',
-    );
+    expect(await window.invoke(GENERATE, { root: ROOT })).toContain(GENERATED);
     expect(await window.invoke(VALIDATE, { root: ROOT })).toContain(
       '"verdict":"already-lace-style"',
     );
@@ -399,9 +402,9 @@ describe("describe, save and generate on the root's session", () => {
     await until('the tab releasing the session', () => window.rootSessions.held().length === 0);
 
     const generated = await window.invoke(GENERATE, { root: ROOT });
-    expect(generated).toContain('Generated the Terraform. Files written: main.tf.');
+    expect(generated).toContain(GENERATED);
     expect(generated).toContain(
-      'lace module validate on the written tree: {"verdict":"already-lace-style"',
+      'lace module validate on the Terraform on disk: {"verdict":"already-lace-style"',
     );
     expect(readFileSync(join(window.root, 'main.tf'), 'utf8')).toContain('module "network" {');
     expect(window.opened).toHaveLength(1);
