@@ -130,7 +130,6 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
     diagnostics: [],
     treeHash: 'tree-0',
   };
-  const history: CanvasSource[] = [];
   const listeners = new Set<(frame: CanvasSource) => void>();
   const publish = (next: CanvasSource): void => {
     state = next;
@@ -149,7 +148,6 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
 
   const editor = {
     apply: vi.fn(async (actions: readonly Action[]): Promise<ApplyResult> => {
-      history.push(state);
       publish({
         ...state,
         bundle: actions.reduce(reduce, state.bundle),
@@ -182,15 +180,7 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
     ports: { source, editor, commands, context: { sessionId } },
   };
 
-  return {
-    session,
-    editor,
-    publish,
-    state: () => state,
-    listeners: () => listeners.size,
-    // The canvas undoes the last apply.
-    undo: () => publish({ ...(history.pop() ?? state), unsaved: true }),
-  };
+  return { session, editor, listeners: () => listeners.size };
 }
 
 // Root sessions holding one root's fake session, with the root sessions'
