@@ -12,12 +12,18 @@
 //     sets' schemas (`canvasToolSchemas`, `moduleToolSchemas`), which
 //     `__tests__/lm-tools.manifest.test.ts` holds the manifest to.
 //
-// The tools run in the developer's own model and reach the engine and the
-// CLI; through the CLI, the registry tools and a place reach Lace's registry
-// with their search words or the module's name. A canvas tool call runs on
-// chat-core's `canvasTools`, made for that call over the ports of the
-// session its hold is on: the set keeps nothing between calls, so nothing is
-// kept here per session either.
+// The tools run in the developer's own model. Describe, save and every
+// change but a place work on the engine alone. Through the CLI, the search
+// tool sends Lace's registry its query, system and category, the registry
+// describe tool the module and version, and a place the module's name;
+// validate, and generate after it writes, fetch the module's providers from
+// Lace's provider mirror and its lace.cloud/ modules from the registry, as
+// `lace module validate` does in a terminal, and send nothing from the chat.
+// Nothing else from the chat leaves the machine.
+//
+// A canvas tool call runs on chat-core's `canvasTools`, made for that call
+// over the ports of the session its hold is on: the set keeps nothing
+// between calls, so nothing is kept here per session either.
 //
 // How a call reaches what its tool works on, one rule per operation:
 //

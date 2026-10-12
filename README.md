@@ -163,10 +163,19 @@ Every tool takes `root`, the module directory, as its path in the workspace (`in
 folder itself; in a workspace of several folders, the folder's name first).
 
 **The tools run in your own model.** Your conversation stays between you and the model you chose in VS Code; Lace runs
-no model of its own on it. The registry tools, and a change that places a module, send their search words or the
-module's name to Lace's registry through the Lace CLI, as `lace registry list` and `lace registry describe` do in a
-terminal, and the module a place adds is fetched from the registry. Nothing else from the chat leaves your machine:
-every other tool and change works only on your files and the Lace engine on your machine.
+no model of its own on it. What reaches Lace goes through the Lace CLI and engine, as the same commands do in a
+terminal:
+
+- `lace_search_module_registry` sends Lace's registry its search words, system and category (`lace registry list`), and
+  `lace_describe_registry_module` the module and version it describes (`lace registry describe`).
+- A change that places a module sends the module's name to the registry to find it (`lace registry list`), and the
+  module it adds is fetched from the registry.
+- `lace_validate_module_terraform`, and `lace_generate_module_terraform` after it writes the Terraform, validate the
+  module as `lace module validate` does: they fetch its providers from Lace's provider mirror and its `lace.cloud/`
+  modules from Lace's registry, and send nothing from the chat.
+
+Nothing else from the chat leaves your machine: describing and saving the canvas, and every change other than placing
+a module, work only on your files and the Lace engine on your machine.
 
 | Tool                             | Reference                      | What it does                                                                                                                                                             |
 | -------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

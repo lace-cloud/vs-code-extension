@@ -282,10 +282,17 @@ A failed account command offers the way out its reason names (`vscode/offers.ts`
 ## The chat tools
 
 The extension contributes tools to VS Code's own chat and nothing else: no chat view, no participant, no MCP server, no
-model of Lace's. The tools run in the developer's own model. What leaves the machine is what the CLI sends Lace's
-registry: the search tool's query, system and category (`registry list`), the describe tool's module and version
-(`registry describe`), and a place change's module name (`registry list --query`), with the module a place adds
-fetched by the engine. Every other tool and change works on the root's files and the engine alone. The tool sets are
+model of Lace's. The tools run in the developer's own model. What leaves the machine is what the CLI and the engine
+send Lace:
+
+- the search tool's query, system and category (`registry list`), the registry describe tool's module and version
+  (`registry describe`), and a place change's module name (`registry list --query`), with the module a place adds
+  fetched by the engine;
+- validate, and generate after it writes (it validates the tree it wrote), run `terraform init -backend=false` as `lace
+  module validate` does in a terminal: the module's providers come from Lace's provider mirror and its `lace.cloud/`
+  modules from Lace's registry. They send nothing from the chat.
+
+Describe, save and every change but a place work on the root's files and the engine alone. The tool sets are
 chat-core's (`canvasTools({source, editor, commands})` and `moduleTools({commands})`), each tool a schema and a handler
 on chat-core's one tool contract.
 
