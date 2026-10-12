@@ -113,6 +113,15 @@ const stopIfCancelled = (signal: AbortSignal | undefined): void => {
   if (signal?.aborted) throw new CallCancelled();
 };
 
+// What Save and Generate run on the hold their rule takes: nothing, for a
+// call cancelled while the hold was taken.
+const onHold =
+  (signal: AbortSignal | undefined, run: (tools: CanvasTools) => Promise<ToolResult>) =>
+  (hold: RootHold): Promise<ToolResult> => {
+    stopIfCancelled(signal);
+    return run(canvasOf(hold));
+  };
+
 export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
   const { panels, rootSessions, operations, commands } = ports;
 
@@ -133,15 +142,6 @@ export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
       await hold.release();
     }
   }
-
-  // What Save and Generate run on the hold their rule takes: nothing, for a
-  // call cancelled while the hold was taken.
-  const onHold =
-    (signal: AbortSignal | undefined, run: (tools: CanvasTools) => Promise<ToolResult>) =>
-    (hold: RootHold): Promise<ToolResult> => {
-      stopIfCancelled(signal);
-      return run(canvasOf(hold));
-    };
 
   // An operation's result: the tool's own, or what the operation that did
   // not run says, as an error when it was asked for and could not run.

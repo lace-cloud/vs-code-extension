@@ -695,6 +695,48 @@ describe('registration', () => {
     expect(t.holders()).toBe(0);
   });
 
+  test.each([
+    ['lace_save_module_canvas', true],
+    ['lace_generate_module_terraform', false],
+  ])('%s, cancelled while its hold is being taken, rejects as cancelled, runs no handler and gives the hold back', async (name, open) => {
+    const { tools, registerTool } = registered();
+    const t = setUp();
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
+    // Save's rule runs only on a root whose canvas is open.
+    if (open) await t.panels.ensure(prod);
+    const holders = t.holders();
+    const acquire = t.ports.rootSessions.acquire as ReturnType<typeof vi.fn>;
+    const acquiring = acquire.getMockImplementation();
+    if (acquiring === undefined) throw new Error('the fake root sessions acquire nothing');
+    const acquires = acquire.mock.calls.length;
+    let proceed = () => {};
+    acquire.mockImplementationOnce(async (root: string) => {
+      await new Promise<void>((resolve) => (proceed = resolve));
+      return acquiring(root);
+    });
+    const cancellation = fakeCancellation();
+    handled.splice(0);
+
+    const call = Promise.resolve(
+      tools
+        .get(name)
+        ?.invoke(
+          { input: { root: 'infra/prod' }, toolInvocationToken: undefined },
+          cancellation.token,
+        ),
+    );
+    call.catch(() => {});
+    await vi.waitFor(() => expect(acquire).toHaveBeenCalledTimes(acquires + 1));
+    cancellation.cancel();
+    proceed();
+
+    await expect(call).rejects.toBeInstanceOf(Cancelled);
+    expect(handled).toEqual([]);
+    expect(t.holders()).toBe(holders);
+    expect(t.fake.editor.save).not.toHaveBeenCalled();
+    expect(t.fake.editor.generate).not.toHaveBeenCalled();
+  });
+
   test('a change cancelled while its canvas tab is being ensured rejects as cancelled, and holds and runs nothing', async () => {
     const { tools, registerTool } = registered();
     const t = setUp();
