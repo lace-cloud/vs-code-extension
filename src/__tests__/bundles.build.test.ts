@@ -58,21 +58,43 @@ describe.each([
 describe("the registry sidebar's stylesheet", () => {
   const rules = readFileSync(join(OUT, 'registry-sidebar.css'), 'utf8')
     .split('}')
-    .map((rule) => rule.split('{'));
-  const ROW_ACTION = /\.(module-add|module-star|version-toggle|version-row-add)\b/;
+    .map((rule) => rule.split('{'))
+    .map(([selectors = '', declarations = '']) => ({
+      selectors,
+      declarations: declarations.replace(/\s/g, ''),
+    }));
+  // A row's actions and what holds them.
+  const IN_A_ROW =
+    /\.(module-add|module-star|version-toggle|version-row-add|module-actions|version-row)\b/;
 
-  test('never takes a row action out of the tab order with display: none or visibility: hidden', () => {
+  test('never takes a row action, or what holds it, out of the tab order with display: none or visibility: hidden', () => {
     const hiding = rules.filter(
-      ([selectors = '', declarations = '']) =>
-        ROW_ACTION.test(selectors) && /display:\s*none|visibility:\s*hidden/.test(declarations),
+      ({ selectors, declarations }) =>
+        IN_A_ROW.test(selectors) && /display:none|visibility:hidden/.test(declarations),
     );
     expect(hiding).toEqual([]);
+  });
+
+  test("shows each of a row's actions, at full width, while keyboard focus is in the row", () => {
+    // Whether a rule for `action` under keyboard focus in its row declares
+    // every one of `declarations`.
+    const revealed = (action: string, ...declarations: string[]) =>
+      rules.some(
+        (rule) =>
+          rule.selectors.includes(':has(:focus-visible)') &&
+          rule.selectors.includes(action) &&
+          declarations.every((declaration) => rule.declarations.includes(declaration)),
+      );
+    for (const action of ['.module-star', '.module-add', '.version-toggle']) {
+      expect(revealed(action, 'width:22px', 'opacity:1'), action).toBe(true);
+    }
+    expect(revealed('.version-row-add', 'opacity:1')).toBe(true);
   });
 
   test('draws keyboard focus with the focus border', () => {
     expect(
       rules.some(
-        ([selectors = '', declarations = '']) =>
+        ({ selectors, declarations }) =>
           selectors.includes(':focus-visible') &&
           declarations.includes('var(--vscode-focusBorder)'),
       ),
