@@ -3,7 +3,7 @@
 // every row with its versions on expand, its "+" and its star. The
 // organization shown is the CLI's selection; its picker runs the
 // extension's Select Organization.
-import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from 'react';
+import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
 import type {
   Read,
   RegistryRow,
@@ -13,22 +13,13 @@ import type {
 } from '../protocol/registry-protocol';
 import { moduleKey, moduleLabel } from '../protocol/registry-protocol';
 import { bySystem, categoriesOf, inOrganization, shownRows } from './filter';
+import { onKey } from './keys';
 import { ModuleIcon } from './ModuleIcon';
 
 type Send = (message: SidebarMessage) => void;
 type Loaded = Extract<SidebarState, { kind: 'loaded' }>;
 
 const SEARCH_DEBOUNCE_MS = 150;
-
-// Activates on Enter and Space as on a click, for an element that is not a
-// button.
-const onKey =
-  (run: () => void) =>
-  (event: KeyboardEvent): void => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    run();
-  };
 
 export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
   const [typed, setTyped] = useState('');

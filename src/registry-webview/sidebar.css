@@ -253,8 +253,13 @@ body {
   font-size: 16px;
 }
 
+/* A row's actions show while it is hovered and while focus is on it or on
+ * one of them, so the keyboard reaches them: Tab goes from the row to its
+ * actions. */
 .module-item:hover .module-star,
-.module-item:hover .module-add {
+.module-item:hover .module-add,
+.module-item:focus-within .module-star,
+.module-item:focus-within .module-add {
   display: flex;
 }
 
@@ -266,6 +271,15 @@ body {
 .module-star:hover,
 .module-add:hover {
   background: var(--vscode-toolbar-hoverBackground);
+}
+
+.module-item:focus-visible,
+.module-star:focus-visible,
+.module-add:focus-visible,
+.version-toggle:focus-visible,
+.version-row-add:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 .empty-state {
@@ -389,7 +403,8 @@ body {
   padding: 0;
 }
 
-.module-item:hover .version-toggle {
+.module-item:hover .version-toggle,
+.module-item:focus-within .version-toggle {
   display: flex;
 }
 
@@ -431,23 +446,29 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
+/* A version row holds nothing else to focus, so its "+" stays in the tab
+ * order, unseen until the row is hovered or the "+" has focus; its negative
+ * margin keeps the row as tall as its label. */
 .version-row-add {
   flex-shrink: 0;
   width: 20px;
   height: 20px;
+  margin: -3px 0;
   border: none;
   background: transparent;
   color: var(--vscode-foreground);
   cursor: pointer;
   border-radius: 4px;
-  display: none;
+  display: flex;
+  opacity: 0;
   align-items: center;
   justify-content: center;
   font-size: 14px;
 }
 
-.version-row:hover .version-row-add {
-  display: flex;
+.version-row:hover .version-row-add,
+.version-row-add:focus-visible {
+  opacity: 1;
 }
 
 .version-row-add:hover {
