@@ -360,7 +360,7 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   CLI included, is refused before a test runs.
 - **The chat tools end to end**: `tools/__tests__/lm-tools.engine.test.ts` invokes every tool `registerLaceTools`
   registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel) and
-  commands mapping, signed out; a change makes no request of the extension's own beyond the engine.
+  commands mapping, signed out; a delete makes no request of the extension's own beyond the engine.
 - **The window e2e** (`packages/host-e2e/window/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha
   suites, bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the
   engine tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens a fresh git

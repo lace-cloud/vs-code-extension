@@ -296,7 +296,7 @@ describe('the change tool on the real engine', () => {
     expect(window.rootSessions.held()).toMatchObject([{ holders: 1 }]);
   });
 
-  test('a change reaches the engine and nothing else: the extension makes no request of its own and logs nothing', async () => {
+  test('a delete reaches the engine and nothing else: the extension makes no request of its own and logs nothing', async () => {
     const fetched = vi.spyOn(globalThis, 'fetch');
     afterTest(() => fetched.mockRestore());
     const window = toolsWindow();
