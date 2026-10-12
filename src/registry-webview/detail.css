@@ -20,13 +20,28 @@ html {
   scrollbar-gutter: stable;
 }
 
-/* ── Header ── */
+/* ── Header ──
+ * The icon, then the title block with "Add to Canvas" beside it. Narrower,
+ * each part wraps rather than leaving the page: "Add to Canvas" goes below
+ * the title block when the two do not fit side by side, the title block
+ * goes below the icon when it would be narrower than 200px, and the title,
+ * the meta row and the description wrap within the width they have. */
 .header {
   padding: 24px 32px;
   border-bottom: 1px solid var(--vscode-widget-border);
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 20px;
+}
+
+.header-main {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 20px;
 }
 
 .header-icon img {
@@ -47,8 +62,12 @@ html {
   flex-shrink: 0;
 }
 
+/* Beside "Add to Canvas" while it can be 240px wide; a word longer than the
+ * width breaks anywhere. */
 .header-info {
-  flex: 1;
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .header-info h1 {
@@ -59,8 +78,9 @@ html {
 
 .header-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   font-size: 13px;
   color: var(--vscode-descriptionForeground);
   margin-bottom: 12px;

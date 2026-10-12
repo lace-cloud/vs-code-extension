@@ -46,30 +46,32 @@ export function ModuleDetail({
     <>
       <div className="header">
         <ModuleIcon vendor={record?.latest.vendor ?? row.vendor} className="header-icon" />
-        <div className="header-info">
-          <h1>{moduleLabel(row)}</h1>
-          <div className="header-meta">
-            <span className="badge">{KIND}</span>
-            <span>{row.version}</span>
-            <span>·</span>
-            <span>{row.system.toUpperCase()}</span>
-            {row.categories.length > 0 && (
-              <>
-                <span>·</span>
-                <span>{row.categories.join(', ')}</span>
-              </>
-            )}
+        <div className="header-main">
+          <div className="header-info">
+            <h1>{moduleLabel(row)}</h1>
+            <div className="header-meta">
+              <span className="badge">{KIND}</span>
+              <span>{row.version}</span>
+              <span>·</span>
+              <span>{row.system.toUpperCase()}</span>
+              {row.categories.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span>{row.categories.join(', ')}</span>
+                </>
+              )}
+            </div>
+            {description && <p className="header-description">{description}</p>}
           </div>
-          {description && <p className="header-description">{description}</p>}
-        </div>
-        <div className="header-actions">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => send({ op: 'place', version: row.version })}
-          >
-            Add to Canvas
-          </button>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => send({ op: 'place', version: row.version })}
+            >
+              Add to Canvas
+            </button>
+          </div>
         </div>
       </div>
 
