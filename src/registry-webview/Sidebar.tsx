@@ -2,22 +2,21 @@
 // favourites, recently used, the organization's modules and the public ones,
 // each by system, every row (ModuleRow) with its versions on expand, its "+"
 // and its star. The organization shown is the CLI's selection; its picker
-// runs the extension's Select Organization. Every control is a button of its own,
-// none inside another, so each is reached by Tab, activated by Enter and
-// Space, and announced as a control.
+// runs the extension's Select Organization. Every control is a button of its
+// own, none inside another, so each is reached by Tab, activated by Enter
+// and Space, and announced as a control.
 import { type ReactNode, useEffect, useState } from 'react';
-import type { RegistryRow, SidebarMessage, SidebarState } from '../protocol/registry-protocol';
+import type { RegistryRow, SendSidebarMessage, SidebarState } from '../protocol/registry-protocol';
 import { moduleKey } from '../protocol/registry-protocol';
 import { CategoryChips } from './CategoryChips';
 import { bySystem, categoriesOf, inOrganization, shownRows } from './filter';
 import { ModuleRow } from './ModuleRow';
 
-type Send = (message: SidebarMessage) => void;
 type Loaded = Extract<SidebarState, { kind: 'loaded' }>;
 
 const SEARCH_DEBOUNCE_MS = 150;
 
-export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
+export function Sidebar({ state, send }: { state: SidebarState; send: SendSidebarMessage }) {
   const [typed, setTyped] = useState('');
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<readonly string[]>([]);
@@ -28,16 +27,23 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
     return () => clearTimeout(timer);
   }, [typed]);
 
-  const rows = state.kind === 'loaded' ? state.rows : [];
   const searching = query.trim() !== '';
-  // The categories shown under the search box: what the filter toggle says
-  // is expanded is exactly what is drawn.
-  const chips = filtersShown && !searching ? categoriesOf(rows) : [];
-  const chipsShown = chips.length > 0;
+  // The categories there are to filter by: none while the registry is not
+  // listed or a search is under way, when the filter toggle is disabled.
+  const categories = state.kind === 'loaded' && !searching ? categoriesOf(state.rows) : [];
+  // What the filter toggle shows, says (pressed, expanded) and applies is one
+  // value: the chips drawn under the search box. Closing the filter clears
+  // what was chosen, so no filter is ever applied unseen.
+  const chipsShown = filtersShown && categories.length > 0;
+  const applied = chipsShown ? chosen : [];
   const toggle = (category: string) =>
     setChosen((now) =>
       now.includes(category) ? now.filter((c) => c !== category) : [...now, category],
     );
+  const toggleFilters = () => {
+    if (filtersShown) setChosen([]);
+    setFiltersShown(!filtersShown);
+  };
 
   return (
     <>
@@ -53,10 +59,11 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
           />
           <button
             type="button"
-            className={`filter-toggle${filtersShown || chosen.length > 0 ? ' active' : ''}`}
+            className={`filter-toggle${chipsShown ? ' active' : ''}`}
             title="Filter by category"
             aria-expanded={chipsShown}
-            onClick={() => setFiltersShown((shown) => !shown)}
+            disabled={categories.length === 0}
+            onClick={toggleFilters}
           >
             <span aria-hidden="true">{'▽'}</span>
           </button>
@@ -72,9 +79,9 @@ export function Sidebar({ state, send }: { state: SidebarState; send: Send }) {
           </button>
         )}
       </div>
-      {chipsShown && <CategoryChips categories={chips} chosen={chosen} onToggle={toggle} />}
+      {chipsShown && <CategoryChips categories={categories} chosen={chosen} onToggle={toggle} />}
       <div id="content">
-        <Content state={state} send={send} query={query} chosen={searching ? [] : chosen} />
+        <Content state={state} send={send} query={query} chosen={applied} />
       </div>
     </>
   );
@@ -103,7 +110,7 @@ function Content({
   chosen,
 }: {
   state: SidebarState;
-  send: Send;
+  send: SendSidebarMessage;
   query: string;
   chosen: readonly string[];
 }) {
@@ -146,7 +153,7 @@ function Modules({
   chosen,
 }: {
   state: Loaded;
-  send: Send;
+  send: SendSidebarMessage;
   query: string;
   chosen: readonly string[];
 }) {

@@ -56,7 +56,7 @@ describe('the registry sidebar page', () => {
     expect(
       buttonClasses(html).filter((name) => name.startsWith('module-') || name === 'version-toggle'),
     ).toEqual(['module-open', 'version-toggle', 'module-add', 'module-star']);
-    expect(html).toContain('aria-label="Add ACME VPC v2.0.0 to the canvas"');
+    expect(html).toContain('title="Add ACME VPC v2.0.0 to the canvas"');
   });
 
   test('draws each row: label, version, categories, under its system and its registry', () => {
@@ -173,28 +173,42 @@ describe('what the registry sidebar says to a screen reader', () => {
     expect(textOf(html, open['aria-describedby'])).toBe('data');
   });
 
-  test('the star keeps one name and title, and says whether it is pressed', () => {
+  // A row action is named by its title alone, its glyph hidden: its tooltip
+  // is its name.
+  const namedByTitle = (html: string, name: string) => {
+    const action = attributesOf(html, name);
+    expect(action).not.toHaveProperty('aria-label');
+    expect(html).toMatch(
+      new RegExp(`class="${name}[^>]*><span aria-hidden="true">[^<]+</span></button>`),
+    );
+    return action;
+  };
+
+  test('the "+" is named by its title, which says what it adds', () => {
+    expect(namedByTitle(moduleRow(), 'module-add')).toMatchObject({
+      title: 'Add ACME DB v2.0.0 to the canvas',
+    });
+  });
+
+  test('the star keeps one name, its title, and says whether it is pressed', () => {
     for (const starred of [false, true]) {
-      expect(attributesOf(moduleRow({ starred }), 'module-star')).toMatchObject({
-        'aria-label': 'Favorite ACME DB',
-        title: 'Favorite',
+      expect(namedByTitle(moduleRow({ starred }), 'module-star')).toMatchObject({
+        title: 'Favorite ACME DB',
         'aria-pressed': String(starred),
       });
     }
   });
 
-  test('the versions toggle keeps one name, says whether it is expanded, and its title follows', () => {
-    const shut = attributesOf(moduleRow(), 'version-toggle');
-    const open = attributesOf(moduleRow({ expanded: true }), 'version-toggle');
+  test('the versions toggle is named by its title, which follows whether it is expanded', () => {
+    const shut = namedByTitle(moduleRow(), 'version-toggle');
+    const open = namedByTitle(moduleRow({ expanded: true }), 'version-toggle');
     expect(shut).toMatchObject({
-      'aria-label': 'Other versions of ACME DB',
       'aria-expanded': 'false',
-      title: 'Show other versions',
+      title: 'Show other versions of ACME DB',
     });
     expect(open).toMatchObject({
-      'aria-label': 'Other versions of ACME DB',
       'aria-expanded': 'true',
-      title: 'Hide other versions',
+      title: 'Hide other versions of ACME DB',
     });
     expect(open.class).toBe('version-toggle expanded');
   });
@@ -204,14 +218,29 @@ describe('what the registry sidebar says to a screen reader', () => {
     const toggle = attributesOf(html, 'filter-toggle');
     expect(toggle).toMatchObject({ title: 'Filter by category', 'aria-expanded': 'false' });
     expect(toggle).not.toHaveProperty('aria-label');
+    expect(toggle).not.toHaveProperty('disabled');
     expect(html).toMatch(/class="filter-toggle[^>]*><span aria-hidden="true">▽<\/span><\/button>/);
   });
 
-  test('a category chip says whether it is chosen', () => {
+  test.each([
+    ['loading', { kind: 'loading' } as SidebarState],
+    ['signed out', { kind: 'signedOut' } as SidebarState],
+    ['failed', { kind: 'failed', message: 'the engine stopped' } as SidebarState],
+    ['empty', loaded()],
+  ])('the filter toggle is disabled with nothing to filter (%s)', (_name, state) => {
+    expect(attributesOf(sidebar(state), 'filter-toggle')).toMatchObject({
+      disabled: '',
+      'aria-expanded': 'false',
+    });
+  });
+
+  test('a category chip says whether it is chosen, and a chosen one leads with a hidden check mark', () => {
     const html = renderToStaticMarkup(
       <CategoryChips categories={['data', 'networking']} chosen={['data']} onToggle={nothing} />,
     );
-    expect(html).toContain('aria-pressed="true">data</button>');
+    expect(html).toContain(
+      'aria-pressed="true"><span class="chip-check" aria-hidden="true">✓</span>data</button>',
+    );
     expect(html).toContain('aria-pressed="false">networking</button>');
   });
 

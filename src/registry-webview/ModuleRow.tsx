@@ -2,18 +2,18 @@
 // named by its name and version and described by its categories, which opens
 // its detail and whose hit area is the whole row; then its actions side by
 // side (its other versions, "+", its star); and, once expanded, its other
-// versions, each with a "+" of its own.
+// versions, each with a "+" of its own. An action is named by its title, as
+// VS Code's action bars name theirs, so its tooltip and its name are one;
+// its glyph is hidden from screen readers.
 import { useId } from 'react';
 import type {
   Read,
   RegistryRow,
   RegistryVersion,
-  SidebarMessage,
+  SendSidebarMessage,
 } from '../protocol/registry-protocol';
 import { moduleKey, moduleLabel } from '../protocol/registry-protocol';
 import { ModuleIcon } from './ModuleIcon';
-
-type Send = (message: SidebarMessage) => void;
 
 export function ModuleRow({
   row,
@@ -28,7 +28,7 @@ export function ModuleRow({
   versions: Read<readonly RegistryVersion[]> | undefined;
   expanded: boolean;
   onExpand: (() => void) | undefined;
-  send: Send;
+  send: SendSidebarMessage;
 }) {
   const key = moduleKey(row);
   const label = moduleLabel(row);
@@ -60,32 +60,29 @@ export function ModuleRow({
             <button
               type="button"
               className={`version-toggle${expanded ? ' expanded' : ''}`}
-              title={expanded ? 'Hide other versions' : 'Show other versions'}
-              aria-label={`Other versions of ${label}`}
+              title={`${expanded ? 'Hide' : 'Show'} other versions of ${label}`}
               aria-expanded={expanded}
               onClick={onExpand}
             >
-              {expanded ? '▾' : '▸'}
+              <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
             </button>
           )}
           <button
             type="button"
             className="module-add"
-            title="Add to canvas"
-            aria-label={`Add ${label} ${row.version} to the canvas`}
+            title={`Add ${label} ${row.version} to the canvas`}
             onClick={() => send({ op: 'place', key, version: row.version })}
           >
-            +
+            <span aria-hidden="true">+</span>
           </button>
           <button
             type="button"
             className={`module-star${starred ? ' starred' : ''}`}
-            title="Favorite"
-            aria-label={`Favorite ${label}`}
+            title={`Favorite ${label}`}
             aria-pressed={starred}
             onClick={() => send({ op: 'toggleFavourite', key })}
           >
-            {starred ? '★' : '☆'}
+            <span aria-hidden="true">{starred ? '★' : '☆'}</span>
           </button>
         </div>
       </div>
@@ -101,7 +98,7 @@ function OlderVersions({
 }: {
   row: RegistryRow;
   versions: Read<readonly RegistryVersion[]> | undefined;
-  send: Send;
+  send: SendSidebarMessage;
 }) {
   const note = (text: string) => (
     <div className="version-row">
@@ -121,11 +118,10 @@ function OlderVersions({
           <button
             type="button"
             className="version-row-add"
-            title={`Add ${v.version} to canvas`}
-            aria-label={`Add ${moduleLabel(row)} ${v.version} to the canvas`}
+            title={`Add ${moduleLabel(row)} ${v.version} to the canvas`}
             onClick={() => send({ op: 'place', key: moduleKey(row), version: v.version })}
           >
-            +
+            <span aria-hidden="true">+</span>
           </button>
         </div>
       ))}

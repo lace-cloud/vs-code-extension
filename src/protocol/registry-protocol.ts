@@ -71,6 +71,9 @@ export type SidebarMessage =
   | { op: 'toggleFavourite'; key: string }
   | { op: 'versions'; key: string };
 
+// How the sidebar page tells its host what the developer did.
+export type SendSidebarMessage = (message: SidebarMessage) => void;
+
 export type DetailMessage = { op: 'ready' } | { op: 'place'; version: string };
 
 const record = (value: unknown): value is Record<string, unknown> =>

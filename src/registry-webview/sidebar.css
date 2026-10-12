@@ -57,11 +57,17 @@ body {
 }
 
 /* ── Toggles: the filter toggle and the category chips ──
- * Drawn as VS Code draws its own toggles (the search box's match case, say):
- * off, no edge and no fill, the toggle's hover fill under the pointer; on,
- * the toggled option's background, border and foreground. One mechanism in
- * every theme: in high contrast the on state is the border alone, which
- * differs from the focus ring's colour. */
+ * On, a toggle takes the colours VS Code gives a toggled option
+ * (--vscode-inputOption-active*: background, border, foreground); under the
+ * pointer, its hover background. The filter toggle is an icon, with no edge
+ * at rest. A chip keeps an edge at rest, the checkbox border's, so it reads
+ * as a control; and since in high contrast that edge and the on border are
+ * one colour, a chosen chip also leads with a check mark, so on and off
+ * differ by shape in every theme. The mark takes the chip's own left
+ * padding, so choosing a chip does not change its width. (In high contrast
+ * VS Code dashes a hovered toggle's border in the focus colour; this page
+ * outlines it instead, as it does every hovered action: see "High
+ * contrast" below.) */
 .filter-toggle,
 .chip {
   border: 1px solid transparent;
@@ -94,6 +100,12 @@ body {
   padding: 0;
 }
 
+.filter-toggle:disabled {
+  cursor: default;
+  opacity: 0.4;
+  background: transparent;
+}
+
 /* ── Category chips ── */
 #chips {
   display: flex;
@@ -103,11 +115,26 @@ body {
 }
 
 .chip {
-  padding: 2px 8px;
+  padding: 2px 10px;
   font-size: 11px;
   border-radius: 10px;
+  border-color: var(--vscode-checkbox-border, var(--vscode-contrastBorder, transparent));
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
+}
+
+/* A chosen chip gives its check mark 10px of its 20px of side padding (4px
+ * before the mark, 6px after the label), so choosing it keeps its width; the
+ * mark's line is no taller than the label's, so it keeps its height too. */
+.chip.active {
+  padding: 2px 6px 2px 4px;
+}
+
+.chip-check {
+  display: inline-block;
+  width: 10px;
+  line-height: 1;
+  text-align: center;
 }
 
 .module-list {
@@ -263,7 +290,9 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Above the module's ::after, so a click on an action is the action's. */
+/* Above the module's ::after, so a click on an action is the action's; a
+ * click between two actions passes through to the module, as a click
+ * anywhere else on the row does. */
 .module-actions {
   position: relative;
   z-index: 1;
@@ -271,6 +300,11 @@ body {
   display: flex;
   align-items: center;
   margin-top: 2px;
+  pointer-events: none;
+}
+
+.module-actions > * {
+  pointer-events: auto;
 }
 
 /* At rest a row's actions take no width (see "Row actions" below). */
@@ -531,7 +565,7 @@ body {
     .module-add,
     .version-toggle,
     .version-row-add,
-    .filter-toggle,
+    .filter-toggle:not(:disabled),
     .chip,
     .retry-btn
   ):hover {
