@@ -36,11 +36,6 @@ body {
   color: var(--vscode-input-foreground);
   border-radius: 4px;
   font-size: 12px;
-  outline: none;
-}
-
-.search-input:focus {
-  border-color: var(--vscode-focusBorder);
 }
 
 .search-input::placeholder {
@@ -58,12 +53,7 @@ body {
   color: var(--vscode-input-foreground);
   border-radius: 4px;
   font-size: 11px;
-  outline: none;
   cursor: pointer;
-}
-
-.org-picker:focus {
-  border-color: var(--vscode-focusBorder);
 }
 
 .filter-toggle {
@@ -211,15 +201,14 @@ body {
   border-radius: 4px;
 }
 
-.module-open:focus-visible {
-  outline: none;
-}
-
+/* The tile is edged with the theme's contrast border, which only the high
+ * contrast themes have; elsewhere the edge is transparent. */
 .module-icon {
   flex-shrink: 0;
   width: 26px;
   height: 26px;
   border-radius: 4px;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
   background: var(--vscode-badge-background);
   display: flex;
   align-items: center;
@@ -275,15 +264,16 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 2px;
   margin-top: 2px;
 }
 
+/* At rest a row's actions take no width (see "Row actions" below). */
 .module-star,
 .module-add {
   flex-shrink: 0;
-  width: 22px;
+  width: 0;
   height: 22px;
+  overflow: hidden;
   border: none;
   background: transparent;
   color: var(--vscode-foreground);
@@ -325,7 +315,7 @@ body {
   margin-top: 10px;
   padding: 4px 14px;
   font-size: 12px;
-  border: none;
+  border: 1px solid var(--vscode-button-border, transparent);
   border-radius: 4px;
   cursor: pointer;
   background: var(--vscode-button-background);
@@ -412,8 +402,9 @@ body {
 /* ── Version grouping ── */
 .version-toggle {
   flex-shrink: 0;
-  width: 22px;
+  width: 0;
   height: 22px;
+  overflow: hidden;
   border: none;
   background: transparent;
   color: var(--vscode-descriptionForeground);
@@ -483,28 +474,73 @@ body {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
-/* ── Row actions: when they show, and the keyboard's focus ──
- * A row's actions, and a version row's "+", are always laid out and in the
- * tab order, so the keyboard reaches each one in either direction and
- * nothing moves when they show. They show while their row is hovered and
- * while keyboard focus is in it; a mouse click focuses without
- * :focus-visible, so it does not keep them shown. A starred star and the
- * toggle of an expanded row always show. */
+/* ── Row actions: when they show ──
+ * A row's actions, and a version row's "+", stay rendered and in the tab
+ * order, so the keyboard reaches each one in either direction. They show
+ * while their row is hovered and while keyboard focus is in it; a mouse
+ * click focuses without :focus-visible, so it does not keep them shown. A
+ * starred star and the toggle of an expanded row always show.
+ *
+ * At rest a module row's actions take no width, so its name has the row,
+ * as a VS Code tree's label does; while they show they take their width
+ * back and the name narrows. The row's height is the same in every state.
+ * A version row's label is short, so its "+" keeps its width. */
 .module-item:hover :is(.module-star, .module-add, .version-toggle),
 .module-item:has(:focus-visible) :is(.module-star, .module-add, .version-toggle),
-.version-row:hover .version-row-add,
-.version-row:has(:focus-visible) .version-row-add,
 .module-star.starred,
 .version-toggle.has-versions {
+  width: 22px;
   opacity: 1;
 }
 
-.module-item:has(.module-open:focus-visible),
-.module-star:focus-visible,
-.module-add:focus-visible,
-.version-toggle:focus-visible,
-.version-row-add:focus-visible,
-.system-header:focus-visible {
+/* Shown actions sit 2px apart; a collapsed one takes no gap. */
+.module-item:hover .module-actions > * + *,
+.module-item:has(:focus-visible) .module-actions > * + *,
+.version-toggle.has-versions ~ .module-star.starred {
+  margin-left: 2px;
+}
+
+.version-row:hover .version-row-add,
+.version-row:has(:focus-visible) .version-row-add {
+  opacity: 1;
+}
+
+/* ── High contrast: a hovered row or action is outlined, as VS Code's lists
+ * and toolbars are; body carries vscode-high-contrast in both high contrast
+ * themes. Of no more weight than :hover, so a focus ring wins over it. ── */
+:where(.vscode-high-contrast)
+  :where(
+    .module-item,
+    button.system-header,
+    .version-row,
+    .module-star,
+    .module-add,
+    .version-toggle,
+    .version-row-add,
+    .filter-toggle,
+    .chip
+  ):hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder);
+  outline-offset: -1px;
+}
+
+/* ── Keyboard focus: one ring for every control, the theme's focus border.
+ * A filled button takes it outside its edge; the module button draws it on
+ * its row. ── */
+:is(button, input):focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.retry-btn:focus-visible {
+  outline-offset: 2px;
+}
+
+.module-open:focus-visible {
+  outline: none;
+}
+
+.module-item:has(.module-open:focus-visible) {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
 }

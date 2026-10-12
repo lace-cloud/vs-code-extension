@@ -61,10 +61,10 @@ describe("the registry sidebar's stylesheet", () => {
     .map((rule) => rule.split('{'));
   const ROW_ACTION = /\.(module-add|module-star|version-toggle|version-row-add)\b/;
 
-  test('never takes a row action out of the tab order with display: none', () => {
+  test('never takes a row action out of the tab order with display: none or visibility: hidden', () => {
     const hiding = rules.filter(
       ([selectors = '', declarations = '']) =>
-        ROW_ACTION.test(selectors) && /display:\s*none/.test(declarations),
+        ROW_ACTION.test(selectors) && /display:\s*none|visibility:\s*hidden/.test(declarations),
     );
     expect(hiding).toEqual([]);
   });
