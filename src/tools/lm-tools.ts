@@ -39,11 +39,11 @@
 // Nothing asks: no tool returns `confirmationMessages`, and the chat shows
 // the tool's row with its invocation message. A result chat-core marks as an
 // error is thrown, which is how a Language Model Tool says its call failed.
-// A call whose token is already cancelled when it is invoked throws VS
-// Code's `CancellationError` before anything runs: no root is resolved, no
-// panel opened, no session held, no handler called. A cancellation that
-// arrives during the call reaches chat-core's handler as an `AbortSignal`:
-// a cancelled change applies nothing further.
+// A call cancelled by the time its root is resolved (which reads the
+// workspace's files and nothing else) throws VS Code's `CancellationError`:
+// no panel is opened, no session held, no handler called. A cancellation
+// that arrives after reaches chat-core's handler as an `AbortSignal`: a
+// cancelled change applies nothing further.
 import { posix } from 'node:path';
 import {
   type CanvasTools,
@@ -308,10 +308,10 @@ function languageModelTool(
       invocationMessage: `${tool.schema.title}: ${String(input.root)}`,
     }),
     invoke: async ({ input }, token) => {
+      const root = await rootNamed(sources, rootOf(input));
       if (token.isCancellationRequested) throw new api.CancellationError();
       const cancellation = abortOn(token);
       try {
-        const root = await rootNamed(sources, rootOf(input));
         const result = await tool.call(root, toolInput(input), cancellation.signal);
         if (result.isError) throw new Error(result.content);
         return new api.LanguageModelToolResult([new api.LanguageModelTextPart(result.content)]);

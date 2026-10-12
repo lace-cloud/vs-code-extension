@@ -541,6 +541,18 @@ describe('registration', () => {
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, sources);
     const cancellation = fakeCancellation();
     handled.splice(0);
+    // The session delivers its frame only once the test says so, so the
+    // describe is under way when the call is cancelled.
+    const source = t.fake.session.ports.source;
+    const subscribe = source.subscribe.bind(source);
+    let deliver = () => {};
+    source.subscribe = (on, onEnd) => {
+      let off = () => {};
+      deliver = () => {
+        off = subscribe(on, onEnd);
+      };
+      return () => off();
+    };
 
     const call = tools
       .get('lace_describe_module_canvas')
@@ -548,7 +560,9 @@ describe('registration', () => {
         { input: { root: 'infra/prod' }, toolInvocationToken: undefined },
         cancellation.token,
       );
+    await vi.waitFor(() => expect(handled).toHaveLength(1));
     cancellation.cancel();
+    deliver();
     await call;
 
     expect(handled.map(({ tool, signal }) => [tool, signal?.aborted])).toEqual([
@@ -583,6 +597,42 @@ describe('registration', () => {
     expect(handled).toEqual([]);
     expect(t.commands.at).not.toHaveBeenCalled();
     expect(t.commands.anywhere).not.toHaveBeenCalled();
+    expect(cancellation.listening()).toBe(0);
+  });
+
+  test('a change cancelled while its root is being resolved rejects as cancelled, and opens and holds nothing', async () => {
+    const { tools, registerTool } = registered();
+    const t = setUp();
+    // The workspace's Terraform files are still being found.
+    let found = () => {};
+    const finding = {
+      folders: () => [repo],
+      terraformFiles: () =>
+        new Promise<vscode.Uri[]>((resolve) => {
+          found = () => resolve([uri('/work/repo/infra/prod/main.tf')]);
+        }),
+    };
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, finding);
+    const cancellation = fakeCancellation();
+    handled.splice(0);
+
+    const call = Promise.resolve(
+      tools
+        .get('lace_change_module_canvas')
+        ?.invoke(
+          { input: { root: 'infra/prod', ...DELETE_DB }, toolInvocationToken: undefined },
+          cancellation.token,
+        ),
+    );
+    call.catch(() => {});
+    await settled();
+    cancellation.cancel();
+    found();
+
+    await expect(call).rejects.toBeInstanceOf(Cancelled);
+    expect(t.panels.ensure).not.toHaveBeenCalled();
+    expect(t.acquired).toEqual([]);
+    expect(handled).toEqual([]);
     expect(cancellation.listening()).toBe(0);
   });
 

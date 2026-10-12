@@ -330,11 +330,12 @@ A connect that names no pin is the canvas's `auto_connect`, and the pairs the en
 choose between. The changes apply in order, each as one `ApplyAction`. Every result ends with the current canvas;
 sensitive values are withheld.
 
-**Cancellation.** A Language Model Tool invoked with a token already cancelled throws VS Code's `CancellationError`
-before anything else, for every tool: no root is resolved, no panel opened, no session held, no handler called.
-Otherwise `invoke` maps the `CancellationToken` to an `AbortSignal` (aborted on `onCancellationRequested`, the listener
-disposed when the call settles) and hands it to chat-core's handler: a change cancelled during the call starts nothing
-further and applies nothing after the cancellation, and the module tools stop waiting on their command.
+**Cancellation.** `invoke` resolves the call's `root` first, which reads the workspace's files and nothing else. A
+call whose token is cancelled by then, whether before it was invoked or while its root was resolved, throws VS Code's
+`CancellationError`, for every tool: no panel opened, no session held, no handler called. Otherwise `invoke` maps the
+`CancellationToken` to an `AbortSignal` (aborted on `onCancellationRequested`, the listener disposed when the call
+settles) and hands it to chat-core's handler: a change cancelled during the call starts nothing further and applies
+nothing after the cancellation, and the module tools stop waiting on their command.
 
 **The text level.** `resources/instructions/lace-modules.instructions.md`, contributed through `chatInstructions` and
 applied to `**/*.tf`, tells the developer's coding assistant the rules of editing a Lace module's `.tf` files directly.
