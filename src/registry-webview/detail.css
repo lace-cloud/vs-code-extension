@@ -13,6 +13,13 @@ body {
   line-height: 1.5;
 }
 
+/* The page always keeps room for its scrollbar, so a tab whose content
+ * scrolls and one whose content fits lay the header and the tabs out alike:
+ * nothing moves when the tab changes. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* ── Header ── */
 .header {
   padding: 24px 32px;
@@ -85,13 +92,15 @@ body {
 }
 
 /* Edged with the theme's button border, as VS Code's buttons are: in high
- * contrast the fill is the page's own and the border is the button. */
+ * contrast the fill is the page's own and the border is the button. The
+ * edge is drawn inside the box, so it takes no space. */
 .btn-primary {
   padding: 8px 20px;
   border-radius: 4px;
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
-  border: 1px solid var(--vscode-button-border, transparent);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--vscode-button-border, transparent);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -351,15 +360,16 @@ th.property {
 }
 /* Inline code, in the README and in the interface's types: the theme's
  * preformatted text on its own background, the pair VS Code gives them, and
- * its edge where the theme has one (High Contrast Dark), drawn inside the box
- * so it takes no space. */
+ * its border where the theme has one (High Contrast Dark). A real border, so
+ * code that wraps is left open at each line break. It is 1px in every theme,
+ * transparent where the theme has none, so the box is one size in all. */
 .readme code,
 .prop-type code {
   font-family: var(--vscode-editor-font-family);
   color: var(--vscode-textPreformat-foreground);
   background: var(--vscode-textPreformat-background);
-  box-shadow: inset 0 0 0 1px var(--vscode-textPreformat-border, transparent);
-  padding: 1px 4px;
+  border: 1px solid var(--vscode-textPreformat-border, transparent);
+  padding: 0 3px;
   border-radius: 3px;
 }
 /* A fenced block: the editor's text on the theme's code block background. */
@@ -374,6 +384,6 @@ th.property {
 .readme pre code {
   color: inherit;
   background: none;
-  box-shadow: none;
+  border: none;
   padding: 0;
 }
