@@ -1,0 +1,608 @@
+/* The registry sidebar, in its kept design. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+}
+
+.search-container {
+  padding: 8px 8px 4px;
+  position: sticky;
+  top: 0;
+  background: var(--vscode-sideBar-background);
+  z-index: 10;
+}
+
+.search-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--vscode-input-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.search-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.org-picker {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  margin-top: 4px;
+  border: 1px solid var(--vscode-input-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ── Toggles: the filter toggle and the category chips ──
+ * On, a toggle takes the colours VS Code gives a toggled option
+ * (--vscode-inputOption-active*: background, border, foreground); under the
+ * pointer, its hover background. The filter toggle is an icon, with no edge
+ * at rest. A chip keeps an edge at rest, the checkbox border's, so it reads
+ * as a control; and since in high contrast that edge and the on border are
+ * one colour, a chosen chip also leads with a check mark, so on and off
+ * differ by shape in every theme. The mark takes the chip's own left
+ * padding, so choosing a chip does not change its width. (In high contrast
+ * VS Code dashes a hovered toggle's border in the focus colour; this page
+ * outlines it instead, as it does every hovered action: see "High
+ * contrast" below.) */
+.filter-toggle,
+.chip {
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.filter-toggle:hover,
+.chip:hover {
+  background: var(--vscode-inputOption-hoverBackground);
+}
+
+.filter-toggle.active,
+.chip.active {
+  border-color: var(--vscode-inputOption-activeBorder);
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground);
+}
+
+.filter-toggle {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: var(--vscode-foreground);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  padding: 0;
+}
+
+.filter-toggle:disabled {
+  cursor: default;
+  opacity: 0.4;
+  background: transparent;
+}
+
+/* ── Category chips ── */
+#chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px 2px;
+}
+
+.chip {
+  padding: 2px 10px;
+  font-size: 11px;
+  border-radius: 10px;
+  border-color: var(--vscode-checkbox-border, var(--vscode-contrastBorder, transparent));
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
+/* A chosen chip gives its check mark 10px of its 20px of side padding (4px
+ * before the mark, 6px after the label), so choosing it keeps its width; the
+ * mark's line is no taller than the label's, so it keeps its height too. */
+.chip.active {
+  padding: 2px 6px 2px 4px;
+}
+
+.chip-check {
+  display: inline-block;
+  width: 10px;
+  line-height: 1;
+  text-align: center;
+}
+
+.module-list {
+  padding: 0 4px 8px;
+}
+
+/* A heading over a list of modules: a section's, which is a button that
+ * folds the section, or the favourites', which is only a heading. */
+.list-heading,
+.system-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-sideBarSectionHeader-foreground);
+  margin-top: 4px;
+  user-select: none;
+}
+
+.system-header {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.system-header:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.system-header .chevron {
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.system-header.collapsed .chevron {
+  transform: rotate(-90deg);
+}
+
+.system-body.collapsed {
+  display: none;
+}
+
+.system-body .system-header {
+  padding-left: 20px;
+}
+
+.module-count {
+  font-weight: 400;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* A row holds two kinds of control side by side: the module itself, which
+ * opens its detail, and its actions. */
+.module-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  gap: 8px;
+  user-select: none;
+}
+
+.module-item:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* The module itself. Its ::after covers the whole row, so a click anywhere
+ * on the row but its actions opens the module; the row draws its focus. */
+.module-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.module-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+}
+
+/* The tile is edged with the theme's contrast border, which only the high
+ * contrast themes have; elsewhere the edge is transparent. */
+.module-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  background: var(--vscode-badge-background);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  margin-top: 1px;
+  overflow: hidden;
+}
+
+.module-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.module-info {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.module-name {
+  display: block;
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-foreground);
+}
+
+.module-version {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  font-weight: 400;
+}
+
+.module-categories {
+  display: block;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Above the module's ::after, so a click on an action is the action's; a
+ * click between two actions passes through to the module, as a click
+ * anywhere else on the row does. */
+.module-actions {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+  pointer-events: none;
+}
+
+.module-actions > * {
+  pointer-events: auto;
+}
+
+/* At rest a row's actions take no width (see "Row actions" below). */
+.module-star,
+.module-add {
+  flex-shrink: 0;
+  width: 0;
+  height: 22px;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  opacity: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.module-star.starred {
+  color: var(--vscode-charts-yellow);
+}
+
+.module-star:hover,
+.module-add:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.empty-state {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.result-count {
+  padding: 2px 8px 4px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ── Retry button ──
+ * Edged with the theme's button border, drawn inside the box so the edge
+ * takes no space. */
+.retry-btn {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 14px;
+  font-size: 12px;
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.retry-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+/* ── Skeleton loading ──
+ * Drawn in the badge's colour, and in high contrast (where the badge is the
+ * page's own black) in the contrast border's. */
+.skeleton-group {
+  --skeleton-fill: var(--vscode-badge-background);
+  padding: 0 4px;
+}
+
+.skeleton-header {
+  height: 12px;
+  width: 50px;
+  margin: 10px 8px 6px;
+  border-radius: 3px;
+  background: var(--skeleton-fill);
+  opacity: 0.4;
+}
+
+.skeleton-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 6px 8px;
+  gap: 8px;
+}
+
+.skeleton-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-fill) 25%,
+    transparent 50%,
+    var(--skeleton-fill) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.skeleton-line {
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-fill) 25%,
+    transparent 50%,
+    var(--skeleton-fill) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-line:first-child {
+  width: 70%;
+}
+.skeleton-line:last-child {
+  width: 45%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ── Version grouping ── */
+.version-toggle {
+  flex-shrink: 0;
+  width: 0;
+  height: 22px;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  opacity: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  padding: 0;
+}
+
+.version-toggle:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.version-children {
+  padding-left: 34px;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: default;
+  gap: 6px;
+  user-select: none;
+}
+
+.version-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.version-row-label {
+  flex: 1;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Its negative margin keeps the version row as tall as its label. */
+.version-row-add {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: -3px 0;
+  border: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  opacity: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.version-row-add:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+/* ── Row actions: when they show ──
+ * A row's actions, and a version row's "+", stay rendered and in the tab
+ * order, so the keyboard reaches each one in either direction. They show
+ * while their row is hovered and while keyboard focus is in it; a mouse
+ * click focuses without :focus-visible, so it does not keep them shown. A
+ * starred star and the toggle of an expanded row always show.
+ *
+ * At rest a module row's actions take no width, so its name has the row,
+ * as a VS Code tree's label does; while they show they take their width
+ * back and the name narrows. The row's height is the same in every state.
+ * A version row's label is short, so its "+" keeps its width. */
+.module-item:hover :is(.module-star, .module-add, .version-toggle),
+.module-item:has(:focus-visible) :is(.module-star, .module-add, .version-toggle),
+.module-star.starred,
+.version-toggle.expanded {
+  width: 22px;
+  opacity: 1;
+}
+
+/* Shown actions sit 2px apart; a collapsed one takes no gap. */
+.module-item:hover .module-actions > * + *,
+.module-item:has(:focus-visible) .module-actions > * + *,
+.version-toggle.expanded ~ .module-star.starred {
+  margin-left: 2px;
+}
+
+.version-row:hover .version-row-add,
+.version-row:has(:focus-visible) .version-row-add {
+  opacity: 1;
+}
+
+/* ── High contrast, both themes ──
+ * As VS Code 1.141 draws a hovered list row: the list's hover background
+ * (--vscode-list-hoverBackground, which the rows' own :hover rules set in
+ * every theme) under a dashed outline in the contrast active border (the
+ * list's hover outline; VS Code exposes no --vscode-list-hoverOutline).
+ * Every hovered action and toggle is outlined as VS Code outlines a hovered
+ * toolbar action, in --vscode-toolbar-hoverOutline. A control with an edge
+ * or a fill of its own (a toggle, the retry button) takes the outline
+ * outside it, where it can be seen. The outlines weigh no more than :hover,
+ * so a focus ring wins over them. */
+:where(.vscode-high-contrast, .vscode-high-contrast-light)
+  :where(.module-item, button.system-header, .version-row):hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder);
+  outline-offset: -1px;
+}
+
+:where(.vscode-high-contrast, .vscode-high-contrast-light)
+  :where(
+    .module-star,
+    .module-add,
+    .version-toggle,
+    .version-row-add,
+    .filter-toggle:not(:disabled),
+    .chip,
+    .retry-btn
+  ):hover {
+  outline: 1px dashed var(--vscode-toolbar-hoverOutline);
+  outline-offset: -1px;
+}
+
+:where(.vscode-high-contrast, .vscode-high-contrast-light)
+  :where(.filter-toggle, .chip, .retry-btn):hover {
+  outline-offset: 2px;
+}
+
+:is(.vscode-high-contrast, .vscode-high-contrast-light) .skeleton-group {
+  --skeleton-fill: var(--vscode-contrastBorder);
+}
+
+/* ── Keyboard focus: one ring for every control, the theme's focus border.
+ * A control with an edge or a fill of its own (a toggle, the retry button)
+ * takes it outside, so it is not lost in that edge; the module button draws
+ * it on its row. ── */
+:is(button, input):focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+:is(.filter-toggle, .chip, .retry-btn):focus-visible {
+  outline-offset: 2px;
+}
+
+.module-open:focus-visible {
+  outline: none;
+}
+
+.module-item:has(.module-open:focus-visible) {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}

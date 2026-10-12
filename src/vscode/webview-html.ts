@@ -1,52 +1,50 @@
+// The HTML a webview page loads: one script and one stylesheet from out/,
+// under a CSP that runs only a script carrying this document's nonce. Every
+// document is new: a fresh nonce, so assigning it reloads the page.
 import { randomBytes } from 'node:crypto';
-import * as path from 'node:path';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 
-export type WebviewHtmlOptions = {
-  /** Filename of the bundled webview script in `out/` (e.g. 'webview.js' or 'chat-sidebar.js'). */
-  scriptFilename: string;
-  /** HTML <title> content. */
+export type WebviewHtmlInputs = {
+  // `webview.asWebviewUri` for a file under the extension's out/.
+  outUri: (file: string) => vscode.Uri;
+  cspSource: string;
   title: string;
-  /** Optional inline <style> content inserted in <head>. */
-  bodyStyle?: string;
-  /** Optional inline <script> inserted before the main bundle — e.g. for keyboard shortcut handlers. */
-  prebodyScript?: string;
 };
 
-/**
- * Builds the HTML document served by a VS Code webview. Shared between the
- * canvas panel and the chat sidebar — both load a single bundled React app
- * and need the same CSP + nonce pattern.
- */
-export function buildWebviewHtml(
-  context: vscode.ExtensionContext,
-  webview: vscode.Webview,
-  options: WebviewHtmlOptions,
+// `bundle` names the page's script and stylesheet in out/; `images` are
+// the sources its images may load from beside the extension's own.
+export function pageHtml(
+  { outUri, cspSource, title }: WebviewHtmlInputs,
+  { bundle, images }: { bundle: string; images: readonly string[] },
 ): string {
-  // CSP nonces must be unpredictable. Math.random() isn't
-  // cryptographically strong; randomBytes is the right primitive.
   const nonce = randomBytes(16).toString('hex');
-  const scriptUri = webview.asWebviewUri(
-    vscode.Uri.file(path.join(context.extensionPath, 'out', options.scriptFilename)),
-  );
-  const styleBlock = options.bodyStyle ? `<style>${options.bodyStyle}</style>` : '';
-  const prebodyBlock = options.prebodyScript
-    ? `<script nonce="${nonce}">${options.prebodyScript}</script>`
-    : '';
-
+  const csp = [
+    "default-src 'none'",
+    `img-src ${[cspSource, ...images].join(' ')}`,
+    `style-src ${cspSource} 'unsafe-inline'`,
+    `font-src ${cspSource}`,
+    `script-src 'nonce-${nonce}'`,
+  ].join('; ');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src ${webview.cspSource};" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${options.title}</title>
-  ${styleBlock}
+  <title>${escapeHtml(title)}</title>
+  <link rel="stylesheet" href="${outUri(`${bundle}.css`)}" />
 </head>
 <body>
   <div id="root"></div>
-  ${prebodyBlock}
-  <script nonce="${nonce}" src="${scriptUri}"></script>
+  <script nonce="${nonce}" src="${outUri(`${bundle}.js`)}"></script>
 </body>
 </html>`;
+}
+
+export function canvasHtml(inputs: WebviewHtmlInputs): string {
+  return pageHtml(inputs, { bundle: 'canvas-webview', images: ['data:'] });
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 }

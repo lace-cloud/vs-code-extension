@@ -1,0 +1,12 @@
+/* The page is the canvas: no margin, the editor's own background behind it. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--vscode-editor-background);
+}

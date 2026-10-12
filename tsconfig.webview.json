@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/canvas-webview/**/*",
+    "src/registry-webview/**/*",
+    "src/webview/**/*.ts",
+    "src/protocol/**/*.ts"
+  ],
+  "exclude": ["src/canvas-webview/__tests__/**", "src/protocol/__tests__/**"]
+}

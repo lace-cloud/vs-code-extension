@@ -1,0 +1,510 @@
+/* Module detail, in its kept design. */
+
+/* VS Code sets body's font, colour and background from the theme; this
+   declares only what it overrides. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  line-height: 1.5;
+}
+
+/* The page always keeps room for its scrollbar, so a tab whose content
+ * scrolls and one whose content fits lay the header and the tabs out alike:
+ * nothing moves when the tab changes. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* ── Header ──
+ * The icon, then the title block with "Add to Canvas" beside it. Narrower,
+ * each part wraps rather than leaving the page: "Add to Canvas" goes below
+ * the title block when the two do not fit side by side, the title block
+ * goes below the icon when it would be narrower than 200px, and the title,
+ * the meta row and the description wrap within the width they have. */
+.header {
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--vscode-widget-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.header-main {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 20px;
+}
+
+.header-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.header-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+/* Beside "Add to Canvas" while it can be 240px wide; a word longer than the
+ * width breaks anywhere. */
+.header-info {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.header-info h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 12px;
+}
+
+.header-description {
+  color: var(--vscode-descriptionForeground);
+  font-size: 14px;
+}
+
+/* The meta row's separators: each item after the version leads with its
+ * own dot, so a wrapped line may start with one but never ends with one,
+ * and no dot stands alone. Screen readers skip it (its alternative text is
+ * empty). */
+.meta-next::before {
+  content: "·" / "";
+  margin-right: 12px;
+}
+
+/* Edged with the theme's contrast border, which only the high contrast
+ * themes have, where the badge's fill is the page's own; drawn inside the
+ * box, so the edge takes no space. */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--vscode-contrastBorder, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Edged with the theme's button border, as VS Code's buttons are: in high
+ * contrast the fill is the page's own and the border is the button. The
+ * edge is drawn inside the box, so it takes no space. */
+.btn-primary {
+  padding: 8px 20px;
+  border-radius: 4px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--vscode-button-border, transparent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+/* Keyboard focus: one ring, the theme's focus border, on every control, the
+ * tab panel and every scroll box, drawn inside the edge, where a box that
+ * clips its content does not clip it; a filled button takes it outside its
+ * edge. */
+:is(button, a, .scroll-box, [role="tabpanel"]):focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.btn-primary:focus-visible {
+  outline-offset: 2px;
+}
+
+/* High contrast, both themes: a hovered tab or button is outlined dashed in
+ * the theme's active border, as VS Code outlines a hovered list row or
+ * button; the filled button takes it outside its fill, where it can be seen.
+ * The outline weighs no more than :hover, so a focus ring wins. */
+:where(.vscode-high-contrast, .vscode-high-contrast-light) :where(.tab, .btn-primary):hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder);
+  outline-offset: -1px;
+}
+
+:where(.vscode-high-contrast, .vscode-high-contrast-light) :where(.btn-primary):hover {
+  outline-offset: 2px;
+}
+
+/* ── Error banner ── */
+.error-banner {
+  padding: 8px 32px;
+  background: var(--vscode-inputValidation-warningBackground);
+  color: var(--vscode-inputValidation-warningForeground);
+  border-bottom: 1px solid var(--vscode-inputValidation-warningBorder);
+  font-size: 13px;
+}
+
+/* ── Tabs ──
+ * Narrower than its tabs, the bar wraps them onto another line, so every
+ * tab is always whole; the rule spans the bar, under its last line. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-bottom: 1px solid var(--vscode-widget-border);
+  padding: 0 32px;
+}
+
+/* Styled as VS Code styles its panel's tabs: the inactive label in the panel
+ * title's inactive colour, taking the active colour on hover; the active
+ * tab in the active colour, underlined in the panel title's active border.
+ * (Light Modern gives both labels one colour, so there, as in VS Code, the
+ * underline alone marks the active tab.) */
+.tab {
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-family: inherit;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--vscode-panelTitle-inactiveForeground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.tab:hover,
+.tab.active {
+  color: var(--vscode-panelTitle-activeForeground);
+}
+
+.tab.active {
+  border-bottom-color: var(--vscode-panelTitle-activeBorder);
+}
+
+/* ── Content ── */
+.content {
+  padding: 24px 32px;
+  max-width: 900px;
+}
+
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
+
+.section {
+  margin-bottom: 28px;
+}
+.section h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--vscode-widget-border);
+}
+
+.section p {
+  font-size: 14px;
+}
+
+.examples-hint {
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 12px;
+}
+
+/* ── Table ── */
+/* A table wider than the page scrolls sideways in this box, as a fenced
+ * code block does, so the page does not. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-widget-border);
+  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+td {
+  padding: 8px 12px;
+  border: 1px solid var(--vscode-widget-border);
+  vertical-align: top;
+}
+
+.prop-name {
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-textLink-foreground);
+  white-space: nowrap;
+}
+
+.prop-type {
+  font-size: 12px;
+}
+
+/* A type's code takes the space of its text alone: its 3px of padding and
+ * 1px border reach into the cell's own padding, so the table lays out as for
+ * the bare type. */
+.prop-type code {
+  margin: 0 -4px;
+}
+
+.prop-required {
+  text-align: center;
+}
+/* Whether an input is required: a mark in the table's Required column, a
+ * word where the table is stacked (below). */
+.required-word {
+  display: none;
+}
+.prop-desc {
+  color: var(--vscode-descriptionForeground);
+}
+.empty {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  text-align: center;
+}
+
+/* ── Interface, narrow ──
+ * Narrower than 480px, the Inputs and Outputs tables no longer fit their
+ * columns, so each input or output is a block of its own: its name, type
+ * and whether it is required on one line, its description below at the
+ * full width. The column headings are hidden from view (screen readers
+ * still read the table). At 480px and wider, the table is the table. */
+.interface {
+  container: interface / inline-size;
+}
+
+@container interface (width < 480px) {
+  .interface-table,
+  .interface-table tbody,
+  .interface-table tr,
+  .interface-table td {
+    display: block;
+  }
+
+  .interface-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .interface-table tr {
+    padding: 8px 12px;
+    border: 1px solid var(--vscode-widget-border);
+    border-top-width: 0;
+  }
+
+  .interface-table tbody tr:first-child {
+    border-top-width: 1px;
+  }
+
+  .interface-table td {
+    padding: 0;
+    border: none;
+  }
+
+  .interface-table :is(.prop-name, .prop-type, .prop-required) {
+    display: inline-block;
+    margin-right: 12px;
+    vertical-align: baseline;
+  }
+
+  .interface-table .prop-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .interface-table .prop-type code {
+    margin: 0;
+  }
+
+  .interface-table .required-mark {
+    display: none;
+  }
+
+  .interface-table .required-word {
+    display: inline;
+    color: var(--vscode-descriptionForeground);
+  }
+
+  .interface-table .prop-desc {
+    margin-top: 4px;
+  }
+
+  .interface-table .prop-desc:empty {
+    display: none;
+  }
+}
+
+/* ── Versions ── */
+.version-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-widget-border);
+  font-size: 12px;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-descriptionForeground);
+}
+
+.version-tag.active {
+  border-color: var(--vscode-textLink-foreground);
+  color: var(--vscode-textLink-foreground);
+  background: var(--vscode-list-activeSelectionBackground);
+}
+
+.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ── Loading ── */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 14px;
+}
+
+.loading::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--vscode-widget-border);
+  border-top-color: var(--vscode-textLink-foreground);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 12px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Example placeholder ── */
+.code-block {
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 6px;
+  padding: 16px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+th.property {
+  width: 140px;
+}
+
+/* ── README ── */
+.readme {
+  font-size: 14px;
+}
+.readme h1,
+.readme h2,
+.readme h3 {
+  margin: 16px 0 8px;
+  border-bottom: none;
+}
+.readme p,
+.readme ul,
+.readme ol,
+.readme pre,
+.readme .table-scroll {
+  margin-bottom: 12px;
+}
+.readme ul,
+.readme ol {
+  padding-left: 24px;
+}
+.readme img {
+  max-width: 100%;
+}
+.readme a {
+  color: var(--vscode-textLink-foreground);
+}
+/* Inline code, in the README and in the interface's types: the theme's
+ * preformatted text on its own background, the pair VS Code gives them, and
+ * its border where the theme has one (High Contrast Dark). A real border, so
+ * code that wraps is left open at each line break. It is 1px in every theme,
+ * transparent where the theme has none, so the box is one size in all. */
+.readme code,
+.prop-type code {
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-textPreformat-foreground);
+  background: var(--vscode-textPreformat-background);
+  border: 1px solid var(--vscode-textPreformat-border, transparent);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+/* A fenced block: the editor's text on the theme's code block background. */
+.readme pre {
+  background: var(--vscode-textCodeBlock-background);
+  color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+}
+.readme pre code {
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
