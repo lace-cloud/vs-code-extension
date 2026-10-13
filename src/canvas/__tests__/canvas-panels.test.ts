@@ -123,8 +123,6 @@ function workspaceState() {
 
 function setup(
   options: {
-    files?: string[];
-    createMainTf?: boolean;
     // The workspace's folders.
     folders?: AuthoringRoot['folder'][];
     // What the engine's first serves fail with, in turn.
@@ -145,9 +143,7 @@ function setup(
         panels.push(made);
         return made.panel;
       }),
-      showInformationMessage: vi.fn(async () =>
-        options.createMainTf ? 'Create main.tf' : undefined,
-      ),
+      showInformationMessage: vi.fn(async () => undefined),
       showWarningMessage: vi.fn(async () => undefined),
       showErrorMessage: vi.fn(
         async (_text: string, ..._labels: string[]): Promise<string | undefined> => undefined,
@@ -156,7 +152,6 @@ function setup(
     },
     workspace: {
       workspaceFolders: options.folders,
-      fs: { readDirectory: vi.fn(async () => (options.files ?? ['main.tf']).map((f) => [f, 1])) },
       openTextDocument: vi.fn(async (opened: { path?: string }) => {
         if (opened.path?.endsWith('/missing.tf')) {
           throw new Error(`cannot open file://${opened.path}`);
@@ -623,36 +618,5 @@ describe('closing the tab', () => {
     const status = { id: 1, status: { code: 1, message: 'cancelled' } };
     expect(() => served[0].bridge.post(status as never)).not.toThrow();
     expect(panels[0].posted).toEqual([]);
-  });
-});
-
-describe('a directory with no top-level Terraform', () => {
-  test('the engine’s refused frame makes the host offer Create main.tf, which opens an untitled file and writes nothing', async () => {
-    const { canvasPanels, holds, api } = setup({ files: ['README.md'], createMainTf: true });
-    await canvasPanels.ensure(prod);
-    const hold = holds.get('/work/repo/infra/prod')!;
-
-    hold.publish(frame({ sourceRefused: true }));
-    hold.publish(frame({ sourceRefused: true }));
-    await settled();
-
-    expect(api.window.showInformationMessage).toHaveBeenCalledTimes(1);
-    expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'infra/prod has no Terraform files yet. Create main.tf to start the module.',
-      'Create main.tf',
-    );
-    const [opened] = api.workspace.openTextDocument.mock.calls[0] as unknown as [
-      { scheme: string; path: string },
-    ];
-    expect(opened).toMatchObject({ scheme: 'untitled', path: '/work/repo/infra/prod/main.tf' });
-    expect(api.window.showTextDocument).toHaveBeenCalledTimes(1);
-  });
-
-  test('a refused frame on a directory that holds Terraform offers nothing: the canvas shows the engine’s message', async () => {
-    const { canvasPanels, holds, api } = setup({ files: ['main.tf'] });
-    await canvasPanels.ensure(prod);
-    holds.get('/work/repo/infra/prod')?.publish(frame({ sourceRefused: true }));
-    await settled();
-    expect(api.window.showInformationMessage).not.toHaveBeenCalled();
   });
 });

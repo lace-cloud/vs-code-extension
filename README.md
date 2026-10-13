@@ -39,9 +39,9 @@ Each entry of the canvas's Diagnostics list has **Open source**, which opens the
 and column, beside the canvas. For one located on the canvas alone, such as a required input not set, it says the
 diagnostic names no file.
 
-A directory with no `.tf` file opens with the canvas locked and the engine's message, and a notification offers
-**Create main.tf**: it opens an untitled `main.tf` in that directory, and your save is the write. The extension writes no
-Terraform of its own; only Generate, Format and Convert write source files.
+A directory with no `.tf` file opens an empty canvas you can edit: the module starts there, as it would in a new `.tf`
+file, and Generate writes its first `.tf` files. The extension writes no Terraform of its own; only Generate, Format and
+Convert write source files.
 
 ## Modules, canvases and authoring sessions
 
@@ -69,7 +69,10 @@ files, and one side is taken whole. To edit the files by hand, generate first.
 **Lace style.** Lace style is the form of Terraform the canvas works in, and `lace module validate` says whether a module
 is in it. The first
 Generate on a hand-written module writes it in that style: comments, blank lines, argument order and the file a block sits
-in are not carried through. A module whose Terraform does not parse opens with the canvas locked until it parses again.
+in are not carried through. A module whose own `.tf` declares managed resources is not in Lace style: its canvas opens
+read-only and reads **Needs conversion**, and its **Convert** runs `lace module convert`, which composes each of those
+resources into a module of its own. A module whose Terraform does not parse opens with the canvas locked until it parses
+again.
 
 ## Saving follows `files.autoSave`
 
@@ -128,7 +131,8 @@ its ten most recent runs. The view's description names the module; it follows th
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
   the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. A module with no current
   certification offers **Validate**.
-- **Preview** opens the plan and the policy verdict as a read-only document.
+- **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
+  document.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal.

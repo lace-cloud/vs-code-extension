@@ -117,6 +117,13 @@ const run = (id: string, status: string, url?: string) => ({
   ...(url === undefined ? {} : { url }),
 });
 const runs = (...items: ReturnType<typeof run>[]) => ({ items, nextCursor: null, hasMore: false });
+// The Advisories of a preview of a stack no Agent is bound at Preview on.
+const NO_AGENT = {
+  queue: { manifestation: 'preview', floor: 0.5, entries: [], belowFloor: 0 },
+  truncated: false,
+  pending: 0,
+  bound: 0,
+};
 const applyResult = (error: string | null = null) => ({
   type: 'result',
   run: run('run_9', error ? 'apply_failed' : 'apply_succeeded'),
@@ -674,6 +681,7 @@ describe('a stack row', () => {
                 human: '+ aws_s3_bucket.b',
               },
               policy: null,
+              advisories: NO_AGENT,
             },
           ],
         },
@@ -705,7 +713,7 @@ describe('a stack row', () => {
     ]);
     expect(ran.find((c) => c.path === 'stack preview')?.cwd).toBe('/work/repo/infra/prod');
     expect(t.opened).toEqual([
-      'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n',
+      'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n',
     ]);
     expect(t.channels.get('Lace: prod')).toEqual(['── lace run logs run_1 ──', 'line one']);
     expect(t.shownChannels).toContain('Lace: prod');
@@ -779,6 +787,7 @@ describe('an apply', () => {
                 human: '',
               },
               policy: null,
+              advisories: NO_AGENT,
             },
           ],
         },
@@ -861,6 +870,7 @@ describe('an apply', () => {
                 human: '',
               },
               policy: null,
+              advisories: NO_AGENT,
             },
           ],
         },

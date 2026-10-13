@@ -2,10 +2,28 @@ import { type CommandFailure, type LaceReason, parseBound } from '@lace-cloud/ca
 import { describe, expect, test } from 'vitest';
 import { outcomeNotice, previewText, refusedState } from '../stack-rows';
 
+type Binding = {
+  policyId: string;
+  name: string;
+  handler: string;
+  mode: string;
+  decision: string;
+  reason: string;
+};
+
+// The Advisories of a preview: none, from one bound Agent that answered.
+const NO_ADVISORIES = {
+  queue: { manifestation: 'preview', floor: 0.5, entries: [] as object[], belowFloor: 0 },
+  truncated: false,
+  pending: 0,
+  bound: 1,
+};
+
 // A preview whose policy verdict gives `reason`.
 const preview = (
   reason: string,
-  more: { rulesFired?: string[]; approvalMode?: string | null } = {},
+  more: { rulesFired?: string[]; approvalMode?: string | null; bindings?: Binding[] } = {},
+  advisories: object = NO_ADVISORIES,
 ) =>
   parseBound('stack preview', {
     stack: { id: 'stk_1', slug: 'prod' },
@@ -23,12 +41,27 @@ const preview = (
       approvalMode: null,
       isAuthoringTimePreview: false,
       ...more,
+      bindings: (more.bindings ?? []).map((binding) => ({
+        ...binding,
+        rulesFired: [],
+        approvalMode: null,
+      })),
     },
+    advisories,
   });
 
 // The policy line of a preview's document.
 const policyLine = (text: string): string | undefined =>
   text.split('\n').find((line) => line.startsWith('Policy:'));
+
+// The lines of a preview's document from its first line starting with
+// `heading` to the blank line that ends that part.
+const part = (text: string, heading: string): string[] => {
+  const lines = text.split('\n');
+  const from = lines.findIndex((line) => line.startsWith(heading));
+  const to = lines.indexOf('', from);
+  return lines.slice(from, to);
+};
 
 describe("a preview's policy verdict", () => {
   test('names its mode, policy and rule, then the reason it gives', () => {
@@ -48,11 +81,166 @@ describe("a preview's policy verdict", () => {
 
   test('is followed by the rules fired and the approval it asks for', () => {
     const text = previewText(preview('', { rulesFired: ['r1', 'r2'], approvalMode: 'any_one' }));
+    expect(part(text, 'Policy:')).toEqual([
+      'Policy: require_approval (pol_1, rule rule_1)',
+      'Rules fired: r1, r2',
+      'Approval: any_one',
+    ]);
+  });
+
+  test('when several policies answer, lists each one with its own answer', () => {
+    const text = previewText(
+      preview('', {
+        bindings: [
+          {
+            policyId: 'pol_1',
+            name: 'prod-gate',
+            handler: 'opa',
+            mode: 'gating',
+            decision: 'require_approval',
+            reason: 'a change to prod needs approval',
+          },
+          {
+            policyId: 'pol_2',
+            name: 'cost',
+            handler: 'builtin',
+            mode: 'observing',
+            decision: 'policy_blocked',
+            reason: 'over budget',
+          },
+          {
+            policyId: 'pol_3',
+            name: 'tags',
+            handler: 'builtin',
+            mode: 'gating',
+            decision: 'abstain',
+            reason: '',
+          },
+          {
+            policyId: 'pol_4',
+            name: 'actor',
+            handler: 'external',
+            mode: 'gating',
+            decision: 'decided_at_apply',
+            reason: 'reads the submitting actor',
+          },
+        ],
+      }),
+    );
+    expect(part(text, 'Policy:')).toEqual([
+      'Policy: require_approval (pol_1, rule rule_1)',
+      'Policies:',
+      '  pol_1  prod-gate (opa, gating): require_approval — a change to prod needs approval',
+      '  pol_2  cost (builtin, observing): policy_blocked (observing: an observing policy never blocks the run) — over budget',
+      '  pol_3  tags (builtin, gating): no opinion',
+      '  pol_4  actor (external, gating): decided at apply — reads the submitting actor',
+    ]);
+  });
+
+  test('when one policy answers, the verdict is its answer and it is not listed again', () => {
+    const text = previewText(
+      preview('', {
+        bindings: [
+          {
+            policyId: 'pol_1',
+            name: 'prod-gate',
+            handler: 'opa',
+            mode: 'gating',
+            decision: 'require_approval',
+            reason: '',
+          },
+        ],
+      }),
+    );
+    expect(part(text, 'Policy:')).toEqual(['Policy: require_approval (pol_1, rule rule_1)']);
+  });
+});
+
+// An Advisory of `agent` at `confidence` whose output is `output`.
+const advisory = (agent: string, confidence: number, output: unknown = {}) => ({
+  id: `adv_${agent}`,
+  manifestation: 'preview',
+  emittedByInstallId: `inst_${agent}`,
+  emittedByDisplayName: agent,
+  confidenceScore: confidence,
+  producedAt: '2026-10-13T00:00:00Z',
+  outputJson: output,
+});
+
+const SUBJECT = {
+  resourceUri: 'aws_s3_bucket.b',
+  riskCategory: 'public_access',
+  remediationKind: 'block_public_access',
+};
+
+// The Advisories part of the document of a preview whose Advisories are
+// `advisories`.
+const advisoriesOf = (advisories: object): string[] =>
+  part(previewText(preview('', {}, advisories)), 'Advisories:');
+
+describe("a preview's Advisories", () => {
+  test('of a stack no Agent is bound at Preview on say so', () => {
+    expect(advisoriesOf({ ...NO_ADVISORIES, bound: 0 })).toEqual([
+      'Advisories: no Agent is installed and bound at Preview',
+    ]);
+  });
+
+  test('that list none say so, with how many are under the Preview floor', () => {
+    expect(advisoriesOf(NO_ADVISORIES)).toEqual(['Advisories: none']);
     expect(
-      text.endsWith(
-        'Policy: require_approval (pol_1, rule rule_1)\nRules fired: r1, r2\nApproval: any_one\n',
-      ),
-    ).toBe(true);
+      advisoriesOf({ ...NO_ADVISORIES, queue: { ...NO_ADVISORIES.queue, belowFloor: 2 } }),
+    ).toEqual(['Advisories: none (2 under the Preview floor)']);
+  });
+
+  test("list one line per subject: the leading Advisory's Agent, confidence and summary, then whether Agents agree or disagree", () => {
+    const lines = advisoriesOf({
+      ...NO_ADVISORIES,
+      queue: {
+        ...NO_ADVISORIES.queue,
+        entries: [
+          {
+            kind: 'consensus',
+            subject: { ...SUBJECT, remediationFingerprint: 'f1' },
+            advisories: [
+              advisory('Guard', 0.92, { summary: 'The bucket is public' }),
+              advisory('Sentry', 0.8),
+            ],
+            agentCount: 2,
+          },
+          {
+            kind: 'consensus',
+            subject: { ...SUBJECT, remediationFingerprint: 'f2' },
+            advisories: [advisory('Guard', 0.6, { summary: 7 })],
+            agentCount: 1,
+          },
+          {
+            kind: 'disagreement',
+            subject: SUBJECT,
+            lanes: [
+              {
+                remediationFingerprint: 'f1',
+                advisories: [advisory('Guard', 0.75, { summary: 'Block public access' })],
+              },
+              { remediationFingerprint: 'f3', advisories: [advisory('Sentry', 0.7)] },
+            ],
+          },
+        ],
+        belowFloor: 1,
+      },
+      pending: 2,
+    });
+    expect(lines).toEqual([
+      'Advisories:',
+      '  Guard (92%): The bucket is public — 2 Agents agree',
+      '  Guard (60%): public_access on aws_s3_bucket.b',
+      '  Guard (75%): Block public access — Agents disagree on public_access',
+      '  1 more under the Preview floor',
+      '  2 bound Agent(s) have not answered',
+    ]);
+  });
+
+  test('end the document, after the policy verdict', () => {
+    expect(previewText(preview('')).endsWith('\n\nAdvisories: none\n')).toBe(true);
   });
 });
 

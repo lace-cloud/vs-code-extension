@@ -4,11 +4,12 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConnectError, Reason } from '@lace-cloud/canvas/engine';
+import { type Action, ConnectError, Reason } from '@lace-cloud/canvas/engine';
 import { ENGINE_PROTOCOL_VERSION } from '@lace-cloud/proto';
 import { describe, expect, test } from 'vitest';
 import { createAutosaveKeeper } from '../../autosave/autosave-policy';
 import { EngineStartError } from '../engine';
+import type { RootHold } from '../root-sessions';
 import { afterTest, BINARY, moduleDirectory, realEngine, until } from './real-engine';
 
 const STAND_IN = join(__dirname, 'host-stand-in.mjs');
@@ -37,7 +38,18 @@ const engineProcesses = (): number[] =>
       ),
     );
 
-const EDIT = [{ set_variables: { variables: [] } }];
+// An edit of the root module through `hold`: its variables set, whole, to
+// none.
+function variablesCleared(hold: Pick<RootHold, 'ports'>): Action[] {
+  let scope = '';
+  hold.ports.source.subscribe(
+    (frame) => {
+      scope = frame.bundle.entry;
+    },
+    () => {},
+  )();
+  return [{ set_variables: { variables: [], scope } }];
+}
 
 describe('root sessions on the real engine', () => {
   test('two spellings of one directory are one session', async () => {
@@ -66,7 +78,7 @@ describe('root sessions on the real engine', () => {
     );
 
     const edit = await rootSessions.acquire(root);
-    const applied = await edit.ports.editor.apply(EDIT);
+    const applied = await edit.ports.editor.apply(variablesCleared(edit));
     await edit.release();
 
     expect(applied.success).toBe(true);
@@ -79,7 +91,7 @@ describe('root sessions on the real engine', () => {
     const { rootSessions, reports } = realEngine();
     const first = await rootSessions.acquire(root);
     const id = first.sessionId;
-    await first.ports.editor.apply(EDIT);
+    await first.ports.editor.apply(variablesCleared(first));
     await first.release();
 
     const second = await rootSessions.acquire(root);
@@ -94,6 +106,39 @@ describe('root sessions on the real engine', () => {
     expect(second.sessionId).not.toBe(id);
     expect(unsaved).toBe(false);
     expect(reports).toEqual([]);
+  });
+
+  test('a directory with no Terraform opens editable: the module starts on the canvas, and Generate writes its first files', async () => {
+    const { root } = moduleDirectory({});
+    const { rootSessions } = realEngine();
+    const hold = await rootSessions.acquire(root);
+    let frame = { sourceRefused: true, bundle: { entry: '' } };
+    hold.ports.source.subscribe(
+      (next) => {
+        frame = next;
+      },
+      () => {},
+    )();
+    expect(frame.sourceRefused).toBe(false);
+
+    const variable = {
+      name: 'name',
+      type: 'string',
+      required: true,
+      description: '',
+      default_value: undefined,
+      validation: [],
+      sensitive: false,
+    };
+    const applied = await hold.ports.editor.apply([
+      { set_variables: { variables: [variable], scope: frame.bundle.entry } },
+    ]);
+    expect(applied.success).toBe(true);
+    await hold.ports.editor.save();
+    const events = [];
+    for await (const event of hold.ports.editor.generate()) events.push(event);
+    expect(events.at(-1)).toMatchObject({ type: 'success', written: ['main.tf', 'variables.tf'] });
+    expect(readFileSync(join(root, 'variables.tf'), 'utf8')).toContain('variable "name"');
   });
 
   test('a root another engine holds is refused with its reason', async () => {
@@ -128,7 +173,7 @@ describe('root sessions on the real engine', () => {
 
     const edit = await rootSessions.acquire(root);
     expect(edit.sessionId).toBe(canvas.sessionId);
-    await edit.ports.editor.apply(EDIT);
+    await edit.ports.editor.apply(variablesCleared(edit));
     await edit.release();
 
     let unsaved = false;
@@ -214,7 +259,7 @@ describe('the window closing', () => {
       },
       () => {},
     );
-    await hold.ports.editor.apply(EDIT);
+    await hold.ports.editor.apply(variablesCleared(hold));
     await until('the unsaved frame', () => unsaved);
     const [enginePid] = engineProcesses();
 
@@ -245,13 +290,13 @@ describe('the window closing', () => {
       },
       () => {},
     );
-    await hold.ports.editor.apply(EDIT);
+    await hold.ports.editor.apply(variablesCleared(hold));
     await until('the unsaved frame', () => frame.unsaved);
     writeFileSync(join(root, 'main.tf'), 'variable "name" {\n');
     await until('the refused source', () => frame.sourceRefused);
 
     await hold.release();
-    const said = `was not saved (source_refused): [failed_precondition] the source tf is refused; fix it, then edit, save or generate again`;
+    const said = `was not saved (source_refused): [failed_precondition] the source tf is refused, and its diagnostics name why; resolve it (convert a tree out of lace shape), then edit, save or generate again`;
     expect(saving.log).toEqual([`The canvas of ${root} ${said}`]);
     expect(saving.shown).toEqual([`The canvas of ${root} ${said}`]);
     expect(rootSessions.held()).toEqual([]);

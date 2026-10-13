@@ -142,19 +142,94 @@ export function outcomeNotice(
   }
 }
 
+type Preview = JsonOf<'stack preview'>;
+type PreviewPolicy = NonNullable<Preview['policy']>;
+type PreviewBinding = PreviewPolicy['bindings'][number];
+type PreviewEntry = Preview['advisories']['queue']['entries'][number];
+
+// The decisions a policy answers that read as words rather than as a
+// resolution kind.
+const DECISION_WORDS: Readonly<Record<string, string>> = {
+  decided_at_apply: 'decided at apply',
+  abstain: 'no opinion',
+};
+
+// One policy's own answer: its decision, that an observing policy's block
+// never blocks the run, and the reason it gives.
+function bindingAnswer(binding: PreviewBinding): string {
+  const reason = binding.reason.trim();
+  const observed =
+    binding.mode === 'observing' && binding.decision === 'policy_blocked'
+      ? ' (observing: an observing policy never blocks the run)'
+      : '';
+  return `${DECISION_WORDS[binding.decision] ?? binding.decision}${observed}${reason === '' ? '' : ` — ${reason}`}`;
+}
+
 // A preview's policy verdict: its mode, policy and rule, then the reason it
-// gives when it gives one, the rules fired and the approval it asks for.
-function policyText(policy: NonNullable<JsonOf<'stack preview'>['policy']>): string {
+// gives when it gives one, the rules fired and the approval it asks for;
+// when several policies answer, each one's own answer.
+function policyText(policy: PreviewPolicy): string {
   const reason = policy.reason.trim();
   return [
     `Policy: ${policy.mode} (${policy.policyId}, rule ${policy.ruleId})${reason === '' ? '' : `: ${reason}`}`,
     ...(policy.rulesFired.length > 0 ? [`Rules fired: ${policy.rulesFired.join(', ')}`] : []),
     ...(policy.approvalMode === null ? [] : [`Approval: ${policy.approvalMode}`]),
+    ...(policy.bindings.length > 1
+      ? [
+          'Policies:',
+          ...policy.bindings.map(
+            (binding) =>
+              `  ${binding.policyId}  ${binding.name} (${binding.handler}, ${binding.mode}): ${bindingAnswer(binding)}`,
+          ),
+        ]
+      : []),
   ].join('\n');
 }
 
-// A preview as a read-only document: the plan and the policy verdict.
-export function previewText(preview: JsonOf<'stack preview'>): string {
+// One subject of the preview's Advisories: its leading Advisory's Agent,
+// confidence and summary (the subject itself when the Advisory offers no
+// summary), then whether the Agents disagree or how many agree.
+function entryText(entry: PreviewEntry): string {
+  const primary =
+    entry.kind === 'disagreement' ? entry.lanes[0].advisories[0] : entry.advisories[0];
+  const output = primary.outputJson;
+  const offered =
+    typeof output === 'object' && output !== null && 'summary' in output ? output.summary : null;
+  const summary =
+    typeof offered === 'string' && offered !== ''
+      ? offered
+      : `${entry.subject.riskCategory} on ${entry.subject.resourceUri}`;
+  const line = `${primary.emittedByDisplayName} (${Math.round(primary.confidenceScore * 100)}%): ${summary}`;
+  if (entry.kind === 'disagreement')
+    return `${line} — Agents disagree on ${entry.subject.riskCategory}`;
+  return entry.agentCount > 1 ? `${line} — ${entry.agentCount} Agents agree` : line;
+}
+
+// What the preview shows of the Agents bound at Preview: one line per
+// subject of its queue and how many are under the Preview's floor, or that
+// it shows none, then how many bound Agents have not answered. A preview
+// no Agent is bound at says so.
+function advisoriesText({ queue, pending, bound }: Preview['advisories']): string {
+  if (bound === 0) return 'Advisories: no Agent is installed and bound at Preview';
+  const listed =
+    queue.entries.length > 0
+      ? [
+          'Advisories:',
+          ...queue.entries.map((entry) => `  ${entryText(entry)}`),
+          ...(queue.belowFloor > 0 ? [`  ${queue.belowFloor} more under the Preview floor`] : []),
+        ]
+      : [
+          `Advisories: none${queue.belowFloor > 0 ? ` (${queue.belowFloor} under the Preview floor)` : ''}`,
+        ];
+  return [
+    ...listed,
+    ...(pending > 0 ? [`  ${pending} bound Agent(s) have not answered`] : []),
+  ].join('\n');
+}
+
+// A preview as a read-only document: the plan, the policy verdict and the
+// Advisories.
+export function previewText(preview: Preview): string {
   const { summary, human } = preview.plan;
   const { policy } = preview;
   return [
@@ -164,6 +239,8 @@ export function previewText(preview: JsonOf<'stack preview'>): string {
     human,
     '',
     policy === null ? 'Policy: none applies' : policyText(policy),
+    '',
+    advisoriesText(preview.advisories),
     '',
   ].join('\n');
 }
