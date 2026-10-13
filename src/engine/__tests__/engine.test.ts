@@ -1,3 +1,4 @@
+import type { BridgeEngineCaller } from '@lace-cloud/canvas/engine';
 import {
   EngineProtocolMismatchError,
   type EngineTransport,
@@ -75,9 +76,8 @@ function fakeManager() {
 
 const settings = { binaryPath: () => '/opt/lace', autoRestart: () => true };
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-const version = async (caller: {
-  unary: (m: 'Initialize', r: unknown) => Promise<{ server_version: string }>;
-}) => (await caller.unary('Initialize', {})).server_version;
+const version = async (caller: BridgeEngineCaller) =>
+  (await caller.unary('Initialize', {})).server_version;
 
 describe('the engine starts on demand', () => {
   test('asking for a caller starts a stopped engine, once for every asker', async () => {

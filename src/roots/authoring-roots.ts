@@ -244,11 +244,6 @@ type RootsApi = {
   window: Pick<typeof vscode.window, 'activeTextEditor' | 'showQuickPick'>;
 };
 
-type EditorApi = {
-  workspace: Pick<typeof vscode.workspace, 'openTextDocument'>;
-  window: Pick<typeof vscode.window, 'showTextDocument'>;
-};
-
 // The sources as VS Code supplies them.
 export function workspaceRootSources(
   api: RootsApi,
@@ -275,12 +270,4 @@ export function workspaceRootSources(
       return picked?.root;
     },
   };
-}
-
-// Starting a module happens at the text level: an untitled `main.tf` opens
-// in the root's directory, and the developer's save is the write. The
-// extension writes no source file.
-export async function startModule(api: EditorApi, root: AuthoringRoot): Promise<void> {
-  const untitled = fileUri(root, 'main.tf').with({ scheme: 'untitled' });
-  await api.window.showTextDocument(await api.workspace.openTextDocument(untitled));
 }
