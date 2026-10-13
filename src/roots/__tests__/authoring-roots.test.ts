@@ -10,7 +10,6 @@ import {
   rootPath,
   rootsHolding,
   rootToAct,
-  startModule,
   workspaceRootSources,
 } from '../authoring-roots';
 import { folder, uri } from './fake-uri';
@@ -303,12 +302,10 @@ describe('the sources VS Code supplies', () => {
       workspace: {
         workspaceFolders: [repo],
         findFiles: vi.fn(async () => [uri('/work/repo/infra/prod/main.tf')]),
-        openTextDocument: vi.fn(async (opened: unknown) => ({ opened })),
       },
       window: {
         activeTextEditor: activePath ? { document: { uri: uri(activePath) } } : undefined,
         showQuickPick: vi.fn(),
-        showTextDocument: vi.fn(),
       },
     };
   }
@@ -328,17 +325,6 @@ describe('the sources VS Code supplies', () => {
     const fake = api(undefined);
     await sourcesOf(fake).terraformFiles();
     expect(fake.workspace.findFiles).toHaveBeenCalledWith('**/*.tf', '**/{.terraform,.lace}/**');
-  });
-
-  test('starting a module opens an untitled main.tf in the root and writes nothing', async () => {
-    const fake = api(undefined);
-    await startModule(fake as never, prod);
-    const [opened] = fake.workspace.openTextDocument.mock.calls[0] as unknown as [
-      { scheme: string; path: string },
-    ];
-    expect(opened.scheme).toBe('untitled');
-    expect(opened.path).toBe('/work/repo/infra/prod/main.tf');
-    expect(fake.window.showTextDocument).toHaveBeenCalledTimes(1);
   });
 });
 

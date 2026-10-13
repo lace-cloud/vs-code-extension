@@ -140,9 +140,9 @@ its `RunCtx` and reads it when the store notifies.
   document carries a fresh nonce (`vscode/webview-html.ts`), so the page reloads and boots again through its one path.
 - The panel takes its webview once, when it is created: the engine can still answer a page after its tab closed, and
   that answer, posted to the closed webview, goes nowhere.
-- A directory with no top-level `.tf` opens source-refused; the page shows the engine's message and the host offers
-  **Create main.tf**, which opens an untitled `main.tf` there. The extension writes no source file: Generate, Format and
-  Convert are the CLI's writers.
+- A directory with no top-level `.tf` opens editable, on the empty module: the module starts on the canvas, and its
+  first Generate writes its first `.tf` files. The extension writes no source file: Generate, Format and Convert are the
+  CLI's writers.
 - The page reports its focus, which `onFocusChange` autosave reads. The canvas package's keymap handles its own keys;
   the extension contributes no keybinding.
 - The page follows VS Code's theme (`webview/theme.ts`): `data-theme` on `<html>`, which the canvas's design tokens
@@ -196,7 +196,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
   on the root that apply ran in, whose report lands where the palette's does. A preview opens as a read-only
-  `lace-preview:` document.
+  `lace-preview:` document: the plan, the policy verdict with each policy's own answer when several answer, and the
+  Advisories.
 - When the stacks cannot be listed, the context key `lace.stacks.state` selects the welcome view by the failure's reason:
   `signedOut`, `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the
   host builds no portal URL), `noStack`, `noRoot`, `failed`. The tree does not offer `lace stack destroy`; it is a

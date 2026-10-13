@@ -40,7 +40,6 @@ import {
   rootTitle,
   rootUri,
   sameRoot,
-  startModule,
 } from '../roots/authoring-roots';
 import type { RootState } from '../state/root-state';
 import { type OfferActions, notice as showNotice } from '../vscode/offers';
@@ -57,7 +56,7 @@ type PanelsApi = {
     | 'showErrorMessage'
     | 'showTextDocument'
   >;
-  workspace: Pick<typeof vscode.workspace, 'fs' | 'openTextDocument' | 'workspaceFolders'>;
+  workspace: Pick<typeof vscode.workspace, 'openTextDocument' | 'workspaceFolders'>;
   ViewColumn: Pick<typeof vscode.ViewColumn, 'Active' | 'Beside'>;
   Range: typeof vscode.Range;
 };
@@ -98,8 +97,6 @@ export type CanvasPanel = {
   readonly hold: RootHold;
   readonly panel: vscode.WebviewPanel;
 };
-
-const CREATE_MAIN_TF = 'Create main.tf';
 
 export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
   const {
@@ -261,37 +258,6 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     }
     await serve();
     disposables.push({ dispose: hold.renewed(guarded(`rebooting the canvas of ${label}`, serve)) });
-
-    // A directory with no top-level Terraform opens source-refused: the
-    // canvas shows the engine's message, and the host offers to start the
-    // module at the text level.
-    let offered = false;
-    const offerMainTf = guarded(`offering to start the module in ${label}`, async () => {
-      if (offered) return;
-      offered = true;
-      const entries = await api.workspace.fs.readDirectory(rootUri(root));
-      if (entries.some(([name]) => name.endsWith('.tf'))) return;
-      const answer = await api.window.showInformationMessage(
-        `${label} has no Terraform files yet. Create main.tf to start the module.`,
-        CREATE_MAIN_TF,
-      );
-      if (answer === CREATE_MAIN_TF) await startModule(api, root);
-    });
-    const watch = () =>
-      hold.ports.source.subscribe(
-        (frame) => {
-          if (frame.sourceRefused) offerMainTf();
-        },
-        () => {},
-      );
-    let unwatch = watch();
-    disposables.push({ dispose: () => unwatch() });
-    disposables.push({
-      dispose: hold.renewed(() => {
-        unwatch();
-        unwatch = watch();
-      }),
-    });
 
     return { root, hold, panel, tick: () => postEvent(host, { op: 'tick' }) };
   }
