@@ -73,6 +73,7 @@ function window(repository: string) {
   const sources: RootSources = {
     folders: () => [repo],
     activeCanvas: () => ({ folder: repo, relative: 'infra' }),
+    openCanvases: () => [{ folder: repo, relative: 'infra' }],
     activeTerraformDirectory: () => undefined,
     terraformFiles: async () => [],
     pick: async () => undefined,

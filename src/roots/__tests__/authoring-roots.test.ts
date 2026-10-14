@@ -1,15 +1,17 @@
 import { describe, expect, test, vi } from 'vitest';
 import {
   type AuthoringRoot,
+  candidates,
   fileUri,
+  findRoot,
   nameRoot,
   type RootSources,
   rootAt,
   rootLabel,
   rootOfPath,
   rootPath,
-  rootsHolding,
   rootToAct,
+  startingSources,
   workspaceRootSources,
 } from '../authoring-roots';
 import { folder, uri } from './fake-uri';
@@ -21,6 +23,7 @@ function sources(over: Partial<RootSources> = {}): RootSources {
   return {
     folders: () => [repo],
     activeCanvas: () => undefined,
+    openCanvases: () => [],
     activeTerraformDirectory: () => undefined,
     terraformFiles: async () => [],
     pick: async () => undefined,
@@ -170,6 +173,7 @@ describe('naming a root', () => {
     const asking: RootSources = {
       folders: () => [repo],
       activeCanvas: () => undefined,
+      openCanvases: () => [],
       activeTerraformDirectory: () => undefined,
       terraformFiles: several,
     };
@@ -183,10 +187,119 @@ describe('naming a root', () => {
     });
   });
 
-  test('none when no directory holds Terraform, and says so', async () => {
+  test('none when no directory holds Terraform, no canvas is open and the sources start no module, and says so', async () => {
     const pick = vi.fn();
-    expect(await nameRoot(sources({ pick }))).toEqual({ kind: 'noTerraform' });
+    expect(await nameRoot(sources({ pick }))).toEqual({ kind: 'noModule' });
     expect(pick).not.toHaveBeenCalled();
+  });
+
+  const infraNew: AuthoringRoot = { folder: repo, relative: 'infra/new' };
+
+  test('an open canvas on a directory with no Terraform is a candidate: alone it is named without asking, and no module is started', async () => {
+    const pick = vi.fn();
+    const start = vi.fn();
+    const named = await nameRoot(sources({ openCanvases: () => [infraNew], pick, start }));
+    expect(named).toEqual(rooted(infraNew));
+    expect(pick).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  test('an unfocused canvas on infra/new beside the Terraform of infra/prod gives a pick of the two, each once', async () => {
+    const pick = vi.fn(async (roots: readonly AuthoringRoot[]) => roots[1]);
+    const named = await nameRoot(
+      sources({
+        openCanvases: () => [infraNew, prod],
+        terraformFiles: async () => [uri('/work/repo/infra/prod/main.tf')],
+        pick,
+      }),
+    );
+    expect(pick.mock.calls[0][0]).toEqual([infraNew, prod]);
+    expect(named).toEqual(rooted(prod));
+  });
+});
+
+describe('a module started where the workspace holds none', () => {
+  const rooted = (root: AuthoringRoot) => ({ kind: 'root', root });
+  const other = folder('/work/other', 1);
+
+  test("where no directory holds Terraform, sources that can start a module name the workspace's one folder, without asking", async () => {
+    const start = vi.fn();
+    expect(await nameRoot(sources({ start }))).toEqual(rooted({ folder: repo, relative: '' }));
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  test('in a workspace of several folders, the developer picks the folder it starts in, in folder order', async () => {
+    const start = vi.fn(async (roots: readonly AuthoringRoot[]) => roots[1]);
+    const named = await nameRoot(sources({ folders: () => [repo, other], start }));
+    expect(start.mock.calls[0][0]).toEqual([
+      { folder: repo, relative: '' },
+      { folder: other, relative: '' },
+    ]);
+    expect(named).toEqual(rooted({ folder: other, relative: '' }));
+  });
+
+  test('a dismissed pick of the folder names none, and says the developer dismissed it', async () => {
+    const start = vi.fn(async () => undefined);
+    expect(await nameRoot(sources({ folders: () => [repo, other], start }))).toEqual({
+      kind: 'dismissed',
+    });
+  });
+
+  test('where a directory holds Terraform, no folder is a candidate and nothing is asked about one', async () => {
+    const start = vi.fn();
+    const named = await nameRoot(
+      sources({ terraformFiles: async () => [uri('/work/repo/infra/prod/main.tf')], start }),
+    );
+    expect(named).toEqual(rooted(prod));
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  test('with no folder open names none, and says so', async () => {
+    const start = vi.fn();
+    expect(await nameRoot(sources({ folders: () => [], start }))).toEqual({ kind: 'noFolder' });
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  test("a folder on a remote scheme starts the module at the folder's own URI", async () => {
+    const remote = { ...repo, uri: uri('/work/repo', 'vscode-remote', 'ssh-remote+host') };
+    const named = await nameRoot(sources({ folders: () => [remote], start: vi.fn() }));
+    expect(named.kind === 'root' && fileUri(named.root, 'main.tf').toString()).toBe(
+      'vscode-remote://ssh-remote+host/work/repo/main.tf',
+    );
+  });
+
+  test('finding a root asks nothing: no pick among several and no folder to start in', async () => {
+    const pick = vi.fn();
+    const start = vi.fn();
+    const twoModules = async () => [uri('/work/repo/a/main.tf'), uri('/work/repo/b/main.tf')];
+    expect(await findRoot(sources({ terraformFiles: twoModules, pick, start }))).toEqual({
+      kind: 'several',
+      roots: [
+        { folder: repo, relative: 'a' },
+        { folder: repo, relative: 'b' },
+      ],
+    });
+    expect(await findRoot(sources({ folders: () => [repo, other], pick, start }))).toEqual({
+      kind: 'noModule',
+    });
+    expect(pick).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  test("the starting sources ask among the workspace's folders by name", async () => {
+    const window = {
+      showQuickPick: vi.fn(async (items: readonly { root: AuthoringRoot }[]) => items[1]),
+    };
+    const starting = startingSources(window as never, sources({ folders: () => [repo, other] }));
+    const named = await nameRoot(starting);
+    expect(window.showQuickPick).toHaveBeenCalledWith(
+      [
+        { label: 'repo', description: undefined, root: { folder: repo, relative: '' } },
+        { label: 'other', description: undefined, root: { folder: other, relative: '' } },
+      ],
+      { placeHolder: 'Which folder does the module start in?' },
+    );
+    expect(named).toEqual(rooted({ folder: other, relative: '' }));
   });
 });
 
@@ -243,6 +356,7 @@ describe('the root a command acts on', () => {
     const asking: RootSources = {
       folders: () => [repo],
       activeCanvas: () => undefined,
+      openCanvases: () => [],
       activeTerraformDirectory: () => undefined,
       terraformFiles: async () => [uri('/work/repo/a/main.tf'), uri('/work/repo/b/main.tf')],
     };
@@ -260,39 +374,59 @@ describe('the root a command acts on', () => {
     );
   });
 
-  test('with no directory holding Terraform, says so and how a module starts', async () => {
+  test('with no directory holding Terraform and no canvas open, says so and how a module starts', async () => {
     const said = window();
     expect(await rootToAct(sources(), said, 'validate')).toBeUndefined();
     expect(said.showInformationMessage).toHaveBeenCalledWith(
-      'No module to validate: no directory under this workspace holds Terraform files. Start one with Lace: Open Canvas on its folder in the Explorer.',
+      'No module to validate: no directory under this workspace holds Terraform files and no canvas is open. Start one with Lace: Open Canvas.',
     );
   });
 });
 
-describe('the directories that hold Terraform', () => {
-  test("exclude Terraform's cache and Lace's state directory", () => {
-    const roots = rootsHolding(
+describe('the candidates', () => {
+  const candidatesOf = (
+    folders: readonly ReturnType<typeof folder>[],
+    files: readonly string[],
+    open: readonly AuthoringRoot[] = [],
+  ) =>
+    candidates({
+      folders: () => folders,
+      openCanvases: () => open,
+      terraformFiles: async () => files.map((path) => uri(path)),
+    });
+
+  test("are the directories that hold Terraform, excluding Terraform's cache and Lace's state directory", async () => {
+    const roots = await candidatesOf(
       [repo],
       [
-        uri('/work/repo/infra/prod/main.tf'),
-        uri('/work/repo/infra/prod/.terraform/modules/vpc/main.tf'),
-        uri('/work/repo/infra/prod/.lace/.canvas/main.tf'),
-        uri('/work/repo/.terraform/modules/x/main.tf'),
+        '/work/repo/infra/prod/main.tf',
+        '/work/repo/infra/prod/.terraform/modules/vpc/main.tf',
+        '/work/repo/infra/prod/.lace/.canvas/main.tf',
+        '/work/repo/.terraform/modules/x/main.tf',
       ],
     );
     expect(roots.map((r) => r.relative)).toEqual(['infra/prod']);
   });
 
-  test('span every workspace folder, in folder order', () => {
+  test('span every workspace folder, in folder order', async () => {
     const other = folder('/work/other', 1);
-    const roots = rootsHolding(
+    const roots = await candidatesOf(
       [repo, other],
-      [uri('/work/other/main.tf'), uri('/work/repo/a/b/main.tf')],
+      ['/work/other/main.tf', '/work/repo/a/b/main.tf'],
     );
     expect(roots.map((r) => [r.folder.name, r.relative])).toEqual([
       ['repo', 'a/b'],
       ['other', ''],
     ]);
+  });
+
+  test('take in the roots of the canvases open, focused or not, each once, shallowest first', async () => {
+    const roots = await candidatesOf(
+      [repo],
+      ['/work/repo/infra/prod/main.tf'],
+      [prod, { folder: repo, relative: 'infra/new/eu' }, { folder: repo, relative: '' }],
+    );
+    expect(roots.map((r) => r.relative)).toEqual(['', 'infra/prod', 'infra/new/eu']);
   });
 });
 
@@ -311,20 +445,39 @@ describe('the sources VS Code supplies', () => {
   }
   // The fakes carry only what the module reads.
   const sourcesOf = (fake: ReturnType<typeof api>) =>
-    workspaceRootSources(fake as never, () => undefined);
+    workspaceRootSources(fake as never, {
+      activeCanvas: () => undefined,
+      openCanvases: () => [],
+    });
 
-  test('the active editor names a directory only when its file is Terraform', () => {
+  test('the active editor names a directory only when its file is Terraform, .tf or .tf.json as the CLI reads it', () => {
     expect(sourcesOf(api('/work/repo/infra/prod/main.tf')).activeTerraformDirectory()?.path).toBe(
       '/work/repo/infra/prod',
     );
+    expect(
+      sourcesOf(api('/work/repo/infra/json/main.tf.json')).activeTerraformDirectory()?.path,
+    ).toBe('/work/repo/infra/json');
     expect(sourcesOf(api('/work/repo/README.md')).activeTerraformDirectory()).toBeUndefined();
+    expect(sourcesOf(api('/work/repo/package.json')).activeTerraformDirectory()).toBeUndefined();
     expect(sourcesOf(api(undefined)).activeTerraformDirectory()).toBeUndefined();
   });
 
-  test("the search is one glob that skips Terraform's cache and Lace's state", async () => {
+  test("the search is one glob over .tf and .tf.json files that skips Terraform's cache and Lace's state", async () => {
     const fake = api(undefined);
     await sourcesOf(fake).terraformFiles();
-    expect(fake.workspace.findFiles).toHaveBeenCalledWith('**/*.tf', '**/{.terraform,.lace}/**');
+    expect(fake.workspace.findFiles).toHaveBeenCalledWith(
+      '**/*.{tf,tf.json}',
+      '**/{.terraform,.lace}/**',
+    );
+  });
+
+  test('the pick among several modules asks which module', async () => {
+    const fake = api(undefined);
+    await sourcesOf(fake).pick?.([prod]);
+    expect(fake.window.showQuickPick).toHaveBeenCalledWith(
+      [{ label: 'infra/prod', description: 'repo', root: prod }],
+      { placeHolder: 'Which module?' },
+    );
   });
 });
 

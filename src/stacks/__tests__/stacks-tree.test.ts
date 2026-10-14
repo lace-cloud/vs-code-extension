@@ -171,6 +171,9 @@ type Options = {
   binaryPath?: string;
   // The workspace's Terraform files; two module directories by default.
   terraformFiles?: string[];
+  // The canvases open in the window, focused or not; the active one by
+  // default.
+  openCanvases?: AuthoringRoot[];
 };
 
 function setup(options: Options) {
@@ -310,6 +313,7 @@ function setup(options: Options) {
   const sources: RootSources = {
     folders: () => [repo],
     activeCanvas: () => options.root,
+    openCanvases: () => options.openCanvases ?? (options.root ? [options.root] : []),
     activeTerraformDirectory: () => undefined,
     terraformFiles: async () =>
       (
@@ -486,6 +490,34 @@ describe('the stacks of the current root', () => {
     expect(t.view.description).toBe('infra/staging');
     expect(t.contexts.at(-1)).toBe('noStack');
   });
+
+  const fresh: AuthoringRoot = { folder: repo, relative: 'infra/new' };
+
+  test('with no canvas focused, names the canvas open on a directory that holds no Terraform', async () => {
+    const t = setup({
+      scripts: { 'stack list': { documents: [stacks()] } },
+      terraformFiles: [],
+      openCanvases: [fresh],
+    });
+    await t.children();
+    expect(t.view.description).toBe('infra/new');
+    expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
+      ['stack list', { source: '/work/repo/infra/new' }],
+    ]);
+  });
+
+  test('Show Stacks of a Module, with only a canvas open on a directory that holds no Terraform, names that root and says nothing', async () => {
+    const t = setup({
+      scripts: { 'stack list': { documents: [stacks()] } },
+      terraformFiles: [],
+      openCanvases: [fresh],
+    });
+    await t.command(STACK_COMMANDS.chooseModule);
+    await t.children();
+    expect(t.messages).toEqual([]);
+    expect(t.view.description).toBe('infra/new');
+    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/new' });
+  });
 });
 
 describe('a stack command from the palette with no root named', () => {
@@ -501,7 +533,7 @@ describe('a stack command from the palette with no root named', () => {
     expect(t.messages).toEqual([
       {
         level: 'info',
-        text: `No module to ${verb}: no directory under this workspace holds Terraform files. Start one with Lace: Open Canvas on its folder in the Explorer.`,
+        text: `No module to ${verb}: no directory under this workspace holds Terraform files and no canvas is open. Start one with Lace: Open Canvas.`,
         buttons: [],
       },
     ]);

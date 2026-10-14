@@ -286,6 +286,15 @@ describe('ensure', () => {
     expect(canvasPanels.activeRoot()).toEqual(other);
   });
 
+  test("the open roots are every panel's, active or not, and a closed panel's root leaves them", async () => {
+    const { canvasPanels, panels } = setup();
+    await canvasPanels.ensure(prod);
+    await canvasPanels.ensure(other);
+    expect(canvasPanels.roots()).toEqual([prod, other]);
+    panels[0].panel.dispose();
+    expect(canvasPanels.roots()).toEqual([other]);
+  });
+
   test('a serve that fails once the hold is taken closes the blank panel and releases the hold; the next ensure opens the root again', async () => {
     const restarted = new Error('the engine speaks another protocol');
     const { canvasPanels, panels, holds, pageFocus } = setup({ serveFails: [restarted] });

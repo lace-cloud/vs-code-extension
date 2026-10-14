@@ -84,6 +84,8 @@ export type CanvasPanels = {
   ensure: (root: AuthoringRoot, options?: { preserveFocus?: boolean }) => Promise<CanvasPanel>;
   // The root of the panel that is active, when one is.
   activeRoot: () => AuthoringRoot | undefined;
+  // The roots of every panel open, active or not.
+  roots: () => readonly AuthoringRoot[];
   // `listener` is called with a panel's root each time that panel becomes
   // the active one.
   onDidChangeActive: (listener: (root: AuthoringRoot) => void) => () => void;
@@ -286,6 +288,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
       return pending;
     },
     activeRoot: () => panels.find((entry) => entry.panel.active)?.root,
+    roots: () => panels.map((entry) => entry.root),
     onDidChangeActive(listener) {
       activated.add(listener);
       return () => activated.delete(listener);

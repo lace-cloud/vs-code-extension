@@ -4,8 +4,10 @@
 // only VS Code knows:
 //
 //   - the `root` input every tool takes, the module directory the call is
-//     for, resolved to an authoring root of the workspace and from it to the
-//     session or the commands port the tool runs on;
+//     for, resolved to an authoring root of the workspace as a directory
+//     pointed at is (a directory with no Terraform yet among them, where the
+//     canvas tools start a module), and from it to the session or the
+//     commands port the tool runs on;
 //   - the reference name the developer types after `#` and the model of an
 //     agent host is shown, the tool's name said in camel case;
 //   - the manifest's `languageModelTools` entries, generated from the tool
@@ -47,7 +49,7 @@
 // gives back the one it took, and runs nothing. A cancellation that arrives
 // once the handler runs reaches it as an `AbortSignal`: a cancelled change
 // applies nothing further.
-import { posix } from 'node:path';
+import { isAbsolute, posix } from 'node:path';
 import {
   type CanvasTools,
   canvasToolSchemas,
@@ -64,9 +66,13 @@ import type { CommandsMapping } from '../engine/commands-mapping';
 import type { RootHold, RootSessions } from '../engine/root-sessions';
 import {
   type AuthoringRoot,
+  candidates,
+  fileUri,
+  placeOf,
   type RootSources,
+  rootOfPath,
   rootPath,
-  rootsHolding,
+  rootUri,
   workspacePath,
 } from '../roots/authoring-roots';
 
@@ -225,37 +231,60 @@ export function rootName(root: AuthoringRoot, folders: readonly vscode.Workspace
   return path === '' ? '.' : path;
 }
 
-// A `root` that names no directory of the workspace holding Terraform.
+// A `root` that names no directory of the workspace a module is authored
+// in; `roots` are the candidates.
 export class UnknownRoot extends Error {
   constructor(
     readonly given: string,
     readonly roots: readonly string[],
   ) {
     super(
-      `No module directory of this workspace is named ${JSON.stringify(given)}. The directories holding Terraform (${roots.length}): ${roots.join(', ')}.`,
+      `No module directory of this workspace is named ${JSON.stringify(given)}. The directories that hold Terraform or have an open canvas (${roots.length}): ${roots.join(', ')}.`,
     );
   }
 }
 
-// The authoring root a tool's `root` names: one of the directories holding
-// Terraform, named as `rootName` names it or by its absolute path.
-export async function rootNamed(
-  sources: Pick<RootSources, 'folders' | 'terraformFiles'>,
+// What a tool's `root` is resolved against: the workspace's folders, the
+// candidates naming chooses among, and whether a directory is there.
+type ToolRootSources = Pick<RootSources, 'folders' | 'openCanvases' | 'terraformFiles'> & {
+  isDirectory: (directory: vscode.Uri) => Promise<boolean>;
+};
+
+// The directory a tool's `root` spells: its absolute path, as `rootPath`
+// spells a root; else its path in the workspace as `rootName` names it.
+function spelledDirectory(
+  folders: readonly vscode.WorkspaceFolder[],
   given: string,
-): Promise<AuthoringRoot> {
-  const folders = sources.folders();
-  const roots = rootsHolding(folders, await sources.terraformFiles());
-  const spelled = posix.normalize(given.replace(/\/+$/, ''));
-  const root = roots.find(
-    (each) => rootName(each, folders) === spelled || rootPath(each) === given,
-  );
-  if (root === undefined) {
-    throw new UnknownRoot(
-      given,
-      roots.map((each) => rootName(each, folders)),
-    );
+): vscode.Uri | undefined {
+  if (isAbsolute(given)) {
+    const root = rootOfPath(folders, given);
+    return root && rootUri(root);
   }
-  return root;
+  const spelled = posix.normalize(given.replace(/\/+$/, ''));
+  if (folders.length > 1) {
+    const [name, ...below] = spelled.split('/');
+    const folder = folders.find((each) => each.name === name);
+    return folder && fileUri({ folder, relative: '' }, below.join('/'));
+  }
+  const [folder] = folders;
+  return folder && fileUri({ folder, relative: '' }, spelled);
+}
+
+// The authoring root a tool's `root` names: the directory it spells, named
+// as a directory pointed at is (`placeOf`), when that directory is there.
+// Any other `root` is `UnknownRoot`.
+export async function rootNamed(sources: ToolRootSources, given: string): Promise<AuthoringRoot> {
+  const folders = sources.folders();
+  const directory = spelledDirectory(folders, given);
+  const placed = directory && placeOf(folders, directory);
+  if (placed?.kind === 'root' && (await sources.isDirectory(rootUri(placed.root)))) {
+    return placed.root;
+  }
+  const known = await candidates(sources);
+  throw new UnknownRoot(
+    given,
+    known.map((each) => rootName(each, folders)),
+  );
 }
 
 // ── The manifest's entries ──
@@ -308,7 +337,27 @@ export type LanguageModelApi = {
   LanguageModelToolResult: typeof vscode.LanguageModelToolResult;
   LanguageModelTextPart: typeof vscode.LanguageModelTextPart;
   CancellationError: typeof vscode.CancellationError;
+  // What says whether a tool's `root` is a directory on disk.
+  workspace: { fs: Pick<vscode.FileSystem, 'stat'> };
+  FileType: Pick<typeof vscode.FileType, 'Directory'>;
+  FileSystemError: typeof vscode.FileSystemError;
 };
+
+// Whether `directory` is a directory on disk, as VS Code's file system reads
+// it: one it finds nothing at is none.
+function directoryOn(
+  api: Pick<LanguageModelApi, 'workspace' | 'FileType' | 'FileSystemError'>,
+): (directory: vscode.Uri) => Promise<boolean> {
+  return async (directory) => {
+    try {
+      const { type } = await api.workspace.fs.stat(directory);
+      return (type & api.FileType.Directory) !== 0;
+    } catch (error) {
+      if (error instanceof api.FileSystemError && error.code === 'FileNotFound') return false;
+      throw error;
+    }
+  };
+}
 
 function rootOf(input: Input): string {
   const { root } = input;
@@ -332,7 +381,7 @@ function abortOn(token: vscode.CancellationToken): { signal: AbortSignal; dispos
 function languageModelTool(
   api: LanguageModelApi,
   tool: LaceTool,
-  sources: Pick<RootSources, 'folders' | 'terraformFiles'>,
+  sources: ToolRootSources,
 ): vscode.LanguageModelTool<Input> {
   return {
     prepareInvocation: ({ input }) => ({
@@ -373,12 +422,13 @@ function languageModelTool(
 export function registerLaceTools(
   api: LanguageModelApi,
   ports: LaceToolPorts,
-  sources: Pick<RootSources, 'folders' | 'terraformFiles'>,
+  sources: Pick<RootSources, 'folders' | 'openCanvases' | 'terraformFiles'>,
 ): vscode.Disposable {
   const register = api.lm?.registerTool?.bind(api.lm);
   if (register === undefined) return { dispose: () => {} };
+  const roots: ToolRootSources = { ...sources, isDirectory: directoryOn(api) };
   const registrations = createLaceTools(ports).map((tool) =>
-    register(tool.schema.name, languageModelTool(api, tool, sources)),
+    register(tool.schema.name, languageModelTool(api, tool, roots)),
   );
   return {
     dispose() {

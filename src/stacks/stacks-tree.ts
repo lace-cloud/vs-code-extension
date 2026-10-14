@@ -43,7 +43,7 @@ import type { CommandsMapping } from '../engine/commands-mapping';
 import type { RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
-  nameRoot,
+  findRoot,
   type RootSources,
   rootAt,
   rootLabel,
@@ -178,15 +178,6 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     view.message = message;
   }
 
-  // The root the tree opens on, without asking: the active canvas's, the
-  // active Terraform file's, or the workspace's one module. These sources
-  // have no pick.
-  const quietly: RootSources = {
-    folders: sources.folders,
-    activeCanvas: sources.activeCanvas,
-    activeTerraformDirectory: sources.activeTerraformDirectory,
-    terraformFiles: sources.terraformFiles,
-  };
   // The root the developer picks among the workspace's modules.
   const picking: RootSources = {
     ...sources,
@@ -294,8 +285,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       if (row?.kind === 'stack') return runRows(row);
       if (row) return [];
       if (!root) {
-        const named = await nameRoot(quietly);
-        if (named.kind === 'root') root = named.root;
+        const found = await findRoot(sources);
+        if (found.kind === 'root') root = found.root;
       }
       view.description = root ? rootLabel(root) : undefined;
       if (!root) {
