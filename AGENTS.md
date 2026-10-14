@@ -202,12 +202,12 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
   on the root that apply ran in, whose report lands where the palette's does. An apply held for approval says what the
-  Run waits on, as `lace stack apply` shows it, from the change request its gate event carries: the change request and
-  its state, each requirement with its state and its decider (Lace, or a change-management system), and each record a
+  Run waits on, from the change request its gate event carries: the change request and its state, each requirement
+  with its state and its decider as the gate event names it (Lace, or a change-management system), and each record a
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
-  its page; each record with a page is offered as **Open <kind> <reference>**, which opens that page. A preview opens
-  as a read-only `lace-preview:` document: the plan, the policy verdict with each policy's own answer when several
-  answer, and the Advisories.
+  its page, or that it is not opened yet; each record with a page is offered as **Open <kind> <reference>**, which
+  opens that page. A preview opens as a read-only `lace-preview:` document: the plan, the policy verdict with each
+  policy's own answer when several answer, and the Advisories.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
   gives (`rootlessState`): `noFolder` (open the folder, no action), `noModule` (Open Canvas starts one), `severalModules`
   (Choose Module). When the stacks cannot be listed, it selects the welcome view by the failure's reason: `signedOut`,

@@ -150,24 +150,28 @@ const DECIDERS: Readonly<Record<ChangeRequest['requirements'][number]['decidedBy
   ecm: 'decided in its change-management system',
 };
 
-// A record as its change-management system names it: the system's kind,
-// and its reference once the record is opened.
-const recordName = ({ kind, externalRef }: ChangeRecord): string =>
-  externalRef === null ? kind : `${kind} ${externalRef}`;
-
-// A record's line: its name, the state Lace last read and its page; or that
-// it is not opened yet.
-function recordText(record: ChangeRecord): string {
-  if (record.externalRef === null) return `${record.kind}: not opened yet`;
-  const page = record.externalUrl === null ? '' : `, ${record.externalUrl}`;
-  return `${recordName(record)}: ${record.state ?? 'not read yet'}${page}`;
+// What a record says and offers, read once from its shape. A record its
+// system has not opened yet has only its system's kind; an opened one has
+// its reference, and the state Lace last read and its page once Lace has
+// them, and offers that page.
+function recordSaid(record: ChangeRecord): { line: string; offers: Offer[] } {
+  if (record.externalRef === null) return { line: `${record.kind}: not opened yet`, offers: [] };
+  const name = `${record.kind} ${record.externalRef}`;
+  const read = `${name}: ${record.state ?? 'not read yet'}`;
+  if (record.externalUrl === null) return { line: read, offers: [] };
+  return {
+    line: `${read}, ${record.externalUrl}`,
+    offers: [{ kind: 'openRecord', record: name, url: record.externalUrl }],
+  };
 }
 
-// What an apply held for approval says, as `lace stack apply` shows it: the
-// change request it waits on and its state, each requirement with its state
-// and decider, and each record a change-management system keeps of it. It
-// offers the page of each record that has one.
+// What an apply held for approval says, from the change request its gate
+// event carries: the change request it waits on and its state, each
+// requirement with its state and its decider as the gate names it, and
+// each record a change-management system keeps of it, with its state and
+// page. It offers the page of each record that has one.
 function awaitingNotice(slug: string, { id, state, requirements, records }: ChangeRequest): Notice {
+  const said = records.map(recordSaid);
   return {
     level: 'info',
     text: [
@@ -176,13 +180,9 @@ function awaitingNotice(slug: string, { id, state, requirements, records }: Chan
         (requirement) =>
           `Requirement ${requirement.id}: ${requirement.state}, ${DECIDERS[requirement.decidedBy]}.`,
       ),
-      ...records.map((record) => `Record ${recordText(record)}.`),
+      ...said.map(({ line }) => `Record ${line}.`),
     ].join(' '),
-    offers: records.flatMap((record): Offer[] =>
-      record.externalUrl === null
-        ? []
-        : [{ kind: 'openRecord', record: recordName(record), url: record.externalUrl }],
-    ),
+    offers: said.flatMap(({ offers }) => offers),
   };
 }
 
