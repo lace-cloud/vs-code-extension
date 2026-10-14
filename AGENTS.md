@@ -188,7 +188,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 
 - `laceStacks` lists the current root's stacks (`stack list --source <root>`), each with its ten latest runs
   (`run list --stack`). The root follows the active canvas and the active `.tf` editor; **Show Stacks of a Module** picks
-  it. The view's description names it.
+  it, and is in the view's title bar while more than one root is a candidate (the context key `lace.stacks.choice`, set
+  on each read of the tree). The view's description names it.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
   `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
   the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
@@ -202,10 +203,11 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   on the root that apply ran in, whose report lands where the palette's does. A preview opens as a read-only
   `lace-preview:` document: the plan, the policy verdict with each policy's own answer when several answer, and the
   Advisories.
-- When the stacks cannot be listed, the context key `lace.stacks.state` selects the welcome view by the failure's reason:
-  `signedOut`, `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the
-  host builds no portal URL), `noStack`, `noRoot`, `failed`. The tree does not offer `lace stack destroy`; it is a
-  terminal command.
+- When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
+  gives (`rootlessState`): `noFolder` (open the folder, no action), `noModule` (Open Canvas starts one), `severalModules`
+  (Choose Module). When the stacks cannot be listed, it selects the welcome view by the failure's reason: `signedOut`,
+  `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no
+  portal URL), `noStack`, `failed`. The tree does not offer `lace stack destroy`; it is a terminal command.
 - Creating a stack is one-time setup in a terminal, not a journey of the extension. `noStack`'s action, Create Stack in
   Terminal (`lace.stacks.createInTerminal`), types `<lace.binaryPath> stack create SLUG --source . --connection
   CONNECTION_ID` into a terminal at the root, unsent: a placeholder for each argument `stack create` requires
@@ -232,7 +234,7 @@ palette commands (Preview, Apply, Scan Stack, Show Stacks of a Module) name thei
 placement name theirs over `startingSources`, whose `start` asks which workspace folder a module starts in where there
 is no candidate (a workspace of one folder is not asked); every other surface's sources have no `start`, so a module
 command in such a workspace says there is no module: an empty tree has nothing to validate. The Stacks view finds its
-root with `findRoot`, which asks nothing, and a root it cannot find is its `noRoot` state.
+root with `findRoot`, which asks nothing, and shows why it found none by that reason's state.
 
 - **Save** and **Generate** run `canvas-operations.ts`, the same functions the chat tools run. Generate first saves the
   root's dirty `.tf` editors, holds the session for the call with no tab, shows its progress, and ends with the files

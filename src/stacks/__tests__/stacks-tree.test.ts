@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
   COMMANDS,
   CommandExitError,
@@ -15,9 +17,24 @@ import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
-import { type Row, STACK_COMMANDS, STACKS_STATE, stacksTree } from '../stacks-tree';
+import { type Row, STACK_COMMANDS, STACKS_CHOICE, STACKS_STATE, stacksTree } from '../stacks-tree';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+// What the manifest contributes to the Stacks view: its welcomes, each
+// selected by its `when`, and its title bar's entries.
+const contributes = JSON.parse(
+  readFileSync(join(resolve(__dirname, '..', '..', '..'), 'package.json'), 'utf8'),
+).contributes as {
+  viewsWelcome: { view: string; when?: string; contents: string }[];
+  menus: Record<string, { command: string; when?: string }[]>;
+};
+const welcomesOf = (state: string) =>
+  contributes.viewsWelcome.filter(
+    (welcome) => welcome.view === 'laceStacks' && welcome.when === `lace.stacks.state == ${state}`,
+  );
+const linksIn = (contents: string): string[] =>
+  [...contents.matchAll(/\(command:([\w.]+)\)/g)].map(([, command]) => command);
 const repo = folder('/work/repo');
 const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
 const staging: AuthoringRoot = { folder: repo, relative: 'infra/staging' };
@@ -174,6 +191,8 @@ type Options = {
   // The canvases open in the window, focused or not; the active one by
   // default.
   openCanvases?: AuthoringRoot[];
+  // The workspace's folders; one by default.
+  folders?: vscode.WorkspaceFolder[];
 };
 
 function setup(options: Options) {
@@ -191,6 +210,8 @@ function setup(options: Options) {
   };
   const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
   const contexts: unknown[] = [];
+  // Each value the view gave `lace.stacks.choice`.
+  const choices: unknown[] = [];
   const messages: { level: string; text: string; buttons: string[] }[] = [];
   const answer = (level: string) =>
     vi.fn(async (text: string, ...buttons: string[]) => {
@@ -270,6 +291,7 @@ function setup(options: Options) {
       },
       executeCommand: vi.fn(async (_command: string, key: string, value: unknown) => {
         if (key === STACKS_STATE) contexts.push(value);
+        if (key === STACKS_CHOICE) choices.push(value);
       }),
     },
     env: { shell: options.shell ?? '/bin/zsh', openExternal: vi.fn(async () => true) },
@@ -311,7 +333,7 @@ function setup(options: Options) {
     },
   };
   const sources: RootSources = {
-    folders: () => [repo],
+    folders: () => options.folders ?? [repo],
     activeCanvas: () => options.root,
     openCanvases: () => options.openCanvases ?? (options.root ? [options.root] : []),
     activeTerraformDirectory: () => undefined,
@@ -374,6 +396,7 @@ function setup(options: Options) {
     item,
     command,
     contexts,
+    choices,
     messages,
     channels,
     shownChannels,
@@ -476,19 +499,110 @@ describe('the stacks of the current root', () => {
     expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/staging' });
   });
 
-  test('with no root to name, the view offers the pick; the pick shows the chosen root', async () => {
+  test('with several modules and none focused, the view offers the pick; the pick shows the chosen root', async () => {
     const t = setup({
       scripts: { 'stack list': { documents: [stacks()] } },
       picks: ['infra/staging'],
     });
     expect(await t.children()).toEqual([]);
-    expect(t.contexts).toEqual(['noRoot']);
+    expect(t.contexts).toEqual(['severalModules']);
     expect(t.commands.invoked).toEqual([]);
 
     await t.command(STACK_COMMANDS.chooseModule);
     await t.children();
     expect(t.view.description).toBe('infra/staging');
     expect(t.contexts.at(-1)).toBe('noStack');
+  });
+
+  test.each<[string, Omit<Options, 'scripts'>, string, string, string[]]>([
+    [
+      'no folder is open',
+      { folders: [] },
+      'noFolder',
+      'No folder is open. Open the folder that holds the module to see the stacks deployed from it.',
+      [],
+    ],
+    [
+      'no directory holds a module',
+      { terraformFiles: [] },
+      'noModule',
+      'No directory in this workspace holds a module yet. Start one on the canvas.\n[Open Canvas](command:lace.openCanvas)',
+      ['lace.openCanvas'],
+    ],
+    [
+      'several directories hold one',
+      {},
+      'severalModules',
+      'Several directories in this workspace hold a module. Choose one to see the stacks deployed from it.\n[Choose Module](command:lace.stacks.chooseModule)',
+      ['lace.stacks.chooseModule'],
+    ],
+  ])('with no root to name because %s, the view shows that reason’s welcome and lists nothing', async (_why, over, state, contents, links) => {
+    const t = setup({ scripts: {}, ...over });
+    expect(await t.children()).toEqual([]);
+    expect(t.contexts).toEqual([state]);
+    expect(t.commands.invoked).toEqual([]);
+    expect(t.view.description).toBeUndefined();
+
+    const welcomes = welcomesOf(state);
+    expect(welcomes).toHaveLength(1);
+    expect(welcomes[0].contents).toBe(contents);
+    expect(linksIn(welcomes[0].contents)).toEqual(links);
+  });
+
+  test('no welcome of the view is selected by a state it does not have', () => {
+    expect(contributes.viewsWelcome.filter((welcome) => welcome.when?.includes('noRoot'))).toEqual(
+      [],
+    );
+  });
+
+  test('with no module yet, the canvas the developer opens is the root the view follows', async () => {
+    const t = setup({ scripts: { 'stack list': { documents: [stacks()] } }, terraformFiles: [] });
+    await t.children();
+    expect(t.contexts).toEqual(['noModule']);
+
+    t.active.fire({ folder: repo, relative: '' });
+    expect(t.redrawn).toEqual([undefined]);
+    await t.children();
+    expect(t.view.description).toBe('repo');
+    expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
+      ['stack list', { source: '/work/repo' }],
+    ]);
+  });
+
+  test('Show Stacks of a Module is in the title bar while more than one module is there to choose among, read on each read', async () => {
+    const [title, ...more] = contributes.menus['view/title'].filter(
+      (entry) => entry.command === STACK_COMMANDS.chooseModule,
+    );
+    expect(more).toEqual([]);
+    expect(title.when).toBe('view == laceStacks && lace.stacks.choice');
+
+    const listed = { 'stack list': { documents: [stacks()] } };
+    const none = setup({ scripts: listed, terraformFiles: [] });
+    await none.children();
+    expect(none.choices).toEqual([false]);
+
+    const one = setup({
+      root: prod,
+      scripts: listed,
+      terraformFiles: ['/work/repo/infra/prod/main.tf'],
+    });
+    await one.children();
+    await one.children();
+    expect(one.choices).toEqual([false, false]);
+
+    const two = setup({ root: prod, scripts: listed });
+    await two.children();
+    expect(two.choices).toEqual([true]);
+
+    // A canvas focused on a directory with no Terraform, beside one that
+    // holds Terraform, is a second module to choose.
+    const beside = setup({
+      root: { folder: repo, relative: 'infra/new' },
+      scripts: listed,
+      terraformFiles: ['/work/repo/infra/prod/main.tf'],
+    });
+    await beside.children();
+    expect(beside.choices).toEqual([true]);
   });
 
   const fresh: AuthoringRoot = { folder: repo, relative: 'infra/new' };

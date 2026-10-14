@@ -1,6 +1,7 @@
-// What the Stacks tree draws, as pure functions of the CLI's documents: the
-// state a list of stacks leaves the view in, each row's label, icon and
-// actions, an apply's outcome as a notice, and a preview as a document.
+// What the Stacks tree draws, as pure functions of the CLI's documents and
+// of naming a root: the state a view that names no root shows and the state
+// a list of stacks leaves the view in, each row's label, icon and actions,
+// an apply's outcome as a notice, and a preview as a document.
 import type {
   CommandFailure,
   JsonOf,
@@ -9,13 +10,17 @@ import type {
   StackRef,
 } from '@lace-cloud/canvas/engine';
 import { type ByReason, byReason } from '../engine/command-outcome';
+import type { Found } from '../roots/authoring-roots';
 
 export type Stack = JsonOf<'stack list'>['items'][number];
 export type Run = JsonOf<'run list'>['items'][number];
 
-// The view's state; each but `stacks` is a welcome with its one action.
+// The view's state; each but `stacks` is a welcome, with the one action
+// that gets past it where there is one.
 export type StacksState =
-  | 'noRoot'
+  | 'noFolder'
+  | 'noModule'
+  | 'severalModules'
   | 'signedOut'
   | 'noOrganization'
   | 'noTeam'
@@ -35,6 +40,19 @@ const REFUSALS: ByReason<StacksState> = {
 
 export function refusedState(failure: CommandFailure | undefined): StacksState {
   return (failure && byReason(REFUSALS, failure.reason)) ?? 'failed';
+}
+
+type Rootless = Exclude<Found, { kind: 'root' }>;
+
+// The state of a view that names no root, by the reason finding one gave.
+const ROOTLESS: Readonly<Record<Rootless['kind'], StacksState>> = {
+  noFolder: 'noFolder',
+  noModule: 'noModule',
+  several: 'severalModules',
+};
+
+export function rootlessState(found: Rootless): StacksState {
+  return ROOTLESS[found.kind];
 }
 
 export const stackRef = (stack: Stack): StackRef => ({ id: stack.id, slug: stack.slug });

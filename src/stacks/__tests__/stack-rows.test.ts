@@ -1,6 +1,6 @@
 import { type CommandFailure, type LaceReason, parseBound } from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
-import { outcomeNotice, previewText, refusedState } from '../stack-rows';
+import { outcomeNotice, previewText, refusedState, rootlessState } from '../stack-rows';
 
 type Binding = {
   policyId: string;
@@ -252,6 +252,14 @@ describe('the state a refused list leaves', () => {
     expect(refusedState(failure('no_team'))).toBe('noTeam');
     expect(refusedState(failure('unspecified'))).toBe('failed');
     expect(refusedState(undefined)).toBe('failed');
+  });
+});
+
+describe('the state of a view that names no root', () => {
+  test('is named by the reason finding one gave', () => {
+    expect(rootlessState({ kind: 'noFolder' })).toBe('noFolder');
+    expect(rootlessState({ kind: 'noModule' })).toBe('noModule');
+    expect(rootlessState({ kind: 'several', roots: [] })).toBe('severalModules');
   });
 });
 

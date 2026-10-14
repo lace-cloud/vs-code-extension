@@ -60,8 +60,18 @@
       },
       {
         "view": "laceStacks",
-        "when": "lace.stacks.state == noRoot",
-        "contents": "Choose a module to see the stacks deployed from it.\n[Choose Module](command:lace.stacks.chooseModule)"
+        "when": "lace.stacks.state == noFolder",
+        "contents": "No folder is open. Open the folder that holds the module to see the stacks deployed from it."
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == noModule",
+        "contents": "No directory in this workspace holds a module yet. Start one on the canvas.\n[Open Canvas](command:lace.openCanvas)"
+      },
+      {
+        "view": "laceStacks",
+        "when": "lace.stacks.state == severalModules",
+        "contents": "Several directories in this workspace hold a module. Choose one to see the stacks deployed from it.\n[Choose Module](command:lace.stacks.chooseModule)"
       },
       {
         "view": "laceStacks",
@@ -284,7 +294,7 @@
       "view/title": [
         {
           "command": "lace.stacks.chooseModule",
-          "when": "view == laceStacks",
+          "when": "view == laceStacks && lace.stacks.choice",
           "group": "navigation@1"
         },
         {

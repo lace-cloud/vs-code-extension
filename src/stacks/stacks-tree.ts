@@ -1,8 +1,10 @@
 // The Stacks tree: the stacks deployed from the current authoring root
 // (`lace stack list --source <root>`), each with its recent runs (`lace run
 // list --stack`). The view's description names the root; it follows the
-// canvas or the Terraform file the developer turns to, and its title action
-// is the pick Open Canvas uses.
+// canvas or the Terraform file the developer turns to, and its title action,
+// there while more than one root is a candidate (the context key
+// `lace.stacks.choice`, set each time the tree is read), is the pick Open
+// Canvas uses.
 //
 // A row's actions are the package's bindings — Preview, Apply and Scan for
 // drift on a stack, Follow logs and Cancel on a run — each run through the
@@ -26,8 +28,11 @@
 // settled, a scan or a cancel done) reads the tree again and tells the
 // canvas of the root that run was about that its reads are stale.
 //
-// When the stacks cannot be listed, the view says why by the failure's
-// reason, with the one action that gets past it.
+// With no root found, the view says why, by the reason finding one gave: no
+// folder is open; no directory holds a module yet, and Open Canvas starts
+// one; or several do, and Choose Module picks one. When the stacks cannot be
+// listed, the view says why by the failure's reason, with the one action
+// that gets past it.
 import {
   type ActionContribution,
   CORE_COMMAND_ACTIONS,
@@ -43,6 +48,7 @@ import type { CommandsMapping } from '../engine/commands-mapping';
 import type { RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
+  candidates,
   findRoot,
   type RootSources,
   rootAt,
@@ -64,6 +70,7 @@ import {
   type RowLook,
   type Run,
   refusedState,
+  rootlessState,
   runLook,
   type Stack,
   type StacksState,
@@ -73,6 +80,7 @@ import {
 
 export const STACKS_VIEW = 'laceStacks';
 export const STACKS_STATE = 'lace.stacks.state';
+export const STACKS_CHOICE = 'lace.stacks.choice';
 export const PREVIEW_SCHEME = 'lace-preview';
 
 export const STACK_COMMANDS = {
@@ -284,15 +292,18 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     async getChildren(row) {
       if (row?.kind === 'stack') return runRows(row);
       if (row) return [];
+      const choice = (await candidates(sources)).length > 1;
+      void api.commands.executeCommand('setContext', STACKS_CHOICE, choice);
       if (!root) {
         const found = await findRoot(sources);
-        if (found.kind === 'root') root = found.root;
+        if (found.kind !== 'root') {
+          view.description = undefined;
+          setState(rootlessState(found));
+          return [];
+        }
+        root = found.root;
       }
-      view.description = root ? rootLabel(root) : undefined;
-      if (!root) {
-        setState('noRoot');
-        return [];
-      }
+      view.description = rootLabel(root);
       return stackRows(root);
     },
   };
