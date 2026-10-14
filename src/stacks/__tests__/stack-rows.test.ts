@@ -270,7 +270,17 @@ describe('what a settled apply says', () => {
       level: 'info',
       text: 'Applied prod.',
     });
-    expect(outcomeNotice('prod', { kind: 'awaiting-approval', changeRequestId: 'cr_1' })).toEqual({
+    expect(
+      outcomeNotice('prod', {
+        kind: 'awaiting-approval',
+        changeRequest: {
+          id: 'chg_1',
+          state: 'submitted',
+          requirements: [{ id: 'creq_policy', state: 'pending', decidedBy: 'lace' }],
+          records: [],
+        },
+      }),
+    ).toEqual({
       level: 'info',
       text: 'The change to prod awaits approval.',
     });
