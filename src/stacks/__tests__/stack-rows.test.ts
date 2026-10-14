@@ -1,6 +1,6 @@
 import { type CommandFailure, type LaceReason, parseBound } from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
-import { outcomeNotice, previewText, refusedState } from '../stack-rows';
+import { outcomeNotice, previewText, refusedState, rootlessState } from '../stack-rows';
 
 type Binding = {
   policyId: string;
@@ -255,26 +255,31 @@ describe('the state a refused list leaves', () => {
   });
 });
 
+describe('the state of a view that names no root', () => {
+  test('is named by the reason finding one gave', () => {
+    expect(rootlessState({ kind: 'noFolder' })).toBe('noFolder');
+    expect(rootlessState({ kind: 'noModule' })).toBe('noModule');
+    expect(rootlessState({ kind: 'several', roots: [] })).toBe('severalModules');
+  });
+});
+
 describe('what a settled apply says', () => {
-  test('each outcome has its notice; a failure keeps its document', () => {
+  test('each outcome has its notice; a failure offers the ways out its reason names', () => {
     const failure: CommandFailure = { reason: 'stale_certification', message: 'stale' };
     expect(outcomeNotice('prod', { kind: 'succeeded' })).toEqual({
       level: 'info',
       text: 'Applied prod.',
-    });
-    expect(outcomeNotice('prod', { kind: 'awaiting-approval', changeRequestId: 'cr_1' })).toEqual({
-      level: 'info',
-      text: 'The change to prod awaits approval.',
+      offers: [],
     });
     expect(outcomeNotice('prod', { kind: 'blocked', message: 'Error: stale\n', failure })).toEqual({
       level: 'warn',
       text: 'Error: stale',
-      failure,
+      offers: [{ kind: 'validate' }],
     });
     expect(outcomeNotice('prod', { kind: 'failed', message: 'Error: boom' })).toEqual({
       level: 'error',
       text: 'Error: boom',
-      failure: undefined,
+      offers: [],
     });
     expect(outcomeNotice('prod', { kind: 'cancelled' }).text).toBe('Cancelled the apply of prod.');
     expect(outcomeNotice('prod', { kind: 'detached', submitted: true }).text).toBe(
@@ -283,5 +288,98 @@ describe('what a settled apply says', () => {
     expect(outcomeNotice('prod', { kind: 'detached', submitted: false }).text).toBe(
       'The apply of prod stopped before it was sent; nothing ran.',
     );
+  });
+});
+
+describe('what an apply held for approval says', () => {
+  const awaiting = (
+    requirements: { id: string; state: string; decidedBy: 'lace' | 'ecm' }[],
+    records: {
+      externalSystemId: string;
+      kind: string;
+      externalRef: string | null;
+      externalUrl: string | null;
+      state: string | null;
+    }[],
+  ) =>
+    outcomeNotice('prod', {
+      kind: 'awaiting-approval',
+      changeRequest: { id: 'chg_1', state: 'submitted', requirements, records },
+    });
+
+  test('a change request Lace alone decides names its requirement, and offers nothing to open', () => {
+    expect(awaiting([{ id: 'creq_policy', state: 'pending', decidedBy: 'lace' }], [])).toEqual({
+      level: 'info',
+      text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: pending, decided in Lace.',
+      offers: [],
+    });
+  });
+
+  test('a requirement a change-management system decides names that system’s record, its state and its page, and offers the page', () => {
+    expect(
+      awaiting(
+        [
+          { id: 'creq_policy', state: 'approved', decidedBy: 'lace' },
+          { id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' },
+        ],
+        [
+          {
+            externalSystemId: 'esys_jsm',
+            kind: 'jsm',
+            externalRef: 'CHG-42',
+            externalUrl: 'https://acme.atlassian.net/browse/CHG-42',
+            state: 'Waiting for approval',
+          },
+        ],
+      ),
+    ).toEqual({
+      level: 'info',
+      text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: approved, decided in Lace. Requirement creq_jsm: pending, decided in its change-management system. Record jsm CHG-42: Waiting for approval, https://acme.atlassian.net/browse/CHG-42.',
+      offers: [
+        {
+          kind: 'openRecord',
+          record: 'jsm CHG-42',
+          url: 'https://acme.atlassian.net/browse/CHG-42',
+        },
+      ],
+    });
+  });
+
+  test('a record its system has not opened yet says so, and has no page to offer', () => {
+    expect(
+      awaiting(
+        [{ id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' }],
+        [
+          {
+            externalSystemId: 'esys_jsm',
+            kind: 'jsm',
+            externalRef: null,
+            externalUrl: null,
+            state: null,
+          },
+        ],
+      ),
+    ).toEqual({
+      level: 'info',
+      text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_jsm: pending, decided in its change-management system. Record jsm: not opened yet.',
+      offers: [],
+    });
+  });
+
+  test('a record opened but not read yet says so', () => {
+    expect(
+      awaiting(
+        [{ id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' }],
+        [
+          {
+            externalSystemId: 'esys_jsm',
+            kind: 'jsm',
+            externalRef: 'CHG-42',
+            externalUrl: null,
+            state: null,
+          },
+        ],
+      ).text,
+    ).toContain('Record jsm CHG-42: not read yet.');
   });
 });

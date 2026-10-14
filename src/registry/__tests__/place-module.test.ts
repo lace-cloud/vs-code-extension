@@ -1,8 +1,9 @@
 import { describe, expect, test, vi } from 'vitest';
+import type * as vscode from 'vscode';
 import { type FakeEngine, fakeEngine } from '../../engine/__tests__/fake-engine';
 import { createRootSessions, type RootHold } from '../../engine/root-sessions';
 import { folder } from '../../roots/__tests__/fake-uri';
-import { type AuthoringRoot, type RootSources, rootPath } from '../../roots/authoring-roots';
+import { type AuthoringRoot, rootPath, type StartingSources } from '../../roots/authoring-roots';
 import {
   PLACEMENT_API_REFUSALS,
   PLACEMENT_REFUSALS,
@@ -15,15 +16,31 @@ const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
 // A module as the registry names it: its version as the registry spells it.
 const VPC = { author: 'acme', name: 'vpc', version: 'v2.0.0' };
 
-const sources = (root: AuthoringRoot | undefined): RootSources => ({
-  folders: () => [repo],
+// The roots placement can name: the active canvas's, the canvases open, or
+// in a workspace that holds no Terraform the folder the module starts in.
+const sources = (
+  root: AuthoringRoot | undefined,
+  folders: readonly vscode.WorkspaceFolder[],
+  open: readonly AuthoringRoot[],
+): StartingSources => ({
+  folders: () => folders,
   activeCanvas: () => root,
+  openCanvases: () => open,
   activeTerraformDirectory: () => undefined,
   terraformFiles: async () => [],
   pick: async () => undefined,
+  start: async () => undefined,
 });
 
-function setup(options: { root?: AuthoringRoot | null; answer?: string } = {}) {
+function setup(
+  options: {
+    root?: AuthoringRoot | null;
+    answer?: string;
+    folders?: readonly vscode.WorkspaceFolder[];
+    // The canvases open in the window, focused or not.
+    open?: readonly AuthoringRoot[];
+  } = {},
+) {
   const engine: FakeEngine = fakeEngine();
   const reports: unknown[] = [];
   const rootSessions = createRootSessions({
@@ -55,7 +72,11 @@ function setup(options: { root?: AuthoringRoot | null; answer?: string } = {}) {
   const placed = vi.fn(async () => {});
   const place = placeModule({
     api: api as unknown as PlaceApi,
-    sources: sources(options.root === null ? undefined : (options.root ?? prod)),
+    sources: sources(
+      options.root === null ? undefined : (options.root ?? prod),
+      options.folders ?? [repo],
+      options.open ?? (options.root === null ? [] : [options.root ?? prod]),
+    ),
     panels,
     rootSessions,
     log,
@@ -88,13 +109,32 @@ describe('placing a registry module', () => {
     expect(firstOpen).toBeLessThan(firstApply);
   });
 
-  test('with no root named, nothing is opened, and the notice says why', async () => {
-    const { place, panels, sent, api } = setup({ root: null });
+  test('in a workspace that holds no Terraform, the module is placed on a new canvas of the workspace folder', async () => {
+    const { place, events, sent, api, placed } = setup({ root: null });
+    await place(VPC);
+    expect(events).toEqual(['ensure /work/repo true']);
+    expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
+    expect(api.window.showInformationMessage).not.toHaveBeenCalled();
+    expect(placed).toHaveBeenCalledWith(VPC);
+  });
+
+  test('in a workspace that holds no Terraform, an unfocused canvas open on a directory is where the module is placed', async () => {
+    const { place, events, sent } = setup({
+      root: null,
+      open: [{ folder: repo, relative: 'infra/new' }],
+    });
+    await place(VPC);
+    expect(events).toEqual(['ensure /work/repo/infra/new true']);
+    expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
+  });
+
+  test('with no folder open, nothing is opened, and the notice says why', async () => {
+    const { place, panels, sent, api } = setup({ root: null, folders: [] });
     await place(VPC);
     expect(panels.ensure).not.toHaveBeenCalled();
     expect(sent('SessionOpen')).toEqual([]);
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'No module to add acme/vpc v2.0.0 to: no directory under this workspace holds Terraform files. Start one with Lace: Open Canvas on its folder in the Explorer.',
+      'No module to add acme/vpc v2.0.0 to: no folder is open. Open the folder that holds the module first.',
     );
   });
 

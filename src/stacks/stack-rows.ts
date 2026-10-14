@@ -1,6 +1,8 @@
-// What the Stacks tree draws, as pure functions of the CLI's documents: the
-// state a list of stacks leaves the view in, each row's label, icon and
-// actions, an apply's outcome as a notice, and a preview as a document.
+// What the Stacks tree draws, as pure functions of the CLI's documents and
+// of naming a root: the state a view that names no root shows and the state
+// a list of stacks leaves the view in, each row's label, icon and actions,
+// an apply's outcome as a notice with what it offers, and a preview as a
+// document.
 import type {
   CommandFailure,
   JsonOf,
@@ -9,13 +11,18 @@ import type {
   StackRef,
 } from '@lace-cloud/canvas/engine';
 import { type ByReason, byReason } from '../engine/command-outcome';
+import type { Found } from '../roots/authoring-roots';
+import { type Offer, offersFor } from '../vscode/offers';
 
 export type Stack = JsonOf<'stack list'>['items'][number];
 export type Run = JsonOf<'run list'>['items'][number];
 
-// The view's state; each but `stacks` is a welcome with its one action.
+// The view's state; each but `stacks` is a welcome, with the one action
+// that gets past it where there is one.
 export type StacksState =
-  | 'noRoot'
+  | 'noFolder'
+  | 'noModule'
+  | 'severalModules'
   | 'signedOut'
   | 'noOrganization'
   | 'noTeam'
@@ -35,6 +42,19 @@ const REFUSALS: ByReason<StacksState> = {
 
 export function refusedState(failure: CommandFailure | undefined): StacksState {
   return (failure && byReason(REFUSALS, failure.reason)) ?? 'failed';
+}
+
+type Rootless = Exclude<Found, { kind: 'root' }>;
+
+// The state of a view that names no root, by the reason finding one gave.
+const ROOTLESS: Readonly<Record<Rootless['kind'], StacksState>> = {
+  noFolder: 'noFolder',
+  noModule: 'noModule',
+  several: 'severalModules',
+};
+
+export function rootlessState(found: Rootless): StacksState {
+  return ROOTLESS[found.kind];
 }
 
 export const stackRef = (stack: Stack): StackRef => ({ id: stack.id, slug: stack.slug });
@@ -116,29 +136,85 @@ export function runLook(run: Run): RowLook {
 export type Notice = {
   level: 'info' | 'warn' | 'error';
   text: string;
-  failure?: CommandFailure;
+  offers: readonly Offer[];
 };
 
-// What an apply that settled says.
+type ChangeRequest = Extract<RunOutcome, { kind: 'awaiting-approval' }>['changeRequest'];
+type ChangeRecord = ChangeRequest['records'][number];
+
+// Who decides a requirement, as the gate names its decider. The gate does
+// not say which record settles a requirement a change-management system
+// decides.
+const DECIDERS: Readonly<Record<ChangeRequest['requirements'][number]['decidedBy'], string>> = {
+  lace: 'decided in Lace',
+  ecm: 'decided in its change-management system',
+};
+
+// What a record says and offers, read once from its shape. A record its
+// system has not opened yet has only its system's kind; an opened one has
+// its reference, and the state Lace last read and its page once Lace has
+// them, and offers that page.
+function recordSaid(record: ChangeRecord): { line: string; offers: Offer[] } {
+  if (record.externalRef === null) return { line: `${record.kind}: not opened yet`, offers: [] };
+  const name = `${record.kind} ${record.externalRef}`;
+  const read = `${name}: ${record.state ?? 'not read yet'}`;
+  if (record.externalUrl === null) return { line: read, offers: [] };
+  return {
+    line: `${read}, ${record.externalUrl}`,
+    offers: [{ kind: 'openRecord', record: name, url: record.externalUrl }],
+  };
+}
+
+// What an apply held for approval says, from the change request its gate
+// event carries: the change request it waits on and its state, each
+// requirement with its state and its decider as the gate names it, and
+// each record a change-management system keeps of it, with its state and
+// page. It offers the page of each record that has one.
+function awaitingNotice(slug: string, { id, state, requirements, records }: ChangeRequest): Notice {
+  const said = records.map(recordSaid);
+  return {
+    level: 'info',
+    text: [
+      `The change to ${slug} awaits approval: change request ${id}, ${state}.`,
+      ...requirements.map(
+        (requirement) =>
+          `Requirement ${requirement.id}: ${requirement.state}, ${DECIDERS[requirement.decidedBy]}.`,
+      ),
+      ...said.map(({ line }) => `Record ${line}.`),
+    ].join(' '),
+    offers: said.flatMap(({ offers }) => offers),
+  };
+}
+
+// What an apply that settled says, and what it offers: the ways out a
+// failure's reason names, and the records of a change request it waits on.
 export function outcomeNotice(
   slug: string,
   outcome: Exclude<RunOutcome, { kind: 'running' }>,
 ): Notice {
   switch (outcome.kind) {
     case 'succeeded':
-      return { level: 'info', text: `Applied ${slug}.` };
+      return { level: 'info', text: `Applied ${slug}.`, offers: [] };
     case 'awaiting-approval':
-      return { level: 'info', text: `The change to ${slug} awaits approval.` };
+      return awaitingNotice(slug, outcome.changeRequest);
     case 'blocked':
-      return { level: 'warn', text: outcome.message.trim(), failure: outcome.failure };
+      return { level: 'warn', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'failed':
-      return { level: 'error', text: outcome.message.trim(), failure: outcome.failure };
+      return { level: 'error', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'cancelled':
-      return { level: 'info', text: `Cancelled the apply of ${slug}.` };
+      return { level: 'info', text: `Cancelled the apply of ${slug}.`, offers: [] };
     case 'detached':
       return outcome.submitted
-        ? { level: 'warn', text: `Stopped following the apply of ${slug}; the run goes on.` }
-        : { level: 'warn', text: `The apply of ${slug} stopped before it was sent; nothing ran.` };
+        ? {
+            level: 'warn',
+            text: `Stopped following the apply of ${slug}; the run goes on.`,
+            offers: [],
+          }
+        : {
+            level: 'warn',
+            text: `The apply of ${slug} stopped before it was sent; nothing ran.`,
+            offers: [],
+          };
   }
 }
 

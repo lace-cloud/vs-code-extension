@@ -1,17 +1,24 @@
 const path = require('node:path');
 const { readdirSync } = require('node:fs');
 
-// The window tests, one bundle each, for the extension host to load: each
-// carries what it imports — the libraries and the extension's own modules —
-// and takes `vscode` and Mocha's globals from the host.
-const window = path.resolve(__dirname, 'window');
-const tests = readdirSync(window).filter((file) => file.endsWith('.test.ts'));
+// The window tests, one bundle each under the suite's directory in `out/`,
+// for the extension host to load: each carries what it imports — the
+// libraries and the extension's own modules — and takes `vscode` and
+// Mocha's globals from the host. `window/` runs in a workspace whose tests
+// make their modules; `empty/` in one that holds no Terraform.
+const SUITES = ['window', 'empty'];
+const entry = Object.fromEntries(
+  SUITES.flatMap((suite) => {
+    const directory = path.resolve(__dirname, suite);
+    return readdirSync(directory)
+      .filter((file) => file.endsWith('.test.ts'))
+      .map((file) => [`${suite}/${file.replace(/\.ts$/, '')}`, path.join(directory, file)]);
+  }),
+);
 
 module.exports = {
   name: 'window-tests',
-  entry: Object.fromEntries(
-    tests.map((file) => [file.replace(/\.ts$/, ''), path.join(window, file)]),
-  ),
+  entry,
   output: {
     path: path.resolve(__dirname, 'out'),
     filename: '[name].js',

@@ -84,13 +84,16 @@ function rootSessions(open: boolean, editor: object, spelled = PROD) {
 }
 
 // The roots a command can name: the active canvas's, else those
-// `terraformFiles` holds, whose pick the developer dismisses.
+// `terraformFiles` holds and the canvases open, whose pick the developer
+// dismisses.
 const sources = (
   root: AuthoringRoot | undefined,
   terraformFiles: readonly vscode.Uri[] = [],
+  canvases: readonly AuthoringRoot[] = root ? [root] : [],
 ): RootSources => ({
   folders: () => [repo],
   activeCanvas: () => root,
+  openCanvases: () => canvases,
   activeTerraformDirectory: () => undefined,
   terraformFiles: async () => terraformFiles,
   pick: async () => undefined,
@@ -102,6 +105,8 @@ function setup(
     answer?: string;
     root?: AuthoringRoot;
     terraformFiles?: readonly vscode.Uri[];
+    // The canvases open in the window, focused or not.
+    canvases?: readonly AuthoringRoot[];
     // Whether this window holds the root's session, and the spelling of the
     // root it was opened with.
     open?: boolean;
@@ -119,10 +124,15 @@ function setup(
     selectTeam: vi.fn(),
     openPortal: vi.fn(),
     install: vi.fn(),
+    openRecord: vi.fn(),
   };
   const { table } = authoringCommands({
     api: api as unknown as AuthoringApi,
-    sources: sources('root' in options ? options.root : prod, options.terraformFiles),
+    sources: sources(
+      'root' in options ? options.root : prod,
+      options.terraformFiles,
+      options.canvases,
+    ),
     operations: canvasOperations({
       workspace: api.workspace as never,
       rootSessions: sessions as never,
@@ -202,10 +212,11 @@ describe('the module commands', () => {
     const { table, textDocuments, invoked } = setup({ [path]: script });
     const mine = document(`${PROD}/main.tf`, true);
     const nested = document(`${PROD}/modules/a/main.tf`, true);
+    const json = document(`${PROD}/outputs.tf.json`, true);
     const clean = document(`${PROD}/variables.tf`, false);
     const other = document('/work/repo/infra/stage/main.tf', true);
     const notes = document(`${PROD}/README.md`, true);
-    textDocuments.push(mine, nested, clean, other, notes);
+    textDocuments.push(mine, nested, json, clean, other, notes);
     mine.save.mockImplementation(async () => {
       expect(invoked).toEqual([]);
       return true;
@@ -214,6 +225,7 @@ describe('the module commands', () => {
     await table[id]();
     expect(mine.save).toHaveBeenCalled();
     expect(nested.save).toHaveBeenCalled();
+    expect(json.save).toHaveBeenCalled();
     for (const unsaved of [clean, other, notes]) expect(unsaved.save).not.toHaveBeenCalled();
     expect(invoked).toEqual([{ cwd: PROD, path, args: {} }]);
   });
@@ -272,7 +284,16 @@ describe('the module commands', () => {
     await table[SCAN_MODULE]();
     expect(invoked).toEqual([]);
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'No module to scan: no directory under this workspace holds Terraform files. Start one with Lace: Open Canvas on its folder in the Explorer.',
+      'No module to scan: no directory under this workspace holds Terraform files and no canvas is open. Start one with Lace: Open Canvas.',
+    );
+  });
+
+  test('Validate in a workspace with no Terraform and no canvas open runs nothing and says so: an empty tree has nothing to certify', async () => {
+    const { table, invoked, api } = setup({}, { root: undefined });
+    await table[VALIDATE_MODULE]();
+    expect(invoked).toEqual([]);
+    expect(api.window.showInformationMessage).toHaveBeenCalledWith(
+      'No module to validate: no directory under this workspace holds Terraform files and no canvas is open. Start one with Lace: Open Canvas.',
     );
   });
 
@@ -616,6 +637,22 @@ describe('Save', () => {
     await table[SAVE_CANVAS]();
     expect(editor.save).toHaveBeenCalledOnce();
     expect(sessions.holders()).toBe(0);
+  });
+
+  test('with an unfocused canvas open on a directory that holds no Terraform, and no other module, saves that canvas', async () => {
+    const editor = { save: vi.fn(async () => {}) };
+    const fresh: AuthoringRoot = { folder: repo, relative: 'infra/new' };
+    const { table, api, sessions } = setup(
+      {},
+      { root: undefined, canvases: [fresh], open: true, spelled: '/work/repo/infra/new', editor },
+    );
+    await table[SAVE_CANVAS]();
+    expect(sessions.acquire).toHaveBeenCalledWith('/work/repo/infra/new');
+    expect(editor.save).toHaveBeenCalledOnce();
+    expect(api.window.setStatusBarMessage).toHaveBeenCalledWith(
+      'Lace: saved the canvas of infra/new',
+      5000,
+    );
   });
 
   test('a session of another root is no open canvas of this one', async () => {

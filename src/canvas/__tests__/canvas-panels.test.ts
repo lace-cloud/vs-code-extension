@@ -199,6 +199,7 @@ function setup(
     selectTeam: vi.fn(),
     openPortal: vi.fn(),
     install: vi.fn(),
+    openRecord: vi.fn(),
   };
   const validate = vi.fn(async () => {});
   const generated = vi.fn(async () => {});
@@ -284,6 +285,15 @@ describe('ensure', () => {
     expect(canvasPanels.activeRoot()).toBeUndefined();
     panels[1].panel.active = true;
     expect(canvasPanels.activeRoot()).toEqual(other);
+  });
+
+  test("the open roots are every panel's, active or not, and a closed panel's root leaves them", async () => {
+    const { canvasPanels, panels } = setup();
+    await canvasPanels.ensure(prod);
+    await canvasPanels.ensure(other);
+    expect(canvasPanels.roots()).toEqual([prod, other]);
+    panels[0].panel.dispose();
+    expect(canvasPanels.roots()).toEqual([other]);
   });
 
   test('a serve that fails once the hold is taken closes the blank panel and releases the hold; the next ensure opens the root again', async () => {
