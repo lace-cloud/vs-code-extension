@@ -157,8 +157,10 @@ function toolsWindow(module: Record<string, string> = MODULE) {
         showTextDocument: async () => ({}) as vscode.TextEditor,
       } as never,
       workspace: {
+        workspaceFolders: [folder(repository)],
         fs: { readDirectory: async () => [] },
         openTextDocument: async () => ({}),
+        onDidChangeWorkspaceFolders: () => ({ dispose: () => {} }),
       } as never,
       ViewColumn: { Active: -1, Beside: -2 },
       Range: class {} as never,

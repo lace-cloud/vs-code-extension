@@ -109,7 +109,7 @@ export function placeModule(options: PlaceOptions): (module: PlacedModule) => Pr
     const named = `${module.author}/${module.name} ${module.version}`;
     const root = await rootToAct(sources, api.window, `add ${named} to`);
     if (!root) return;
-    const label = rootLabel(root);
+    const label = rootLabel(root, sources.folders());
     try {
       await panels.ensure(root, { preserveFocus: true });
       const hold = await rootSessions.acquire(rootPath(root));

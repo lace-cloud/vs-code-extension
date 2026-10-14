@@ -98,7 +98,8 @@ export function problemsObserver(
   report: (what: string, error: unknown) => void,
 ): SessionObserver {
   return (session: RootSession) => {
-    const root = rootOfPath(api.workspace.workspaceFolders ?? [], session.root);
+    const folders = api.workspace.workspaceFolders ?? [];
+    const root = rootOfPath(folders, session.root);
     if (!root) {
       report(
         `showing the problems of ${session.root}`,
@@ -106,7 +107,7 @@ export function problemsObserver(
       );
       return { dispose: () => {} };
     }
-    const label = rootLabel(root);
+    const label = rootLabel(root, folders);
     const collection = api.languages.createDiagnosticCollection(`lace ${label}`);
     let frame: Pick<CanvasSource, 'diagnostics' | 'treeHash'> | null = null;
     let fold: ReportFold = EMPTY_REPORT_FOLD;

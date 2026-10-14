@@ -50,15 +50,21 @@ Convert write source files.
 **A module directory** (Lace calls it an *authoring root*) is any directory under a workspace folder that holds a `.tf`
 file, or one with none yet whose module you start on the canvas. A workspace can hold several, such as `infra/prod` and
 `infra/staging`; `.terraform` and `.lace` directories are not module directories. Every Lace surface acts on one module
-directory, chosen in this order: the directory you pointed at (an Explorer folder, a Stacks row, a tool's `root`); else
-the module of the active canvas tab; else the directory of the active `.tf` editor; else the one module directory in the
-workspace, a directory holding `.tf` files or one whose canvas is open, or your pick among several; else, for
-**Lace: Open Canvas** and placing a registry module, the workspace folder, where the module starts. Each command says
-which module it acted on. When none can be named it says why, such as a folder inside `.terraform`; dismissing the pick
-ends the command quietly.
+directory, chosen in this order: the directory you pointed at (a folder you right-click in the Explorer, a Stacks row, a
+tool's `root`); else the module of the active canvas tab; else the directory of the active `.tf` editor; else the one
+module directory in the workspace, a directory holding `.tf` files or one whose canvas is open, or your pick among
+several; else, for **Lace: Open Canvas** and placing a registry module, the workspace folder, where the module starts.
+When none can be named, the command says why, such as a folder inside `.terraform`; dismissing the pick ends the command
+quietly.
 
-**One canvas tab per module directory.** Its title is the directory's path in the workspace (in a workspace of several
-folders, the folder's name first), with ● while the canvas holds unsaved edits.
+A module directory has one name: its path in the workspace, with the folder's name first in a workspace of several
+folders, and the folder's name for a workspace folder itself. The module commands say it in their progress and their
+results, and the canvas tab, the Stacks view's description and the chat tools' results name the module by it;
+**Preview**, **Apply** and **Scan for Drift** name the stack they act on instead.
+
+**One canvas tab per module directory.** Its title is the directory's name, with ● while the canvas holds unsaved edits.
+A tab whose folder you remove from the workspace stays open, titled by the directory's full path; its own toolbar
+still works, and no other surface names it as a module directory.
 
 **One authoring session per module directory.** The canvas tab, the palette commands and the chat tools all work on the
 same session, so an edit made through any of them is what the others show next. A text edit to a `.tf` file reaches the

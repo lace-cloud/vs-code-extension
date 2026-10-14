@@ -39,13 +39,28 @@ describe('a root is a directory under a workspace folder', () => {
     const root = rootAt([repo], uri('/work/repo/infra/prod'));
     expect(root).toEqual({ folder: repo, relative: 'infra/prod' });
     expect(rootPath(root!)).toBe('/work/repo/infra/prod');
-    expect(rootLabel(root!)).toBe('infra/prod');
+    expect(rootLabel(root!, [repo])).toBe('infra/prod');
   });
 
   test('the workspace folder itself is the root with an empty path, labelled by its name', () => {
     const root = rootAt([repo], uri('/work/repo'));
     expect(root).toEqual({ folder: repo, relative: '' });
-    expect(rootLabel(root!)).toBe('repo');
+    expect(rootLabel(root!, [repo])).toBe('repo');
+  });
+
+  test("in a workspace of several folders a root is named by its path in the workspace, the folder's name first", () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    expect(rootLabel({ folder: api, relative: 'infra/prod' }, [api, web])).toBe('api/infra/prod');
+    expect(rootLabel({ folder: web, relative: '' }, [api, web])).toBe('web');
+  });
+
+  test("a root whose folder has left the workspace is named by its directory's full path", () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [api])).toBe('/work/web/infra/prod');
+    expect(rootLabel({ folder: web, relative: '' }, [api])).toBe('/work/web');
+    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [])).toBe('/work/web/infra/prod');
   });
 
   test('a directory outside every workspace folder is no root', () => {
@@ -153,6 +168,33 @@ describe('naming a root', () => {
 
   test("else the active canvas's root", async () => {
     expect(await nameRoot(all)).toEqual(rooted(canvas));
+  });
+
+  test('a focused canvas whose folder has left the workspace names no root: finding goes on to the active Terraform file, then the candidates', async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const orphan: AuthoringRoot = { folder: web, relative: 'infra/prod' };
+    const finding = (over: Partial<RootSources>) => {
+      const read = sources({
+        folders: () => [api],
+        activeCanvas: () => orphan,
+        openCanvases: () => [orphan],
+        ...over,
+      });
+      return findRoot(read, () => candidates(read));
+    };
+    expect(
+      await finding({ activeTerraformDirectory: () => uri('/work/api/infra/staging') }),
+    ).toEqual({ kind: 'root', root: { folder: api, relative: 'infra/staging' } });
+    expect(
+      await finding({
+        terraformFiles: async () => [
+          uri('/work/api/infra/prod/main.tf'),
+          uri('/work/web/infra/prod/main.tf'),
+        ],
+      }),
+    ).toEqual({ kind: 'root', root: { folder: api, relative: 'infra/prod' } });
+    expect(await finding({})).toEqual({ kind: 'noModule' });
   });
 
   test("else the active Terraform file's directory", async () => {
@@ -337,8 +379,8 @@ describe('a module started where the workspace holds none', () => {
     const named = await nameRoot(starting);
     expect(window.showQuickPick).toHaveBeenCalledWith(
       [
-        { label: 'repo', description: undefined, root: { folder: repo, relative: '' } },
-        { label: 'other', description: undefined, root: { folder: other, relative: '' } },
+        { label: 'repo', root: { folder: repo, relative: '' } },
+        { label: 'other', root: { folder: other, relative: '' } },
       ],
       { placeHolder: 'Which folder does the module start in?' },
     );
@@ -463,6 +505,17 @@ describe('the candidates', () => {
     ]);
   });
 
+  test('leave out an open canvas whose folder has left the workspace', async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const roots = await candidatesOf(
+      [api],
+      ['/work/api/infra/prod/main.tf', '/work/web/infra/prod/main.tf'],
+      [{ folder: web, relative: 'infra/prod' }],
+    );
+    expect(roots).toEqual([{ folder: api, relative: 'infra/prod' }]);
+  });
+
   test('take in the roots of the canvases open, focused or not, each once, shallowest first', async () => {
     const roots = await candidatesOf(
       [repo],
@@ -474,10 +527,10 @@ describe('the candidates', () => {
 });
 
 describe('the sources VS Code supplies', () => {
-  function api(activePath: string | undefined) {
+  function api(activePath: string | undefined, workspaceFolders = [repo]) {
     return {
       workspace: {
-        workspaceFolders: [repo],
+        workspaceFolders,
         findFiles: vi.fn(async () => [uri('/work/repo/infra/prod/main.tf')]),
       },
       window: {
@@ -517,8 +570,25 @@ describe('the sources VS Code supplies', () => {
   test('the pick among several modules asks which module', async () => {
     const fake = api(undefined);
     await sourcesOf(fake).pick?.([prod]);
+    expect(fake.window.showQuickPick).toHaveBeenCalledWith([{ label: 'infra/prod', root: prod }], {
+      placeHolder: 'Which module?',
+    });
+  });
+
+  test("the pick lists two folders' roots of one path by their names", async () => {
+    const backend = folder('/work/api', 0);
+    const frontend = folder('/work/web', 1);
+    const fake = api(undefined, [backend, frontend]);
+    const roots: AuthoringRoot[] = [
+      { folder: backend, relative: 'infra' },
+      { folder: frontend, relative: 'infra' },
+    ];
+    await sourcesOf(fake).pick?.(roots);
     expect(fake.window.showQuickPick).toHaveBeenCalledWith(
-      [{ label: 'infra/prod', description: 'repo', root: prod }],
+      [
+        { label: 'api/infra', root: roots[0] },
+        { label: 'web/infra', root: roots[1] },
+      ],
       { placeHolder: 'Which module?' },
     );
   });
