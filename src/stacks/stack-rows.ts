@@ -140,24 +140,37 @@ export type Notice = {
 };
 
 type ChangeRequest = Extract<RunOutcome, { kind: 'awaiting-approval' }>['changeRequest'];
+type ChangeRequirement = ChangeRequest['requirements'][number];
 type ChangeRecord = ChangeRequest['records'][number];
 
-// Who decides a requirement, as the gate names its decider. The gate does
-// not say which record settles a requirement a change-management system
-// decides.
-const DECIDERS: Readonly<Record<ChangeRequest['requirements'][number]['decidedBy'], string>> = {
-  lace: 'decided in Lace',
-  ecm: 'decided in its change-management system',
-};
+// Who decides a requirement: Lace, or the change-management system whose
+// record settles it, named by that record once its system has opened it.
+function deciderSaid(requirement: ChangeRequirement, records: readonly ChangeRecord[]): string {
+  if (requirement.decidedBy === 'lace') return 'decided in Lace';
+  const record = records.find(({ id }) => id === requirement.recordId);
+  if (record === undefined) return 'decided in its change-management system';
+  if (record.externalRef === null) return `decided in ${record.kind} (record not opened yet)`;
+  return `decided in ${record.kind} ${record.externalRef}`;
+}
+
+// What the system decided on a record Lace has read: its decision, that it
+// awaits one, or that the system ended the record with none.
+function decisionSaid(record: ChangeRecord): string {
+  if (record.decision !== null) return `${record.decision} in ${record.kind}`;
+  return record.state === 'open' ? 'awaiting its decision' : 'ended with no decision';
+}
 
 // What a record says and offers, read once from its shape. A record its
 // system has not opened yet has only its system's kind; an opened one has
-// its reference, and the state Lace last read and its page once Lace has
-// them, and offers that page.
+// its reference, and once Lace has read them, the record's state, the
+// system's decision on it and its page, which it offers.
 function recordSaid(record: ChangeRecord): { line: string; offers: Offer[] } {
   if (record.externalRef === null) return { line: `${record.kind}: not opened yet`, offers: [] };
   const name = `${record.kind} ${record.externalRef}`;
-  const read = `${name}: ${record.state ?? 'not read yet'}`;
+  const read =
+    record.state === null
+      ? `${name}: not read yet`
+      : `${name}: ${record.state}, ${decisionSaid(record)}`;
   if (record.externalUrl === null) return { line: read, offers: [] };
   return {
     line: `${read}, ${record.externalUrl}`,
@@ -167,22 +180,29 @@ function recordSaid(record: ChangeRecord): { line: string; offers: Offer[] } {
 
 // What an apply held for approval says, from the change request its gate
 // event carries: the change request it waits on and its state, each
-// requirement with its state and its decider as the gate names it, and
-// each record a change-management system keeps of it, with its state and
-// page. It offers the page of each record that has one.
-function awaitingNotice(slug: string, { id, state, requirements, records }: ChangeRequest): Notice {
+// requirement with its state and its decider, and each record a
+// change-management system keeps of it, with its state, the system's
+// decision and its page. It offers the held Run's page in the portal, where
+// a requirement is decided, when the CLI named it, and the page of each
+// record that has one.
+function awaitingNotice(
+  slug: string,
+  { id, state, requirements, records }: ChangeRequest,
+  runUrl: string | null,
+): Notice {
   const said = records.map(recordSaid);
+  const runPage: Offer[] = runUrl === null ? [] : [{ kind: 'openPortal', url: runUrl }];
   return {
     level: 'info',
     text: [
       `The change to ${slug} awaits approval: change request ${id}, ${state}.`,
       ...requirements.map(
         (requirement) =>
-          `Requirement ${requirement.id}: ${requirement.state}, ${DECIDERS[requirement.decidedBy]}.`,
+          `Requirement ${requirement.id}: ${requirement.state}, ${deciderSaid(requirement, records)}.`,
       ),
       ...said.map(({ line }) => `Record ${line}.`),
     ].join(' '),
-    offers: said.flatMap(({ offers }) => offers),
+    offers: [...runPage, ...said.flatMap(({ offers }) => offers)],
   };
 }
 
@@ -196,7 +216,7 @@ export function outcomeNotice(
     case 'succeeded':
       return { level: 'info', text: `Applied ${slug}.`, offers: [] };
     case 'awaiting-approval':
-      return awaitingNotice(slug, outcome.changeRequest);
+      return awaitingNotice(slug, outcome.changeRequest, outcome.runUrl);
     case 'blocked':
       return { level: 'warn', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'failed':
