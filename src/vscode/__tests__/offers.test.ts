@@ -8,6 +8,7 @@ const actions = (): OfferActions => ({
   selectTeam: vi.fn(),
   openPortal: vi.fn(),
   install: vi.fn(),
+  openRecord: vi.fn(),
 });
 
 const window = (answer?: string) => ({
@@ -46,7 +47,7 @@ describe('the ways out of a failure', () => {
       act,
       'error',
       'no team',
-      { reason: 'no_team', message: 'no team', url: 'https://portal/teams/new' },
+      offersFor({ reason: 'no_team', message: 'no team', url: 'https://portal/teams/new' }),
       ['Show Output'],
     );
     expect(shown.showErrorMessage).toHaveBeenCalledWith(
@@ -66,7 +67,13 @@ describe('the ways out of a failure', () => {
   test('Validate is offered only by a notice that names its root, and validates that root', async () => {
     const failure: CommandFailure = { reason: 'no_certification', message: 'no certification' };
     const unnamed = window('Validate');
-    await notice({ window: unnamed } as never, actions(), 'error', 'no certification', failure);
+    await notice(
+      { window: unnamed } as never,
+      actions(),
+      'error',
+      'no certification',
+      offersFor(failure),
+    );
     expect(unnamed.showErrorMessage).toHaveBeenCalledWith('no certification');
 
     const named = window('Validate');
@@ -76,9 +83,39 @@ describe('the ways out of a failure', () => {
       { ...actions(), validate },
       'error',
       'no certification',
-      failure,
+      offersFor(failure),
     );
     expect(named.showErrorMessage).toHaveBeenCalledWith('no certification', 'Validate');
     expect(validate).toHaveBeenCalledWith({ kind: 'validate' });
+  });
+});
+
+describe("a change request's records", () => {
+  test('are offered by the record each opens, and the one chosen opens its page', async () => {
+    const shown = {
+      ...window(),
+      showInformationMessage: vi.fn(
+        async (_text: string, ..._labels: string[]) => 'Open jsm CHG-7',
+      ),
+    };
+    const act = actions();
+    const page = { kind: 'openRecord', record: 'jsm CHG-7', url: 'https://jsm/CHG-7' } as const;
+    const answer = await notice(
+      { window: shown } as never,
+      act,
+      'info',
+      'awaits approval',
+      [{ kind: 'openRecord', record: 'snow CHG-1', url: 'https://snow/CHG-1' }, page],
+      ['Show Output'],
+    );
+    expect(shown.showInformationMessage).toHaveBeenCalledWith(
+      'awaits approval',
+      'Open snow CHG-1',
+      'Open jsm CHG-7',
+      'Show Output',
+    );
+    expect(answer).toBe('Open jsm CHG-7');
+    expect(act.openRecord).toHaveBeenCalledOnce();
+    expect(act.openRecord).toHaveBeenCalledWith(page);
   });
 });

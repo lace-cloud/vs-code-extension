@@ -91,6 +91,7 @@ function window(repository: string) {
       selectTeam: vi.fn(),
       openPortal: vi.fn(),
       install: vi.fn(),
+      openRecord: vi.fn(),
     },
   });
   return { api, table };

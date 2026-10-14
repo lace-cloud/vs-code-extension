@@ -67,12 +67,12 @@ import type { RootHold, RootSessions } from '../engine/root-sessions';
 import {
   type AuthoringRoot,
   candidates,
-  fileUri,
   placeOf,
   type RootSources,
   rootOfPath,
   rootPath,
   rootUri,
+  workspaceDirectory,
   workspacePath,
 } from '../roots/authoring-roots';
 
@@ -251,7 +251,8 @@ type ToolRootSources = Pick<RootSources, 'folders' | 'openCanvases' | 'terraform
 };
 
 // The directory a tool's `root` spells: its absolute path, as `rootPath`
-// spells a root; else its path in the workspace as `rootName` names it.
+// spells a root; else its path in the workspace as `rootName` names it,
+// `.` for a folder itself.
 function spelledDirectory(
   folders: readonly vscode.WorkspaceFolder[],
   given: string,
@@ -261,13 +262,7 @@ function spelledDirectory(
     return root && rootUri(root);
   }
   const spelled = posix.normalize(given.replace(/\/+$/, ''));
-  if (folders.length > 1) {
-    const [name, ...below] = spelled.split('/');
-    const folder = folders.find((each) => each.name === name);
-    return folder && fileUri({ folder, relative: '' }, below.join('/'));
-  }
-  const [folder] = folders;
-  return folder && fileUri({ folder, relative: '' }, spelled);
+  return workspaceDirectory(folders, spelled === '.' ? '' : spelled);
 }
 
 // The authoring root a tool's `root` names: the directory it spells, named

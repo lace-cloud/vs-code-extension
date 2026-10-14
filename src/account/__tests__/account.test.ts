@@ -342,6 +342,7 @@ describe('an account command that fails', () => {
       validate: vi.fn(),
       openPortal: vi.fn(),
       install: vi.fn(),
+      openRecord: vi.fn(),
     };
     accountControls(
       {

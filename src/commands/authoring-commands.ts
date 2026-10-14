@@ -60,7 +60,7 @@ import {
   rootToAct,
   rootUri,
 } from '../roots/authoring-roots';
-import { notice, type OfferActions } from '../vscode/offers';
+import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import { type CanvasOperations, notDoneText } from './canvas-operations';
 import { saveTerraformBuffers } from './terraform-buffers';
 
@@ -274,7 +274,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
       { ...offers, validate: () => validate(root) },
       'error',
       failure.message,
-      failure,
+      offersFor(failure),
     );
   }
 

@@ -1,7 +1,8 @@
 // What the Stacks tree draws, as pure functions of the CLI's documents and
 // of naming a root: the state a view that names no root shows and the state
 // a list of stacks leaves the view in, each row's label, icon and actions,
-// an apply's outcome as a notice, and a preview as a document.
+// an apply's outcome as a notice with what it offers, and a preview as a
+// document.
 import type {
   CommandFailure,
   JsonOf,
@@ -11,6 +12,7 @@ import type {
 } from '@lace-cloud/canvas/engine';
 import { type ByReason, byReason } from '../engine/command-outcome';
 import type { Found } from '../roots/authoring-roots';
+import { type Offer, offersFor } from '../vscode/offers';
 
 export type Stack = JsonOf<'stack list'>['items'][number];
 export type Run = JsonOf<'run list'>['items'][number];
@@ -134,29 +136,85 @@ export function runLook(run: Run): RowLook {
 export type Notice = {
   level: 'info' | 'warn' | 'error';
   text: string;
-  failure?: CommandFailure;
+  offers: readonly Offer[];
 };
 
-// What an apply that settled says.
+type ChangeRequest = Extract<RunOutcome, { kind: 'awaiting-approval' }>['changeRequest'];
+type ChangeRecord = ChangeRequest['records'][number];
+
+// Who decides a requirement, as the gate names its decider. The gate does
+// not say which record settles a requirement a change-management system
+// decides.
+const DECIDERS: Readonly<Record<ChangeRequest['requirements'][number]['decidedBy'], string>> = {
+  lace: 'decided in Lace',
+  ecm: 'decided in its change-management system',
+};
+
+// A record as its change-management system names it: the system's kind,
+// and its reference once the record is opened.
+const recordName = ({ kind, externalRef }: ChangeRecord): string =>
+  externalRef === null ? kind : `${kind} ${externalRef}`;
+
+// A record's line: its name, the state Lace last read and its page; or that
+// it is not opened yet.
+function recordText(record: ChangeRecord): string {
+  if (record.externalRef === null) return `${record.kind}: not opened yet`;
+  const page = record.externalUrl === null ? '' : `, ${record.externalUrl}`;
+  return `${recordName(record)}: ${record.state ?? 'not read yet'}${page}`;
+}
+
+// What an apply held for approval says, as `lace stack apply` shows it: the
+// change request it waits on and its state, each requirement with its state
+// and decider, and each record a change-management system keeps of it. It
+// offers the page of each record that has one.
+function awaitingNotice(slug: string, { id, state, requirements, records }: ChangeRequest): Notice {
+  return {
+    level: 'info',
+    text: [
+      `The change to ${slug} awaits approval: change request ${id}, ${state}.`,
+      ...requirements.map(
+        (requirement) =>
+          `Requirement ${requirement.id}: ${requirement.state}, ${DECIDERS[requirement.decidedBy]}.`,
+      ),
+      ...records.map((record) => `Record ${recordText(record)}.`),
+    ].join(' '),
+    offers: records.flatMap((record): Offer[] =>
+      record.externalUrl === null
+        ? []
+        : [{ kind: 'openRecord', record: recordName(record), url: record.externalUrl }],
+    ),
+  };
+}
+
+// What an apply that settled says, and what it offers: the ways out a
+// failure's reason names, and the records of a change request it waits on.
 export function outcomeNotice(
   slug: string,
   outcome: Exclude<RunOutcome, { kind: 'running' }>,
 ): Notice {
   switch (outcome.kind) {
     case 'succeeded':
-      return { level: 'info', text: `Applied ${slug}.` };
+      return { level: 'info', text: `Applied ${slug}.`, offers: [] };
     case 'awaiting-approval':
-      return { level: 'info', text: `The change to ${slug} awaits approval.` };
+      return awaitingNotice(slug, outcome.changeRequest);
     case 'blocked':
-      return { level: 'warn', text: outcome.message.trim(), failure: outcome.failure };
+      return { level: 'warn', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'failed':
-      return { level: 'error', text: outcome.message.trim(), failure: outcome.failure };
+      return { level: 'error', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'cancelled':
-      return { level: 'info', text: `Cancelled the apply of ${slug}.` };
+      return { level: 'info', text: `Cancelled the apply of ${slug}.`, offers: [] };
     case 'detached':
       return outcome.submitted
-        ? { level: 'warn', text: `Stopped following the apply of ${slug}; the run goes on.` }
-        : { level: 'warn', text: `The apply of ${slug} stopped before it was sent; nothing ran.` };
+        ? {
+            level: 'warn',
+            text: `Stopped following the apply of ${slug}; the run goes on.`,
+            offers: [],
+          }
+        : {
+            level: 'warn',
+            text: `The apply of ${slug} stopped before it was sent; nothing ran.`,
+            offers: [],
+          };
   }
 }
 

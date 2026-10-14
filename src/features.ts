@@ -74,6 +74,7 @@ export function windowHost(base: WindowBase): Host {
     selectTeam: () => account.selectTeam(),
     openPortal: ({ url }) => api.env.openExternal(api.Uri.parse(url)),
     install: ({ url }) => api.env.openExternal(api.Uri.parse(url)),
+    openRecord: ({ url }) => api.env.openExternal(api.Uri.parse(url)),
   };
   const panels = createCanvasPanels({
     api,

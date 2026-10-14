@@ -42,7 +42,7 @@ import {
   sameRoot,
 } from '../roots/authoring-roots';
 import type { RootState } from '../state/root-state';
-import { type OfferActions, notice as showNotice } from '../vscode/offers';
+import { type OfferActions, offersFor, notice as showNotice } from '../vscode/offers';
 import { canvasHtml } from '../vscode/webview-html';
 
 export const CANVAS_VIEW_TYPE = 'lace.canvas';
@@ -204,7 +204,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
       else if (n.op === 'generated') return generated(root, n.written);
       else {
         const actions = { ...offers, validate: () => validate(root) };
-        return showNotice(api, actions, n.level, n.text, n.failure).then(() => {});
+        return showNotice(api, actions, n.level, n.text, offersFor(n.failure)).then(() => {});
       }
     });
     const openSource = async ({ file, line, column }: SourceLocation): Promise<null> => {

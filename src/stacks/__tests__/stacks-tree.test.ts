@@ -312,6 +312,7 @@ function setup(options: Options) {
     selectTeam: vi.fn(),
     openPortal: vi.fn(),
     install: vi.fn(),
+    openRecord: vi.fn(),
   };
   const runOutput = createRunOutput(api.window as never);
   const ran: CommandRun[] = [];
@@ -332,18 +333,21 @@ function setup(options: Options) {
       return dispose;
     },
   };
+  // Each search of the workspace for its Terraform files.
+  const terraformFiles = vi.fn(async () =>
+    (
+      options.terraformFiles ?? [
+        '/work/repo/infra/prod/main.tf',
+        '/work/repo/infra/staging/main.tf',
+      ]
+    ).map((path) => uri(path)),
+  );
   const sources: RootSources = {
     folders: () => options.folders ?? [repo],
     activeCanvas: () => options.root,
     openCanvases: () => options.openCanvases ?? (options.root ? [options.root] : []),
     activeTerraformDirectory: () => undefined,
-    terraformFiles: async () =>
-      (
-        options.terraformFiles ?? [
-          '/work/repo/infra/prod/main.tf',
-          '/work/repo/infra/staging/main.tf',
-        ]
-      ).map((path) => uri(path)),
+    terraformFiles,
     pick: async (roots) => {
       const relative = options.picks?.shift();
       return roots.find((r) => r.relative === relative);
@@ -412,6 +416,7 @@ function setup(options: Options) {
     report,
     redrawn,
     log,
+    terraformFiles,
   };
 }
 
@@ -567,6 +572,19 @@ describe('the stacks of the current root', () => {
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
       ['stack list', { source: '/work/repo' }],
     ]);
+  });
+
+  test('each read of the tree searches the workspace for Terraform once, with a root or without', async () => {
+    const listed = { 'stack list': { documents: [stacks()] } };
+    const rootless = setup({ scripts: listed });
+    await rootless.children();
+    expect(rootless.contexts).toEqual(['severalModules']);
+    expect(rootless.terraformFiles).toHaveBeenCalledOnce();
+
+    const rooted = setup({ root: prod, scripts: listed });
+    await rooted.children();
+    await rooted.children();
+    expect(rooted.terraformFiles).toHaveBeenCalledTimes(2);
   });
 
   test('Show Stacks of a Module is in the title bar while more than one module is there to choose among, read on each read', async () => {
@@ -1039,6 +1057,62 @@ describe('an apply', () => {
     await settled();
 
     expect(t.panels.tick.mock.calls).toEqual([[prod], [prod]]);
+  });
+
+  test('held for approval, says what it waits on and offers the page of each record, which the window opens', async () => {
+    const page = 'https://acme.atlassian.net/browse/CHG-42';
+    const said =
+      'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: approved, decided in Lace. Requirement creq_jsm: pending, decided in its change-management system. Record jsm CHG-42: Waiting for approval, https://acme.atlassian.net/browse/CHG-42.';
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': {
+          documents: [
+            { type: 'phase', name: 'submit' },
+            { type: 'phase', name: 'awaiting_approval' },
+            {
+              type: 'gate',
+              resolution: { mode: 'awaiting_approval' },
+              changeRequest: {
+                id: 'chg_1',
+                state: 'submitted',
+                requirements: [
+                  { id: 'creq_policy', state: 'approved', decidedBy: 'lace' },
+                  { id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' },
+                ],
+                records: [
+                  {
+                    externalSystemId: 'esys_jsm',
+                    kind: 'jsm',
+                    externalRef: 'CHG-42',
+                    externalUrl: page,
+                    state: 'Waiting for approval',
+                  },
+                ],
+              },
+            },
+            { ...applyResult(), run: run('run_9', 'awaiting_approval') },
+          ],
+        },
+      },
+      answers: { [said]: 'Open jsm CHG-42' },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+
+    expect(t.messages).toContainEqual({
+      level: 'info',
+      text: said,
+      buttons: ['Open jsm CHG-42', 'Show Output'],
+    });
+    expect(t.offers.openRecord).toHaveBeenCalledWith({
+      kind: 'openRecord',
+      record: 'jsm CHG-42',
+      url: page,
+    });
+    expect(t.shownChannels).toEqual([]);
   });
 
   test('its Cancel is the run’s explicit cancel', async () => {

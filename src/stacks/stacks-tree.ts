@@ -22,11 +22,12 @@
 //
 // Selecting a stack picks it for the root, and the root's canvas draws its
 // badges. An apply runs under a progress notification and says how it
-// settled, with the ways out its failure names (Validate is the palette's,
-// on the root the apply ran in); a preview opens as a
-// read-only document; each tick of the runner's store (a run started or
-// settled, a scan or a cancel done) reads the tree again and tells the
-// canvas of the root that run was about that its reads are stale.
+// settled (`outcomeNotice`), with the ways out its failure names (Validate
+// is the palette's, on the root the apply ran in), or, held for approval,
+// the change request it waits on with the page of each of its records; a
+// preview opens as a read-only document; each tick of the runner's store (a
+// run started or settled, a scan or a cancel done) reads the tree again and
+// tells the canvas of the root that run was about that its reads are stale.
 //
 // With no root found, the view says why, by the reason finding one gave: no
 // folder is open; no directory holds a module yet, and Open Canvas starts
@@ -292,10 +293,12 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     async getChildren(row) {
       if (row?.kind === 'stack') return runRows(row);
       if (row) return [];
-      const choice = (await candidates(sources)).length > 1;
-      void api.commands.executeCommand('setContext', STACKS_CHOICE, choice);
+      // One read of the candidates per read of the tree: the choice, and the
+      // root found when the view has none.
+      const known = await candidates(sources);
+      void api.commands.executeCommand('setContext', STACKS_CHOICE, known.length > 1);
       if (!root) {
-        const found = await findRoot(sources);
+        const found = await findRoot(sources, async () => known);
         if (found.kind !== 'root') {
           view.description = undefined;
           setState(rootlessState(found));
@@ -361,7 +364,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (settled.outcome.kind === 'running') return;
     const said = outcomeNotice(stack.slug, settled.outcome);
     const offers = { ...options.offers, validate: () => options.validate(of) };
-    const answer = await notice(api, offers, said.level, said.text, said.failure, [SHOW_OUTPUT]);
+    const answer = await notice(api, offers, said.level, said.text, said.offers, [SHOW_OUTPUT]);
     if (answer === SHOW_OUTPUT) runOutput.show(stack.slug);
   }
 

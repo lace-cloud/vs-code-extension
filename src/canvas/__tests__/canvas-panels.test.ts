@@ -199,6 +199,7 @@ function setup(
     selectTeam: vi.fn(),
     openPortal: vi.fn(),
     install: vi.fn(),
+    openRecord: vi.fn(),
   };
   const validate = vi.fn(async () => {});
   const generated = vi.fn(async () => {});

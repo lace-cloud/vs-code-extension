@@ -11,7 +11,10 @@ import {
   rootOfPath,
   rootPath,
   rootToAct,
+  rootUri,
   startingSources,
+  workspaceDirectory,
+  workspacePath,
   workspaceRootSources,
 } from '../authoring-roots';
 import { folder, uri } from './fake-uri';
@@ -63,6 +66,30 @@ describe('a root is a directory under a workspace folder', () => {
       folder: inner,
       relative: 'prod',
     });
+  });
+});
+
+describe('a path in the workspace', () => {
+  const other = folder('/work/other', 1);
+  const roots: AuthoringRoot[] = [
+    { folder: repo, relative: '' },
+    { folder: repo, relative: 'infra/prod' },
+    { folder: other, relative: '' },
+    { folder: other, relative: 'infra' },
+  ];
+
+  test('names the directory `workspacePath` spells, in a workspace of one folder or of several', () => {
+    for (const folders of [[repo], [repo, other]]) {
+      for (const root of roots.filter((each) => folders.includes(each.folder))) {
+        const named = workspaceDirectory(folders, workspacePath(root, folders));
+        expect(named?.toString()).toBe(rootUri(root).toString());
+      }
+    }
+  });
+
+  test('names no directory under a folder name the workspace does not have', () => {
+    expect(workspaceDirectory([repo, other], 'elsewhere/infra')).toBeUndefined();
+    expect(workspaceDirectory([], 'infra')).toBeUndefined();
   });
 });
 
@@ -272,18 +299,34 @@ describe('a module started where the workspace holds none', () => {
     const pick = vi.fn();
     const start = vi.fn();
     const twoModules = async () => [uri('/work/repo/a/main.tf'), uri('/work/repo/b/main.tf')];
-    expect(await findRoot(sources({ terraformFiles: twoModules, pick, start }))).toEqual({
+    const finding = (over: Partial<RootSources>) => {
+      const read = sources({ ...over, pick, start });
+      return findRoot(read, () => candidates(read));
+    };
+    expect(await finding({ terraformFiles: twoModules })).toEqual({
       kind: 'several',
       roots: [
         { folder: repo, relative: 'a' },
         { folder: repo, relative: 'b' },
       ],
     });
-    expect(await findRoot(sources({ folders: () => [repo, other], pick, start }))).toEqual({
-      kind: 'noModule',
-    });
+    expect(await finding({ folders: () => [repo, other] })).toEqual({ kind: 'noModule' });
     expect(pick).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
+  });
+
+  test('finding a root reads the candidates only when the focus names none', async () => {
+    const known = vi.fn(async () => [prod]);
+    const canvas: AuthoringRoot = { folder: repo, relative: 'canvas' };
+    expect(await findRoot(sources({ activeCanvas: () => canvas }), known)).toEqual({
+      kind: 'root',
+      root: canvas,
+    });
+    expect(known).not.toHaveBeenCalled();
+    expect(await findRoot(sources(), known)).toEqual({ kind: 'root', root: prod });
+    expect(known).toHaveBeenCalledOnce();
+    expect(await findRoot(sources({ folders: () => [] }), known)).toEqual({ kind: 'noFolder' });
+    expect(known).toHaveBeenCalledOnce();
   });
 
   test("the starting sources ask among the workspace's folders by name", async () => {
@@ -362,7 +405,7 @@ describe('the root a command acts on', () => {
     };
     expect(await rootToAct(asking, said, 'validate')).toBeUndefined();
     expect(said.showInformationMessage).toHaveBeenCalledWith(
-      'No module to validate: several directories hold Terraform files (a, b). Open the canvas of one, or point at its folder in the Explorer.',
+      'No module to validate: several directories hold a module (a, b). Open the canvas of one, or point at its folder in the Explorer.',
     );
   });
 

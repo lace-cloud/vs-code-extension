@@ -24,12 +24,12 @@ export type AuthoringRoot = {
 const NOT_AUTHORED = ['.terraform', '.lace'];
 // A Terraform file is one the Lace CLI reads as Terraform: `.tf` or
 // `.tf.json`.
-const TERRAFORM_EXTENSIONS = ['.tf', '.tf.json'];
-const TERRAFORM_FILES = '**/*.{tf,tf.json}';
+const TERRAFORM_EXTENSIONS = ['tf', 'tf.json'];
+const TERRAFORM_FILES = `**/*.{${TERRAFORM_EXTENSIONS.join(',')}}`;
 const NOT_AUTHORED_FILES = `**/{${NOT_AUTHORED.join(',')}}/**`;
 
 export function isTerraformFile(path: string): boolean {
-  return TERRAFORM_EXTENSIONS.some((extension) => path.endsWith(extension));
+  return TERRAFORM_EXTENSIONS.some((extension) => path.endsWith(`.${extension}`));
 }
 
 export function rootUri(root: AuthoringRoot): vscode.Uri {
@@ -65,6 +65,22 @@ export function workspacePath(
   return folders.length > 1 ? posix.join(root.folder.name, root.relative) : root.relative;
 }
 
+// The directory a path in the workspace names, read as `workspacePath`
+// spells one: under the folder whose name comes first in a workspace of
+// several folders, else under the one folder. Undefined when no folder has
+// that name.
+export function workspaceDirectory(
+  folders: readonly vscode.WorkspaceFolder[],
+  path: string,
+): vscode.Uri | undefined {
+  const [name, ...below] = path.split('/');
+  const [folder, under] =
+    folders.length > 1
+      ? [folders.find((each) => each.name === name), below.join('/')]
+      : [folders[0], path];
+  return folder && fileUri({ folder, relative: '' }, under);
+}
+
 // What the root's canvas tab is titled: its path in the workspace, the
 // folder's name for the folder itself.
 export function rootTitle(root: AuthoringRoot, folders: readonly vscode.WorkspaceFolder[]): string {
@@ -90,12 +106,12 @@ export type Found =
   | { kind: 'several'; roots: readonly AuthoringRoot[] }
   // No folder is open in the window.
   | { kind: 'noFolder' }
-  // No directory under the workspace holds Terraform and no canvas is open,
-  // and the sources cannot start a module.
+  // No directory under the workspace holds Terraform and no canvas is open.
   | { kind: 'noModule' };
 
 // What naming a root found: the root, or why there is none. The reason is
-// data: `unnamedText` says what each one means to the developer.
+// data: `unnamedText` says what each one means to the developer. Naming
+// gives `noModule` only for sources that cannot start a module.
 export type Named =
   | Found
   // The developer dismissed the pick among several roots.
@@ -110,7 +126,6 @@ export type Named =
 // folder that contains it, whether or not it holds Terraform, or why it is
 // none.
 export function placeOf(folders: readonly vscode.WorkspaceFolder[], directory: vscode.Uri): Named {
-  if (folders.length === 0) return { kind: 'noFolder' };
   const [folder] = folders
     .filter((candidate) => under(candidate, directory))
     .sort((a, b) => b.uri.path.length - a.uri.path.length);
@@ -229,23 +244,36 @@ async function asked(
   return picked === undefined ? { kind: 'dismissed' } : { kind: 'root', root: picked };
 }
 
+// What naming finds in a window with no folder open, whatever it looks for:
+// no root, and why. `name` reads the folders of a window that has one.
+function inFolders<T>(
+  sources: Pick<RootSources, 'folders'>,
+  name: (folders: readonly vscode.WorkspaceFolder[]) => T,
+): T | { kind: 'noFolder' } {
+  const folders = sources.folders();
+  return folders.length === 0 ? { kind: 'noFolder' } : name(folders);
+}
+
 // The root found when nothing is pointed at, asking nothing: the active
 // canvas's root; else the directory of the active Terraform file; else the
-// one candidate. When it finds none it says why: no folder is open, several
-// roots are candidates, or none is.
-export async function findRoot(sources: Omit<RootSources, 'pick' | 'start'>): Promise<Found> {
-  const folders = sources.folders();
-  if (folders.length === 0) return { kind: 'noFolder' };
+// one of the candidates `known` reads, which it reads only then. When it
+// finds none it says why: no folder is open, several roots are candidates,
+// or none is.
+export async function findRoot(
+  sources: Pick<RootSources, 'folders' | 'activeCanvas' | 'activeTerraformDirectory'>,
+  known: () => Promise<readonly AuthoringRoot[]>,
+): Promise<Found> {
+  return inFolders(sources, async (folders): Promise<Found> => {
+    const canvas = sources.activeCanvas();
+    if (canvas) return { kind: 'root', root: canvas };
 
-  const canvas = sources.activeCanvas();
-  if (canvas) return { kind: 'root', root: canvas };
+    const directory = sources.activeTerraformDirectory();
+    const edited = directory && rootAt(folders, directory);
+    if (edited) return { kind: 'root', root: edited };
 
-  const directory = sources.activeTerraformDirectory();
-  const edited = directory && rootAt(folders, directory);
-  if (edited) return { kind: 'root', root: edited };
-
-  const found = await candidates(sources);
-  return found.length === 0 ? { kind: 'noModule' } : among(found);
+    const found = await known();
+    return found.length === 0 ? { kind: 'noModule' } : among(found);
+  });
 }
 
 // The one function every surface calls to learn which root it acts on: the
@@ -258,8 +286,8 @@ export async function findRoot(sources: Omit<RootSources, 'pick' | 'start'>): Pr
 // candidate and the sources start no module, several are candidates and the
 // sources have no pick to ask, or the pick was dismissed.
 export async function nameRoot(sources: RootSources, pointedAt?: vscode.Uri): Promise<Named> {
-  if (pointedAt) return placeOf(sources.folders(), pointedAt);
-  const found = await findRoot(sources);
+  if (pointedAt) return inFolders(sources, (folders) => placeOf(folders, pointedAt));
+  const found = await findRoot(sources, () => candidates(sources));
   if (found.kind === 'several') return asked(found, sources.pick);
   if (found.kind === 'noModule' && sources.start) {
     const folders = sources.folders().map((folder) => ({ folder, relative: '' }));
@@ -280,7 +308,7 @@ function unnamedText(unnamed: Exclude<Named, { kind: 'root' }>, verb: string): s
     case 'noModule':
       return `No module to ${verb}: no directory under this workspace holds Terraform files and no canvas is open. Start one with Lace: Open Canvas.`;
     case 'several':
-      return `No module to ${verb}: several directories hold Terraform files (${unnamed.roots.map(rootLabel).join(', ')}). Open the canvas of one, or point at its folder in the Explorer.`;
+      return `No module to ${verb}: several directories hold a module (${unnamed.roots.map(rootLabel).join(', ')}). Open the canvas of one, or point at its folder in the Explorer.`;
     case 'outsideWorkspace':
       return `No module to ${verb}: ${unnamed.directory.fsPath} is outside the folders of this workspace.`;
     case 'notAuthored':

@@ -124,6 +124,7 @@ function setup(
     selectTeam: vi.fn(),
     openPortal: vi.fn(),
     install: vi.fn(),
+    openRecord: vi.fn(),
   };
   const { table } = authoringCommands({
     api: api as unknown as AuthoringApi,

@@ -134,7 +134,9 @@ its ten most recent runs. The view's description names the module; it follows th
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
   the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. A module with no current
-  certification offers **Validate**.
+  certification offers **Validate**. An apply held for approval names the change request the run waits on, as
+  `lace stack apply` does: each requirement with its state and whether Lace or a change-management system decides it,
+  and each record that system keeps, with **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
   document.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
