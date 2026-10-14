@@ -21,7 +21,7 @@ import { placeModule } from './registry/place-module';
 import { registryMarks } from './registry/registry-marks';
 import { registryReads } from './registry/registry-reads';
 import { createRegistryView, REFRESH_REGISTRY, REGISTRY_VIEW } from './registry/registry-view';
-import { type RootSources, workspaceRootSources } from './roots/authoring-roots';
+import { type RootSources, startingSources, workspaceRootSources } from './roots/authoring-roots';
 import { createRunOutput, type RunOutput } from './stacks/run-output';
 import { stacksTree } from './stacks/stacks-tree';
 import { createRootState, type RootState } from './state/root-state';
@@ -46,7 +46,8 @@ export type WindowBase = {
 // than one feature reads — what the window keeps per root, the commands
 // mapping, the account, the window's one action runner with the Output
 // channels of its runs and what its notices offer, the canvas panels, how a
-// surface names its root, the one rule of Save and of Generate, and the
+// surface names its root (a surface that starts a module adds its ask,
+// `startingSources`), the one rule of Save and of Generate, and the
 // palette's module commands, whose Validate a notice about a root offers.
 export type Host = WindowBase & {
   rootState: RootState;
@@ -73,6 +74,7 @@ export function windowHost(base: WindowBase): Host {
     selectTeam: () => account.selectTeam(),
     openPortal: ({ url }) => api.env.openExternal(api.Uri.parse(url)),
     install: ({ url }) => api.env.openExternal(api.Uri.parse(url)),
+    openRecord: ({ url }) => api.env.openExternal(api.Uri.parse(url)),
   };
   const panels = createCanvasPanels({
     api,
@@ -94,7 +96,10 @@ export function windowHost(base: WindowBase): Host {
     presenter: offeringPresenter(api, offers, createConfirm(api.window), report),
     onRunLog: runOutput.append,
   });
-  const sources = workspaceRootSources(api, panels.activeRoot);
+  const sources = workspaceRootSources(api, {
+    activeCanvas: panels.activeRoot,
+    openCanvases: panels.roots,
+  });
   const operations = canvasOperations({ workspace: api.workspace, rootSessions });
   const modules = authoringCommands({
     api,
@@ -130,7 +135,9 @@ const disposingAll = (disposables: readonly vscode.Disposable[]): vscode.Disposa
 // Lace: Open Canvas, and the canvas panels' lifetime.
 function canvas({ api, panels, sources }: Host): vscode.Disposable {
   return disposingAll([
-    ...registerCommands(api, { [OPEN_CANVAS]: openCanvas(panels, sources, api.window) }),
+    ...registerCommands(api, {
+      [OPEN_CANVAS]: openCanvas(panels, startingSources(api.window, sources), api.window),
+    }),
     panels,
   ]);
 }
@@ -152,7 +159,7 @@ function registry(host: Host): vscode.Disposable {
   const marks = registryMarks(context.globalState);
   const place = placeModule({
     api,
-    sources: host.sources,
+    sources: startingSources(api.window, host.sources),
     panels: host.panels,
     rootSessions: host.rootSessions,
     log: host.log,

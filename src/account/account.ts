@@ -6,7 +6,7 @@ import type * as vscode from 'vscode';
 import { failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
 import { registerCommands } from '../vscode/commands';
-import { notice, type OfferActions } from '../vscode/offers';
+import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import {
   currentSelection,
   type ScopeApi,
@@ -104,7 +104,7 @@ export function accountControls(
     try {
       await act();
     } catch (error) {
-      await notice(api, offers, 'error', failureText(error), failureOf(error));
+      await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
     }
   };
   const registered = registerCommands(api, {

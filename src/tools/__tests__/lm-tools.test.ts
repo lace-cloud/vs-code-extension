@@ -68,6 +68,21 @@ const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
 
 const NAMES = TOOL_SCHEMAS.map((schema) => schema.name);
 
+// VS Code's file system as `stat` reads it: a directory at each of
+// `directories`, and nothing anywhere else.
+const DIRECTORY = 2;
+class FileSystemError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+const fileSystem = (directories: readonly string[]) => ({
+  stat: async (at: vscode.Uri) => {
+    if (directories.includes(at.path)) return { type: DIRECTORY, ctime: 0, mtime: 0, size: 0 };
+    throw new FileSystemError('FileNotFound');
+  },
+});
+
 const DELETE_DB = { changes: [{ operation: 'delete', instance: 'db' }] };
 const RENAME_APP = { changes: [{ operation: 'rename', instance: 'app', value: 'frontend' }] };
 
@@ -331,12 +346,25 @@ describe('the root a tool names', () => {
   const app = folder('/work/app', 0);
   const api = folder('/work/api', 1);
   const files = (...paths: string[]) => paths.map((path) => uri(path));
+  // What a tool's `root` is resolved against: the workspace's folders, its
+  // Terraform files, the canvases open, and the directories on disk.
+  const resolving = (
+    folders: readonly vscode.WorkspaceFolder[],
+    terraformFiles: readonly vscode.Uri[],
+    directories: readonly string[],
+    open: readonly AuthoringRoot[] = [],
+  ) => ({
+    folders: () => folders,
+    openCanvases: () => open,
+    terraformFiles: async () => terraformFiles,
+    isDirectory: async (at: vscode.Uri) => directories.includes(at.path),
+  });
 
   test('is its path in the workspace, `.` for the folder itself', async () => {
-    const sources = {
-      folders: () => [app],
-      terraformFiles: async () => files('/work/app/main.tf', '/work/app/infra/prod/main.tf'),
-    };
+    const sources = resolving([app], files('/work/app/main.tf', '/work/app/infra/prod/main.tf'), [
+      '/work/app',
+      '/work/app/infra/prod',
+    ]);
     expect(rootName({ folder: app, relative: '' }, [app])).toBe('.');
     expect(await rootNamed(sources, 'infra/prod')).toEqual({ folder: app, relative: 'infra/prod' });
     expect(await rootNamed(sources, './infra/prod/')).toEqual({
@@ -351,26 +379,47 @@ describe('the root a tool names', () => {
   });
 
   test('names the folder first in a workspace of several folders', async () => {
-    const sources = {
-      folders: () => [app, api],
-      terraformFiles: async () => files('/work/app/infra/main.tf', '/work/api/infra/main.tf'),
-    };
+    const sources = resolving(
+      [app, api],
+      files('/work/app/infra/main.tf', '/work/api/infra/main.tf'),
+      ['/work/app/infra', '/work/api/infra', '/work/api'],
+    );
     expect(await rootNamed(sources, 'api/infra')).toEqual({ folder: api, relative: 'infra' });
     expect(await rootNamed(sources, 'app/infra')).toEqual({ folder: app, relative: 'infra' });
+    expect(await rootNamed(sources, 'api')).toEqual({ folder: api, relative: '' });
   });
 
-  test('that names no directory holding Terraform is an error listing the ones that do', async () => {
-    const sources = {
-      folders: () => [app],
-      terraformFiles: async () =>
-        files('/work/app/infra/prod/main.tf', '/work/app/.terraform/modules/x/main.tf'),
-    };
+  test('is any directory of the workspace that is there, one that holds no Terraform yet included; one that is not there is an error listing the candidates', async () => {
+    const fresh: AuthoringRoot = { folder: app, relative: 'infra/new' };
+    const sources = resolving(
+      [app],
+      files('/work/app/infra/prod/main.tf', '/work/app/.terraform/modules/x/main.tf'),
+      ['/work/app', '/work/app/infra/prod', '/work/app/infra/new', '/work/app/infra/empty'],
+      [fresh],
+    );
+    expect(await rootNamed(sources, 'infra/empty')).toEqual({
+      folder: app,
+      relative: 'infra/empty',
+    });
+    expect(await rootNamed(sources, '.')).toEqual({ folder: app, relative: '' });
+
     const refused = rootNamed(sources, 'infra/staging');
     await expect(refused).rejects.toBeInstanceOf(UnknownRoot);
-    await expect(refused).rejects.toMatchObject({ roots: ['infra/prod'] });
+    await expect(refused).rejects.toMatchObject({ roots: ['infra/new', 'infra/prod'] });
     await expect(refused).rejects.toThrow(
-      'No module directory of this workspace is named "infra/staging". The directories holding Terraform (1): infra/prod.',
+      'No module directory of this workspace is named "infra/staging". The directories that hold Terraform or have an open canvas (2): infra/new, infra/prod.',
     );
+  });
+
+  test("that is, or is inside, Terraform's cache or Lace's state, or is outside the workspace, is an error though the directory is there", async () => {
+    const sources = resolving([app], files('/work/app/infra/prod/main.tf'), [
+      '/work/app/.terraform/modules/x',
+      '/work/app/.lace',
+      '/work/other',
+    ]);
+    for (const given of ['.terraform/modules/x', '.lace', '../other', '/work/other']) {
+      await expect(rootNamed(sources, given)).rejects.toMatchObject({ roots: ['infra/prod'] });
+    }
   });
 });
 
@@ -384,15 +433,24 @@ describe('registration', () => {
   class Cancelled extends Error {}
   const sources = {
     folders: () => [repo],
+    openCanvases: () => [],
     terraformFiles: async () => [uri('/work/repo/infra/prod/main.tf')],
   };
 
-  function language(lm: LanguageModelApi['lm']): LanguageModelApi {
+  // The API registration reads, over a file system with the workspace's
+  // folder and `infra/prod` on disk.
+  function language(
+    lm: LanguageModelApi['lm'],
+    fs: Pick<vscode.FileSystem, 'stat'> = fileSystem(['/work/repo', '/work/repo/infra/prod']),
+  ): LanguageModelApi {
     return {
       lm,
       LanguageModelToolResult: Result as unknown as typeof vscode.LanguageModelToolResult,
       LanguageModelTextPart: TextPart as unknown as typeof vscode.LanguageModelTextPart,
       CancellationError: Cancelled as unknown as typeof vscode.CancellationError,
+      workspace: { fs },
+      FileType: { Directory: DIRECTORY },
+      FileSystemError: FileSystemError as unknown as typeof vscode.FileSystemError,
     };
   }
 
@@ -603,16 +661,19 @@ describe('registration', () => {
   test('a change cancelled while its root is being resolved rejects as cancelled, and opens and holds nothing', async () => {
     const { tools, registerTool } = registered();
     const t = setUp();
-    // The workspace's Terraform files are still being found.
+    // The directory the root names is still being read.
     let found = () => {};
-    const finding = {
-      folders: () => [repo],
-      terraformFiles: () =>
-        new Promise<vscode.Uri[]>((resolve) => {
-          found = () => resolve([uri('/work/repo/infra/prod/main.tf')]);
+    const reading = {
+      stat: () =>
+        new Promise<vscode.FileStat>((resolve) => {
+          found = () => resolve({ type: DIRECTORY, ctime: 0, mtime: 0, size: 0 });
         }),
     };
-    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, finding);
+    registerLaceTools(
+      language({ registerTool } as LanguageModelApi['lm'], reading),
+      t.ports,
+      sources,
+    );
     const cancellation = fakeCancellation();
     handled.splice(0);
 
@@ -806,7 +867,44 @@ describe('registration', () => {
     const call = tools
       .get('lace_describe_module_canvas')
       ?.invoke({ input: { root: 'nowhere' }, toolInvocationToken: undefined }, token);
-    await expect(call).rejects.toThrow('The directories holding Terraform (1): infra/prod.');
+    await expect(call).rejects.toThrow(
+      'The directories that hold Terraform or have an open canvas (1): infra/prod.',
+    );
+  });
+
+  test('a stat that fails for another reason than a missing directory fails the call with its own error', async () => {
+    const { tools, registerTool } = registered();
+    const denied = {
+      stat: async () => Promise.reject(new FileSystemError('NoPermissions')),
+    };
+    registerLaceTools(
+      language({ registerTool } as LanguageModelApi['lm'], denied),
+      setUp().ports,
+      sources,
+    );
+    const call = tools
+      .get('lace_describe_module_canvas')
+      ?.invoke({ input: { root: 'infra/prod' }, toolInvocationToken: undefined }, token);
+    await expect(call).rejects.toThrow('NoPermissions');
+  });
+
+  test('in a workspace with no Terraform, root `.` names the workspace folder: the change tool ensures its canvas without focus and applies the change', async () => {
+    const { tools, registerTool } = registered();
+    const t = setUp();
+    const empty = { folders: () => [repo], openCanvases: () => [], terraformFiles: async () => [] };
+    registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), t.ports, empty);
+    const result = (await tools
+      .get('lace_change_module_canvas')
+      ?.invoke({ input: { root: '.', ...DELETE_DB }, toolInvocationToken: undefined }, token)) as
+      | Result
+      | undefined;
+    expect(t.panels.ensure).toHaveBeenCalledWith(
+      { folder: repo, relative: '' },
+      { preserveFocus: true },
+    );
+    expect(
+      result?.content.map((part) => (part instanceof TextPart ? part.value : '')).join(''),
+    ).toContain('Change 1: applied. deleted db.');
   });
 
   test('a result chat-core marks as an error is thrown with its text', async () => {

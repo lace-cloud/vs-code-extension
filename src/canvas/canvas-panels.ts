@@ -42,7 +42,7 @@ import {
   sameRoot,
 } from '../roots/authoring-roots';
 import type { RootState } from '../state/root-state';
-import { type OfferActions, notice as showNotice } from '../vscode/offers';
+import { type OfferActions, offersFor, notice as showNotice } from '../vscode/offers';
 import { canvasHtml } from '../vscode/webview-html';
 
 export const CANVAS_VIEW_TYPE = 'lace.canvas';
@@ -84,6 +84,8 @@ export type CanvasPanels = {
   ensure: (root: AuthoringRoot, options?: { preserveFocus?: boolean }) => Promise<CanvasPanel>;
   // The root of the panel that is active, when one is.
   activeRoot: () => AuthoringRoot | undefined;
+  // The roots of every panel open, active or not.
+  roots: () => readonly AuthoringRoot[];
   // `listener` is called with a panel's root each time that panel becomes
   // the active one.
   onDidChangeActive: (listener: (root: AuthoringRoot) => void) => () => void;
@@ -202,7 +204,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
       else if (n.op === 'generated') return generated(root, n.written);
       else {
         const actions = { ...offers, validate: () => validate(root) };
-        return showNotice(api, actions, n.level, n.text, n.failure).then(() => {});
+        return showNotice(api, actions, n.level, n.text, offersFor(n.failure)).then(() => {});
       }
     });
     const openSource = async ({ file, line, column }: SourceLocation): Promise<null> => {
@@ -286,6 +288,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
       return pending;
     },
     activeRoot: () => panels.find((entry) => entry.panel.active)?.root,
+    roots: () => panels.map((entry) => entry.root),
     onDidChangeActive(listener) {
       activated.add(listener);
       return () => activated.delete(listener);

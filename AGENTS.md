@@ -24,8 +24,9 @@ shows what changed after Generate.
 `src/extension.ts` builds the window's base: the "Lace" Output channel, the engine, the root sessions, and the autosave
 keeper observing every held session. `windowHost` (`src/features.ts`) builds the owners more than one feature reads (the
 root state, the canvas panels, the commands mapping, the account, the window's one action runner with its runs' Output
-channels and the offers its notices make, the root sources, Save and Generate's canvas operations, and the palette's
-module commands with their Validate on a root) and hands the same `Host` to every feature in `FEATURES`:
+channels and the offers its notices make, the root sources over the canvas panels' roots, Save and Generate's canvas
+operations, and the palette's module commands with their Validate on a root) and hands the same `Host` to every feature
+in `FEATURES`:
 
 | Feature | Registers |
 |---|---|
@@ -52,7 +53,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
 | Running a package binding (Stacks rows, stack palette commands) | `engine/runner-host.ts` | the Stacks tree, the offers |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
-| Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then | `roots/authoring-roots.ts` (`nameRoot`, `rootToAct`) | every surface that acts on a module |
+| Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`) | every surface that acts on a module |
 | How a line typed into a terminal calls a program in the terminal's shell | `vscode/shell-line.ts` (`shellLine`, over `env.shell`) | Create Stack in Terminal |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
@@ -63,6 +64,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
 | The way out a failure names | `vscode/offers.ts`, by the failure's `reason` | every notice of a failed command |
+| What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
 | Validate on a root, whatever offers it | `commands/authoring-commands.ts` (`validate`, the palette's Validate) | the palette, the Stacks tree's apply, a notice about a root |
 
 ## Engine and sessions
@@ -118,7 +120,8 @@ its `RunCtx` and reads it when the store notifies.
 
 - `canvas-panels.ts`: one webview panel per root, created only by `ensure(root, {preserveFocus?})`; two `ensure` calls in
   flight make one panel. The title is the root's path under its workspace folder (`rootTitle`: the folder's name first
-  in a workspace of several folders), with ● while the session is unsaved.
+  in a workspace of several folders), with ● while the session is unsaved. `roots` lists every open panel's root,
+  focused or not: each is a candidate when a surface names its root.
 - The page (`canvas-webview/`) shares one postMessage pair between the engine bridge and the host protocol. It boots with
   the host's `boot` call (the root, the kept arrangement, the picked stack), opens the root's session over the bridge,
   and mounts the canvas package's `App` with its ports: `source`, `editor`, `commands`, `context` from the engine
@@ -141,8 +144,9 @@ its `RunCtx` and reads it when the store notifies.
 - The panel takes its webview once, when it is created: the engine can still answer a page after its tab closed, and
   that answer, posted to the closed webview, goes nowhere.
 - A directory with no top-level `.tf` opens editable, on the empty module: the module starts on the canvas, and its
-  first Generate writes its first `.tf` files. The extension writes no source file: Generate, Format and Convert are the
-  CLI's writers.
+  first Generate writes its first `.tf` files. In a workspace where no directory holds Terraform and no canvas is open,
+  Open Canvas from the palette opens the canvas of the workspace's folder, the developer's pick in a workspace of
+  several folders. The extension writes no source file: Generate, Format and Convert are the CLI's writers.
 - The page reports its focus, which `onFocusChange` autosave reads. The canvas package's keymap handles its own keys;
   the extension contributes no keybinding.
 - The page follows VS Code's theme (`webview/theme.ts`): `data-theme` on `<html>`, which the canvas's design tokens
@@ -174,17 +178,19 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 - Module detail (`module-detail.ts`, one panel per module): `registry get` for the README and versions, `registry
   describe` of the shown version for the interface (it downloads and certifies the version, so it settles later and can
   be refused). Tabs: Details, Interface, Versions, Examples.
-- Placement (`place-module.ts`): `nameRoot`, `ensure` without focus, a hold for the call, one `place_module`. A refusal is
-  read by its reason: `unauthenticated` offers Sign In; `not_lace_form`, `hash_mismatch`, `registry_unavailable`,
-  `not_found`, `version_not_found`, `forbidden` are named with the module (any other reason as "the engine refused
-  it"), and **Show Details** writes the engine's full message to the "Lace" Output channel.
+- Placement (`place-module.ts`): `nameRoot` (in a workspace with no module, the workspace folder the module starts in),
+  `ensure` without focus, a hold for the call, one `place_module`. A refusal is read by its reason: `unauthenticated`
+  offers Sign In; `not_lace_form`, `hash_mismatch`, `registry_unavailable`, `not_found`, `version_not_found`,
+  `forbidden` are named with the module (any other reason as "the engine refused it"), and **Show Details** writes the
+  engine's full message to the "Lace" Output channel.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
 
 ## Stacks tree
 
 - `laceStacks` lists the current root's stacks (`stack list --source <root>`), each with its ten latest runs
   (`run list --stack`). The root follows the active canvas and the active `.tf` editor; **Show Stacks of a Module** picks
-  it. The view's description names it.
+  it, and is in the view's title bar while more than one root is a candidate (the context key `lace.stacks.choice`, set
+  on each read of the tree). The view's description names it.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
   `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
   the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
@@ -195,13 +201,18 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
-  on the root that apply ran in, whose report lands where the palette's does. A preview opens as a read-only
-  `lace-preview:` document: the plan, the policy verdict with each policy's own answer when several answer, and the
-  Advisories.
-- When the stacks cannot be listed, the context key `lace.stacks.state` selects the welcome view by the failure's reason:
-  `signedOut`, `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the
-  host builds no portal URL), `noStack`, `noRoot`, `failed`. The tree does not offer `lace stack destroy`; it is a
-  terminal command.
+  on the root that apply ran in, whose report lands where the palette's does. An apply held for approval says what the
+  Run waits on, from the change request its gate event carries: the change request and its state, each requirement
+  with its state and its decider as the gate event names it (Lace, or a change-management system), and each record a
+  change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
+  its page, or that it is not opened yet; each record with a page is offered as **Open <kind> <reference>**, which
+  opens that page. A preview opens as a read-only `lace-preview:` document: the plan, the policy verdict with each
+  policy's own answer when several answer, and the Advisories.
+- When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
+  gives (`rootlessState`): `noFolder` (open the folder, no action), `noModule` (Open Canvas starts one), `severalModules`
+  (Choose Module). When the stacks cannot be listed, it selects the welcome view by the failure's reason: `signedOut`,
+  `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no
+  portal URL), `noStack`, `failed`. The tree does not offer `lace stack destroy`; it is a terminal command.
 - Creating a stack is one-time setup in a terminal, not a journey of the extension. `noStack`'s action, Create Stack in
   Terminal (`lace.stacks.createInTerminal`), types `<lace.binaryPath> stack create SLUG --source . --connection
   CONNECTION_ID` into a terminal at the root, unsent: a placeholder for each argument `stack create` requires
@@ -218,12 +229,17 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 
 ## Module commands
 
-`commands/authoring-commands.ts`; every command acts on the root `nameRoot` names and says which. When none is named,
-`rootToAct` says why by the reason `nameRoot` gives (no folder is open; no directory holds Terraform; several do and the
-sources have no pick to ask; the folder pointed at is outside the workspace, or is or is inside `.terraform` or `.lace`,
-which is not a module directory), and a pick the developer dismissed says nothing. Open Canvas, placement, the stack palette commands (Preview,
-Apply, Scan Stack, Show Stacks of a Module) name their root the same way; the Stacks view names its root quietly, from
-sources with no pick, and a root it cannot name is its `noRoot` state.
+`commands/authoring-commands.ts`; every command acts on the root `nameRoot` names and says which. With nothing pointed
+at, the candidates are the directories that hold Terraform and the roots of the canvases open, focused or not; the sole
+candidate is named without asking, and among several the developer picks. When none is named, `rootToAct` says why by
+the reason `nameRoot` gives (no folder is open; no directory holds Terraform and no canvas is open; several are
+candidates and the sources have no pick to ask; the folder pointed at is outside the workspace, or is or is inside
+`.terraform` or `.lace`, which is not a module directory), and a pick the developer dismissed says nothing. The stack
+palette commands (Preview, Apply, Scan Stack, Show Stacks of a Module) name their root the same way. Open Canvas and
+placement name theirs over `startingSources`, whose `start` asks which workspace folder a module starts in where there
+is no candidate (a workspace of one folder is not asked); every other surface's sources have no `start`, so a module
+command in such a workspace says there is no module: an empty tree has nothing to validate. The Stacks view finds its
+root with `findRoot`, which asks nothing, and shows why it found none by that reason's state.
 
 - **Save** and **Generate** run `canvas-operations.ts`, the same functions the chat tools run. Generate first saves the
   root's dirty `.tf` editors, holds the session for the call with no tab, shows its progress, and ends with the files
@@ -301,8 +317,10 @@ a handler on chat-core's one tool contract.
 **The adapter** (`tools/lm-tools.ts`) adds what only VS Code knows:
 
 - the `root` input every tool requires: the module directory's path in the workspace (`.` for a folder itself, the
-  folder's name first in a multi-root workspace) or its absolute path, resolved to one of the directories holding
-  Terraform; any other is an error listing them;
+  folder's name first in a multi-root workspace) or its absolute path, named as a directory pointed at is (`placeOf`):
+  any directory there under a workspace folder that is not, and is not inside, `.terraform` or `.lace`, one with no
+  Terraform yet included, where the canvas tools start a module; any other is an error listing the directories that
+  hold Terraform and the roots of the canvases open;
 - the reference name, the tool's name in camel case;
 - the manifest's `languageModelTools` entries, generated from the tool sets' schemas (`canvasToolSchemas`,
   `moduleToolSchemas`, chat-core's data, read with no ports): `pnpm manifest:tools` writes them, and
@@ -365,13 +383,15 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
 - **The chat tools end to end**: `tools/__tests__/lm-tools.engine.test.ts` invokes every tool `registerLaceTools`
   registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel) and
   commands mapping, signed out; a delete makes no request of the extension's own beyond the engine.
-- **The window e2e** (`packages/host-e2e/window/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha
+- **The window e2e** (`packages/host-e2e/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha
   suites, bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the
-  engine tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens a fresh git
-  repository whose settings name the engine, with a Lace config directory of its own, so every case is signed out:
-  activation (every manifest command registered, an engine of the extension's protocol), the palette's module commands
-  (Validate, Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit,
-  a hand edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. CI runs it under
+  engine tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens two windows, each on
+  a fresh git repository of its own whose settings name the engine, with a Lace config directory of the run's own, so
+  every case is signed out. `window/` runs in a repository whose tests make their module directories: activation (every
+  manifest command registered, an engine of the extension's protocol), the palette's module commands (Validate,
+  Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit, a hand
+  edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that
+  holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder. CI runs it under
   `xvfb-run`.
 - **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
   organization and team) is unit-tested over scripted commands.

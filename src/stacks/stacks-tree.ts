@@ -1,8 +1,10 @@
 // The Stacks tree: the stacks deployed from the current authoring root
 // (`lace stack list --source <root>`), each with its recent runs (`lace run
 // list --stack`). The view's description names the root; it follows the
-// canvas or the Terraform file the developer turns to, and its title action
-// is the pick Open Canvas uses.
+// canvas or the Terraform file the developer turns to, and its title action,
+// there while more than one root is a candidate (the context key
+// `lace.stacks.choice`, set each time the tree is read), is the pick Open
+// Canvas uses.
 //
 // A row's actions are the package's bindings — Preview, Apply and Scan for
 // drift on a stack, Follow logs and Cancel on a run — each run through the
@@ -20,14 +22,19 @@
 //
 // Selecting a stack picks it for the root, and the root's canvas draws its
 // badges. An apply runs under a progress notification and says how it
-// settled, with the ways out its failure names (Validate is the palette's,
-// on the root the apply ran in); a preview opens as a
-// read-only document; each tick of the runner's store (a run started or
-// settled, a scan or a cancel done) reads the tree again and tells the
-// canvas of the root that run was about that its reads are stale.
+// settled (`outcomeNotice`), with the ways out its failure names (Validate
+// is the palette's, on the root the apply ran in), or, held for approval,
+// the change request it waits on, offering the page of each record that has
+// one; a preview opens as a read-only document; each tick of the runner's
+// store (a run started or settled, a scan or a cancel done) reads the tree
+// again and tells the canvas of the root that run was about that its reads
+// are stale.
 //
-// When the stacks cannot be listed, the view says why by the failure's
-// reason, with the one action that gets past it.
+// With no root found, the view says why, by the reason finding one gave: no
+// folder is open; no directory holds a module yet, and Open Canvas starts
+// one; or several do, and Choose Module picks one. When the stacks cannot be
+// listed, the view says why by the failure's reason, with the one action
+// that gets past it.
 import {
   type ActionContribution,
   CORE_COMMAND_ACTIONS,
@@ -43,7 +50,8 @@ import type { CommandsMapping } from '../engine/commands-mapping';
 import type { RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
-  nameRoot,
+  candidates,
+  findRoot,
   type RootSources,
   rootAt,
   rootLabel,
@@ -64,6 +72,7 @@ import {
   type RowLook,
   type Run,
   refusedState,
+  rootlessState,
   runLook,
   type Stack,
   type StacksState,
@@ -73,6 +82,7 @@ import {
 
 export const STACKS_VIEW = 'laceStacks';
 export const STACKS_STATE = 'lace.stacks.state';
+export const STACKS_CHOICE = 'lace.stacks.choice';
 export const PREVIEW_SCHEME = 'lace-preview';
 
 export const STACK_COMMANDS = {
@@ -178,15 +188,6 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     view.message = message;
   }
 
-  // The root the tree opens on, without asking: the active canvas's, the
-  // active Terraform file's, or the workspace's one module. These sources
-  // have no pick.
-  const quietly: RootSources = {
-    folders: sources.folders,
-    activeCanvas: sources.activeCanvas,
-    activeTerraformDirectory: sources.activeTerraformDirectory,
-    terraformFiles: sources.terraformFiles,
-  };
   // The root the developer picks among the workspace's modules.
   const picking: RootSources = {
     ...sources,
@@ -293,15 +294,20 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     async getChildren(row) {
       if (row?.kind === 'stack') return runRows(row);
       if (row) return [];
+      // One read of the candidates per read of the tree: the choice, and the
+      // root found when the view has none.
+      const known = await candidates(sources);
+      void api.commands.executeCommand('setContext', STACKS_CHOICE, known.length > 1);
       if (!root) {
-        const named = await nameRoot(quietly);
-        if (named.kind === 'root') root = named.root;
+        const found = await findRoot(sources, async () => known);
+        if (found.kind !== 'root') {
+          view.description = undefined;
+          setState(rootlessState(found));
+          return [];
+        }
+        root = found.root;
       }
-      view.description = root ? rootLabel(root) : undefined;
-      if (!root) {
-        setState('noRoot');
-        return [];
-      }
+      view.description = rootLabel(root);
       return stackRows(root);
     },
   };
@@ -359,7 +365,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (settled.outcome.kind === 'running') return;
     const said = outcomeNotice(stack.slug, settled.outcome);
     const offers = { ...options.offers, validate: () => options.validate(of) };
-    const answer = await notice(api, offers, said.level, said.text, said.failure, [SHOW_OUTPUT]);
+    const answer = await notice(api, offers, said.level, said.text, said.offers, [SHOW_OUTPUT]);
     if (answer === SHOW_OUTPUT) runOutput.show(stack.slug);
   }
 

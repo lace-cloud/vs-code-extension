@@ -4,8 +4,8 @@
 // panels, for a developer signed out (a home of the test's own). The canvas
 // panels are the extension's own over a stand-in for VS Code's webview
 // panel, so a panel holds its root's session as a canvas tab does.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import type { BoundPath, CommandsPort } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
@@ -112,13 +112,29 @@ class TextPart {
   constructor(readonly value: string) {}
 }
 class Cancelled extends Error {}
+class FileSystemError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
+// VS Code's file system over the disk, as `stat` reads it.
+const DIRECTORY = 2;
+const FILE = 1;
+const fileSystem = {
+  stat: async (at: vscode.Uri): Promise<vscode.FileStat> => {
+    if (!existsSync(at.fsPath)) throw new FileSystemError('FileNotFound');
+    const type = statSync(at.fsPath).isDirectory() ? DIRECTORY : FILE;
+    return { type, ctime: 0, mtime: 0, size: 0 };
+  },
+};
 
 // The window's tools over the real engine, registered as VS Code registers
-// them.
-function toolsWindow() {
+// them, in a repository whose directory `infra` holds `module`.
+function toolsWindow(module: Record<string, string> = MODULE) {
   const home = signedOutHome();
   const { repository, root } = moduleDirectory({});
-  for (const [file, content] of Object.entries(MODULE)) {
+  for (const [file, content] of Object.entries(module)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), content);
   }
@@ -180,9 +196,13 @@ function toolsWindow() {
     LanguageModelToolResult: ToolResult as unknown as typeof vscode.LanguageModelToolResult,
     LanguageModelTextPart: TextPart as unknown as typeof vscode.LanguageModelTextPart,
     CancellationError: Cancelled as unknown as typeof vscode.CancellationError,
+    workspace: { fs: fileSystem },
+    FileType: { Directory: DIRECTORY },
+    FileSystemError: FileSystemError as unknown as typeof vscode.FileSystemError,
   };
   const registration = registerLaceTools(language, ports, {
     folders: () => [folder(repository)],
+    openCanvases: panels.roots,
     terraformFiles: async () => terraformFiles(repository),
   });
   afterTest(() => registration.dispose());
@@ -216,6 +236,7 @@ function toolsWindow() {
 
   return {
     home,
+    repository,
     root,
     engine,
     rootSessions,
@@ -271,12 +292,37 @@ describe('the chat tools on the real engine', () => {
     );
   });
 
-  test('a root that names no module directory is an error listing the ones that hold Terraform', async () => {
+  test('a root that names no directory of the workspace is an error listing the ones that hold Terraform', async () => {
     const window = toolsWindow();
     await expect(window.invoke(DESCRIBE, { root: 'nowhere' })).rejects.toThrow(
-      'No module directory of this workspace is named "nowhere". The directories holding Terraform (3): infra, infra/modules/app, infra/modules/net.',
+      'No module directory of this workspace is named "nowhere". The directories that hold Terraform or have an open canvas (3): infra, infra/modules/app, infra/modules/net.',
     );
     expect(window.rootSessions.held()).toEqual([]);
+  });
+});
+
+describe('a module started in a repository that holds no Terraform', () => {
+  test("root `.` names the repository's folder: a change opens its canvas without focus on the empty module, and describe reads it", async () => {
+    const window = toolsWindow({});
+
+    const changed = await window.invoke(CHANGE, {
+      root: '.',
+      changes: [{ operation: 'delete', instance: 'net' }],
+    });
+    expect(changed).toContain(
+      'Change 1: not applied. Reason: the canvas offers no instance for this change.',
+    );
+    expect(window.opened).toEqual([{ title: basename(window.repository), preserveFocus: true }]);
+    expect(window.rootSessions.held()).toMatchObject([{ root: window.repository, holders: 1 }]);
+    expect(window.frame().sourceRefused).toBe(false);
+
+    const described = await window.invoke(DESCRIBE, { root: '.' });
+    expect(described).toContain(
+      `Canvas of module ./${basename(window.repository)}\nInstances (0):`,
+    );
+    expect(described).toContain('Terraform refused, canvas locked: no');
+    expect(window.rootSessions.held()).toMatchObject([{ holders: 1 }]);
+    expect(terraformFiles(window.repository)).toEqual([]);
   });
 });
 

@@ -1,9 +1,11 @@
 // Placing a registry module on a canvas: the sidebar's "+", module
 // detail's Add to Canvas and Lace: Add Module to Canvas. The root is the one
-// `nameRoot` names. Its canvas panel is created or revealed first, without
-// taking focus, so the developer has the place that shows the edit and the
-// session never rests on this call alone; the call then holds the session
-// for its own duration and applies one `place_module`.
+// `nameRoot` names, which in a workspace that holds no module is the
+// workspace folder the module starts in. Its canvas panel is created or
+// revealed first, without taking focus, so the developer has the place that
+// shows the edit and the session never rests on this call alone; the call
+// then holds the session for its own duration and applies one
+// `place_module`.
 //
 // A placement the engine refuses says why by its reason: signed out offers
 // Sign In; any other names the module and the reason, with Show Details on
@@ -15,7 +17,7 @@ import { SIGN_IN } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { type ByReason, byReason } from '../engine/command-outcome';
 import type { RootSessions } from '../engine/root-sessions';
-import { type RootSources, rootLabel, rootPath, rootToAct } from '../roots/authoring-roots';
+import { rootLabel, rootPath, rootToAct, type StartingSources } from '../roots/authoring-roots';
 
 export type PlacedModule = { author: string; name: string; version: string };
 
@@ -30,7 +32,7 @@ export type PlaceApi = {
 
 export type PlaceOptions = {
   api: PlaceApi;
-  sources: RootSources;
+  sources: StartingSources;
   panels: Pick<CanvasPanels, 'ensure'>;
   rootSessions: Pick<RootSessions, 'acquire'>;
   log: Pick<vscode.OutputChannel, 'appendLine' | 'show'>;

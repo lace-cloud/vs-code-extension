@@ -73,6 +73,7 @@ function window(repository: string) {
   const sources: RootSources = {
     folders: () => [repo],
     activeCanvas: () => ({ folder: repo, relative: 'infra' }),
+    openCanvases: () => [{ folder: repo, relative: 'infra' }],
     activeTerraformDirectory: () => undefined,
     terraformFiles: async () => [],
     pick: async () => undefined,
@@ -90,6 +91,7 @@ function window(repository: string) {
       selectTeam: vi.fn(),
       openPortal: vi.fn(),
       install: vi.fn(),
+      openRecord: vi.fn(),
     },
   });
   return { api, table };

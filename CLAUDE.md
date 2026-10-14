@@ -18,7 +18,7 @@ changing code. `README.md` is the Marketplace page: what a developer installing 
 The code and the docs use Lace's own vocabulary:
 
 - **authoring root**: the directory a module is authored in, any directory under a workspace folder that holds a `.tf`
-  file (`root` in code). Not the workspace folder.
+  file, or one with none yet that a module starts in on the canvas (`root` in code). Not the workspace folder.
 - **authoring session**: the engine's session of one authoring root, where "session" could be read as a chat session.
 - **diagnostic**: what the engine, Validate, Convert and Scan report about the Terraform. Not "finding".
 - **the developer's coding assistant** (or "the developer's model"): the model a developer already uses in chat, the one
@@ -93,9 +93,10 @@ default.
 pnpm --filter @lace-cloud/host-e2e test     # the window e2e (run pnpm build first)
 ```
 
-**The window e2e** (`packages/host-e2e/window/`) loads the built extension into a real VS Code that `@vscode/test-cli`
-downloads, in a fresh git repository whose settings name the engine, and runs signed out. It opens a VS Code window for
-a few seconds; CI runs it under a virtual display. Nothing in the tests signs in.
+**The window e2e** (`packages/host-e2e/`) loads the built extension into a real VS Code that `@vscode/test-cli`
+downloads, in two fresh git repositories whose settings name the engine, one window each, and runs signed out: the
+`window/` suites in a repository whose tests make their modules, the `empty/` suites in one that holds no Terraform. It
+opens a VS Code window for a few seconds each; CI runs it under a virtual display. Nothing in the tests signs in.
 
 ## Branch flow and shipping
 

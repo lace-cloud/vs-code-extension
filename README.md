@@ -28,7 +28,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 
 ## Getting started
 
-1. Open the folder that holds your Terraform, and trust it.
+1. Open the folder that holds your Terraform, or the folder your module starts in, and trust it.
 2. Run **Lace: Open Canvas** from the Command Palette, or right-click a folder in the Explorer and choose it there.
 3. Work on the canvas. Place modules from the **Registry** view in the Lace activity bar.
 4. Save the canvas (the canvas's Save button, `Cmd+S` / `Ctrl+S` while the canvas has focus, or **Lace: Save**).
@@ -40,18 +40,22 @@ and column, beside the canvas. For one located on the canvas alone, such as a re
 diagnostic names no file.
 
 A directory with no `.tf` file opens an empty canvas you can edit: the module starts there, as it would in a new `.tf`
-file, and Generate writes its first `.tf` files. The extension writes no Terraform of its own; only Generate, Format and
+file, and Generate writes its first `.tf` files. In a workspace with no `.tf` file and no canvas open, **Lace: Open
+Canvas** from the Command Palette and placing a registry module start the module in the workspace folder; in a
+workspace of several folders you pick which. The extension writes no Terraform of its own; only Generate, Format and
 Convert write source files.
 
 ## Modules, canvases and authoring sessions
 
 **A module directory** (Lace calls it an *authoring root*) is any directory under a workspace folder that holds a `.tf`
-file. A workspace can hold several, such as `infra/prod` and `infra/staging`; `.terraform` and `.lace` directories are not
-module directories. Every Lace surface acts on one module directory, chosen in this order: the directory you pointed at
-(an Explorer folder, a Stacks row, a tool's `root`); else the module of the active canvas tab; else the directory of the
-active `.tf` editor; else the one module directory in the workspace, or your pick among several. Each command says which
-module it acted on. When none can be named it says why, such as a folder inside `.terraform`; dismissing the pick ends
-the command quietly.
+file, or one with none yet whose module you start on the canvas. A workspace can hold several, such as `infra/prod` and
+`infra/staging`; `.terraform` and `.lace` directories are not module directories. Every Lace surface acts on one module
+directory, chosen in this order: the directory you pointed at (an Explorer folder, a Stacks row, a tool's `root`); else
+the module of the active canvas tab; else the directory of the active `.tf` editor; else the one module directory in the
+workspace, a directory holding `.tf` files or one whose canvas is open, or your pick among several; else, for
+**Lace: Open Canvas** and placing a registry module, the workspace folder, where the module starts. Each command says
+which module it acted on. When none can be named it says why, such as a folder inside `.terraform`; dismissing the pick
+ends the command quietly.
 
 **One canvas tab per module directory.** Its title is the directory's path in the workspace (in a workspace of several
 folders, the folder's name first), with ● while the canvas holds unsaved edits.
@@ -123,19 +127,23 @@ row for its versions. The organization shown is the one the Lace CLI has selecte
 
 The **Stacks** view lists the stacks deployed from the current module directory (`lace stack list --source`), each with
 its ten most recent runs. The view's description names the module; it follows the canvas or `.tf` file you turn to, and
-**Lace: Show Stacks of a Module** in its title bar picks another.
+**Lace: Show Stacks of a Module**, in its title bar while the workspace holds more than one module, picks another.
 
 - On a stack: **Preview**, **Apply** and **Scan for Drift**. On a run: **Follow Logs**, **Cancel Run** and
   **Open in Portal**.
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
   the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. A module with no current
-  certification offers **Validate**.
+  certification offers **Validate**. An apply held for approval names the change request the run waits on: each
+  requirement with its state and whether Lace or a change-management system decides it, and each record that system
+  keeps, with its state and **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
   document.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal.
+- With no module to list the stacks of, the view says why: no folder is open; no directory holds a module yet, with
+  **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
   portal), **Create Stack in Terminal** (no stack deployed from the module yet), or **Retry**.
@@ -164,7 +172,8 @@ pick says so.
 Lace adds tools to VS Code's own chat. There is no Lace chat view and no model of Lace's: your coding assistant, in agent
 mode, calls Lace's tools as it calls any other, and you can name one with `#` (for example `#laceChangeModuleCanvas`).
 Every tool takes `root`, the module directory, as its path in the workspace (`infra/prod`, or `.` for the workspace
-folder itself; in a workspace of several folders, the folder's name first).
+folder itself; in a workspace of several folders, the folder's name first). A directory with no `.tf` file yet is a
+module directory too: the canvas tools start its module there.
 
 **The tools run in your own model.** Your conversation stays between you and the model you chose in VS Code; Lace runs
 no model of its own on it, and the conversation itself is never sent. A tool reaches the network only as the same Lace
@@ -243,7 +252,7 @@ The extension runs one Lace engine per window, started when something first need
 
 | Command                              | ID                             | What it does                                                                                                     |
 | ------------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Lace: Open Canvas                    | `lace.openCanvas`              | Opens the module's canvas tab. Also on the Explorer folder menu.                                                 |
+| Lace: Open Canvas                    | `lace.openCanvas`              | Opens the module's canvas tab; in a workspace with no module, starts one in the workspace folder. Also on the Explorer folder menu. |
 | Lace: Save                           | `lace.save`                    | Saves the module's open canvas; with none open there is nothing unsaved, and it says so.                         |
 | Lace: Generate                       | `lace.generate`                | Generates the saved canvas to the module's `.tf` files, with no tab, after saving the module's open `.tf` editors. |
 | Lace: Validate Module                | `lace.validateModule`          | Runs `lace module validate` on the module's Terraform and writes its certification under `.lace/`.              |
@@ -251,7 +260,7 @@ The extension runs one Lace engine per window, started when something first need
 | Lace: Format Module                  | `lace.formatModule`            | Runs `lace module fmt` and names the files it changed.                                                           |
 | Lace: Scan Module                    | `lace.scanModule`              | Runs `lace module scan` (tfsec).                                                                                 |
 | Lace: Generate Docs                  | `lace.generateDocs`            | Runs `lace module docs` (terraform-docs) and opens the markdown in an untitled editor; your save is the write. Also on the Explorer folder menu. |
-| Lace: Add Module to Canvas           | `lace.addModuleToCanvas`       | Picks a registry module and places it on the module's canvas.                                                    |
+| Lace: Add Module to Canvas           | `lace.addModuleToCanvas`       | Picks a registry module and places it on the module's canvas; in a workspace with no module, on the canvas of the workspace folder, where the module starts. |
 | Lace: Refresh Registry               | `lace.refreshRegistry`         | Reads the registry again.                                                                                        |
 | Lace: Sign In                        | `lace.signIn`                  | Signs in to Lace.                                                                                                |
 | Lace: Sign Out                       | `lace.signOut`                 | Signs out of Lace.                                                                                               |

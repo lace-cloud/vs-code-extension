@@ -1,8 +1,9 @@
 // The window e2e: the extension, built in the repository's `out/`, loaded
 // into a real VS Code that `@vscode/test-cli` downloads, against a real
-// engine. Each run opens a workspace of its own: a fresh git repository
-// whose settings name the engine. The tests make their module directories
-// in it.
+// engine. Each suite runs in a window of its own, opened on a workspace of
+// its own: a fresh git repository whose settings name the engine. The
+// `window` suites make their module directories in theirs; the `empty
+// workspace` suites run in one that holds no Terraform.
 //
 // The engine is the binary LACE_E2E_ENGINE names, else the `lace` CLI the
 // engine tests run (`src/engine/__tests__/engine-binary.mjs`: `bin/lace`,
@@ -27,43 +28,58 @@ if (!existsSync(join(extension, 'out', 'extension.js'))) {
 }
 
 const run = realpathSync(mkdtempSync(join(tmpdir(), 'lace-host-e2e-')));
-const workspace = join(run, 'workspace');
-mkdirSync(join(workspace, '.vscode'), { recursive: true });
-execFileSync('git', ['-c', 'init.defaultBranch=main', 'init', '--quiet', workspace]);
-writeFileSync(
-  join(workspace, '.vscode', 'settings.json'),
-  JSON.stringify(
-    {
-      'lace.binaryPath': engine,
-      'files.autoSave': 'off',
-      'git.enabled': false,
-      'workbench.startupEditor': 'none',
-    },
-    null,
-    2,
-  ),
-);
 process.on('exit', () => rmSync(run, { recursive: true, force: true }));
 
-export default defineConfig({
-  label: 'window',
-  files: 'out/**/*.test.js',
-  version: 'stable',
-  extensionDevelopmentPath: extension,
-  workspaceFolder: workspace,
-  // VS Code's own state under the run's directory: a short path, since a
-  // socket is made in it, and nothing kept from one run to the next.
-  launchArgs: [
-    '--disable-extensions',
-    '--disable-workspace-trust',
-    `--user-data-dir=${join(run, 'vscode')}`,
-  ],
-  env: {
-    LACE_E2E_ENGINE: engine,
-    LACE_CONFIG_DIR: join(run, 'lace-config'),
-    LACE_API_KEY: undefined,
-    LACE_ORGANIZATION: undefined,
-    LACE_TEAM: undefined,
-  },
-  mocha: { ui: 'bdd', timeout: 120_000, reporter: 'spec' },
-});
+// A fresh git repository `name` under the run's directory, whose settings
+// name the engine.
+function repository(name) {
+  const workspace = join(run, name);
+  mkdirSync(join(workspace, '.vscode'), { recursive: true });
+  execFileSync('git', ['-c', 'init.defaultBranch=main', 'init', '--quiet', workspace]);
+  writeFileSync(
+    join(workspace, '.vscode', 'settings.json'),
+    JSON.stringify(
+      {
+        'lace.binaryPath': engine,
+        'files.autoSave': 'off',
+        'git.enabled': false,
+        'workbench.startupEditor': 'none',
+      },
+      null,
+      2,
+    ),
+  );
+  return workspace;
+}
+
+// The suites bundled under `out/<suite>/`, in a window on `workspace`.
+// VS Code's own state for the window is in the run's directory, under the
+// suite's name: a short path, since a socket is made in it, and nothing
+// kept from one run to the next.
+function window(label, suite, workspace) {
+  return {
+    label,
+    files: `out/${suite}/**/*.test.js`,
+    version: 'stable',
+    extensionDevelopmentPath: extension,
+    workspaceFolder: workspace,
+    launchArgs: [
+      '--disable-extensions',
+      '--disable-workspace-trust',
+      `--user-data-dir=${join(run, suite)}`,
+    ],
+    env: {
+      LACE_E2E_ENGINE: engine,
+      LACE_CONFIG_DIR: join(run, 'lace-config'),
+      LACE_API_KEY: undefined,
+      LACE_ORGANIZATION: undefined,
+      LACE_TEAM: undefined,
+    },
+    mocha: { ui: 'bdd', timeout: 120_000, reporter: 'spec' },
+  };
+}
+
+export default defineConfig([
+  window('window', 'window', repository('workspace')),
+  window('empty workspace', 'empty', repository('empty-workspace')),
+]);
