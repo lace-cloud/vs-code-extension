@@ -498,6 +498,27 @@ describe('the stacks of the current root', () => {
     });
   });
 
+  test('turning to a canvas whose folder has left the workspace leaves the view on its root', async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const t = setup({
+      folders: [api],
+      terraformFiles: ['/work/api/infra/prod/main.tf'],
+      scripts: { 'stack list': { documents: [stacks()] } },
+    });
+    await t.children();
+    expect(t.view.description).toBe('infra/prod');
+
+    t.active.fire({ folder: web, relative: 'infra/prod' });
+    expect(t.redrawn).toEqual([]);
+    await t.children();
+    expect(t.view.description).toBe('infra/prod');
+    expect(t.commands.invoked.map((c) => c.args)).toEqual([
+      { source: '/work/api/infra/prod' },
+      { source: '/work/api/infra/prod' },
+    ]);
+  });
+
   test('follows the canvas the developer turns to', async () => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.children();

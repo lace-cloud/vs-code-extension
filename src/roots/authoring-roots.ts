@@ -277,17 +277,18 @@ function inFolders<T>(
 }
 
 // The root found when nothing is pointed at, asking nothing: the active
-// canvas's root; else the directory of the active Terraform file; else the
-// one of the candidates `known` reads, which it reads only then. When it
-// finds none it says why: no folder is open, several roots are candidates,
-// or none is.
+// canvas's root, when its folder is open (a canvas whose folder has left
+// the workspace is no root); else the directory of the active Terraform
+// file; else the one of the candidates `known` reads, which it reads only
+// then. When it finds none it says why: no folder is open, several roots
+// are candidates, or none is.
 export async function findRoot(
   sources: Pick<RootSources, 'folders' | 'activeCanvas' | 'activeTerraformDirectory'>,
   known: () => Promise<readonly AuthoringRoot[]>,
 ): Promise<Found> {
   return inFolders(sources, async (folders): Promise<Found> => {
     const canvas = sources.activeCanvas();
-    if (canvas) return { kind: 'root', root: canvas };
+    if (canvas && folderOpen(canvas, folders)) return { kind: 'root', root: canvas };
 
     const directory = sources.activeTerraformDirectory();
     const edited = directory && rootAt(folders, directory);

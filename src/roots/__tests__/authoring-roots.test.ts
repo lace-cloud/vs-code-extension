@@ -170,6 +170,33 @@ describe('naming a root', () => {
     expect(await nameRoot(all)).toEqual(rooted(canvas));
   });
 
+  test('a focused canvas whose folder has left the workspace names no root: finding goes on to the active Terraform file, then the candidates', async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const orphan: AuthoringRoot = { folder: web, relative: 'infra/prod' };
+    const finding = (over: Partial<RootSources>) => {
+      const read = sources({
+        folders: () => [api],
+        activeCanvas: () => orphan,
+        openCanvases: () => [orphan],
+        ...over,
+      });
+      return findRoot(read, () => candidates(read));
+    };
+    expect(
+      await finding({ activeTerraformDirectory: () => uri('/work/api/infra/staging') }),
+    ).toEqual({ kind: 'root', root: { folder: api, relative: 'infra/staging' } });
+    expect(
+      await finding({
+        terraformFiles: async () => [
+          uri('/work/api/infra/prod/main.tf'),
+          uri('/work/web/infra/prod/main.tf'),
+        ],
+      }),
+    ).toEqual({ kind: 'root', root: { folder: api, relative: 'infra/prod' } });
+    expect(await finding({})).toEqual({ kind: 'noModule' });
+  });
+
   test("else the active Terraform file's directory", async () => {
     const named = await nameRoot({ ...all, activeCanvas: () => undefined });
     expect(named).toEqual(rooted({ folder: repo, relative: 'edited' }));

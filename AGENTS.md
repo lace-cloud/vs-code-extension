@@ -189,10 +189,11 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 ## Stacks tree
 
 - `laceStacks` lists the current root's stacks (`stack list --source <root>`), each with its ten latest runs
-  (`run list --stack`). The root follows the active canvas and the active `.tf` editor; **Show Stacks of a Module** picks
-  it, and is in the view's title bar while more than one root is a candidate (the context key `lace.stacks.choice`, set
-  on each read of the tree). The view's description names it (`rootLabel`). A change of the workspace's folders reads
-  the tree again, and a root whose folder left the workspace is dropped and found again.
+  (`run list --stack`). The root follows the active canvas (one whose folder is open) and the active `.tf` editor;
+  **Show Stacks of a Module** picks it, and is in the view's title bar while more than one root is a candidate (the
+  context key `lace.stacks.choice`, set on each read of the tree). The view's description names it (`rootLabel`). A
+  change of the workspace's folders reads the tree again, and a root whose folder left the workspace is dropped and
+  found again.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
   `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
   the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named

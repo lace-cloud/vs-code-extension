@@ -2,10 +2,11 @@
 // (`lace stack list --source <root>`), each with its recent runs (`lace run
 // list --stack`). The view's description names the root (`rootLabel`, among
 // the workspace's folders open when the tree is read); it follows the
-// canvas or the Terraform file the developer turns to, and its title action,
-// there while more than one root is a candidate (the context key
-// `lace.stacks.choice`, set each time the tree is read), is the pick Open
-// Canvas uses. When the workspace's folders change, the tree is read again,
+// canvas or the Terraform file the developer turns to (a canvas whose
+// folder has left the workspace is no root, and turning to it changes
+// nothing), and its title action, there while more than one root is a
+// candidate (the context key `lace.stacks.choice`, set each time the tree is
+// read), is the pick Open Canvas uses. When the workspace's folders change, the tree is read again,
 // and a root whose folder left the workspace is dropped and found again.
 //
 // A row's actions are the package's bindings — Preview, Apply and Scan for
@@ -520,7 +521,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       },
     }),
   ];
-  const offActive = panels.onDidChangeActive(show);
+  const offActive = panels.onDidChangeActive((of) => {
+    if (folderOpen(of, sources.folders())) show(of);
+  });
   const offAccount = options.account.onDidChange(refresh);
 
   return {
