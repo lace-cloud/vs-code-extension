@@ -39,13 +39,20 @@ describe('a root is a directory under a workspace folder', () => {
     const root = rootAt([repo], uri('/work/repo/infra/prod'));
     expect(root).toEqual({ folder: repo, relative: 'infra/prod' });
     expect(rootPath(root!)).toBe('/work/repo/infra/prod');
-    expect(rootLabel(root!)).toBe('infra/prod');
+    expect(rootLabel(root!, [repo])).toBe('infra/prod');
   });
 
   test('the workspace folder itself is the root with an empty path, labelled by its name', () => {
     const root = rootAt([repo], uri('/work/repo'));
     expect(root).toEqual({ folder: repo, relative: '' });
-    expect(rootLabel(root!)).toBe('repo');
+    expect(rootLabel(root!, [repo])).toBe('repo');
+  });
+
+  test("in a workspace of several folders a root is named by its path in the workspace, the folder's name first", () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    expect(rootLabel({ folder: api, relative: 'infra/prod' }, [api, web])).toBe('api/infra/prod');
+    expect(rootLabel({ folder: web, relative: '' }, [api, web])).toBe('web');
   });
 
   test('a directory outside every workspace folder is no root', () => {
@@ -337,8 +344,8 @@ describe('a module started where the workspace holds none', () => {
     const named = await nameRoot(starting);
     expect(window.showQuickPick).toHaveBeenCalledWith(
       [
-        { label: 'repo', description: undefined, root: { folder: repo, relative: '' } },
-        { label: 'other', description: undefined, root: { folder: other, relative: '' } },
+        { label: 'repo', root: { folder: repo, relative: '' } },
+        { label: 'other', root: { folder: other, relative: '' } },
       ],
       { placeHolder: 'Which folder does the module start in?' },
     );
@@ -474,10 +481,10 @@ describe('the candidates', () => {
 });
 
 describe('the sources VS Code supplies', () => {
-  function api(activePath: string | undefined) {
+  function api(activePath: string | undefined, workspaceFolders = [repo]) {
     return {
       workspace: {
-        workspaceFolders: [repo],
+        workspaceFolders,
         findFiles: vi.fn(async () => [uri('/work/repo/infra/prod/main.tf')]),
       },
       window: {
@@ -517,8 +524,25 @@ describe('the sources VS Code supplies', () => {
   test('the pick among several modules asks which module', async () => {
     const fake = api(undefined);
     await sourcesOf(fake).pick?.([prod]);
+    expect(fake.window.showQuickPick).toHaveBeenCalledWith([{ label: 'infra/prod', root: prod }], {
+      placeHolder: 'Which module?',
+    });
+  });
+
+  test("the pick lists two folders' roots of one path by their names", async () => {
+    const backend = folder('/work/api', 0);
+    const frontend = folder('/work/web', 1);
+    const fake = api(undefined, [backend, frontend]);
+    const roots: AuthoringRoot[] = [
+      { folder: backend, relative: 'infra' },
+      { folder: frontend, relative: 'infra' },
+    ];
+    await sourcesOf(fake).pick?.(roots);
     expect(fake.window.showQuickPick).toHaveBeenCalledWith(
-      [{ label: 'infra/prod', description: 'repo', root: prod }],
+      [
+        { label: 'api/infra', root: roots[0] },
+        { label: 'web/infra', root: roots[1] },
+      ],
       { placeHolder: 'Which module?' },
     );
   });

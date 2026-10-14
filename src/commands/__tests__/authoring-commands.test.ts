@@ -90,8 +90,9 @@ const sources = (
   root: AuthoringRoot | undefined,
   terraformFiles: readonly vscode.Uri[] = [],
   canvases: readonly AuthoringRoot[] = root ? [root] : [],
+  folders: readonly vscode.WorkspaceFolder[] = [repo],
 ): RootSources => ({
-  folders: () => [repo],
+  folders: () => folders,
   activeCanvas: () => root,
   openCanvases: () => canvases,
   activeTerraformDirectory: () => undefined,
@@ -107,6 +108,8 @@ function setup(
     terraformFiles?: readonly vscode.Uri[];
     // The canvases open in the window, focused or not.
     canvases?: readonly AuthoringRoot[];
+    // The workspace's folders; one by default.
+    folders?: readonly vscode.WorkspaceFolder[];
     // Whether this window holds the root's session, and the spelling of the
     // root it was opened with.
     open?: boolean;
@@ -132,6 +135,7 @@ function setup(
       'root' in options ? options.root : prod,
       options.terraformFiles,
       options.canvases,
+      options.folders,
     ),
     operations: canvasOperations({
       workspace: api.workspace as never,
@@ -325,6 +329,24 @@ describe('the module commands', () => {
     expect(api.window.withProgress).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Lace: validating infra/prod' }),
       expect.any(Function),
+    );
+  });
+
+  test("in a workspace of several folders, name the root by its path in the workspace, the folder's name first", async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const t = setup(
+      { 'module validate': validated([]) },
+      { root: { folder: api, relative: 'infra/prod' }, folders: [api, web] },
+    );
+    await t.table[VALIDATE_MODULE]();
+    expect(t.api.window.withProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Lace: validating api/infra/prod' }),
+      expect.any(Function),
+    );
+    expect(t.api.window.showInformationMessage).toHaveBeenCalledWith(
+      'Validated api/infra/prod: lossy, 0 diagnostics.',
+      'Show Report',
     );
   });
 });

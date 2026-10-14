@@ -163,6 +163,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
 
   const named = (verb: string, pointedAt?: vscode.Uri): Promise<AuthoringRoot | undefined> =>
     rootToAct(sources, api.window, verb, pointedAt);
+  const labelOf = (root: AuthoringRoot): string => rootLabel(root, sources.folders());
 
   async function save(pointedAt?: vscode.Uri): Promise<void> {
     const root = await named('save', pointedAt);
@@ -173,12 +174,12 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     try {
       const outcome = await operations.save(root, (hold) => hold.ports.editor.save());
       if (outcome.kind === 'done') {
-        api.window.setStatusBarMessage(`Lace: saved the canvas of ${rootLabel(root)}`, 5000);
+        api.window.setStatusBarMessage(`Lace: saved the canvas of ${labelOf(root)}`, 5000);
       } else {
-        void api.window.showInformationMessage(notDoneText(root, outcome));
+        void api.window.showInformationMessage(notDoneText(root, sources.folders(), outcome));
       }
     } catch (error) {
-      void api.window.showErrorMessage(saveFailureText(rootLabel(root), error));
+      void api.window.showErrorMessage(saveFailureText(labelOf(root), error));
     }
   }
 
@@ -186,7 +187,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
   // where git shows the diff. A Generate that wrote no file says so, and has
   // no change to show.
   async function generated(root: AuthoringRoot, written: readonly string[]): Promise<void> {
-    const label = rootLabel(root);
+    const label = labelOf(root);
     if (written.length === 0) {
       void api.window.showInformationMessage(
         `Generated the Terraform of ${label}: nothing was written.`,
@@ -203,7 +204,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
   async function generate(pointedAt?: vscode.Uri): Promise<void> {
     const root = await named('generate', pointedAt);
     if (!root) return;
-    const label = rootLabel(root);
+    const label = labelOf(root);
     const outcome = await api.window.withProgress(
       { location: api.ProgressLocation.Notification, title: `Lace: generating ${label}` },
       (progress) =>
@@ -217,7 +218,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
         }),
     );
     if (outcome.kind !== 'done') {
-      void api.window.showErrorMessage(notDoneText(root, outcome));
+      void api.window.showErrorMessage(notDoneText(root, sources.folders(), outcome));
       return;
     }
     const closing = outcome.value;
@@ -248,7 +249,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     return async (pointedAt) => {
       const root = await named(verb, pointedAt);
       if (!root) return;
-      const label = rootLabel(root);
+      const label = labelOf(root);
       if (writes && !(await saveTerraformBuffers(api.workspace, root))) {
         void api.window.showErrorMessage(
           `A Terraform file in ${label} did not save, so Lace did not ${verb} it.`,

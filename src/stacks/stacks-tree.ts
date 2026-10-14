@@ -1,10 +1,12 @@
 // The Stacks tree: the stacks deployed from the current authoring root
 // (`lace stack list --source <root>`), each with its recent runs (`lace run
-// list --stack`). The view's description names the root; it follows the
+// list --stack`). The view's description names the root (`rootLabel`, among
+// the workspace's folders open when the tree is read); it follows the
 // canvas or the Terraform file the developer turns to, and its title action,
 // there while more than one root is a candidate (the context key
 // `lace.stacks.choice`, set each time the tree is read), is the pick Open
-// Canvas uses.
+// Canvas uses. When the workspace's folders change, the tree is read again,
+// and a root whose folder left the workspace is dropped and found again.
 //
 // A row's actions are the package's bindings — Preview, Apply and Scan for
 // drift on a stack, Follow logs and Cancel on a run — each run through the
@@ -126,7 +128,7 @@ export type StacksTreeApi = {
   >;
   workspace: Pick<
     typeof vscode.workspace,
-    'registerTextDocumentContentProvider' | 'openTextDocument'
+    'registerTextDocumentContentProvider' | 'openTextDocument' | 'onDidChangeWorkspaceFolders'
   >;
   commands: Pick<typeof vscode.commands, 'registerCommand' | 'executeCommand'>;
   env: Pick<typeof vscode.env, 'shell'> & {
@@ -307,7 +309,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
         }
         root = found.root;
       }
-      view.description = rootLabel(root);
+      view.description = rootLabel(root, sources.folders());
       return stackRows(root);
     },
   };
@@ -385,7 +387,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     });
     if (listed.items.length === 0) {
       void api.window.showInformationMessage(
-        `No stack is deployed from ${rootLabel(of)} yet. A stack is created once, in a terminal: Create Stack in Terminal in the Stacks view types the command.`,
+        `No stack is deployed from ${rootLabel(of, sources.folders())} yet. A stack is created once, in a terminal: Create Stack in Terminal in the Stacks view types the command.`,
       );
       return undefined;
     }
@@ -396,7 +398,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
         description: stack.id === picked ? `${stack.slug} · on the canvas` : stack.slug,
         stack,
       })),
-      { placeHolder: `A stack deployed from ${rootLabel(of)}` },
+      { placeHolder: `A stack deployed from ${rootLabel(of, sources.folders())}` },
     );
     return chosen && { of, stack: stackRef(chosen.stack) };
   }
@@ -478,6 +480,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       const directory = sources.activeTerraformDirectory();
       const of = directory && rootAt(sources.folders(), directory);
       if (of) show(of);
+    }),
+    api.workspace.onDidChangeWorkspaceFolders(() => {
+      const followed = root?.folder.uri.toString();
+      if (!sources.folders().some((folder) => folder.uri.toString() === followed)) root = undefined;
+      refresh();
     }),
     ...registerCommands(api, {
       [STACK_COMMANDS.refresh]: async () => refresh(),

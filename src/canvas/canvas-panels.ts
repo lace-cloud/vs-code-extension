@@ -12,6 +12,10 @@
 // it served and serves a new one, and assigns new HTML: the page boots again
 // through its one path.
 //
+// The tab is titled by the root's name among the workspace's folders open
+// now (`rootLabel`), with ● while the session is unsaved; a change of the
+// workspace's folders titles it again.
+//
 // The page boots with the stack picked for its root, and hears each later
 // pick and each tick (a run the host started settled) as an event; it
 // reports its focus, which the autosave policy reads. A notice the page
@@ -36,8 +40,8 @@ import {
 import {
   type AuthoringRoot,
   fileUri,
+  rootLabel,
   rootPath,
-  rootTitle,
   rootUri,
   sameRoot,
 } from '../roots/authoring-roots';
@@ -56,7 +60,10 @@ type PanelsApi = {
     | 'showErrorMessage'
     | 'showTextDocument'
   >;
-  workspace: Pick<typeof vscode.workspace, 'openTextDocument' | 'workspaceFolders'>;
+  workspace: Pick<
+    typeof vscode.workspace,
+    'openTextDocument' | 'workspaceFolders' | 'onDidChangeWorkspaceFolders'
+  >;
   ViewColumn: Pick<typeof vscode.ViewColumn, 'Active' | 'Beside'>;
   Range: typeof vscode.Range;
 };
@@ -136,10 +143,10 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
   // subscription, the bridge and the hold. A panel that could not be opened
   // (its first serve failed) is closed, and `create` rejects.
   async function create(root: AuthoringRoot, preserveFocus: boolean | undefined): Promise<Entry> {
-    const label = rootTitle(root, api.workspace.workspaceFolders ?? []);
+    const label = () => rootLabel(root, api.workspace.workspaceFolders ?? []);
     const hold = await rootSessions.acquire(rootPath(root));
     const disposables: vscode.Disposable[] = [];
-    const close = guarded(`closing the canvas of ${label}`, async () => {
+    const close = guarded(`closing the canvas of ${label()}`, async () => {
       pageFocus(hold.sessionId, false);
       for (const disposable of disposables) disposable.dispose();
       await hold.release();
@@ -148,7 +155,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     try {
       panel = api.window.createWebviewPanel(
         CANVAS_VIEW_TYPE,
-        label,
+        label(),
         { viewColumn: api.ViewColumn.Active, preserveFocus: preserveFocus ?? false },
         { enableScripts: true, retainContextWhenHidden: true },
       );
@@ -171,9 +178,11 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
 
   // Wires a new panel to its page and serves the page its first boot; what
   // it sets up, the bridge it serves among them, goes into `disposables`.
+  // `label` names the root by the workspace's folders open when it is
+  // called: the title and the page's document title read it as they are set.
   async function opened(
     root: AuthoringRoot,
-    label: string,
+    label: () => string,
     hold: RootHold,
     panel: vscode.WebviewPanel,
     disposables: vscode.Disposable[],
@@ -192,14 +201,23 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     };
     const { engine: bridge, host } = splitChannel(raw);
 
+    // The tab's title: the root's name now, with ● while the session is
+    // unsaved.
+    let unsaved = false;
+    const retitle = () => {
+      panel.title = unsaved ? `${label()} ●` : label();
+    };
+
     const boot = async (): Promise<Boot> => ({
       root: rootPath(root),
       arrangement: rootState.arrangement(root),
       stack: rootState.stack(root),
     });
     const notice = guarded('a notice from the canvas page', (n: HostNotice) => {
-      if (n.op === 'unsaved') panel.title = n.value ? `${label} ●` : label;
-      else if (n.op === 'focus') pageFocus(hold.sessionId, n.value);
+      if (n.op === 'unsaved') {
+        unsaved = n.value;
+        retitle();
+      } else if (n.op === 'focus') pageFocus(hold.sessionId, n.value);
       else if (n.op === 'arrangement') return rootState.arrange(root, n.value);
       else if (n.op === 'generated') return generated(root, n.written);
       else {
@@ -217,7 +235,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        throw new Error(`Lace could not open ${file} in ${label}: ${reason}`);
+        throw new Error(`Lace could not open ${file} in ${label()}: ${reason}`);
       }
       return null;
     };
@@ -225,17 +243,22 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     disposables.push({
       dispose: rootState.onDidPickStack(
         root,
-        guarded(`telling the canvas of ${label} its stack`, (stack) => {
+        guarded(`telling the canvas of ${label()} its stack`, (stack) => {
           postEvent(host, { op: 'stack', value: stack });
         }),
       ),
     });
     disposables.push(
       panel.onDidChangeViewState(
-        guarded(`the canvas of ${label} becoming active`, () => {
+        guarded(`the canvas of ${label()} becoming active`, () => {
           if (!panel.active) return;
           for (const listener of [...activated]) listener(root);
         }),
+      ),
+    );
+    disposables.push(
+      api.workspace.onDidChangeWorkspaceFolders(
+        guarded(`titling the canvas of ${label()}`, retitle),
       ),
     );
 
@@ -255,11 +278,13 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
             options.extensionUri.with({ path: `${options.extensionUri.path}/out/${file}` }),
           ),
         cspSource: webview.cspSource,
-        title: label,
+        title: label(),
       });
     }
     await serve();
-    disposables.push({ dispose: hold.renewed(guarded(`rebooting the canvas of ${label}`, serve)) });
+    disposables.push({
+      dispose: hold.renewed(guarded(`rebooting the canvas of ${label()}`, serve)),
+    });
 
     return { root, hold, panel, tick: () => postEvent(host, { op: 'tick' }) };
   }

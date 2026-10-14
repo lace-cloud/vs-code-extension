@@ -1,8 +1,9 @@
-// Authoring roots: which module directory a surface acts on, and how one is
-// chosen. An authoring root is a directory under a workspace folder — a
-// repository whose Terraform sits in `infra/prod` has its root there, and a
-// workspace can hold several. A module that starts on the canvas has its
-// root in a directory that holds no Terraform until its first Generate.
+// Authoring roots: which module directory a surface acts on, how one is
+// chosen, and the one name it is called by (`rootLabel`). An authoring root
+// is a directory under a workspace folder — a repository whose Terraform
+// sits in `infra/prod` has its root there, and a workspace can hold
+// several. A module that starts on the canvas has its root in a directory
+// that holds no Terraform until its first Generate.
 //
 // A root is carried as its workspace folder plus its path under that folder,
 // never as one absolute path: every URI handed to VS Code is the folder's own
@@ -48,16 +49,11 @@ export function rootPath(root: AuthoringRoot): string {
   return rootUri(root).fsPath;
 }
 
-// What a surface calls the root: its path under the workspace folder, or the
-// folder's name when the root is the folder.
-export function rootLabel(root: AuthoringRoot): string {
-  return root.relative === '' ? root.folder.name : root.relative;
-}
-
 // The root's path in the workspace: its path under its folder, with the
 // folder's name first in a workspace of several folders, so two folders'
 // roots of one path are told apart. The folder itself, in a workspace of one
-// folder, is `''`; each surface names it in its own way.
+// folder, is `''`: `rootLabel` calls it by the folder's name, and a tool's
+// `root` spells it `.`.
 export function workspacePath(
   root: AuthoringRoot,
   folders: readonly vscode.WorkspaceFolder[],
@@ -81,9 +77,14 @@ export function workspaceDirectory(
   return folder && fileUri({ folder, relative: '' }, under);
 }
 
-// What the root's canvas tab is titled: its path in the workspace, the
-// folder's name for the folder itself.
-export function rootTitle(root: AuthoringRoot, folders: readonly vscode.WorkspaceFolder[]): string {
+// The one name of a root, which the module commands, the canvas tab, the
+// Stacks view and the tools' results call it by: its path in the workspace,
+// with the folder's name first in a workspace of several folders, and the
+// folder's name for a workspace folder itself. A tool's `root` input has a
+// grammar of its own over the same path, which keeps `.` for the folder of
+// a workspace of one folder, and a tool call's invocation message echoes the
+// `root` the model gave.
+export function rootLabel(root: AuthoringRoot, folders: readonly vscode.WorkspaceFolder[]): string {
   const path = workspacePath(root, folders);
   return path === '' ? root.folder.name : path;
 }
@@ -299,7 +300,11 @@ export async function nameRoot(sources: RootSources, pointedAt?: vscode.Uri): Pr
 // What the developer is told when nothing names a root to `verb`: what is
 // true of the reason. A dismissed pick was the developer's own choice, and
 // says nothing.
-function unnamedText(unnamed: Exclude<Named, { kind: 'root' }>, verb: string): string | undefined {
+function unnamedText(
+  unnamed: Exclude<Named, { kind: 'root' }>,
+  folders: readonly vscode.WorkspaceFolder[],
+  verb: string,
+): string | undefined {
   switch (unnamed.kind) {
     case 'dismissed':
       return undefined;
@@ -308,7 +313,7 @@ function unnamedText(unnamed: Exclude<Named, { kind: 'root' }>, verb: string): s
     case 'noModule':
       return `No module to ${verb}: no directory under this workspace holds Terraform files and no canvas is open. Start one with Lace: Open Canvas.`;
     case 'several':
-      return `No module to ${verb}: several directories hold a module (${unnamed.roots.map(rootLabel).join(', ')}). Open the canvas of one, or point at its folder in the Explorer.`;
+      return `No module to ${verb}: several directories hold a module (${unnamed.roots.map((root) => rootLabel(root, folders)).join(', ')}). Open the canvas of one, or point at its folder in the Explorer.`;
     case 'outsideWorkspace':
       return `No module to ${verb}: ${unnamed.directory.fsPath} is outside the folders of this workspace.`;
     case 'notAuthored':
@@ -328,7 +333,7 @@ export async function rootToAct(
 ): Promise<AuthoringRoot | undefined> {
   const named = await nameRoot(sources, pointedAt);
   if (named.kind === 'root') return named.root;
-  const text = unnamedText(named, verb);
+  const text = unnamedText(named, sources.folders(), verb);
   if (text !== undefined) void window.showInformationMessage(text);
   return undefined;
 }
@@ -338,15 +343,17 @@ type RootsApi = {
   window: Pick<typeof vscode.window, 'activeTextEditor' | 'showQuickPick'>;
 };
 
-// Asks the developer which of the roots, a quick pick under `placeHolder`.
-function askAmong(window: Pick<typeof vscode.window, 'showQuickPick'>, placeHolder: string): Ask {
+// Asks the developer which of the roots, a quick pick under `placeHolder`
+// listing each root by its name among the workspace's `folders`.
+function askAmong(
+  window: Pick<typeof vscode.window, 'showQuickPick'>,
+  folders: RootSources['folders'],
+  placeHolder: string,
+): Ask {
   return async (roots) => {
+    const named = folders();
     const picked = await window.showQuickPick(
-      roots.map((root) => ({
-        label: rootLabel(root),
-        description: root.relative === '' ? undefined : root.folder.name,
-        root,
-      })),
+      roots.map((root) => ({ label: rootLabel(root, named), root })),
       { placeHolder },
     );
     return picked?.root;
@@ -358,8 +365,9 @@ export function workspaceRootSources(
   api: RootsApi,
   canvases: Pick<RootSources, 'activeCanvas' | 'openCanvases'>,
 ): RootSources {
+  const folders = () => api.workspace.workspaceFolders ?? [];
   return {
-    folders: () => api.workspace.workspaceFolders ?? [],
+    folders,
     activeCanvas: canvases.activeCanvas,
     openCanvases: canvases.openCanvases,
     activeTerraformDirectory: () => {
@@ -368,7 +376,7 @@ export function workspaceRootSources(
       return uri.with({ path: posix.dirname(uri.path) });
     },
     terraformFiles: async () => api.workspace.findFiles(TERRAFORM_FILES, NOT_AUTHORED_FILES),
-    pick: askAmong(api.window, 'Which module?'),
+    pick: askAmong(api.window, folders, 'Which module?'),
   };
 }
 
@@ -378,5 +386,8 @@ export function startingSources(
   window: Pick<typeof vscode.window, 'showQuickPick'>,
   sources: RootSources,
 ): StartingSources {
-  return { ...sources, start: askAmong(window, 'Which folder does the module start in?') };
+  return {
+    ...sources,
+    start: askAmong(window, sources.folders, 'Which folder does the module start in?'),
+  };
 }

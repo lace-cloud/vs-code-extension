@@ -134,6 +134,8 @@ function setup(
   const served: { bridge: MessageBridge; dispose: ReturnType<typeof vi.fn> }[] = [];
   const events: string[] = [];
   const reports: { what: string; error: unknown }[] = [];
+  // Who hears a change of the workspace's folders.
+  const folderChanges = new Set<() => void>();
   const api = {
     window: {
       createWebviewPanel: vi.fn((_type, title, showOptions) => {
@@ -158,6 +160,10 @@ function setup(
         }
         return { opened };
       }),
+      onDidChangeWorkspaceFolders: (listener: () => void) => {
+        folderChanges.add(listener);
+        return { dispose: () => folderChanges.delete(listener) };
+      },
     },
     ViewColumn: { Active: -1, Beside: -2 },
     Range: class {
@@ -220,6 +226,11 @@ function setup(
     api,
     canvasPanels,
     panels,
+    // The workspace's folders become `folders`, and VS Code says so.
+    changeFolders: (folders: AuthoringRoot['folder'][]) => {
+      api.workspace.workspaceFolders = folders;
+      for (const listener of [...folderChanges]) listener();
+    },
     holds,
     served,
     events,
@@ -275,6 +286,26 @@ describe('ensure', () => {
       'create:api/infra/prod:false',
       'create:api:false',
     ]);
+  });
+
+  test("when the workspace's folders change, each tab is titled by the folders open now, with its ●", async () => {
+    const second = folder('/work/api', 1);
+    const { canvasPanels, panels, changeFolders } = setup({ folders: [repo] });
+    await canvasPanels.ensure(prod);
+    await canvasPanels.ensure(other);
+    const [page, beside] = panels;
+    const unsaved = (value: boolean) =>
+      page.receive({ ch: 'host', frame: { kind: 'notice', notice: { op: 'unsaved', value } } });
+    unsaved(true);
+
+    changeFolders([repo, second]);
+    expect(page.panel.title).toBe('repo/infra/prod ●');
+    expect(beside.panel.title).toBe('repo/infra/other');
+    unsaved(false);
+    expect(page.panel.title).toBe('repo/infra/prod');
+
+    changeFolders([repo]);
+    expect(page.panel.title).toBe('infra/prod');
   });
 
   test('two roots are two panels, and the active one names the active root', async () => {

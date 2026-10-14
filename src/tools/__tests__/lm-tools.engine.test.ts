@@ -159,6 +159,7 @@ function toolsWindow(module: Record<string, string> = MODULE) {
       workspace: {
         fs: { readDirectory: async () => [] },
         openTextDocument: async () => ({}),
+        onDidChangeWorkspaceFolders: () => ({ dispose: () => {} }),
       } as never,
       ViewColumn: { Active: -1, Beside: -2 },
       Range: class {} as never,
