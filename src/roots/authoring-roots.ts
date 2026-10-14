@@ -77,14 +77,32 @@ export function workspaceDirectory(
   return folder && fileUri({ folder, relative: '' }, under);
 }
 
+// Whether the root's workspace folder is among `folders`. A folder removed
+// from the workspace leaves its roots under no open folder, while a canvas
+// tab of one of them stays open.
+export function folderOpen(
+  root: AuthoringRoot,
+  folders: readonly vscode.WorkspaceFolder[],
+): boolean {
+  const { uri } = root.folder;
+  return folders.some((folder) => folder.uri.toString() === uri.toString());
+}
+
 // The one name of a root, which the module commands, the canvas tab, the
 // Stacks view and the tools' results call it by: its path in the workspace,
 // with the folder's name first in a workspace of several folders, and the
-// folder's name for a workspace folder itself. A tool's `root` input has a
-// grammar of its own over the same path, which keeps `.` for the folder of
-// a workspace of one folder, and a tool call's invocation message echoes the
-// `root` the model gave.
+// folder's name for a workspace folder itself. A root whose folder has left
+// the workspace is under no folder's name, and is named by its directory's
+// full path.
+//
+// A tool's `root` input has a grammar of its own over the same path
+// (`rootName` in the tools), which keeps `.` for the folder of a workspace
+// of one folder: a tool call's invocation message echoes the `root` the
+// model gave, and a `root` that names no module directory is answered with
+// the candidates in that grammar, `.` among them, since the model passes
+// them back as `root`.
 export function rootLabel(root: AuthoringRoot, folders: readonly vscode.WorkspaceFolder[]): string {
+  if (!folderOpen(root, folders)) return rootPath(root);
   const path = workspacePath(root, folders);
   return path === '' ? root.folder.name : path;
 }

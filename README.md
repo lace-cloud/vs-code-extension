@@ -63,6 +63,7 @@ results, and the canvas tab, the Stacks view's description and the chat tools' r
 **Preview**, **Apply** and **Scan for Drift** name the stack they act on instead.
 
 **One canvas tab per module directory.** Its title is the directory's name, with ● while the canvas holds unsaved edits.
+A tab whose folder you remove from the workspace stays open, titled by the directory's full path.
 
 **One authoring session per module directory.** The canvas tab, the palette commands and the chat tools all work on the
 same session, so an edit made through any of them is what the others show next. A text edit to a `.tf` file reaches the

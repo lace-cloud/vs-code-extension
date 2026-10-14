@@ -54,6 +54,7 @@ import {
   type AuthoringRoot,
   candidates,
   findRoot,
+  folderOpen,
   type RootSources,
   rootAt,
   rootLabel,
@@ -482,8 +483,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       if (of) show(of);
     }),
     api.workspace.onDidChangeWorkspaceFolders(() => {
-      const followed = root?.folder.uri.toString();
-      if (!sources.folders().some((folder) => folder.uri.toString() === followed)) root = undefined;
+      if (root && !folderOpen(root, sources.folders())) root = undefined;
       refresh();
     }),
     ...registerCommands(api, {

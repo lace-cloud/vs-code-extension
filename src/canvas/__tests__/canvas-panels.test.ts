@@ -123,7 +123,7 @@ function workspaceState() {
 
 function setup(
   options: {
-    // The workspace's folders.
+    // The workspace's folders; the one the roots are under by default.
     folders?: AuthoringRoot['folder'][];
     // What the engine's first serves fail with, in turn.
     serveFails?: Error[];
@@ -153,7 +153,7 @@ function setup(
       showTextDocument: vi.fn(async () => {}),
     },
     workspace: {
-      workspaceFolders: options.folders,
+      workspaceFolders: options.folders ?? [repo],
       openTextDocument: vi.fn(async (opened: { path?: string }) => {
         if (opened.path?.endsWith('/missing.tf')) {
           throw new Error(`cannot open file://${opened.path}`);
@@ -231,6 +231,7 @@ function setup(
       api.workspace.workspaceFolders = folders;
       for (const listener of [...folderChanges]) listener();
     },
+    folderChanges,
     holds,
     served,
     events,
@@ -306,6 +307,44 @@ describe('ensure', () => {
 
     changeFolders([repo]);
     expect(page.panel.title).toBe('infra/prod');
+  });
+
+  test("a tab whose folder left the workspace stays open on its session, titled by its directory's full path", async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const { canvasPanels, panels, holds, changeFolders } = setup({ folders: [api, web] });
+    await canvasPanels.ensure({ folder: web, relative: 'infra/prod' });
+    const [page] = panels;
+    page.receive({ ch: 'host', frame: { kind: 'notice', notice: { op: 'unsaved', value: true } } });
+    expect(page.panel.title).toBe('web/infra/prod ●');
+
+    changeFolders([api]);
+    expect(page.panel.title).toBe('/work/web/infra/prod ●');
+    expect(page.disposed()).toBe(false);
+    expect(holds.get('/work/web/infra/prod')?.hold.release).not.toHaveBeenCalled();
+  });
+
+  test('a failure the panel reports names the root as the workspace names it then', async () => {
+    const second = folder('/work/api', 1);
+    const { canvasPanels, panels, reports, changeFolders } = setup({ folders: [repo] });
+    await canvasPanels.ensure(prod);
+    canvasPanels.onDidChangeActive(() => {
+      throw new Error('listener');
+    });
+
+    changeFolders([repo, second]);
+    panels[0].activate();
+    expect(reports.map(({ what }) => what)).toEqual([
+      'the canvas of repo/infra/prod becoming active',
+    ]);
+  });
+
+  test("a closed tab hears no further change of the workspace's folders", async () => {
+    const { canvasPanels, panels, folderChanges } = setup();
+    await canvasPanels.ensure(prod);
+    expect(folderChanges.size).toBe(1);
+    panels[0].panel.dispose();
+    expect(folderChanges.size).toBe(0);
   });
 
   test('two roots are two panels, and the active one names the active root', async () => {

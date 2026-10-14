@@ -14,7 +14,10 @@
 //
 // The tab is titled by the root's name among the workspace's folders open
 // now (`rootLabel`), with ● while the session is unsaved; a change of the
-// workspace's folders titles it again.
+// workspace's folders titles it again. A tab whose folder left the
+// workspace stays open on its session, titled by its directory's full
+// path. What the panel reports of a failure names the root as it is named
+// when the failure is reported.
 //
 // The page boots with the stack picked for its root, and hears each later
 // pick and each tick (a run the host started settled) as an event; it
@@ -126,15 +129,16 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
   type Entry = CanvasPanel & { tick: () => void };
 
   // Something an observer does, with its failure reported and not thrown
-  // into the stream that called it.
+  // into the stream that called it; `what` says what it was, read when the
+  // failure is reported.
   const guarded =
-    <A extends unknown[]>(what: string, run: (...args: A) => void | Promise<void>) =>
+    <A extends unknown[]>(what: () => string, run: (...args: A) => void | Promise<void>) =>
     (...args: A): void => {
       try {
         const result = run(...args);
-        if (result instanceof Promise) result.catch((error) => report(what, error));
+        if (result instanceof Promise) result.catch((error) => report(what(), error));
       } catch (error) {
-        report(what, error);
+        report(what(), error);
       }
     };
 
@@ -146,11 +150,14 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     const label = () => rootLabel(root, api.workspace.workspaceFolders ?? []);
     const hold = await rootSessions.acquire(rootPath(root));
     const disposables: vscode.Disposable[] = [];
-    const close = guarded(`closing the canvas of ${label()}`, async () => {
-      pageFocus(hold.sessionId, false);
-      for (const disposable of disposables) disposable.dispose();
-      await hold.release();
-    });
+    const close = guarded(
+      () => `closing the canvas of ${label()}`,
+      async () => {
+        pageFocus(hold.sessionId, false);
+        for (const disposable of disposables) disposable.dispose();
+        await hold.release();
+      },
+    );
     let panel: vscode.WebviewPanel;
     try {
       panel = api.window.createWebviewPanel(
@@ -179,7 +186,8 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
   // Wires a new panel to its page and serves the page its first boot; what
   // it sets up, the bridge it serves among them, goes into `disposables`.
   // `label` names the root by the workspace's folders open when it is
-  // called: the title and the page's document title read it as they are set.
+  // called: the title, the page's document title and a failure's report read
+  // it as they are made.
   async function opened(
     root: AuthoringRoot,
     label: () => string,
@@ -213,18 +221,21 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
       arrangement: rootState.arrangement(root),
       stack: rootState.stack(root),
     });
-    const notice = guarded('a notice from the canvas page', (n: HostNotice) => {
-      if (n.op === 'unsaved') {
-        unsaved = n.value;
-        retitle();
-      } else if (n.op === 'focus') pageFocus(hold.sessionId, n.value);
-      else if (n.op === 'arrangement') return rootState.arrange(root, n.value);
-      else if (n.op === 'generated') return generated(root, n.written);
-      else {
-        const actions = { ...offers, validate: () => validate(root) };
-        return showNotice(api, actions, n.level, n.text, offersFor(n.failure)).then(() => {});
-      }
-    });
+    const notice = guarded(
+      () => 'a notice from the canvas page',
+      (n: HostNotice) => {
+        if (n.op === 'unsaved') {
+          unsaved = n.value;
+          retitle();
+        } else if (n.op === 'focus') pageFocus(hold.sessionId, n.value);
+        else if (n.op === 'arrangement') return rootState.arrange(root, n.value);
+        else if (n.op === 'generated') return generated(root, n.written);
+        else {
+          const actions = { ...offers, validate: () => validate(root) };
+          return showNotice(api, actions, n.level, n.text, offersFor(n.failure)).then(() => {});
+        }
+      },
+    );
     const openSource = async ({ file, line, column }: SourceLocation): Promise<null> => {
       const [at, character] = positionOf({ line, column });
       try {
@@ -243,22 +254,28 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     disposables.push({
       dispose: rootState.onDidPickStack(
         root,
-        guarded(`telling the canvas of ${label()} its stack`, (stack) => {
-          postEvent(host, { op: 'stack', value: stack });
-        }),
+        guarded(
+          () => `telling the canvas of ${label()} its stack`,
+          (stack) => {
+            postEvent(host, { op: 'stack', value: stack });
+          },
+        ),
       ),
     });
     disposables.push(
       panel.onDidChangeViewState(
-        guarded(`the canvas of ${label()} becoming active`, () => {
-          if (!panel.active) return;
-          for (const listener of [...activated]) listener(root);
-        }),
+        guarded(
+          () => `the canvas of ${label()} becoming active`,
+          () => {
+            if (!panel.active) return;
+            for (const listener of [...activated]) listener(root);
+          },
+        ),
       ),
     );
     disposables.push(
       api.workspace.onDidChangeWorkspaceFolders(
-        guarded(`titling the canvas of ${label()}`, retitle),
+        guarded(() => `titling the canvas of ${label()}`, retitle),
       ),
     );
 
@@ -283,7 +300,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     }
     await serve();
     disposables.push({
-      dispose: hold.renewed(guarded(`rebooting the canvas of ${label()}`, serve)),
+      dispose: hold.renewed(guarded(() => `rebooting the canvas of ${label()}`, serve)),
     });
 
     return { root, hold, panel, tick: () => postEvent(host, { op: 'tick' }) };

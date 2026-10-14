@@ -55,6 +55,14 @@ describe('a root is a directory under a workspace folder', () => {
     expect(rootLabel({ folder: web, relative: '' }, [api, web])).toBe('web');
   });
 
+  test("a root whose folder has left the workspace is named by its directory's full path", () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [api])).toBe('/work/web/infra/prod');
+    expect(rootLabel({ folder: web, relative: '' }, [api])).toBe('/work/web');
+    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [])).toBe('/work/web/infra/prod');
+  });
+
   test('a directory outside every workspace folder is no root', () => {
     expect(rootAt([repo], uri('/work/repository'))).toBeUndefined();
     expect(rootAt([repo], uri('/elsewhere'))).toBeUndefined();
