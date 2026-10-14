@@ -128,7 +128,12 @@ const onHold =
     return run(canvasOf(hold));
   };
 
-export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
+// The tools over `ports`; a result names its root among the workspace's
+// folders `sources` reads.
+export function createLaceTools(
+  ports: LaceToolPorts,
+  sources: Pick<RootSources, 'folders'>,
+): readonly LaceTool[] {
   const { panels, rootSessions, operations, commands } = ports;
 
   // A call on the root's session, held for the call's duration. A call
@@ -154,7 +159,10 @@ export function createLaceTools(ports: LaceToolPorts): readonly LaceTool[] {
   const resultOf = (root: AuthoringRoot, outcome: Operated<ToolResult>): ToolResult =>
     outcome.kind === 'done'
       ? outcome.value
-      : { content: notDoneText(root, outcome), isError: outcome.kind === 'bufferNotSaved' };
+      : {
+          content: notDoneText(root, sources.folders(), outcome),
+          isError: outcome.kind === 'bufferNotSaved',
+        };
 
   return [
     {
@@ -422,7 +430,7 @@ export function registerLaceTools(
   const register = api.lm?.registerTool?.bind(api.lm);
   if (register === undefined) return { dispose: () => {} };
   const roots: ToolRootSources = { ...sources, isDirectory: directoryOn(api) };
-  const registrations = createLaceTools(ports).map((tool) =>
+  const registrations = createLaceTools(ports, sources).map((tool) =>
     register(tool.schema.name, languageModelTool(api, tool, roots)),
   );
   return {

@@ -46,12 +46,14 @@ export type CanvasOperationsOptions = {
 };
 
 // What an operation that did not run says, for the developer and for the
-// developer's coding assistant alike.
+// developer's coding assistant alike, naming the root among the workspace's
+// `folders`.
 export function notDoneText(
   root: AuthoringRoot,
+  folders: readonly vscode.WorkspaceFolder[],
   outcome: Exclude<Operated<unknown>, { kind: 'done' }>,
 ): string {
-  const label = rootLabel(root);
+  const label = rootLabel(root, folders);
   return outcome.kind === 'noOpenCanvas'
     ? `${label} has no open canvas, so it holds no unsaved edits: nothing was saved.`
     : `A Terraform file in ${label} did not save, so Lace did not generate it.`;

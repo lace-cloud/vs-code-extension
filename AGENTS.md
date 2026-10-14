@@ -53,7 +53,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
 | Running a package binding (Stacks rows, stack palette commands) | `engine/runner-host.ts` | the Stacks tree, the offers |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
-| Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`) | every surface that acts on a module |
+| Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
 | How a line typed into a terminal calls a program in the terminal's shell | `vscode/shell-line.ts` (`shellLine`, over `env.shell`) | Create Stack in Terminal |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
@@ -119,9 +119,10 @@ its `RunCtx` and reads it when the store notifies.
 ## The canvas tab
 
 - `canvas-panels.ts`: one webview panel per root, created only by `ensure(root, {preserveFocus?})`; two `ensure` calls in
-  flight make one panel. The title is the root's path under its workspace folder (`rootTitle`: the folder's name first
-  in a workspace of several folders), with ● while the session is unsaved. `roots` lists every open panel's root,
-  focused or not: each is a candidate when a surface names its root.
+  flight make one panel. The title is the root's name (`rootLabel`: its path in the workspace, the folder's name first
+  in a workspace of several folders), with ● while the session is unsaved, and a change of the workspace's folders
+  titles it again; a tab whose folder left the workspace stays open on its session, titled by its directory's full
+  path. `roots` lists every open panel's root, focused or not: each is a candidate when a surface names its root.
 - The page (`canvas-webview/`) shares one postMessage pair between the engine bridge and the host protocol. It boots with
   the host's `boot` call (the root, the kept arrangement, the picked stack), opens the root's session over the bridge,
   and mounts the canvas package's `App` with its ports: `source`, `editor`, `commands`, `context` from the engine
@@ -188,9 +189,11 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 ## Stacks tree
 
 - `laceStacks` lists the current root's stacks (`stack list --source <root>`), each with its ten latest runs
-  (`run list --stack`). The root follows the active canvas and the active `.tf` editor; **Show Stacks of a Module** picks
-  it, and is in the view's title bar while more than one root is a candidate (the context key `lace.stacks.choice`, set
-  on each read of the tree). The view's description names it.
+  (`run list --stack`). The root follows the active canvas (one whose folder is open) and the active `.tf` editor;
+  **Show Stacks of a Module** picks it, and is in the view's title bar while more than one root is a candidate (the
+  context key `lace.stacks.choice`, set on each read of the tree). The view's description names it (`rootLabel`). A
+  change of the workspace's folders reads the tree again, and a root whose folder left the workspace is dropped and
+  found again.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
   `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
   the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
@@ -230,8 +233,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 ## Module commands
 
 `commands/authoring-commands.ts`; every command acts on the root `nameRoot` names and says which. With nothing pointed
-at, the candidates are the directories that hold Terraform and the roots of the canvases open, focused or not; the sole
-candidate is named without asking, and among several the developer picks. When none is named, `rootToAct` says why by
+at, the candidates are the directories that hold Terraform and the roots of the canvases open, focused or not (a canvas
+whose folder has left the workspace is under no open folder, and is none); the sole candidate is named without asking, and among several the developer picks. When none is named, `rootToAct` says why by
 the reason `nameRoot` gives (no folder is open; no directory holds Terraform and no canvas is open; several are
 candidates and the sources have no pick to ask; the folder pointed at is outside the workspace, or is or is inside
 `.terraform` or `.lace`, which is not a module directory), and a pick the developer dismissed says nothing. The stack

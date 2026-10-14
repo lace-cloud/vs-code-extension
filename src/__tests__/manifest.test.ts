@@ -51,7 +51,10 @@ function registered() {
         onDidChangeActiveTextEditor: () => disposable,
         showErrorMessage: vi.fn(),
       },
-      workspace: { registerTextDocumentContentProvider: () => disposable },
+      workspace: {
+        registerTextDocumentContentProvider: () => disposable,
+        onDidChangeWorkspaceFolders: () => disposable,
+      },
       lm: {
         registerTool: (name: string) => {
           tools.push(name);

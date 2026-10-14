@@ -91,8 +91,13 @@ const instancesIn = (content: string): string[] =>
   [...content.matchAll(/^- (\w+): module/gm)].map(([, name]) => name);
 
 // `scripts`: commands scripted beyond the validate and registry listing
-// every call can make; `fake`: the root's session.
-function setUp(scripts: Scripts = {}, fake = fakeSession()) {
+// every call can make; `fake`: the root's session; `folders`: the
+// workspace's folders.
+function setUp(
+  scripts: Scripts = {},
+  fake = fakeSession(),
+  folders: readonly vscode.WorkspaceFolder[] = [repo],
+) {
   const { rootSessions, acquired, holders, renew } = fakeRootSessions(fake.session);
   const order: string[] = [];
   rootSessions.acquire.mockImplementation(
@@ -130,12 +135,12 @@ function setUp(scripts: Scripts = {}, fake = fakeSession()) {
     panels,
     rootSessions,
     operations: canvasOperations({
-      workspace: { workspaceFolders: [repo], textDocuments } as never,
+      workspace: { workspaceFolders: folders, textDocuments } as never,
       rootSessions,
     }),
     commands,
   };
-  const laceTools = createLaceTools(ports);
+  const laceTools = createLaceTools(ports, { folders: () => folders });
   const tool = (name: string): LaceTool => {
     const found = laceTools.find((each) => each.schema.name === name);
     if (!found) throw new Error(`no tool ${name}`);
@@ -247,6 +252,19 @@ describe('the tools', () => {
     expect(result.isError).toBe(false);
     expect(acquired).toEqual([]);
     expect(fake.editor.save).not.toHaveBeenCalled();
+  });
+
+  test('save on a root with no session, in a workspace of several folders, names the root by its path in the workspace', async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const { tool } = setUp({}, fakeSession(), [api, web]);
+    const result = await tool('lace_save_module_canvas').call(
+      { folder: api, relative: 'infra/prod' },
+      {},
+    );
+    expect(result.content).toBe(
+      'api/infra/prod has no open canvas, so it holds no unsaved edits: nothing was saved.',
+    );
   });
 
   test("save on a root whose canvas is open saves that canvas's session", async () => {
@@ -408,6 +426,21 @@ describe('the root a tool names', () => {
     await expect(refused).rejects.toMatchObject({ roots: ['infra/new', 'infra/prod'] });
     await expect(refused).rejects.toThrow(
       'No module directory of this workspace is named "infra/staging". The directories that hold Terraform or have an open canvas (2): infra/new, infra/prod.',
+    );
+  });
+
+  test('lists no open canvas whose folder has left the workspace among the candidates', async () => {
+    const web = folder('/work/web', 2);
+    const sources = resolving(
+      [api],
+      files('/work/api/infra/prod/main.tf'),
+      ['/work/api/infra/prod', '/work/web/infra/prod'],
+      [{ folder: web, relative: 'infra/prod' }],
+    );
+    const refused = rootNamed(sources, 'infra/staging');
+    await expect(refused).rejects.toMatchObject({ roots: ['infra/prod'] });
+    await expect(refused).rejects.toThrow(
+      'The directories that hold Terraform or have an open canvas (1): infra/prod.',
     );
   });
 

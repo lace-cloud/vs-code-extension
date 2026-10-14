@@ -224,6 +224,8 @@ function setup(options: Options) {
   const opened: string[] = [];
   const progress: { title?: string; reports: string[]; cancel: () => void }[] = [];
   const activeEditor = new Emitter<unknown>();
+  // A change of the workspace's folders, told once `folders` holds them.
+  const workspaceFolders = new Emitter<vscode.WorkspaceFoldersChangeEvent>();
   const api = {
     window: {
       createTreeView: (_id: string, { treeDataProvider }: { treeDataProvider: never }) => {
@@ -283,6 +285,7 @@ function setup(options: Options) {
         opened.push(String(content?.provideTextDocumentContent(u as never, {} as never)));
         return {};
       }),
+      onDidChangeWorkspaceFolders: workspaceFolders.event,
     },
     commands: {
       registerCommand: (id: string, run: (...args: unknown[]) => Promise<unknown>) => {
@@ -417,6 +420,7 @@ function setup(options: Options) {
     redrawn,
     log,
     terraformFiles,
+    workspaceFolders,
   };
 }
 
@@ -494,6 +498,27 @@ describe('the stacks of the current root', () => {
     });
   });
 
+  test('turning to a canvas whose folder has left the workspace leaves the view on its root', async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const t = setup({
+      folders: [api],
+      terraformFiles: ['/work/api/infra/prod/main.tf'],
+      scripts: { 'stack list': { documents: [stacks()] } },
+    });
+    await t.children();
+    expect(t.view.description).toBe('infra/prod');
+
+    t.active.fire({ folder: web, relative: 'infra/prod' });
+    expect(t.redrawn).toEqual([]);
+    await t.children();
+    expect(t.view.description).toBe('infra/prod');
+    expect(t.commands.invoked.map((c) => c.args)).toEqual([
+      { source: '/work/api/infra/prod' },
+      { source: '/work/api/infra/prod' },
+    ]);
+  });
+
   test('follows the canvas the developer turns to', async () => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.children();
@@ -502,6 +527,54 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('infra/staging');
     expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/staging' });
+  });
+
+  test("in a workspace of several folders, the view names its root as the root's canvas tab is titled", async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const t = setup({
+      root: { folder: api, relative: 'infra/prod' },
+      folders: [api, web],
+      terraformFiles: ['/work/api/infra/prod/main.tf', '/work/web/infra/prod/main.tf'],
+      scripts: { 'stack list': { documents: [stacks()] } },
+    });
+    await t.children();
+    expect(t.view.description).toBe('api/infra/prod');
+  });
+
+  test("when the workspace's folders change, the view names its root by the folders open now, and finds another when its root's folder left", async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const folders = [api];
+    const t = setup({
+      folders,
+      terraformFiles: ['/work/api/infra/prod/main.tf', '/work/web/infra/prod/main.tf'],
+      scripts: { 'stack list': { documents: [stacks()] } },
+    });
+    await t.children();
+    expect(t.view.description).toBe('infra/prod');
+
+    folders.push(web);
+    t.workspaceFolders.fire({ added: [web], removed: [] });
+    expect(t.redrawn).toEqual([undefined]);
+    await t.children();
+    expect(t.view.description).toBe('api/infra/prod');
+
+    t.active.fire({ folder: web, relative: 'infra/prod' });
+    await t.children();
+    expect(t.view.description).toBe('web/infra/prod');
+
+    folders.pop();
+    t.workspaceFolders.fire({ added: [], removed: [web] });
+    expect(t.redrawn).toEqual([undefined, undefined, undefined]);
+    await t.children();
+    expect(t.view.description).toBe('infra/prod');
+    expect(t.commands.invoked.map((c) => c.args)).toEqual([
+      { source: '/work/api/infra/prod' },
+      { source: '/work/api/infra/prod' },
+      { source: '/work/web/infra/prod' },
+      { source: '/work/api/infra/prod' },
+    ]);
   });
 
   test('with several modules and none focused, the view offers the pick; the pick shows the chosen root', async () => {
