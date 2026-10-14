@@ -231,13 +231,16 @@ export type StartingSources = RootSources & { start: Ask };
 
 // The roots naming chooses among when nothing names one: the directories
 // holding Terraform and the roots of the canvases open in this window, each
-// once, shallowest first in folder order.
+// once, shallowest first in folder order. A canvas whose folder has left the
+// workspace is under no open folder, so it is no root to choose.
 export async function candidates(
   sources: Pick<RootSources, 'folders' | 'openCanvases' | 'terraformFiles'>,
 ): Promise<AuthoringRoot[]> {
-  const holding = rootsHolding(sources.folders(), await sources.terraformFiles());
+  const folders = sources.folders();
+  const holding = rootsHolding(folders, await sources.terraformFiles());
+  const open = sources.openCanvases().filter((root) => folderOpen(root, folders));
   const once = new Map<string, AuthoringRoot>();
-  for (const root of [...holding, ...sources.openCanvases()]) {
+  for (const root of [...holding, ...open]) {
     once.set(rootUri(root).toString(), root);
   }
   return [...once.values()].sort(

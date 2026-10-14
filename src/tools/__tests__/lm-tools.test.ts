@@ -429,6 +429,21 @@ describe('the root a tool names', () => {
     );
   });
 
+  test('lists no open canvas whose folder has left the workspace among the candidates', async () => {
+    const web = folder('/work/web', 2);
+    const sources = resolving(
+      [api],
+      files('/work/api/infra/prod/main.tf'),
+      ['/work/api/infra/prod', '/work/web/infra/prod'],
+      [{ folder: web, relative: 'infra/prod' }],
+    );
+    const refused = rootNamed(sources, 'infra/staging');
+    await expect(refused).rejects.toMatchObject({ roots: ['infra/prod'] });
+    await expect(refused).rejects.toThrow(
+      'The directories that hold Terraform or have an open canvas (1): infra/prod.',
+    );
+  });
+
   test("that is, or is inside, Terraform's cache or Lace's state, or is outside the workspace, is an error though the directory is there", async () => {
     const sources = resolving([app], files('/work/app/infra/prod/main.tf'), [
       '/work/app/.terraform/modules/x',

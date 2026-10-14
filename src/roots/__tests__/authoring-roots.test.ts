@@ -478,6 +478,17 @@ describe('the candidates', () => {
     ]);
   });
 
+  test('leave out an open canvas whose folder has left the workspace', async () => {
+    const api = folder('/work/api', 0);
+    const web = folder('/work/web', 1);
+    const roots = await candidatesOf(
+      [api],
+      ['/work/api/infra/prod/main.tf', '/work/web/infra/prod/main.tf'],
+      [{ folder: web, relative: 'infra/prod' }],
+    );
+    expect(roots).toEqual([{ folder: api, relative: 'infra/prod' }]);
+  });
+
   test('take in the roots of the canvases open, focused or not, each once, shallowest first', async () => {
     const roots = await candidatesOf(
       [repo],

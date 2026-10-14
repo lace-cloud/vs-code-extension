@@ -232,8 +232,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 ## Module commands
 
 `commands/authoring-commands.ts`; every command acts on the root `nameRoot` names and says which. With nothing pointed
-at, the candidates are the directories that hold Terraform and the roots of the canvases open, focused or not; the sole
-candidate is named without asking, and among several the developer picks. When none is named, `rootToAct` says why by
+at, the candidates are the directories that hold Terraform and the roots of the canvases open, focused or not (a canvas
+whose folder has left the workspace is under no open folder, and is none); the sole candidate is named without asking, and among several the developer picks. When none is named, `rootToAct` says why by
 the reason `nameRoot` gives (no folder is open; no directory holds Terraform and no canvas is open; several are
 candidates and the sources have no pick to ask; the folder pointed at is outside the workspace, or is or is inside
 `.terraform` or `.lace`, which is not a module directory), and a pick the developer dismissed says nothing. The stack
