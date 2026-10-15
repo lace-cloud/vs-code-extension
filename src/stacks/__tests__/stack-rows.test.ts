@@ -1,6 +1,7 @@
 import { type CommandFailure, type LaceReason, parseBound } from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
-import { outcomeNotice, previewText, refusedState, rootlessState } from '../stack-rows';
+import { outcomeNotice, previewText, refusedState, rootlessState, runLook } from '../stack-rows';
+import { run } from './stack-fixtures';
 
 type Binding = {
   policyId: string;
@@ -241,6 +242,31 @@ describe("a preview's Advisories", () => {
 
   test('end the document, after the policy verdict', () => {
     expect(previewText(preview('')).endsWith('\n\nAdvisories: none\n')).toBe(true);
+  });
+});
+
+describe("a run row's actions", () => {
+  const COMPLETED = '2026-09-01T01:00:00Z';
+  const PAGE = 'https://portal/o/t/stacks/stk_1/runs/run_1';
+  const contextOf = (...made: Parameters<typeof run>) => runLook(run(...made)).contextValue;
+
+  test('a run whose document says when it completed has ended, whatever its status', () => {
+    expect(contextOf('run_1', 'apply_succeeded', { completedAt: COMPLETED })).toBe('laceRun ended');
+    expect(contextOf('run_2', 'plan_succeeded', { completedAt: COMPLETED })).toBe('laceRun ended');
+    expect(contextOf('run_3', 'cancelled', { completedAt: COMPLETED })).toBe('laceRun ended');
+  });
+
+  test('a run whose document says no completion is running, whatever its status', () => {
+    expect(contextOf('run_1', 'applying')).toBe('laceRun running');
+    expect(contextOf('run_2', 'awaiting_approval')).toBe('laceRun running');
+    expect(contextOf('run_3', 'plan_succeeded')).toBe('laceRun running');
+  });
+
+  test('a run with a page offers it, ended or running', () => {
+    expect(contextOf('run_1', 'applying', { url: PAGE })).toBe('laceRun running portal');
+    expect(contextOf('run_2', 'apply_failed', { completedAt: COMPLETED, url: PAGE })).toBe(
+      'laceRun ended portal',
+    );
   });
 });
 

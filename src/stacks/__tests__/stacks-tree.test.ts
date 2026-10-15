@@ -20,7 +20,7 @@ import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
 import { stackPick } from '../stack-pick';
 import { type Row, STACK_COMMANDS, STACKS_CHOICE, STACKS_STATE, stacksTree } from '../stacks-tree';
-import { memento, stack, stacks } from './stack-fixtures';
+import { memento, run, runs, stack, stacks } from './stack-fixtures';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -62,45 +62,6 @@ const teams = (...slugs: string[]) => ({
   createUrl: TEAM_CREATE_URL,
 });
 
-const run = (id: string, status: string, url?: string) => ({
-  id,
-  stackId: 'stk_1',
-  orgId: 'org_1',
-  teamId: 'team_1',
-  kind: 'apply',
-  status,
-  initiatedByUserId: null,
-  initiatedVia: 'cli',
-  runnerIdentity: null,
-  runnerLocation: null,
-  bundleSnapshotId: null,
-  sourceCommitSha: null,
-  sourceRef: null,
-  sourcePrUrl: null,
-  sourceOverride: false,
-  planResourceAdd: 1,
-  planResourceChange: 2,
-  planResourceDestroy: 0,
-  planLocation: null,
-  planHumanLocation: null,
-  applyLogLocation: null,
-  policyResultsLocation: null,
-  policyPassed: null,
-  policyResolution: null,
-  changeRequestId: null,
-  cancelReason: null,
-  startedAt: null,
-  completedAt: null,
-  errorMessage: null,
-  sourceTreeHash: null,
-  attestationStatus: null,
-  attestedAt: null,
-  attestation: null,
-  createdAt: '2026-09-01T00:00:00Z',
-  updatedAt: '2026-09-01T00:00:00Z',
-  ...(url === undefined ? {} : { url }),
-});
-const runs = (...items: ReturnType<typeof run>[]) => ({ items, nextCursor: null, hasMore: false });
 // The Advisories of a preview of a stack no Agent is bound at Preview on.
 const NO_AGENT = {
   queue: { manifestation: 'preview', floor: 0.5, entries: [], belowFloor: 0 },
@@ -108,9 +69,10 @@ const NO_AGENT = {
   pending: 0,
   bound: 0,
 };
+const COMPLETED = '2026-09-01T01:00:00Z';
 const applyResult = (error: string | null = null) => ({
   type: 'result',
-  run: run('run_9', error ? 'apply_failed' : 'apply_succeeded'),
+  run: run('run_9', error ? 'apply_failed' : 'apply_succeeded', { completedAt: COMPLETED }),
   summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
   workspaceDir: '/cache',
   error,
@@ -422,7 +384,7 @@ describe('the stacks of the current root', () => {
     });
   });
 
-  test('a stack expands to its recent runs; a run with a page offers it', async () => {
+  test('a stack expands to its recent runs, each row saying whether its run ended; a run with a page offers it', async () => {
     const t = setup({
       root: prod,
       scripts: {
@@ -430,8 +392,11 @@ describe('the stacks of the current root', () => {
         'run list': {
           documents: [
             runs(
-              run('run_1', 'apply_succeeded', 'https://portal/o/t/stacks/stk_1/runs/run_1'),
-              run('run_2', 'plan_failed'),
+              run('run_1', 'apply_succeeded', {
+                completedAt: COMPLETED,
+                url: 'https://portal/o/t/stacks/stk_1/runs/run_1',
+              }),
+              run('run_2', 'applying'),
             ),
           ],
         },
@@ -448,10 +413,10 @@ describe('the stacks of the current root', () => {
       {
         label: 'apply · run_1',
         description: 'apply_succeeded · +1 ~2 -0',
-        contextValue: 'laceRun portal',
+        contextValue: 'laceRun ended portal',
         iconPath: { id: 'pass-filled' },
       },
-      { label: 'apply · run_2', contextValue: 'laceRun', iconPath: { id: 'error' } },
+      { label: 'apply · run_2', contextValue: 'laceRun running', iconPath: { id: 'sync~spin' } },
     ]);
 
     await t.command(STACK_COMMANDS.openInPortal, runRows[0]);
@@ -952,7 +917,7 @@ describe('a stack row', () => {
             { type: 'result', status: 'apply_succeeded' },
           ],
         },
-        'run cancel': { documents: [run('run_1', 'cancelled')] },
+        'run cancel': { documents: [run('run_1', 'cancelled', { completedAt: COMPLETED })] },
       },
     });
     const [row] = await t.children();
