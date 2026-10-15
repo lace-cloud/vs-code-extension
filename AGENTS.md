@@ -73,12 +73,16 @@ each other: every contributed command, view and tool is one a feature registers,
 ## Engine and sessions
 
 **One engine per window.** `engine.ts` runs one `lace engine` through `@lace-cloud/host`'s `ServerManager`, started on
-demand by the first caller. The engine is spawned with a stdin pipe the manager holds and exits when it closes, so an
-extension host that dies takes its engine, sessions and locks with it. The handshake's protocol version decides
-compatibility: an engine of another protocol is refused with a message that names which side to update. The extension
-host reaches the engine through an in-process bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same
-typed mapping a webview holds over its bridge. `whenRunning` waits for a restart that `lace.autoRestart` or the developer
-starts.
+demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's own install puts it, unless
+`lace.binaryPath` names another executable; the manager spawns the value as given, so on Windows the setting names a
+`lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
+default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
+with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
+and locks with it. The handshake's protocol version decides compatibility: an engine of another protocol is refused with
+a message that names which side to update; any other failed start says to install the Lace CLI so `lace` is on `PATH`,
+or to set `lace.binaryPath` to its executable's full path. The extension host reaches the engine through an in-process
+bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same typed mapping a webview holds over its bridge.
+`whenRunning` waits for a restart that `lace.autoRestart` or the developer starts.
 
 **One session per authoring root, `root-sessions.ts` its only owner.**
 
