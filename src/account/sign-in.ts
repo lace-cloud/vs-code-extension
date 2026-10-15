@@ -16,6 +16,7 @@ import {
 } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument } from '../engine/command-outcome';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 
 export type SignInApi = {
   window: Pick<
@@ -69,7 +70,11 @@ export async function signIn(
       cancellable: true,
     },
     async (progress, token) => {
-      const invocation = commands.invoke('login', {}, new AbortController().signal);
+      const invocation = commands.invoke(
+        LACE_COMMANDS.login.path,
+        {},
+        new AbortController().signal,
+      );
       const cancelling = token.onCancellationRequested(() => void invocation.cancel());
       try {
         let user: SignedIn | undefined;
@@ -95,7 +100,7 @@ export async function signIn(
       } catch (error) {
         if (!(error instanceof CommandExitError && error.code === CANCELLED)) {
           void api.window.showErrorMessage(
-            `Lace sign-in failed: ${failureSays(error, { kind: 'write' }).message}`,
+            `Lace sign-in failed: ${failureSays(error, LACE_COMMANDS.login).message}`,
           );
         }
         return undefined;
@@ -111,7 +116,7 @@ export async function signOut(
   commands: CommandsPort,
   window: Pick<typeof vscode.window, 'showInformationMessage'>,
 ): Promise<void> {
-  const { loggedOut } = await commandDocument(commands, { kind: 'write', path: 'logout' }, {});
+  const { loggedOut } = await commandDocument(commands, LACE_COMMANDS.logout, {});
   void window.showInformationMessage(
     loggedOut ? 'Signed out of Lace.' : 'You were not signed in to Lace.',
   );

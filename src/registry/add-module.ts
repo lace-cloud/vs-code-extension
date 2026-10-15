@@ -6,11 +6,12 @@
 // carries.
 import type * as vscode from 'vscode';
 import { documentOf, failureOf, failureText } from '../engine/command-outcome';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 import { moduleKey, moduleLabel, type RegistryRow } from '../protocol/registry-protocol';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import { pickFrom } from '../vscode/pick';
 import type { PlacedModule } from './place-module';
-import { REGISTRY_LIST, type RegistryReads } from './registry-reads';
+import type { RegistryReads } from './registry-reads';
 
 export const ADD_MODULE = 'lace.addModuleToCanvas';
 
@@ -34,7 +35,9 @@ export function addModuleToCanvas(options: {
 }): () => Promise<void> {
   const { api, reads, place, offers } = options;
   return async () => {
-    const listed = reads.list().then((outcome) => documentOf(REGISTRY_LIST, outcome));
+    const listed = reads
+      .list()
+      .then((outcome) => documentOf(LACE_COMMANDS['registry list'], outcome));
     let picked: (vscode.QuickPickItem & { row: RegistryRow }) | undefined;
     try {
       picked = await pickFrom<vscode.QuickPickItem & { row: RegistryRow }>(

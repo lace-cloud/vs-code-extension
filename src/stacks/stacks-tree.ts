@@ -62,6 +62,7 @@ import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 import { binding, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
@@ -221,11 +222,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   async function stackRows(of: AuthoringRoot): Promise<Row[]> {
     let stacks: Stack[];
     try {
-      const listed = await commandDocument(
-        await commands.anywhere(),
-        { kind: 'read', path: 'stack list' },
-        { source: rootPath(of) },
-      );
+      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['stack list'], {
+        source: rootPath(of),
+      });
       stacks = listed.items;
     } catch (error) {
       refusal = failureOf(error);
@@ -250,7 +249,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     try {
       const teams = await commandDocument(
         await commands.anywhere(),
-        { kind: 'read', path: 'team list' },
+        LACE_COMMANDS['team list'],
         {},
       );
       return teams.items.length === 0 ? 'teamlessOrganization' : 'noTeam';
@@ -262,11 +261,10 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   async function runRows(row: Extract<Row, { kind: 'stack' }>): Promise<Row[]> {
     try {
-      const listed = await commandDocument(
-        await commands.anywhere(),
-        { kind: 'read', path: 'run list' },
-        { stack: row.stack.id, limit: RECENT_RUNS },
-      );
+      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['run list'], {
+        stack: row.stack.id,
+        limit: RECENT_RUNS,
+      });
       if (listed.items.length === 0) return [{ kind: 'note', text: 'No runs yet', icon: 'info' }];
       return listed.items.map((run) => ({
         kind: 'run',

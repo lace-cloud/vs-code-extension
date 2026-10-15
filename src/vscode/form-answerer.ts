@@ -25,6 +25,7 @@ import type { ActionContribution, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 import type { Answerer, Form } from '../engine/runner-host';
 import { type AuthoringRoot, type RootSources, rootOfRun, rootUri } from '../roots/authoring-roots';
 import { notice, type OfferActions, offersFor } from './offers';
@@ -75,7 +76,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     connection: async ({ title }) => {
       const listed = commands
         .anywhere()
-        .then((home) => commandDocument(home, { kind: 'read', path: 'connection list' }, {}));
+        .then((home) => commandDocument(home, LACE_COMMANDS['connection list'], {}));
       try {
         const picked = await pickFrom(
           api.window,

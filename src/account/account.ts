@@ -15,6 +15,7 @@ import type { CommandsPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandOutcome, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 import { registerCommands } from '../vscode/commands';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import {
@@ -53,7 +54,7 @@ const LACE_COMMAND = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
 // The account as the CLI reads it, as one value two reads are compared by.
 async function accountRead(commands: CommandsPort): Promise<string> {
   const [who, selection] = await Promise.all([
-    commandOutcome(commands, { kind: 'read', path: 'whoami' }, {}),
+    commandOutcome(commands, LACE_COMMANDS.whoami, {}),
     currentSelection(commands),
   ]);
   const signedIn = who.kind === 'result' ? who.document.user.id : who.failure.reason;

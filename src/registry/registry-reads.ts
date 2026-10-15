@@ -3,19 +3,12 @@
 // reads a directory. The module axis only, and up to the most rows one
 // `registry list` returns.
 import type { BoundPath, JsonOf } from '@lace-cloud/canvas/engine';
-import {
-  type CommandOutcome,
-  commandOutcome,
-  failureText,
-  type LaceCommand,
-} from '../engine/command-outcome';
+import { type CommandOutcome, commandOutcome, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 import type { Read } from '../protocol/registry-protocol';
 
 export const LIST_LIMIT = 500;
-
-// The registry's modules, as the sidebar and Add Module read them.
-export const REGISTRY_LIST: LaceCommand<'registry list'> = { kind: 'read', path: 'registry list' };
 
 // A module's registry reference, as the registry commands take it.
 const artifact = (key: string): string => `module/${key}`;
@@ -31,24 +24,21 @@ export type RegistryReads = {
 export function registryReads(commands: Pick<CommandsMapping, 'anywhere'>): RegistryReads {
   return {
     list: async () =>
-      commandOutcome(await commands.anywhere(), REGISTRY_LIST, {
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['registry list'], {
         axis: 'module',
         limit: LIST_LIMIT,
       }),
     get: async (key) =>
-      commandOutcome(
-        await commands.anywhere(),
-        { kind: 'read', path: 'registry get' },
-        { artifact: artifact(key) },
-      ),
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['registry get'], {
+        artifact: artifact(key),
+      }),
     describe: async (key, version) =>
-      commandOutcome(
-        await commands.anywhere(),
-        { kind: 'read', path: 'registry describe' },
-        { artifact: artifact(key), version },
-      ),
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['registry describe'], {
+        artifact: artifact(key),
+        version,
+      }),
     organization: async () =>
-      commandOutcome(await commands.anywhere(), { kind: 'read', path: 'org current' }, {}),
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['org current'], {}),
   };
 }
 
