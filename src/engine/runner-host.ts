@@ -11,9 +11,9 @@
 // runs in the `RunCtx`'s root, which the runner names as the invocation's
 // working directory; any other runs in the home. A restarted engine is a
 // new port: the next run builds the runner again over it, keeping the
-// store. What is running is the store's to say (the run slot's run, and a
-// command's running mark from its start to its end), so a surface that
-// shows one under way reads the store.
+// store. What is running is the store's to say, and the host keeps no count
+// of its own: the Stacks view's `commandRunning` is the one place that asks
+// it whether any command is under way.
 //
 // Each run is carried through everything the runner does for it in an
 // async context (`AsyncLocalStorage`), which attributes to the run what
