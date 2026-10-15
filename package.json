@@ -96,7 +96,7 @@
       {
         "view": "laceStacks",
         "when": "lace.stacks.state == noStack",
-        "contents": "No stack is deployed from this module yet. A stack is created once, in a terminal: `lace stack create` in the module's directory, with the new stack's slug and the ID of the cloud connection it deploys through (`lace connection list`).\n[Create Stack in Terminal](command:lace.stacks.createInTerminal)"
+        "contents": "No stack is deployed from this module yet.\n[Create Stack](command:lace.stacks.create)"
       },
       {
         "view": "laceStacks",
@@ -183,8 +183,8 @@
         "title": "Lace: Open Portal"
       },
       {
-        "command": "lace.stacks.createInTerminal",
-        "title": "Lace: Create Stack in Terminal"
+        "command": "lace.stacks.create",
+        "title": "Lace: Create Stack"
       },
       {
         "command": "lace.save",
@@ -255,7 +255,7 @@
           "when": "false"
         },
         {
-          "command": "lace.stacks.createInTerminal",
+          "command": "lace.stacks.create",
           "when": "false"
         },
         {

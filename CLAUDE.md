@@ -39,7 +39,7 @@ src/
   canvas-webview/         the canvas page (browser bundle)
   registry/               the registry sidebar, module detail, placement, Add Module to Canvas (host side)
   registry-webview/       the registry sidebar and module detail pages (browser bundles)
-  stacks/                 the Stacks tree, its rows, the runs' Output channels
+  stacks/                 the Stacks tree, its rows, the runs' Output channels, the stack pick
   commands/               the module commands of the palette; Save and Generate's one rule each
   account/                sign-in and sign-out; organization and team
   diagnostics/            the Problems panel
@@ -47,7 +47,7 @@ src/
   autosave/               when a canvas saves, from files.autoSave
   tools/                  the chat tools as Language Model Tools
   protocol/               the webview ↔ host protocols, shared by both bundles
-  vscode/                 command registration, dialogs, notices with their offers, a run form's prompts, webview HTML, a terminal's command line
+  vscode/                 command registration, dialogs, notices with their offers, a run form's prompts, webview HTML
   webview/                the page side of a webview: its postMessage pair; the canvas's theme from VS Code's
 resources/instructions/   the text-level instructions contributed to the developer's coding assistant
 packages/host-e2e/        the window e2e (a real VS Code against a real engine)

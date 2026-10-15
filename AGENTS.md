@@ -25,8 +25,8 @@ shows what changed after Generate.
 keeper observing every held session. `windowHost` (`src/features.ts`) builds the owners more than one feature reads (the
 root state, the canvas panels, the commands mapping, the account, the window's one action runner with the prompts that
 answer its forms, its runs' Output channels and the offers its notices make, the root sources over the canvas panels'
-roots, Save and Generate's canvas operations, and the palette's module commands with their Validate on a root) and hands
-the same `Host` to every feature in `FEATURES`:
+roots, Save and Generate's canvas operations, the palette's module commands with their Validate on a root, and the one
+stack pick) and hands the same `Host` to every feature in `FEATURES`:
 
 | Feature | Registers |
 |---|---|
@@ -51,11 +51,10 @@ each other: every contributed command, view and tool is one a feature registers,
 | A root's session: holders, `SessionOpen`, `SessionClose`, and what observers attach to it | `engine/root-sessions.ts` | canvas panels, tools, Save, Generate, placement, Problems, autosave |
 | A canvas tool call's tool set, over the ports of its hold's session | `tools/lm-tools.ts` | that call |
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
-| Running a package binding (Stacks rows, stack palette commands, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, the offers |
+| Running a package binding (Stacks rows, stack palette commands, Create Stack, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, the offers |
 | How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
-| How a line typed into a terminal calls a program in the terminal's shell | `vscode/shell-line.ts` (`shellLine`, over `env.shell`) | Create Stack in Terminal |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
 | Whether this window holds a root's session, root compared with root | `commands/canvas-operations.ts` (`held`) | Save, where a module command's report lands |
@@ -66,6 +65,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
 | The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
 | What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
+| Which stack of a root a stack command no row names acts on | `stacks/stack-pick.ts` (`pickStack`) | the palette's Preview, Apply and Scan |
 | Validate on a root, whatever offers it | `commands/authoring-commands.ts` (`validate`, the palette's Validate) | the palette, the Stacks tree's apply, a notice about a root |
 
 ## Engine and sessions
@@ -110,11 +110,10 @@ tool sets run theirs on the session mapping's own `commands` port, whose directo
 `{kind: 'failure', failure}`. A command can render its result and exit non-zero (`module scan` with findings, `module
 validate` when Terraform found errors), and that is a result.
 
-**The runner host** is the window's one `createActionRunner` over the home port and one result store. The Stacks tree and
-the stack palette commands run the package's bindings through it with a `RunCtx` naming the root and the stack; the
-binding owns the arguments, the confirmation and the result folding, and the host draws the store. A binding that
-declares the root runs in it. The host runs each binding inside an async context (`AsyncLocalStorage`) carrying its run,
-which attributes to the run what names none:
+**The runner host** is the window's one `createActionRunner` over the home port and one result store. The Stacks tree,
+the stack palette commands and Create Stack run the package's bindings through it with a `RunCtx` naming the root and
+the stack; the binding owns the arguments, the confirmation and the result folding, and the host draws the store. A binding that declares the root runs in it. The host runs each binding inside an async context
+(`AsyncLocalStorage`) carrying its run, which attributes to the run what names none:
 
 - `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked it.
 - The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
@@ -126,7 +125,7 @@ which attributes to the run what names none:
   runs in the run's context again.
 - A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
-  each invocation it started. `run` resolves when the runner's call does, with `ended`, which a trigger shows a
+  each invocation it started. `run` resolves when the runner's call does, with `ended`, which Create Stack shows a
   progress notification against.
 - A notice of a failure offers, after the window's own ways out, each package action placed on a failure's row whose
   `answers` names the failure's reason (`import-partial`, Import the rest, on `import_residual`), run over the failed
@@ -213,7 +212,7 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
   `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
   the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
-  root.
+  root with the one stack pick (`stacks/stack-pick.ts`).
 - Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges. Each tick of the
   runner's store (a run started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root
   that run was about, its `RunCtx.root`, whatever the tree ran since.
@@ -232,19 +231,14 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   (Choose Module). When the stacks cannot be listed, it selects the welcome view by the failure's reason: `signedOut`,
   `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no
   portal URL), `noStack`, `failed`. The tree does not offer `lace stack destroy`; it is a terminal command.
-- Creating a stack is one-time setup in a terminal, not a journey of the extension. `noStack`'s action, Create Stack in
-  Terminal (`lace.stacks.createInTerminal`), types `<lace.binaryPath> stack create SLUG --source . --connection
-  CONNECTION_ID` into a terminal at the root, unsent: a placeholder for each argument `stack create` requires
-  (`stacks-tree.test.ts` reads them from the command contract), which the developer fills in before running it. The
-  terminal runs the default profile, whose shell `env.shell` names, and the line calls the CLI as that shell calls a
-  program by its path (`vscode/shell-line.ts`): PowerShell `& 'path'` (each of `' ‘ ’ ‚ ‛` doubled), Command Prompt
-  `"path"`, fish `'path'` (`\` and `'` escaped), nushell `^'path'` (a raw string when the path holds `'`), any other
-  shell POSIX single quotes. VS Code's API puts no command on a prompt unsent in the shell's syntax
-  (`shellIntegration.executeCommand` runs it), so that rule is the extension's, in that one module. With WSL as the
-  default profile, `env.shell` is `wsl.exe`, which names neither the distribution's shell nor how it mounts the Windows
-  path the setting names, so the line is written for a POSIX shell and may not run there.
-- A stack palette command (Preview, Apply, Scan Stack) on a root with no stack says so, and that Create Stack in
-  Terminal creates one; it shows no empty pick.
+- `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding run
+  through the runner over the view's root, under a progress notification ("Creating a stack for <root>") until its run
+  ends. The runner's form asks for the slug and the connection; the package's notice says "Created stack <slug>", and
+  its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason, through the offers
+  (`not_git_repository` and `no_origin_remote` say the CLI's message).
+- The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>`; a list that cannot be read is shown
+  with the ways out its reason names, and a root with no stack says "No stack is deployed from <root> yet. Create one in
+  the Stacks view." and shows no empty pick.
 
 ## Module commands
 

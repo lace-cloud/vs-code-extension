@@ -152,14 +152,13 @@ its ten most recent runs. The view's description names the module; it follows th
   **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
-  portal), **Create Stack in Terminal** (no stack deployed from the module yet), or **Retry**.
-- A stack is created once, in a terminal. **Create Stack in Terminal** types
-  `lace stack create SLUG --source . --connection CONNECTION_ID`, with the CLI at `lace.binaryPath` written as the shell of
-  your default terminal profile calls a program (PowerShell, Command Prompt, fish, nushell or a POSIX shell), into a
-  terminal at the module directory, unsent: replace `SLUG` with the new stack's slug and `CONNECTION_ID` with the ID of
-  the cloud connection it deploys through (`conn_…`, as `lace connection list` lists them), then run it. Preview, Apply
-  and Scan Stack from the Command Palette on a module with no stack say so. The stack is bound to the module's place in
-  its git repository, and the view lists it once you refresh.
+  portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.
+- **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it asks
+  for the new stack's slug, then for the cloud connection it deploys through, picked from your team's connections as
+  `lace connection list` lists them, and creates it under a progress notification. The stack is bound to the module's
+  place in its git repository, and the view lists it. A team with no cloud connection yet is told so, with
+  **Open Portal**, where connections are added. **Preview**, **Apply** and **Scan for Drift** from the Command Palette
+  on a module with no stack say to create one in the Stacks view.
 
 ## Sign-in, organization and team
 
@@ -281,7 +280,7 @@ The extension runs one Lace engine per window, started when something first need
 | Lace: Cancel Run                     | `lace.cancelRun`               | Cancels a run. On a run row.                                                                                     |
 | Lace: Open in Portal                 | `lace.openRunInPortal`         | Opens a run's page in the Lace portal. On a run row.                                                             |
 | Lace: Open Portal                    | `lace.stacks.openPortal`       | Opens the portal page the Stacks view's failure names. In the view.                                              |
-| Lace: Create Stack in Terminal       | `lace.stacks.createInTerminal` | Types `lace stack create`, with placeholders, into a terminal at the module directory. In the view.          |
+| Lace: Create Stack                   | `lace.stacks.create`           | Creates a stack of the module, asking for its slug and its cloud connection. In the view, while no stack is deployed from the module. |
 | Lace: Start Engine                   | `lace.startEngine`             | Starts the Lace engine.                                                                                          |
 | Lace: Stop Engine                    | `lace.stopEngine`              | Stops the Lace engine.                                                                                           |
 | Lace: Restart Engine                 | `lace.restartEngine`           | Restarts the Lace engine.                                                                                        |

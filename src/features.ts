@@ -11,7 +11,7 @@ import { authoringCommands, type ModuleCommands } from './commands/authoring-com
 import { type CanvasOperations, canvasOperations } from './commands/canvas-operations';
 import { problemsObserver } from './diagnostics/problems';
 import { type CommandsMapping, createCommandsMapping } from './engine/commands-mapping';
-import { type Engine, engineControls, engineSettings } from './engine/engine';
+import { type Engine, engineControls } from './engine/engine';
 import type { RootSessions } from './engine/root-sessions';
 import { createRunnerHost, type RunnerHost } from './engine/runner-host';
 import { moduleKey } from './protocol/registry-protocol';
@@ -23,6 +23,7 @@ import { registryReads } from './registry/registry-reads';
 import { createRegistryView, REFRESH_REGISTRY, REGISTRY_VIEW } from './registry/registry-view';
 import { type RootSources, startingSources, workspaceRootSources } from './roots/authoring-roots';
 import { createRunOutput, type RunOutput } from './stacks/run-output';
+import { type PickStack, stackPick } from './stacks/stack-pick';
 import { stacksTree } from './stacks/stacks-tree';
 import { createRootState, type RootState } from './state/root-state';
 import { registerLaceTools } from './tools/lm-tools';
@@ -49,8 +50,8 @@ export type WindowBase = {
 // that answer its forms, the Output channels of its runs and what its
 // notices offer, the canvas panels, how a surface names its root (a surface
 // that starts a module adds its ask, `startingSources`), the one rule of
-// Save and of Generate, and the palette's module commands, whose Validate a
-// notice about a root offers.
+// Save and of Generate, the palette's module commands, whose Validate a
+// notice about a root offers, and the one stack pick.
 export type Host = WindowBase & {
   rootState: RootState;
   commands: CommandsMapping;
@@ -62,6 +63,7 @@ export type Host = WindowBase & {
   sources: RootSources;
   operations: CanvasOperations;
   modules: ModuleCommands;
+  pickStack: PickStack;
 };
 
 export function windowHost(base: WindowBase): Host {
@@ -112,6 +114,7 @@ export function windowHost(base: WindowBase): Host {
     log,
     offers,
   });
+  const pickStack = stackPick({ api, commands, rootState, sources, offers });
   return {
     ...base,
     rootState,
@@ -124,6 +127,7 @@ export function windowHost(base: WindowBase): Host {
     sources,
     operations,
     modules,
+    pickStack,
   };
 }
 
@@ -205,18 +209,11 @@ function accountCommands({ api, account, commands, offers, report }: Host): vsco
 // The Stacks tree, and the lifetime of the window's runner and its runs'
 // Output channels.
 function stacks(host: Host): vscode.Disposable {
-  const tree = stacksTree({
-    ...host,
-    validate: host.modules.validate,
-    binaryPath: engineSettings(host.api.workspace).binaryPath,
-  });
-  return {
-    dispose() {
-      tree.dispose();
-      host.runner.dispose();
-      host.runOutput.dispose();
-    },
-  };
+  return disposingAll([
+    stacksTree({ ...host, validate: host.modules.validate }),
+    host.runner,
+    host.runOutput,
+  ]);
 }
 
 // The Lace tools in VS Code's chat, run by the developer's own model. A host
