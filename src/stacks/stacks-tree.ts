@@ -30,11 +30,15 @@
 // badges; the tree redraws the row picked before and the row picked now.
 // VS Code redraws an element it was given, by identity, and keeps every
 // other row and what a context menu holds of it; a read of the whole tree
-// drops them until it settles, so only a change that may change the list
-// reads it all. An apply runs under a progress notification and says how it
-// settled (`outcomeNotice`), with the ways out its failure names (Validate
-// is the palette's, on the root the apply ran in), or, held for approval,
-// the change request it waits on, offering the page of each record that has
+// drops them until it settles, so only what may change the list reads it
+// all: a tick of the runner's store, a change of the account (made in this
+// window or found outside it), the view shown again, a change of the
+// workspace's folders, and Refresh.
+//
+// An apply runs under a progress notification and says how it settled
+// (`outcomeNotice`), with the ways out its failure names (Validate is the
+// palette's, on the root the apply ran in), or, held for approval, the
+// change request it waits on, offering the page of each record that has
 // one; a preview opens as a read-only document; each tick of the runner's
 // store (a run started or settled, a scan or a cancel done) reads the tree
 // again and tells the canvas of the root that run was about that its reads
