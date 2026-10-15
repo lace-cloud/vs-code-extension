@@ -322,6 +322,7 @@ function setup(options: Options) {
   const runner = createRunnerHost({
     commands: () => mapping.anywhere(),
     presenter: offeringPresenter(api as never, offers, async () => true, vi.fn()),
+    answerer: (form) => form.cancel(),
     onRunLog: (line, made) => {
       ran.push(made);
       runOutput.append(line, made);

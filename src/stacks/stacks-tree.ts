@@ -38,19 +38,18 @@
 // one; or several do, and Choose Module picks one. When the stacks cannot be
 // listed, the view says why by the failure's reason, with the one action
 // that gets past it.
-import {
-  type ActionContribution,
-  CORE_COMMAND_ACTIONS,
-  type CommandFailure,
-  type RunCtx,
-  type StackRef,
+import type {
+  ActionContribution,
+  CommandFailure,
+  RunCtx,
+  StackRef,
 } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import type { RunnerHost } from '../engine/runner-host';
+import { binding, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
   candidates,
@@ -158,12 +157,6 @@ export type StacksTreeOptions = {
   // The Lace CLI the engine runs, as a terminal would name it.
   binaryPath: () => string;
   report: (what: string, error: unknown) => void;
-};
-
-const binding = (id: string): ActionContribution => {
-  const found = CORE_COMMAND_ACTIONS.find((action) => action.id === id);
-  if (!found) throw new Error(`the canvas package carries no binding ${id}`);
-  return found;
 };
 
 export function stacksTree(options: StacksTreeOptions): vscode.Disposable {

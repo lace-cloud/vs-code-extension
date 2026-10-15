@@ -23,10 +23,10 @@ shows what changed after Generate.
 
 `src/extension.ts` builds the window's base: the "Lace" Output channel, the engine, the root sessions, and the autosave
 keeper observing every held session. `windowHost` (`src/features.ts`) builds the owners more than one feature reads (the
-root state, the canvas panels, the commands mapping, the account, the window's one action runner with its runs' Output
-channels and the offers its notices make, the root sources over the canvas panels' roots, Save and Generate's canvas
-operations, and the palette's module commands with their Validate on a root) and hands the same `Host` to every feature
-in `FEATURES`:
+root state, the canvas panels, the commands mapping, the account, the window's one action runner with the prompts that
+answer its forms, its runs' Output channels and the offers its notices make, the root sources over the canvas panels'
+roots, Save and Generate's canvas operations, and the palette's module commands with their Validate on a root) and hands
+the same `Host` to every feature in `FEATURES`:
 
 | Feature | Registers |
 |---|---|
@@ -51,7 +51,8 @@ each other: every contributed command, view and tool is one a feature registers,
 | A root's session: holders, `SessionOpen`, `SessionClose`, and what observers attach to it | `engine/root-sessions.ts` | canvas panels, tools, Save, Generate, placement, Problems, autosave |
 | A canvas tool call's tool set, over the ports of its hold's session | `tools/lm-tools.ts` | that call |
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
-| Running a package binding (Stacks rows, stack palette commands) | `engine/runner-host.ts` | the Stacks tree, the offers |
+| Running a package binding (Stacks rows, stack palette commands, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, the offers |
+| How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
 | How a line typed into a terminal calls a program in the terminal's shell | `vscode/shell-line.ts` (`shellLine`, over `env.shell`) | Create Stack in Terminal |
@@ -63,7 +64,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
-| The way out a failure names | `vscode/offers.ts`, by the failure's `reason` | every notice of a failed command |
+| The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
 | What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
 | Validate on a root, whatever offers it | `commands/authoring-commands.ts` (`validate`, the palette's Validate) | the palette, the Stacks tree's apply, a notice about a root |
 
@@ -112,9 +113,24 @@ validate` when Terraform found errors), and that is a result.
 **The runner host** is the window's one `createActionRunner` over the home port and one result store. The Stacks tree and
 the stack palette commands run the package's bindings through it with a `RunCtx` naming the root and the stack; the
 binding owns the arguments, the confirmation and the result folding, and the host draws the store. A binding that
-declares the root runs in it. `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked
-it: the store's tick names no run, so the host runs each binding inside an async context (`AsyncLocalStorage`) carrying
-its `RunCtx` and reads it when the store notifies.
+declares the root runs in it. The host runs each binding inside an async context (`AsyncLocalStorage`) carrying its run,
+which attributes to the run what names none:
+
+- `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked it.
+- The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
+  object was answered before is reused by argument name; the answerer (`vscode/form-answerer.ts`) asks the rest, one
+  prompt per argument name: `slug` an input box that refuses an empty value, `connection` a pick from `lace connection
+  list` (a list that cannot be read, or an empty one, cancels the form and says why), `state` an open dialog for one
+  file; any other name cancels the form with a notice. A dismissed prompt cancels the form. The host keeps the form the
+  runner handed it last: a form superseded by a newer one submits and cancels nothing when its prompts settle. A submit
+  runs in the run's context again.
+- A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
+  starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
+  each invocation it started. `run` resolves when the runner's call does, with `ended`, which a trigger shows a
+  progress notification against.
+- A notice of a failure offers, after the window's own ways out, each package action placed on a failure's row whose
+  `answers` names the failure's reason (`import-partial`, Import the rest, on `import_residual`), run over the failed
+  run's own `RunCtx` object, so it reuses the statefile that run was given. The runner's requirement check gates it.
 
 ## The canvas tab
 
@@ -265,10 +281,11 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
 - A failure is the shared notice of `vscode/offers.ts`, with the ways out its reason names: `tool_missing` names the
   tool with **Install** on the URL the failure carries; `source_refused` (a Convert stopped at Terraform it cannot
   represent as written) offers **Validate** of the same root, whose report names what is refused; `not_git_repository`
-  offers nothing, its message says to run `git init`. Validate is offered only by a notice that names its root: a notice
-  the window's runner presents carries no run, so it offers none. Validate and Convert run through the commands mapping,
-  not the runner: the package's bindings for them hand the presenter a verdict line and no document. Generate Docs opens the markdown in an untitled editor and writes
-  nothing into the tree (a README beside the `.tf` would move the tree's hash).
+  offers nothing, its message says to run `git init`. Validate is offered only by a notice whose place supplies Validate
+  on the root the failure is about; the window's runner supplies none. Validate and Convert run through the commands
+  mapping, not the runner: the package's bindings for them hand the presenter a verdict line and no document. Generate
+  Docs opens the markdown in an untitled editor and writes nothing into the tree (a README beside the `.tf` would move
+  the tree's hash).
 
 ## Problems
 

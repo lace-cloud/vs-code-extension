@@ -1,6 +1,6 @@
 import type { CommandFailure, LaceReason } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
-import { notice, type OfferActions, offersFor } from '../offers';
+import { notice, type OfferActions, offeringPresenter, offersFor } from '../offers';
 
 const actions = (): OfferActions => ({
   signIn: vi.fn(),
@@ -117,5 +117,43 @@ describe("a change request's records", () => {
     expect(answer).toBe('Open jsm CHG-7');
     expect(act.openRecord).toHaveBeenCalledOnce();
     expect(act.openRecord).toHaveBeenCalledWith(page);
+  });
+});
+
+describe("the presenter of the window's runner", () => {
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  test("offers, after the failure's ways out, the package actions that answer it, and runs the one chosen", async () => {
+    const failure: CommandFailure = {
+      reason: 'no_team',
+      message: 'No team is selected',
+      url: 'https://portal/teams/new',
+    };
+    const shown = window('Answer');
+    const run = vi.fn(async () => {});
+    const answers = vi.fn(() => [{ label: 'Answer', run }]);
+    const presenter = offeringPresenter({ window: shown } as never, actions(), vi.fn(), vi.fn());
+
+    presenter(answers).notify('error', 'No team is selected', failure);
+    await settled();
+    expect(answers).toHaveBeenCalledWith(failure);
+    expect(shown.showErrorMessage).toHaveBeenCalledWith(
+      'No team is selected',
+      'Select Team',
+      'Open Portal',
+      'Answer',
+    );
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  test('asks for no answer of a notice that carries no failure', async () => {
+    const shown = window();
+    const answers = vi.fn(() => []);
+    const presenter = offeringPresenter({ window: shown } as never, actions(), vi.fn(), vi.fn());
+
+    presenter(answers).notify('info', 'Created stack prod');
+    await settled();
+    expect(answers).not.toHaveBeenCalled();
+    expect(shown.showInformationMessage).toHaveBeenCalledWith('Created stack prod');
   });
 });

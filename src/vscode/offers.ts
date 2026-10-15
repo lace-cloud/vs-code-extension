@@ -1,18 +1,21 @@
 // What the window offers beside a notice. Beside a failed command's: one
 // action per way out the failure's reason names, read from the failure
 // document and never from the message; a reason with no way out the host
-// can take offers nothing, and the message says what happened. Beside an
-// apply held for approval: the held Run's page in the portal, and the page
-// of each record a change-management system keeps of its change request,
-// where the record carries one.
+// can take offers nothing, and the message says what happened. A notice of
+// the window's runner offers, after those, each package action that answers
+// the failure (`FailureAnswer`, which the runner host binds to the failed
+// run). Beside an apply held for approval: the held Run's page in the
+// portal, and the page of each record a change-management system keeps of
+// its change request, where the record carries one.
 //
-// Validate acts on a root: a notice offers it only when the place that shows
-// the notice names the root the failure is about and supplies the action, the
-// palette's Validate on that root. A notice of the window's runner names no
-// run (`PresenterPort.notify` carries no context), so it offers no Validate.
+// Validate acts on a root: a notice offers it only where the place that
+// shows the notice supplies Validate on the root the failure is about (a
+// module command's notice, a canvas page's, an apply's); the window's
+// runner supplies none.
 import type { CommandFailure, PresenterPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type ByReason, byReason } from '../engine/command-outcome';
+import type { RunnerPresenter } from '../engine/runner-host';
 
 export type Offer =
   | { kind: 'signIn' }
@@ -110,20 +113,23 @@ export async function notice(
   return answer;
 }
 
-// The presenter of the window's runner: each notice with its offers, and the
-// typed confirmation a binding asks for.
+// The presenter of the window's runner: each notice with its offers, and
+// after them the package actions that answer its failure, the one chosen
+// run; and the typed confirmation a binding asks for.
 export function offeringPresenter(
   api: NoticeApi,
   actions: OfferActions,
   confirm: NonNullable<PresenterPort['confirm']>,
   report: (what: string, error: unknown) => void,
-): PresenterPort {
-  return {
+): RunnerPresenter {
+  return (answers) => ({
     notify: (level, text, failure) => {
-      notice(api, actions, level, text, offersFor(failure)).catch((error) =>
-        report('acting on a Lace notice', error),
-      );
+      const answering = failure === undefined ? [] : answers(failure);
+      const labels = answering.map(({ label }) => label);
+      notice(api, actions, level, text, offersFor(failure), labels)
+        .then((chosen) => answering.find(({ label }) => label === chosen)?.run())
+        .catch((error) => report('acting on a Lace notice', error));
     },
     confirm,
-  };
+  });
 }

@@ -28,6 +28,7 @@ import { createRootState, type RootState } from './state/root-state';
 import { registerLaceTools } from './tools/lm-tools';
 import { registerCommands } from './vscode/commands';
 import { createConfirm } from './vscode/dialogs';
+import { formAnswerer } from './vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from './vscode/offers';
 
 // What activation builds first: the engine, the root sessions with their
@@ -44,11 +45,12 @@ export type WindowBase = {
 
 // What every feature is handed: the base and the window's owners that more
 // than one feature reads — what the window keeps per root, the commands
-// mapping, the account, the window's one action runner with the Output
-// channels of its runs and what its notices offer, the canvas panels, how a
-// surface names its root (a surface that starts a module adds its ask,
-// `startingSources`), the one rule of Save and of Generate, and the
-// palette's module commands, whose Validate a notice about a root offers.
+// mapping, the account, the window's one action runner with the prompts
+// that answer its forms, the Output channels of its runs and what its
+// notices offer, the canvas panels, how a surface names its root (a surface
+// that starts a module adds its ask, `startingSources`), the one rule of
+// Save and of Generate, and the palette's module commands, whose Validate a
+// notice about a root offers.
 export type Host = WindowBase & {
   rootState: RootState;
   commands: CommandsMapping;
@@ -91,14 +93,15 @@ export function windowHost(base: WindowBase): Host {
     generated: (root, written) => modules.generated(root, written),
     report,
   });
-  const runner = createRunnerHost({
-    commands: () => commands.anywhere(),
-    presenter: offeringPresenter(api, offers, createConfirm(api.window), report),
-    onRunLog: runOutput.append,
-  });
   const sources = workspaceRootSources(api, {
     activeCanvas: panels.activeRoot,
     openCanvases: panels.roots,
+  });
+  const runner = createRunnerHost({
+    commands: () => commands.anywhere(),
+    presenter: offeringPresenter(api, offers, createConfirm(api.window), report),
+    answerer: formAnswerer({ api, commands, offers, sources, report }),
+    onRunLog: runOutput.append,
   });
   const operations = canvasOperations({ workspace: api.workspace, rootSessions });
   const modules = authoringCommands({
