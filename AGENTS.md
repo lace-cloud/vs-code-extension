@@ -452,14 +452,14 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
 
 - **Fakes for unit tests**: `engine/__tests__/fake-commands.ts` (one commands mapping and home port whose commands a
   test scripts per path, recording each invocation's directory), `engine/__tests__/fake-engine.ts` (an engine at the
-  bridge, so the real caller, mapping and codecs run; its Invoke says `started`, then its exit, as protocol 6 orders
-  them), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root sessions with the real rule for holders,
-  VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`, `diagnostics/__tests__/fake-problems-api.ts`,
-  `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand back the button clicked, string or item),
-  `vscode/__tests__/fake-quick-pick.ts` (VS Code's `createQuickPick`: on screen from `show()` until hidden, each hiding
-  firing `onDidHide` once, with whether it was busy when it came on screen; a test's developer answers each pick once
-  its items are in), `account/__tests__/fake-outside.ts` (what tells the window the account may have changed outside it:
-  focus, and a command line ending in an integrated terminal).
+  bridge, so the real caller, mapping and codecs run; its Invoke says `started`, then its exit, as the engine protocol
+  orders them), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root sessions with the real rule for
+  holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
+  `diagnostics/__tests__/fake-problems-api.ts`, `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand
+  back the button clicked, string or item), `vscode/__tests__/fake-quick-pick.ts` (VS Code's `createQuickPick`: on
+  screen from `show()` until hidden, each hiding firing `onDidHide` once, with whether it was busy when it came on
+  screen; a test's developer answers each pick once its items are in), `account/__tests__/fake-outside.ts` (what tells
+  the window the account may have changed outside it: focus, and a command line ending in an integrated terminal).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
   mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is
