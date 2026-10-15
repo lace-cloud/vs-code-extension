@@ -141,7 +141,11 @@ host draws the store. A binding that declares the root runs in it. The host runs
 ## The canvas tab
 
 - `canvas-panels.ts`: one webview panel per root, created only by `ensure(root, {preserveFocus?})`; two `ensure` calls in
-  flight make one panel. The title is the root's name (`rootLabel`: its path in the workspace, the folder's name first
+  flight make one panel. A panel opened without focus (a chat tool, a registry add) is created beside the text
+  editor the active group holds (`window.activeTextEditor`), so the developer's place stays in view, and in the active
+  group when it holds none, where a split would leave an empty group; one opened with focus (**Lace: Open Canvas**) is
+  created in the active group, as any editor opens. A panel already open is revealed in its own column.
+  The title is the root's name (`rootLabel`: its path in the workspace, the folder's name first
   in a workspace of several folders), with ● while the session is unsaved, and a change of the workspace's folders
   titles it again; a tab whose folder left the workspace stays open on its session, titled by its directory's full
   path. `roots` lists every open panel's root, focused or not: each is a candidate when a surface names its root.
