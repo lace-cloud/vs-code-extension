@@ -15,9 +15,12 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 
 - VS Code 1.96 or later, with the folder trusted. Lace runs the Lace CLI and executes Terraform over the folder's content,
   so it does not run in Restricted Mode or in a virtual workspace.
-- The Lace CLI. The extension starts it as `lace engine`, from `/usr/local/bin/lace` or from the path in the setting
-  `lace.binaryPath`. When the CLI and the extension speak different engine protocols, the extension says which of the two
-  to update.
+- The Lace CLI. The extension starts it as `lace engine`: the `lace` on your `PATH`, where the CLI's install puts it, or
+  the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
+  `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
+  (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
+  **Remote** tab of Settings, to the CLI's path on that machine. When the CLI and the extension speak different engine
+  protocols, the extension says which of the two to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
 - A Lace account for the registry and the stacks. Sign in from VS Code with **Lace: Sign In**.
@@ -34,6 +37,11 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 4. Save the canvas (the canvas's Save button, `Cmd+S` / `Ctrl+S` while the canvas has focus, or **Lace: Save**).
 5. Run **Generate** (the canvas's button or **Lace: Generate**). Lace writes the `.tf` files; **Show Changes** opens
    Source Control, where git shows the diff.
+
+Under the module's `.lace/` directory, a stack's **Apply** reads `verdict.json`, `bundle.pb` and `tree-manifest.json`
+from the tree, and the pre-commit hook that `lace hooks install` writes stages them; `.lace/.canvas/state.lace` is the
+module's canvas state, re-derived from the `.tf` files when absent, and `.lace/.canvas/state.lace.lock` is the running
+engine's lock.
 
 Each entry of the canvas's Diagnostics list has **Open source**, which opens the file the diagnostic names at its line
 and column, beside the canvas. For one located on the canvas alone, such as a required input not set, it says the
@@ -308,10 +316,10 @@ Lace binds no keys of its own.
 
 ## Settings
 
-| Setting            | Default               | What it does                                                                  |
-| ------------------ | --------------------- | ----------------------------------------------------------------------------- |
-| `lace.binaryPath`  | `/usr/local/bin/lace` | The Lace CLI the engine runs from. Machine-overridable.                       |
-| `lace.autoRestart` | `true`                | Restart the Lace engine when it exits unexpectedly.                           |
+| Setting            | Default          | What it does                                                                                                 |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `lace.binaryPath`  | `lace` on `PATH` | The Lace CLI the engine runs: `lace` on your `PATH`, or the full path of an executable (`lace.exe` on Windows). Machine-overridable: in a remote window, set it under the **Remote** tab. |
+| `lace.autoRestart` | `true`           | Restart the Lace engine when it exits unexpectedly.                                                          |
 
 Lace also reads VS Code's `files.autoSave` and `files.autoSaveDelay` (see above).
 
