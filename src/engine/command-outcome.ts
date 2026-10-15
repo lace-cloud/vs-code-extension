@@ -25,18 +25,15 @@ export type CommandOutcome<P extends BoundPath> =
 // under it is run again, a write may have made changes.
 export type LaceCommand<P extends BoundPath = BoundPath> = FailedCommand & { path: P };
 
-// A command that failed, said for the command it was: `message` is the
-// package's one reading of the failure for `command` (`failureSays`), and
-// `failure` the failure document, when the command wrote one. Every failure
+// A command that failed, as a caller reads it: `message`, the package's one
+// reading of the failure for the command it was (`failureSays`), and
+// `failure`, the failure document, when the command wrote one. Every failure
 // of a command run through `commandOutcome` rejects with one, so a caller
-// that runs several commands says the one that failed.
+// that runs several commands says the failure of the one that failed.
 export class CommandFailedError extends Error {
   readonly failure: CommandFailure | undefined;
 
-  constructor(
-    readonly command: LaceCommand,
-    said: ReturnType<typeof failureSays>,
-  ) {
+  constructor(said: ReturnType<typeof failureSays>) {
     super(said.message);
     this.failure = said.failure;
   }
@@ -62,28 +59,20 @@ export async function commandOutcome<P extends BoundPath>(
       if (error.failure) return { kind: 'failure', failure: error.failure };
       if (last) return { kind: 'result', document: last.document, exitCode: error.code };
     }
-    throw new CommandFailedError(command, failureSays(error, command));
+    throw new CommandFailedError(failureSays(error, command));
   }
   if (!last) {
-    throw new CommandFailedError(command, {
-      message: `lace ${command.path} exited without a document`,
-    });
+    throw new CommandFailedError({ message: `lace ${command.path} exited without a document` });
   }
   return { kind: 'result', document: last.document, exitCode: 0 };
 }
 
-// The document of `command`'s outcome, for a caller that goes on only with
+// The document of a command's outcome, for a caller that goes on only with
 // it. Throws `CommandFailedError` when the command ended on its failure
 // document.
-export function documentOf<P extends BoundPath>(
-  command: LaceCommand<P>,
-  outcome: CommandOutcome<P>,
-): JsonOf<P> {
+export function documentOf<P extends BoundPath>(outcome: CommandOutcome<P>): JsonOf<P> {
   if (outcome.kind === 'failure') {
-    throw new CommandFailedError(command, {
-      message: outcome.failure.message,
-      failure: outcome.failure,
-    });
+    throw new CommandFailedError({ message: outcome.failure.message, failure: outcome.failure });
   }
   return outcome.document;
 }
@@ -96,7 +85,7 @@ export async function commandDocument<P extends BoundPath>(
   args: ArgsOf<P>,
   signal?: AbortSignal,
 ): Promise<JsonOf<P>> {
-  return documentOf(command, await commandOutcome(commands, command, args, signal));
+  return documentOf(await commandOutcome(commands, command, args, signal));
 }
 
 // Why a command failed, as data, when it said.
@@ -105,10 +94,9 @@ export function failureOf(error: unknown): CommandFailure | undefined {
 }
 
 // What a failure says, for a person. A command run through `commandOutcome`
-// fails with the `CommandFailedError` of the command it was, whose message
-// is the package's reading for that command; any other error, such as an
-// engine that did not start, is no command's failure and says its own
-// message.
+// fails with a `CommandFailedError`, whose message is the package's reading
+// for the command it was; any other error, such as an engine that did not
+// start, is no command's failure and says its own message.
 export function failureText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

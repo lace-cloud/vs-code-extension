@@ -64,26 +64,25 @@ describe('a command outcome', () => {
     expect(outcome).toEqual({ kind: 'failure', failure: NO_TOOL });
   });
 
-  test('rejects a command that wrote neither document as that command, saying what it wrote on stderr', async () => {
+  test('rejects a command that wrote neither document, saying what it wrote on stderr', async () => {
     const failed = await rejection(SCANNED, new CommandExitError(2, 'Error: boom\n'));
     expect(failed).toBeInstanceOf(CommandFailedError);
-    expect(failed).toMatchObject({ command: SCANNED, failure: undefined });
     expect(failureText(failed)).toBe('Error: boom');
     expect(failureOf(failed)).toBeUndefined();
   });
 
-  test('rejects a command that exited 0 without a document as that command', async () => {
+  test('rejects a command that exited 0 without a document, naming the command', async () => {
     const failed = await commandOutcome(commandsYielding([]), SCANNED, {}).catch(
       (error: unknown) => error,
     );
-    expect(failed).toMatchObject({ command: SCANNED });
+    expect(failed).toBeInstanceOf(CommandFailedError);
     expect(failureText(failed)).toBe('lace module scan exited without a document');
   });
 
-  test('rejects a detached command as that command, saying the detach', async () => {
+  test('rejects a detached command, saying the detach', async () => {
     const detached = new CommandDetachedError();
     const failed = await rejection(FORMATTED, detached);
-    expect(failed).toMatchObject({ command: FORMATTED });
+    expect(failed).toBeInstanceOf(CommandFailedError);
     expect(failureText(failed)).toBe(detached.message);
   });
 });
@@ -96,7 +95,7 @@ describe('a command document', () => {
     ).toEqual(SCAN);
   });
 
-  test('rejects a command that could not render one as that command, saying its failure document and never its stderr', async () => {
+  test('rejects a command that could not render one, saying its failure document and never its stderr', async () => {
     const failed = await commandDocument(
       commandsYielding(
         [],
@@ -106,7 +105,6 @@ describe('a command document', () => {
       {},
     ).catch((error: unknown) => error);
     expect(failed).toBeInstanceOf(CommandFailedError);
-    expect(failed).toMatchObject({ command: SCANNED, failure: NO_TOOL });
     expect(failureOf(failed)).toEqual(NO_TOOL);
     expect(failureText(failed)).toBe('tfsec is not installed');
   });
