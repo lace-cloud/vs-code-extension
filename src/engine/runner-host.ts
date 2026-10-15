@@ -186,13 +186,13 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
       if (!run) return invocation;
       hold(run);
       startSettled(run);
-      async function* events() {
+      const events = async function* () {
         try {
           yield* invocation.events;
         } finally {
           release(run);
         }
-      }
+      };
       return { events: events(), cancel: () => invocation.cancel() };
     },
   });
