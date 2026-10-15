@@ -2,12 +2,15 @@
 // Tool the manifest contributes is one a feature registers, and the
 // features register nothing the manifest lacks. Every menu entry and
 // welcome link names a contributed command, every view a `when` clause
-// names is contributed, and the settings are the ones the extension reads.
+// names is contributed, a run row's actions are offered by its state, and
+// the settings are the ones the extension reads.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { engineSettings } from '../engine/engine';
 import { FEATURES, type WindowBase, windowHost } from '../features';
+import { run } from '../stacks/__tests__/stack-fixtures';
+import { runLook } from '../stacks/stack-rows';
 
 const ROOT = resolve(__dirname, '..', '..');
 const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -99,6 +102,41 @@ const menuEntries = (): MenuEntry[] => Object.values<MenuEntry[]>(contributes.me
 const welcomes = (): { view: string; when?: string; contents: string }[] =>
   contributes.viewsWelcome;
 
+// Whether a `when` clause holds for a row of `view` whose contextValue is
+// `viewItem`, read as VS Code reads the terms a row's menu uses: `&&` of
+// `view == <id>`, `viewItem == <value>` and `viewItem =~ /<regex>/<flags>`.
+function holds(when: string, row: { view: string; viewItem: string }): boolean {
+  return when.split('&&').every((part) => {
+    const term = part.trim();
+    const equals = /^(view|viewItem) == (\S+)$/.exec(term);
+    if (equals) return row[equals[1] as 'view' | 'viewItem'] === equals[2];
+    const matches = /^viewItem =~ \/(.*)\/([a-z]*)$/.exec(term);
+    if (matches) return new RegExp(matches[1], matches[2]).test(row.viewItem);
+    throw new Error(`a when term this test does not read: ${term}`);
+  });
+}
+
+// What a run row offers, by its run's state: Follow Logs on every run, Open
+// in Portal on a run with a page, Cancel Run on a run that has not ended.
+type RunState = { ended: boolean; portal: boolean };
+const RUN_ACTIONS: Record<string, (state: RunState) => boolean> = {
+  'lace.followRunLogs': () => true,
+  'lace.openRunInPortal': ({ portal }) => portal,
+  'lace.cancelRun': ({ ended }) => !ended,
+};
+// Every state a run row draws, with the contextValue `runLook` gives it.
+const RUN_ROWS = [false, true].flatMap((ended) =>
+  [false, true].map((portal) => ({
+    state: { ended, portal },
+    viewItem: runLook(
+      run('run_1', 'applying', {
+        ...(ended ? { completedAt: '2026-09-01T01:00:00Z' } : {}),
+        ...(portal ? { url: 'https://portal/o/t/stacks/stk_1/runs/run_1' } : {}),
+      }),
+    ).contextValue,
+  })),
+);
+
 describe('the manifest', () => {
   test('declares exactly the commands the features register', () => {
     expect(registered().commands).toEqual(declaredCommands());
@@ -148,6 +186,25 @@ describe('the manifest', () => {
       ...welcomes().map((welcome) => welcome.view),
     ];
     expect(named.filter((id) => !ids.has(id))).toEqual([]);
+  });
+
+  test("offers each action on a run row exactly where the run's state allows it", () => {
+    const onRuns = (contributes.menus['view/item/context'] as MenuEntry[]).filter((entry) =>
+      entry.when?.includes('laceRun'),
+    );
+    expect([...new Set(onRuns.map((entry) => entry.command))].sort()).toEqual(
+      Object.keys(RUN_ACTIONS).sort(),
+    );
+    const offered = onRuns.flatMap((entry) =>
+      RUN_ROWS.map(({ state, viewItem }) => ({
+        command: entry.command,
+        state,
+        offered: holds(entry.when ?? '', { view: 'laceStacks', viewItem }),
+      })),
+    );
+    expect(offered).toEqual(
+      offered.map((each) => ({ ...each, offered: RUN_ACTIONS[each.command](each.state) })),
+    );
   });
 
   test('declares exactly the settings the extension reads', () => {

@@ -339,22 +339,22 @@
         },
         {
           "command": "lace.openRunInPortal",
-          "when": "view == laceStacks && viewItem =~ /^laceRun portal$/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b.*\\bportal\\b/",
           "group": "inline"
         },
         {
           "command": "lace.followRunLogs",
-          "when": "view == laceStacks && viewItem =~ /^laceRun/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b/",
           "group": "1_run@1"
         },
         {
           "command": "lace.openRunInPortal",
-          "when": "view == laceStacks && viewItem =~ /^laceRun portal$/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b.*\\bportal\\b/",
           "group": "1_run@2"
         },
         {
           "command": "lace.cancelRun",
-          "when": "view == laceStacks && viewItem =~ /^laceRun/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b.*\\brunning\\b/",
           "group": "2_cancel@1"
         }
       ]
