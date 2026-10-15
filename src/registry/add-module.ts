@@ -58,7 +58,13 @@ export function addModuleToCanvas(options: {
         { placeholder: 'Which module?', matchOnDescription: true, matchOnDetail: true },
       );
     } catch (error) {
-      await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
+      await notice(
+        api,
+        offers,
+        'error',
+        failureText(error, { kind: 'read', path: 'registry list' }),
+        offersFor(failureOf(error)),
+      );
       return;
     }
     if (!picked) return;
