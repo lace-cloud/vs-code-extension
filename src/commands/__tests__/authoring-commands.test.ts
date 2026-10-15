@@ -592,7 +592,7 @@ describe('Convert', () => {
     const failure: CommandFailure = {
       reason: 'source_refused',
       message:
-        '1 Terraform construct(s) could not be auto-converted; the residual report names each',
+        '1 Terraform construct(s) Lace cannot carry; the report names each with what to change',
     };
     const { table, api, invoked } = setup(
       { 'module convert': refused(failure, 2), 'module validate': validated([FINDING]) },

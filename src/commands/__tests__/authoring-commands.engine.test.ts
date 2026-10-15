@@ -187,7 +187,7 @@ describe('the module commands on the real engine, with no canvas open', () => {
     await table[CONVERT_MODULE]();
     expect(shownBy(api.window.showErrorMessage)).toEqual([
       [
-        '1 Terraform construct(s) could not be auto-converted; the residual report names each',
+        '1 Terraform construct(s) Lace cannot carry; the report names each with what to change',
         'Validate',
       ],
     ]);
