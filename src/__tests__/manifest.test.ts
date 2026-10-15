@@ -140,9 +140,8 @@ describe('the manifest', () => {
       ...menuEntries().map((entry) => entry.command),
       ...welcomes().flatMap((welcome) => linkedCommands(welcome.contents)),
     ];
-    expect(named.filter((command) => !commands.has(command) && !VS_CODE_OWN.test(command))).toEqual(
-      [],
-    );
+    const owned = (command: string) => commands.has(command) || VS_CODE_OWN.test(command);
+    expect(named.filter((command) => !owned(command))).toEqual([]);
     expect(declaredCommands().filter((command) => VS_CODE_OWN.test(command))).toEqual([]);
   });
 
