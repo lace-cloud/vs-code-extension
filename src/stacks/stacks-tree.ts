@@ -407,14 +407,14 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // A run row's action. Invoked with no row (from a keybinding, or a menu
   // whose row the tree no longer holds), it says where it acts and stops.
   const onRun =
-    (title: string, act: (row: Extract<Row, { kind: 'run' }>) => Promise<unknown>) =>
+    (act: (row: Extract<Row, { kind: 'run' }>) => Promise<unknown>) =>
     async (row?: Extract<Row, { kind: 'run' }>) => {
       if (row) {
         await act(row);
         return;
       }
       void api.window.showInformationMessage(
-        `${title} acts on a run listed in the Stacks view; choose it from that run's menu.`,
+        "This command acts on a run listed in the Stacks view; choose it from that run's menu.",
       );
     };
 
@@ -499,16 +499,16 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       ),
       [STACK_COMMANDS.apply]: onStack('apply', apply),
       [STACK_COMMANDS.scan]: onStack('scan', (of, stack) => runOnStack(BINDINGS.scan, of, stack)),
-      [STACK_COMMANDS.followLogs]: onRun('Follow Logs', async (row) => {
+      [STACK_COMMANDS.followLogs]: onRun(async (row) => {
         runOutput.show(row.stack.slug);
         const ctx: RunCtx = { root: rootPath(row.root), stack: row.stack };
         await runner.run(BINDINGS.followLogs, ctx, { runId: row.run.id });
       }),
-      [STACK_COMMANDS.cancel]: onRun('Cancel Run', async (row) => {
+      [STACK_COMMANDS.cancel]: onRun(async (row) => {
         const ctx: RunCtx = { root: rootPath(row.root), stack: row.stack };
         await runner.run(BINDINGS.cancel, ctx, { runId: row.run.id });
       }),
-      [STACK_COMMANDS.openInPortal]: onRun('Open in Portal', async (row) => {
+      [STACK_COMMANDS.openInPortal]: onRun(async (row) => {
         if (row.run.url !== undefined) await api.env.openExternal(api.Uri.parse(row.run.url));
       }),
       [STACK_COMMANDS.openPortal]: async () => {

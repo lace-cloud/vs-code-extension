@@ -905,17 +905,17 @@ describe('a stack row', () => {
   });
 
   test.each([
-    [STACK_COMMANDS.followLogs, 'Follow Logs'],
-    [STACK_COMMANDS.cancel, 'Cancel Run'],
-    [STACK_COMMANDS.openInPortal, 'Open in Portal'],
-  ])('%s invoked with no run row says it acts on a run of the Stacks view, and runs nothing', async (id, title) => {
+    STACK_COMMANDS.followLogs,
+    STACK_COMMANDS.cancel,
+    STACK_COMMANDS.openInPortal,
+  ])('%s invoked with no run row says it acts on a run of the Stacks view, and runs nothing', async (id) => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.command(id);
     await settled();
     expect(t.messages).toEqual([
       {
         level: 'info',
-        text: `${title} acts on a run listed in the Stacks view; choose it from that run's menu.`,
+        text: "This command acts on a run listed in the Stacks view; choose it from that run's menu.",
         buttons: [],
       },
     ]);
