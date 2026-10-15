@@ -5,9 +5,12 @@ import { folder } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
+import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
 import type { OfferActions } from '../../vscode/offers';
 import { stackPick } from '../stack-pick';
 import { memento, stack, stacks } from './stack-fixtures';
+
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const repo = folder('/work/repo');
 const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
@@ -23,13 +26,13 @@ function setup(
       messages.push({ level, text, buttons: buttons.map(titleOf) });
       return clicked(buttons, await options.answer);
     });
+  const quickPicks = fakeQuickPicks<{
+    label: string;
+    description?: string;
+    stack: { slug: string };
+  }>((items) => items.find((item) => item.stack.slug === options.pick));
   const window = {
-    showQuickPick: vi.fn(
-      async (
-        items: { label: string; description: string; stack: { slug: string } }[],
-        _options: unknown,
-      ) => items.find((item) => item.stack.slug === options.pick),
-    ),
+    createQuickPick: quickPicks.createQuickPick,
     showInformationMessage: message('info'),
     showWarningMessage: message('warn'),
     showErrorMessage: message('error'),
@@ -50,7 +53,7 @@ function setup(
     sources: { folders: () => [repo] },
     offers,
   });
-  return { commands, window, messages, offers, rootState, pickStack };
+  return { commands, window, messages, offers, rootState, pickStack, picks: quickPicks.picks };
 }
 
 describe('the stack pick', () => {
@@ -65,12 +68,29 @@ describe('the stack pick', () => {
     expect(t.commands.invoked).toEqual([
       { cwd: '/home/dev', path: 'stack list', args: { source: '/work/repo/infra/prod' } },
     ]);
-    const [items, options] = t.window.showQuickPick.mock.calls[0];
-    expect(items.map(({ label, description }) => ({ label, description }))).toEqual([
+    const [pick] = t.picks;
+    expect(pick.items.map(({ label, description }) => ({ label, description }))).toEqual([
       { label: 'Prod', description: 'prod · on the canvas' },
       { label: 'Qa', description: 'qa' },
     ]);
-    expect(options).toEqual({ placeHolder: 'The stack deployed from infra/prod to import into' });
+    expect(pick.placeholder).toBe('The stack deployed from infra/prod to import into');
+  });
+
+  test('is on screen, busy, while the stacks are listed', async () => {
+    const t = setup({ 'stack list': { held: true } }, { pick: 'prod' });
+    const picking = t.pickStack(prod, 'preview');
+    await settled();
+    expect(t.picks).toHaveLength(1);
+    expect(t.picks[0]).toMatchObject({
+      visible: true,
+      shownBusy: true,
+      busy: true,
+      items: [],
+      placeholder: 'The stack deployed from infra/prod to preview',
+    });
+
+    t.commands.held[0].finish([stacks(stack('stk_1', 'prod'))]);
+    expect(await picking).toEqual({ id: 'stk_1', slug: 'prod' });
   });
 
   test('a dismissed pick gives no stack', async () => {
@@ -78,7 +98,7 @@ describe('the stack pick', () => {
     expect(await t.pickStack(prod, 'preview')).toBeUndefined();
   });
 
-  test('a root with no stack says so and where one is created, and shows no empty pick', async () => {
+  test('a root with no stack says so and where one is created, and leaves no pick open', async () => {
     const t = setup({ 'stack list': { documents: [stacks()] } });
     expect(await t.pickStack(prod, 'preview')).toBeUndefined();
     expect(t.messages).toEqual([
@@ -88,10 +108,10 @@ describe('the stack pick', () => {
         buttons: [],
       },
     ]);
-    expect(t.window.showQuickPick).not.toHaveBeenCalled();
+    expect(t.picks[0]).toMatchObject({ visible: false, items: [] });
   });
 
-  test('a list that cannot be read says why, with the ways out its reason names', async () => {
+  test('a list that cannot be read closes the pick and says why, with the ways out its reason names', async () => {
     const reason: LaceReason = 'no_team';
     const t = setup(
       {
@@ -108,6 +128,6 @@ describe('the stack pick', () => {
       { level: 'error', text: 'No team is selected', buttons: ['Select Team', 'Open Portal'] },
     ]);
     expect(t.offers.selectTeam).toHaveBeenCalled();
-    expect(t.window.showQuickPick).not.toHaveBeenCalled();
+    expect(t.picks[0]).toMatchObject({ visible: false, items: [] });
   });
 });
