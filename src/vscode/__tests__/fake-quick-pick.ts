@@ -38,7 +38,7 @@ export class FakeQuickPick<I extends Item = Item> {
 
   set items(items: readonly I[]) {
     this.#items = items;
-    const { answer } = this;
+    const answer = this.answer;
     if (answer === undefined || items.length === 0) return;
     queueMicrotask(() => {
       if (!this.visible) return;
