@@ -1,10 +1,10 @@
 // The runner host: the window's one action runner, the only path a host
 // surface runs a package binding through (the Stacks tree's rows, the stack
-// commands of the palette, Create Stack, and the package actions a
-// failure's notice offers). The binding owns the arguments, the
-// confirmation and the result; the host hands it a `RunCtx` naming the
-// authoring root and the stack, answers the arguments it leaves to the
-// host, and draws the store.
+// commands of the palette, Create Stack, Import Existing Resources, and the
+// package actions a failure's notice offers). The binding owns the
+// arguments, the confirmation and the result; the host hands it a `RunCtx`
+// naming the authoring root and the stack, answers the arguments it leaves
+// to the host, and draws the store.
 //
 // The runner runs over the commands mapping's port for the developer's home
 // and one result store for the window. A binding that declares the root

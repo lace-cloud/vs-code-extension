@@ -26,7 +26,9 @@
 // Validate validates the panel's root. The canvas's own Generate ends with
 // the notice Lace: Generate shows, Show Changes among it. Open source on a
 // Diagnostics row asks the host to open a file of the root at a line and
-// column, in the editor beside the canvas.
+// column, in the editor beside the canvas. Import existing resources on the
+// source-refused banner asks the host to run Import Existing Resources on
+// the panel's root.
 import type * as vscode from 'vscode';
 import { positionOf } from '../diagnostics/problems';
 import type { Engine } from '../engine/engine';
@@ -83,6 +85,8 @@ export type CanvasPanelsOptions = {
   // What a notice from a page offers, and Validate on a root.
   offers: OfferActions;
   validate: (root: AuthoringRoot) => Promise<void>;
+  // Import Existing Resources on a root.
+  importResources: (root: AuthoringRoot) => Promise<void>;
   // What the page's own Generate that wrote `written` shows.
   generated: (root: AuthoringRoot, written: readonly string[]) => Promise<void>;
   report: (what: string, error: unknown) => void;
@@ -120,6 +124,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     pageFocus,
     offers,
     validate,
+    importResources,
     generated,
     report,
   } = options;
@@ -250,7 +255,19 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
       }
       return null;
     };
-    disposables.push({ dispose: serveHost(host, { boot, confirm, openSource, notice }) });
+    const importInto = async (): Promise<null> => {
+      await importResources(root);
+      return null;
+    };
+    disposables.push({
+      dispose: serveHost(host, {
+        boot,
+        confirm,
+        openSource,
+        importResources: importInto,
+        notice,
+      }),
+    });
     disposables.push({
       dispose: rootState.onDidPickStack(
         root,

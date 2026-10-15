@@ -173,6 +173,7 @@ function toolsWindow(module: Record<string, string> = MODULE) {
     pageFocus: () => {},
     offers: {} as never,
     validate: async () => {},
+    importResources: async () => {},
     generated: async () => {},
     report,
   });

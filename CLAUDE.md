@@ -39,7 +39,7 @@ src/
   canvas-webview/         the canvas page (browser bundle)
   registry/               the registry sidebar, module detail, placement, Add Module to Canvas (host side)
   registry-webview/       the registry sidebar and module detail pages (browser bundles)
-  stacks/                 the Stacks tree, its rows, the runs' Output channels, the stack pick
+  stacks/                 the Stacks tree and rows, the runs' Output channels, the stack pick, Import Existing Resources
   commands/               the module commands of the palette; Save and Generate's one rule each
   account/                sign-in and sign-out; organization and team
   diagnostics/            the Problems panel

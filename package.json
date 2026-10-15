@@ -203,6 +203,10 @@
         "title": "Lace: Convert Module"
       },
       {
+        "command": "lace.importResources",
+        "title": "Lace: Import Existing Resources"
+      },
+      {
         "command": "lace.formatModule",
         "title": "Lace: Format Module"
       },
@@ -272,6 +276,10 @@
         },
         {
           "command": "lace.convertModule",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.importResources",
           "when": "workspaceFolderCount > 0"
         },
         {

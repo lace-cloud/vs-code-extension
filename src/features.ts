@@ -21,7 +21,17 @@ import { placeModule } from './registry/place-module';
 import { registryMarks } from './registry/registry-marks';
 import { registryReads } from './registry/registry-reads';
 import { createRegistryView, REFRESH_REGISTRY, REGISTRY_VIEW } from './registry/registry-view';
-import { type RootSources, startingSources, workspaceRootSources } from './roots/authoring-roots';
+import {
+  type AuthoringRoot,
+  type RootSources,
+  startingSources,
+  workspaceRootSources,
+} from './roots/authoring-roots';
+import {
+  IMPORT_RESOURCES,
+  importResources,
+  importResourcesCommand,
+} from './stacks/import-resources';
 import { createRunOutput, type RunOutput } from './stacks/run-output';
 import { type PickStack, stackPick } from './stacks/stack-pick';
 import { stacksTree } from './stacks/stacks-tree';
@@ -51,7 +61,8 @@ export type WindowBase = {
 // notices offer, the canvas panels, how a surface names its root (a surface
 // that starts a module adds its ask, `startingSources`), the one rule of
 // Save and of Generate, the palette's module commands, whose Validate a
-// notice about a root offers, and the one stack pick.
+// notice about a root offers, the one stack pick, and Import Existing
+// Resources, which the canvas's banner and the palette run.
 export type Host = WindowBase & {
   rootState: RootState;
   commands: CommandsMapping;
@@ -64,6 +75,7 @@ export type Host = WindowBase & {
   operations: CanvasOperations;
   modules: ModuleCommands;
   pickStack: PickStack;
+  importResources: (root: AuthoringRoot) => Promise<void>;
 };
 
 export function windowHost(base: WindowBase): Host {
@@ -89,9 +101,11 @@ export function windowHost(base: WindowBase): Host {
     confirm: createConfirm(api.window),
     pageFocus: autosave.pageFocus,
     offers,
-    // The module commands name roots through the panels, so they are built
-    // after them; a page's notice is shown long after both exist.
+    // The module commands and Import Existing Resources name roots through
+    // the panels, so they are built after them; a page's notice or banner
+    // action comes long after both exist.
     validate: (root) => modules.validate(root),
+    importResources: (root) => importInto(root),
     generated: (root, written) => modules.generated(root, written),
     report,
   });
@@ -115,6 +129,7 @@ export function windowHost(base: WindowBase): Host {
     offers,
   });
   const pickStack = stackPick({ api, commands, rootState, sources, offers });
+  const importInto = importResources({ api, sources, runner, pickStack });
   return {
     ...base,
     rootState,
@@ -128,6 +143,7 @@ export function windowHost(base: WindowBase): Host {
     operations,
     modules,
     pickStack,
+    importResources: importInto,
   };
 }
 
@@ -206,13 +222,17 @@ function accountCommands({ api, account, commands, offers, report }: Host): vsco
   return accountControls(api, account, commands, offers, report);
 }
 
-// The Stacks tree, and the lifetime of the window's runner and its runs'
-// Output channels.
+// The Stacks tree, Lace: Import Existing Resources, and the lifetime of the
+// window's runner and its runs' Output channels.
 function stacks(host: Host): vscode.Disposable {
+  const { api, sources, runner, runOutput } = host;
   return disposingAll([
     stacksTree({ ...host, validate: host.modules.validate }),
-    host.runner,
-    host.runOutput,
+    ...registerCommands(api, {
+      [IMPORT_RESOURCES]: importResourcesCommand(api.window, sources, host.importResources),
+    }),
+    runner,
+    runOutput,
   ]);
 }
 

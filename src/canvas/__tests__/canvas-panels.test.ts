@@ -208,6 +208,14 @@ function setup(
     openRecord: vi.fn(),
   };
   const validate = vi.fn(async () => {});
+  // Import Existing Resources on a root, which settles when the test says.
+  const imported: { root: AuthoringRoot; end: () => void }[] = [];
+  const importResources = vi.fn(
+    (root: AuthoringRoot) =>
+      new Promise<void>((end) => {
+        imported.push({ root, end });
+      }),
+  );
   const generated = vi.fn(async () => {});
   const canvasPanels = createCanvasPanels({
     api: api as never,
@@ -219,6 +227,7 @@ function setup(
     pageFocus,
     offers,
     validate,
+    importResources,
     generated,
     report: (what, error) => reports.push({ what, error }),
   });
@@ -242,6 +251,8 @@ function setup(
     pageFocus,
     offers,
     validate,
+    importResources,
+    imported,
     generated,
   };
 }
@@ -396,6 +407,7 @@ describe('ensure', () => {
       pageFocus: vi.fn(),
       offers: {} as never,
       validate: vi.fn(),
+      importResources: vi.fn(),
       generated: vi.fn(),
       report: vi.fn(),
     });
@@ -544,6 +556,26 @@ describe('the page and the host', () => {
       kind: 'openPortal',
       url: 'https://portal/teams/new',
     });
+  });
+
+  test("Import existing resources on the banner runs Import Existing Resources on the panel's root, and the call answers once it has ended", async () => {
+    const { canvasPanels, panels, importResources, imported } = setup();
+    await canvasPanels.ensure(prod);
+    const page = panels[0];
+
+    page.receive({
+      ch: 'host',
+      frame: { kind: 'call', id: '6', name: 'importResources', request: {} },
+    });
+    await settled();
+    expect(importResources).toHaveBeenCalledWith(prod);
+    expect(page.posted).toEqual([]);
+
+    imported[0].end();
+    await settled();
+    expect(page.posted).toEqual([
+      { ch: 'host', frame: { kind: 'reply', id: '6', response: null } },
+    ]);
   });
 
   test("the canvas's own Generate ends with the notice Lace: Generate shows, for the panel's root", async () => {

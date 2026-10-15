@@ -42,8 +42,8 @@ diagnostic names no file.
 A directory with no `.tf` file opens an empty canvas you can edit: the module starts there, as it would in a new `.tf`
 file, and Generate writes its first `.tf` files. In a workspace with no `.tf` file and no canvas open, **Lace: Open
 Canvas** from the Command Palette and placing a registry module start the module in the workspace folder; in a
-workspace of several folders you pick which. The extension writes no Terraform of its own; only Generate, Format and
-Convert write source files.
+workspace of several folders you pick which. The extension writes no Terraform of its own; only Generate, Format,
+Convert and Import Existing Resources write source files.
 
 ## Modules, canvases and authoring sessions
 
@@ -80,9 +80,12 @@ files, and one side is taken whole. To edit the files by hand, generate first.
 is in it. The first
 Generate on a hand-written module writes it in that style: comments, blank lines, argument order and the file a block sits
 in are not carried through. A module whose own `.tf` declares managed resources is not in Lace style: its canvas opens
-read-only and reads **Needs conversion**, and its **Convert** runs `lace module convert`, which composes each of those
-resources into a module of its own. A module whose Terraform does not parse opens with the canvas locked until it parses
-again.
+read-only, and its banner says "This Terraform is not in lace shape yet" and offers two choices. **Convert** runs
+`lace module convert`, which restructures the module in place, each of those resources composed into a module of its
+own, so a stack's apply creates only what its state does not hold yet. **Import existing resources** restructures it the
+same way and adds import blocks from a statefile you pick, so an empty stack's first apply adopts the resources that
+statefile records instead of creating them again (see the Stacks view). A module whose Terraform does not parse opens
+with the canvas locked until it parses again.
 
 ## Saving follows `files.autoSave`
 
@@ -159,6 +162,14 @@ its ten most recent runs. The view's description names the module; it follows th
   place in its git repository, and the view lists it. A team with no cloud connection yet is told so, with
   **Open Portal**, where connections are added. **Preview**, **Apply** and **Scan for Drift** from the Command Palette
   on a module with no stack say to create one in the Stacks view.
+- **Lace: Import Existing Resources** (`lace.importResources`), also on the canvas's banner for a module not in Lace
+  style, adopts resources that already exist into a stack of the module (`lace stack import`): you pick the stack, then
+  the statefile that records them, any file you name. It saves the module's open `.tf` editors, then restructures the
+  module as Convert does and writes an import block for each resource the statefile records, under a progress
+  notification. Review the change in git, commit it, then apply the stack to adopt them. An import that cannot derive an
+  import ID for some resources writes nothing and offers **Import the rest**, which names them, then imports the others
+  from the same statefile and leaves those to be created anew. Lace refuses an import into a stack that already holds
+  state.
 
 ## Sign-in, organization and team
 
@@ -262,6 +273,7 @@ The extension runs one Lace engine per window, started when something first need
 | Lace: Generate                       | `lace.generate`                | Generates the saved canvas to the module's `.tf` files, with no tab, after saving the module's open `.tf` editors. |
 | Lace: Validate Module                | `lace.validateModule`          | Runs `lace module validate` on the module's Terraform and writes its certification under `.lace/`.              |
 | Lace: Convert Module                 | `lace.convertModule`           | Runs `lace module convert`, which rewrites the module's Terraform in Lace style, and reports as Validate does; an open canvas picks the rewritten files up. |
+| Lace: Import Existing Resources      | `lace.importResources`         | Runs `lace stack import` on a stack of the module you pick, with a statefile you pick: converts the module as Convert does and adds an import block for each resource the statefile records. Also on the canvas's banner. |
 | Lace: Format Module                  | `lace.formatModule`            | Runs `lace module fmt` and names the files it changed.                                                           |
 | Lace: Scan Module                    | `lace.scanModule`              | Runs `lace module scan` (tfsec).                                                                                 |
 | Lace: Generate Docs                  | `lace.generateDocs`            | Runs `lace module docs` (terraform-docs) and opens the markdown in an untitled editor; your save is the write. Also on the Explorer folder menu. |
@@ -288,8 +300,9 @@ The extension runs one Lace engine per window, started when something first need
 
 The module commands act on the module directory chosen as described above. Validate, Convert, Format, Scan and Generate
 Docs run on the module's files as the same command typed in a terminal there would, and open no session. Generate,
-Format and Convert write the module's `.tf` files, so they save its open `.tf` editors first; Validate, Scan and Generate
-Docs read the files as they are on disk, as the chat's validate tool and the canvas's Validate do, and write nothing.
+Format, Convert and Import Existing Resources write the module's `.tf` files, so they save its open `.tf` editors first;
+Validate, Scan and Generate Docs read the files as they are on disk, as the chat's validate tool and the canvas's
+Validate do, and write nothing.
 Lace binds no keys of its own.
 
 ## Settings
