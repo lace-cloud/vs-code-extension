@@ -42,18 +42,64 @@ body {
   color: var(--vscode-input-placeholderForeground);
 }
 
+/* ── Organization picker ──
+ * A dropdown as VS Code draws its select box: the value in a box in the
+ * dropdown's colours (--vscode-dropdown-*), a chevron at the box's end. A
+ * label before it says what it picks, so it does not read as a second
+ * field under the search input. The whole row is one button, transparent
+ * itself; the box draws the edge and the focus ring. */
 .org-picker {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font-family: inherit;
+  font-size: 12px;
   text-align: left;
-  padding: 4px 8px;
-  margin-top: 4px;
-  border: 1px solid var(--vscode-input-border);
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border-radius: 4px;
-  font-size: 11px;
   cursor: pointer;
+}
+
+.org-picker-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.org-picker-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+}
+
+.org-picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-picker-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* ── Toggles: the filter toggle and the category chips ──
@@ -581,6 +627,11 @@ body {
   outline-offset: 2px;
 }
 
+:where(.vscode-high-contrast, .vscode-high-contrast-light) .org-picker:hover .org-picker-box {
+  outline: 1px dashed var(--vscode-toolbar-hoverOutline);
+  outline-offset: 2px;
+}
+
 :is(.vscode-high-contrast, .vscode-high-contrast-light) .skeleton-group {
   --skeleton-fill: var(--vscode-contrastBorder);
 }
@@ -588,7 +639,8 @@ body {
 /* ── Keyboard focus: one ring for every control, the theme's focus border.
  * A control with an edge or a fill of its own (a toggle, the retry button)
  * takes it outside, so it is not lost in that edge; the module button draws
- * it on its row. ── */
+ * it on its row, and the organization picker on its box, as VS Code draws a
+ * focused select box. ── */
 :is(button, input):focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
@@ -598,8 +650,14 @@ body {
   outline-offset: 2px;
 }
 
-.module-open:focus-visible {
+.module-open:focus-visible,
+.org-picker:focus-visible {
   outline: none;
+}
+
+.org-picker:focus-visible .org-picker-box {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 .module-item:has(.module-open:focus-visible) {

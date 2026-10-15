@@ -119,8 +119,8 @@ change.
 
 The **Registry** view in the Lace activity bar lists the modules of the Lace registry: search, category filters,
 favourites (the star), recently used, your organization's modules and the public ones, each grouped by system. Expand a
-row for its versions. The organization shown is the one the Lace CLI has selected; its picker runs
-**Lace: Select Organization**.
+row for its versions. The **Organization** dropdown under the search shows the organization the Lace CLI has selected;
+it runs **Lace: Select Organization** to switch it.
 
 - **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens or comes
   forward without taking focus, so you see the edit land.
