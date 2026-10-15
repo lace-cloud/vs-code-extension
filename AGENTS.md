@@ -56,6 +56,8 @@ each other: every contributed command, view and tool is one a feature registers,
 | A quick pick whose items come from a read: on screen at once, busy, and filled when the read settles; a read that finds none closes it and runs the caller's own empty path, and one that fails closes it and rejects for the caller's notice | `vscode/pick.ts` (`pickFrom`) | the organization and team picks, the stack pick, the connection prompt, Add Module to Canvas |
 | A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a failure's package answer, the answerer |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
+| What a failed command says: its failure document's message when it wrote one, the CLI's stderr when it wrote none, and for a stream that ended under it that a read is to be run again or that a write may have made changes | the package's `failureSays`, which `failureText` (`engine/command-outcome.ts`) reads by the command that failed | every notice of a failed command, the Stacks view's message and rows |
+| What is running: the run slot's run, and each command's running mark from its start to its end | the package's result store, the runner host's `store` | the Stacks view's progress |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
@@ -80,11 +82,14 @@ demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's 
 `lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
 default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
 with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
-and locks with it. The handshake's protocol version decides compatibility: an engine of another protocol is refused with
-a message that names which side to update; any other failed start says to install the Lace CLI so `lace` is on `PATH`,
-or to set `lace.binaryPath` to its executable's full path. The extension host reaches the engine through an in-process
-bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same typed mapping a webview holds over its bridge.
-`whenRunning` waits for a restart that `lace.autoRestart` or the developer starts.
+and locks with it. The extension speaks engine protocol 6 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version decides compatibility: an
+engine of another protocol is refused with a message that names which side to update. A binary that is not found (the
+`EngineSpawnError` `@lace-cloud/host` rejects with, whose `code` is `ENOENT`) says where it was read from, what
+happened, and to install the Lace CLI so `lace` is on `PATH` or to set `lace.binaryPath` to its executable's full path;
+any other failed start says where the binary was read from and what happened. The extension host reaches the engine
+through an in-process bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same typed mapping a webview
+holds over its bridge. `whenRunning` waits for a restart that `lace.autoRestart` or the developer starts.
 
 **One session per authoring root, `root-sessions.ts` its only owner.**
 
@@ -121,8 +126,9 @@ validate` when Terraform found errors), and that is a result.
 **The runner host** is the window's one `createActionRunner` over the home port and one result store. The Stacks tree,
 the stack palette commands, Create Stack and Import Existing Resources run the package's bindings through it with a
 `RunCtx` naming the root and the stack; the binding owns the arguments, the confirmation and the result folding, and the
-host draws the store. A binding that declares the root runs in it. The host runs each binding inside an async context
-(`AsyncLocalStorage`) carrying its run, which attributes to the run what names none:
+host draws the store. A binding that declares the root runs in it. What is running is the store's to say (the run slot's
+run, and a command's running mark, by the target it runs on); the host keeps no count of its own. The host runs each
+binding inside an async context (`AsyncLocalStorage`) carrying its run, which attributes to the run what names none:
 
 - `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked it.
 - The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
@@ -250,7 +256,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   that time arrives with no row, so only what may change the list reads it whole: a tick, a change of the account, the
   view shown again, a change of the workspace's folders, and Refresh Stacks. Each tick of the runner's store (a run
   started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root that run was about,
-  its `RunCtx.root`, whatever the tree ran since.
+  its `RunCtx.root`, whatever the tree ran since. The view draws its progress while the store marks a command running
+  (the run slot's run, or a command's running mark) and ends it when the store marks none.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
@@ -439,15 +446,16 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
 | `build` | `src/**/*.build.test.ts` | the bundles in `out/` (`pnpm build`) |
 | `engine` | `src/**/*.engine.test.ts` | the `lace` CLI that `LACE_CLI_VERSION` names, in `bin/` or on `PATH` |
 
-- **Fakes for unit tests**: `engine/__tests__/fake-commands.ts` (one commands mapping and home port whose commands a test
-  scripts per path, recording each invocation's directory), `engine/__tests__/fake-engine.ts` (an engine at the bridge,
-  so the real caller, mapping and codecs run), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root
-  sessions with the real rule for holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
-  `diagnostics/__tests__/fake-problems-api.ts`, `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand
-  back the button clicked, string or item), `vscode/__tests__/fake-quick-pick.ts` (VS Code's `createQuickPick`: on
-  screen from `show()` until hidden, each hiding firing `onDidHide` once, with whether it was busy when it came on
-  screen; a test's developer answers each pick once its items are in), `account/__tests__/fake-outside.ts` (what tells
-  the window the account may have changed outside it: focus, and a command line ending in an integrated terminal).
+- **Fakes for unit tests**: `engine/__tests__/fake-commands.ts` (one commands mapping and home port whose commands a
+  test scripts per path, recording each invocation's directory), `engine/__tests__/fake-engine.ts` (an engine at the
+  bridge, so the real caller, mapping and codecs run; its Invoke says `started`, then its exit, as protocol 6 orders
+  them), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root sessions with the real rule for holders,
+  VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`, `diagnostics/__tests__/fake-problems-api.ts`,
+  `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand back the button clicked, string or item),
+  `vscode/__tests__/fake-quick-pick.ts` (VS Code's `createQuickPick`: on screen from `show()` until hidden, each hiding
+  firing `onDidHide` once, with whether it was busy when it came on screen; a test's developer answers each pick once
+  its items are in), `account/__tests__/fake-outside.ts` (what tells the window the account may have changed outside it:
+  focus, and a command line ending in an integrated terminal).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
   mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is
