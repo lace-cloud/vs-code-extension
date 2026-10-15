@@ -1,9 +1,19 @@
 // The account, as the window sees it: signing in and out, and the
 // organization and team scoped commands run in, each run as the CLI's own
 // command through the engine from the developer's home directory. Nothing
-// is kept here; a change is announced so the views that read it read again.
+// of it is kept here but the last read to compare the next with; a change
+// is announced so the views that read the account read again.
+//
+// A terminal or another window can change the account too: `lace login`,
+// `lace logout`, `lace org use`. So the account is read again each time the
+// window regains focus (a terminal outside it) and each time a `lace`
+// command line ends in one of its integrated terminals (which changes no
+// focus), and a read that differs from the last one is announced: who is
+// signed in (`whoami`'s user, or the reason it gives for none), the
+// organization and the team.
+import type { CommandsPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
-import { failureOf, failureText } from '../engine/command-outcome';
+import { commandOutcome, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
 import { registerCommands } from '../vscode/commands';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
@@ -26,34 +36,96 @@ export type Account = {
   signOut: () => Promise<void>;
   selectOrganization: () => Promise<void>;
   selectTeam: () => Promise<void>;
-  // `listener` is called after each sign-in, sign-out or saved selection.
+  // `listener` is called after each sign-in, sign-out or saved selection
+  // this window makes, and when a read finds the account changed outside it.
   onDidChange: (listener: () => void) => () => void;
+  dispose: () => void;
 };
 
-export type AccountApi = SignInApi & ScopeApi;
+export type AccountApi = SignInApi &
+  ScopeApi & {
+    window: Pick<typeof vscode.window, 'onDidChangeWindowState' | 'onDidEndTerminalShellExecution'>;
+  };
 
-export function createAccount(commands: CommandsMapping, api: AccountApi): Account {
+// A command line that runs the `lace` CLI, named bare or by its path.
+const LACE_COMMAND = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
+
+// The account as the CLI reads it, as one value two reads are compared by.
+async function accountRead(commands: CommandsPort): Promise<string> {
+  const [who, selection] = await Promise.all([
+    commandOutcome(commands, 'whoami', {}),
+    currentSelection(commands),
+  ]);
+  const signedIn = who.kind === 'result' ? who.document.user.id : who.failure.reason;
+  return JSON.stringify({ signedIn, ...selection });
+}
+
+export function createAccount(
+  commands: CommandsMapping,
+  api: AccountApi,
+  report: (what: string, error: unknown) => void,
+): Account {
   const listeners = new Set<() => void>();
   const changed = () => {
     for (const listener of [...listeners]) listener();
   };
+
+  // The account as last read, and each read's turn: a read is kept only
+  // while no later one started.
+  let last: string | undefined;
+  let reading = 0;
+  // Reads the account and keeps it; resolves whether it differs from the
+  // read kept before it, when there was one.
+  async function read(): Promise<boolean> {
+    const turn = ++reading;
+    const now = await accountRead(await commands.anywhere());
+    if (turn !== reading) return false;
+    const differs = last !== undefined && now !== last;
+    last = now;
+    return differs;
+  }
+  const failed = (error: unknown) => report('reading the Lace account', error);
+  // The account may have changed outside this window.
+  const readAgain = () =>
+    read().then((differs) => {
+      if (differs) changed();
+    }, failed);
+  // A change this window made: announced, then read as it is now, the read
+  // the next one is compared with.
+  const madeHere = () => {
+    changed();
+    void read().catch(failed);
+  };
+
+  void read().catch(failed);
+  const focus = api.window.onDidChangeWindowState((state) => {
+    if (state.focused) void readAgain();
+  });
+  const terminal = api.window.onDidEndTerminalShellExecution(({ execution }) => {
+    if (LACE_COMMAND.test(execution.commandLine.value.trimStart())) void readAgain();
+  });
+
   return {
     async signIn() {
-      if (await signIn(await commands.anywhere(), api)) changed();
+      if (await signIn(await commands.anywhere(), api)) madeHere();
     },
     async signOut() {
       await signOut(await commands.anywhere(), api.window);
-      changed();
+      madeHere();
     },
     async selectOrganization() {
-      if (await selectOrganization(await commands.anywhere(), api)) changed();
+      if (await selectOrganization(await commands.anywhere(), api)) madeHere();
     },
     async selectTeam() {
-      if (await selectTeam(await commands.anywhere(), api)) changed();
+      if (await selectTeam(await commands.anywhere(), api)) madeHere();
     },
     onDidChange(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    dispose() {
+      focus.dispose();
+      terminal.dispose();
     },
   };
 }
@@ -61,20 +133,15 @@ export function createAccount(commands: CommandsMapping, api: AccountApi): Accou
 type ControlsApi = Parameters<typeof registerCommands>[0] & {
   window: Pick<
     typeof vscode.window,
-    | 'createStatusBarItem'
-    | 'onDidChangeWindowState'
-    | 'showErrorMessage'
-    | 'showWarningMessage'
-    | 'showInformationMessage'
+    'createStatusBarItem' | 'showErrorMessage' | 'showWarningMessage' | 'showInformationMessage'
   >;
 };
 
 // The account's palette commands, and the status bar item showing the
-// selection: read when the feature starts, after each change, and when the
-// window regains focus, since a terminal or another window can change it. A
-// command that fails says why with the ways out its failure names: Sign In
-// for a command that needs credentials, Select Organization for a team
-// pick with none selected.
+// selection: read when the feature starts and at each change of the
+// account, made in this window or found outside it. A command that fails
+// says why with the ways out its failure names: Sign In for a command that
+// needs credentials, Select Organization for a team pick with none selected.
 export function accountControls(
   api: ControlsApi,
   account: Account,
@@ -97,9 +164,6 @@ export function accountControls(
   };
   void refresh();
   const offChange = account.onDidChange(() => void refresh());
-  const focus = api.window.onDidChangeWindowState((state) => {
-    if (state.focused) void refresh();
-  });
   const offering = (act: () => Promise<void>) => async () => {
     try {
       await act();
@@ -116,7 +180,6 @@ export function accountControls(
   return {
     dispose() {
       offChange();
-      focus.dispose();
       status.dispose();
       for (const command of registered) command.dispose();
     },

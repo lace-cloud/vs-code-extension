@@ -21,7 +21,7 @@ import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
 import { stackPick } from '../stack-pick';
 import { type Row, STACK_COMMANDS, STACKS_CHOICE, STACKS_STATE, stacksTree } from '../stacks-tree';
-import { memento, stack, stacks } from './stack-fixtures';
+import { memento, run, runs, stack, stacks } from './stack-fixtures';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -63,45 +63,6 @@ const teams = (...slugs: string[]) => ({
   createUrl: TEAM_CREATE_URL,
 });
 
-const run = (id: string, status: string, url?: string) => ({
-  id,
-  stackId: 'stk_1',
-  orgId: 'org_1',
-  teamId: 'team_1',
-  kind: 'apply',
-  status,
-  initiatedByUserId: null,
-  initiatedVia: 'cli',
-  runnerIdentity: null,
-  runnerLocation: null,
-  bundleSnapshotId: null,
-  sourceCommitSha: null,
-  sourceRef: null,
-  sourcePrUrl: null,
-  sourceOverride: false,
-  planResourceAdd: 1,
-  planResourceChange: 2,
-  planResourceDestroy: 0,
-  planLocation: null,
-  planHumanLocation: null,
-  applyLogLocation: null,
-  policyResultsLocation: null,
-  policyPassed: null,
-  policyResolution: null,
-  changeRequestId: null,
-  cancelReason: null,
-  startedAt: null,
-  completedAt: null,
-  errorMessage: null,
-  sourceTreeHash: null,
-  attestationStatus: null,
-  attestedAt: null,
-  attestation: null,
-  createdAt: '2026-09-01T00:00:00Z',
-  updatedAt: '2026-09-01T00:00:00Z',
-  ...(url === undefined ? {} : { url }),
-});
-const runs = (...items: ReturnType<typeof run>[]) => ({ items, nextCursor: null, hasMore: false });
 // The Advisories of a preview of a stack no Agent is bound at Preview on.
 const NO_AGENT = {
   queue: { manifestation: 'preview', floor: 0.5, entries: [], belowFloor: 0 },
@@ -109,9 +70,10 @@ const NO_AGENT = {
   pending: 0,
   bound: 0,
 };
+const COMPLETED = '2026-09-01T01:00:00Z';
 const applyResult = (error: string | null = null) => ({
   type: 'result',
-  run: run('run_9', error ? 'apply_failed' : 'apply_succeeded'),
+  run: run('run_9', error ? 'apply_failed' : 'apply_succeeded', { completedAt: COMPLETED }),
   summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
   workspaceDir: '/cache',
   error,
@@ -354,9 +316,11 @@ function setup(options: Options) {
     report,
   });
   const children = async (row?: Row) => (await provider?.getChildren(row)) ?? [];
-  const redrawn: (Row | undefined)[] = [];
-  provider?.onDidChangeTreeData?.((row) => {
-    redrawn.push(row as Row | undefined);
+  // What each change of the tree's data named: the rows to redraw, or
+  // `undefined` for the whole tree.
+  const redrawn: (Row | Row[] | undefined)[] = [];
+  provider?.onDidChangeTreeData?.((rows) => {
+    redrawn.push(rows as Row | Row[] | undefined);
   });
   const item = (row: Row) => provider?.getTreeItem(row) as vscode.TreeItem;
   const command = (id: string, ...args: unknown[]) => handlers.get(id)?.(...args);
@@ -427,7 +391,7 @@ describe('the stacks of the current root', () => {
     });
   });
 
-  test('a stack expands to its recent runs; a run with a page offers it', async () => {
+  test('a stack expands to its recent runs, each row saying whether its run ended; a run with a page offers it', async () => {
     const t = setup({
       root: prod,
       scripts: {
@@ -435,8 +399,11 @@ describe('the stacks of the current root', () => {
         'run list': {
           documents: [
             runs(
-              run('run_1', 'apply_succeeded', 'https://portal/o/t/stacks/stk_1/runs/run_1'),
-              run('run_2', 'plan_failed'),
+              run('run_1', 'apply_succeeded', {
+                completedAt: COMPLETED,
+                url: 'https://portal/o/t/stacks/stk_1/runs/run_1',
+              }),
+              run('run_2', 'applying'),
             ),
           ],
         },
@@ -453,10 +420,10 @@ describe('the stacks of the current root', () => {
       {
         label: 'apply · run_1',
         description: 'apply_succeeded · +1 ~2 -0',
-        contextValue: 'laceRun portal',
+        contextValue: 'laceRun ended portal',
         iconPath: { id: 'pass-filled' },
       },
-      { label: 'apply · run_2', contextValue: 'laceRun', iconPath: { id: 'error' } },
+      { label: 'apply · run_2', contextValue: 'laceRun running', iconPath: { id: 'sync~spin' } },
     ]);
 
     await t.command(STACK_COMMANDS.openInPortal, runRows[0]);
@@ -905,6 +872,57 @@ describe('a stack row', () => {
     });
   });
 
+  test('selected, redraws the row picked before and the row picked now, the rows the tree gave, never the whole tree', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+      },
+    });
+    const [prodRow, qaRow] = await t.children();
+
+    t.view.selection.fire({ selection: [prodRow] });
+    await settled();
+    t.view.selection.fire({ selection: [qaRow] });
+    await settled();
+
+    expect(t.redrawn).toHaveLength(2);
+    const [first, second] = t.redrawn as Row[][];
+    expect(first).toHaveLength(1);
+    expect(first[0]).toBe(prodRow);
+    expect(second).toHaveLength(2);
+    expect(second[0]).toBe(prodRow);
+    expect(second[1]).toBe(qaRow);
+    expect(t.item(prodRow).description).toBe('prod');
+    expect(t.item(qaRow).description).toBe('qa · on the canvas');
+  });
+
+  test('Refresh Stacks reads the whole tree again', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    await t.command(STACK_COMMANDS.refresh);
+    expect(t.redrawn).toEqual([undefined]);
+  });
+
+  test.each([
+    [STACK_COMMANDS.followLogs, 'Follow Logs'],
+    [STACK_COMMANDS.cancel, 'Cancel Run'],
+    [STACK_COMMANDS.openInPortal, 'Open in Portal'],
+  ])('%s invoked with no run row says it acts on a run of the Stacks view, and runs nothing', async (id, title) => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.command(id);
+    await settled();
+    expect(t.messages).toEqual([
+      {
+        level: 'info',
+        text: `${title} acts on a run listed in the Stacks view; choose it from that run's menu.`,
+        buttons: [],
+      },
+    ]);
+    expect(t.commands.invoked).toEqual([]);
+    expect(t.api.env.openExternal).not.toHaveBeenCalled();
+  });
+
   test("a Preview refused for no certification offers Validate on the run's root, which validates that root", async () => {
     const t = setup({
       root: prod,
@@ -957,7 +975,7 @@ describe('a stack row', () => {
             { type: 'result', status: 'apply_succeeded' },
           ],
         },
-        'run cancel': { documents: [run('run_1', 'cancelled')] },
+        'run cancel': { documents: [run('run_1', 'cancelled', { completedAt: COMPLETED })] },
       },
     });
     const [row] = await t.children();
