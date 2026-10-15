@@ -6,7 +6,7 @@ import { folder, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
-import { createCanvasPanels } from '../canvas-panels';
+import { CANVAS_VIEW_TYPE, createCanvasPanels } from '../canvas-panels';
 
 const repo = folder('/work/repo');
 const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
@@ -139,6 +139,8 @@ function setup(
   const folderChanges = new Set<() => void>();
   const api = {
     window: {
+      // The text editor the developer is in, when the active group holds one.
+      activeTextEditor: undefined as object | undefined,
       createWebviewPanel: vi.fn((_type, title, showOptions) => {
         events.push(`create:${title}:${showOptions.preserveFocus}`);
         const made = fakePanel();
@@ -271,9 +273,10 @@ describe('ensure', () => {
     expect(panels[0].panel.webview.html).toContain("script-src 'nonce-");
   });
 
-  test('two ensure calls give one panel; the second reveals it', async () => {
+  test('two ensure calls give one panel; a later one reveals it in its own column', async () => {
     const { canvasPanels, panels, api } = setup();
     const [a, b] = await Promise.all([canvasPanels.ensure(prod), canvasPanels.ensure(prod)]);
+    api.window.activeTextEditor = {};
     const c = await canvasPanels.ensure(prod, { preserveFocus: true });
 
     expect(a).toBe(b);
@@ -282,10 +285,37 @@ describe('ensure', () => {
     expect(panels[0].panel.reveal).toHaveBeenCalledWith(undefined, true);
   });
 
-  test('with preserveFocus the panel is created without taking focus', async () => {
-    const { canvasPanels, events } = setup();
+  const shownIn = (viewColumn: number, preserveFocus: boolean) => [
+    CANVAS_VIEW_TYPE,
+    'infra/prod',
+    { viewColumn, preserveFocus },
+    expect.anything(),
+  ];
+
+  test('opened without focus while a text editor is active, the panel is created beside it, taking no focus', async () => {
+    const { canvasPanels, api } = setup();
+    api.window.activeTextEditor = {};
     await canvasPanels.ensure(prod, { preserveFocus: true });
-    expect(events).toContain('create:infra/prod:true');
+    expect(api.window.createWebviewPanel).toHaveBeenCalledWith(
+      ...shownIn(api.ViewColumn.Beside, true),
+    );
+  });
+
+  test('opened without focus with no text editor active, the panel is created in the active group, taking no focus', async () => {
+    const { canvasPanels, api } = setup();
+    await canvasPanels.ensure(prod, { preserveFocus: true });
+    expect(api.window.createWebviewPanel).toHaveBeenCalledWith(
+      ...shownIn(api.ViewColumn.Active, true),
+    );
+  });
+
+  test('opened with focus, the panel is created in the active group over the text editor there', async () => {
+    const { canvasPanels, api } = setup();
+    api.window.activeTextEditor = {};
+    await canvasPanels.ensure(prod);
+    expect(api.window.createWebviewPanel).toHaveBeenCalledWith(
+      ...shownIn(api.ViewColumn.Active, false),
+    );
   });
 
   test('in a workspace of several folders the title names the folder first', async () => {
