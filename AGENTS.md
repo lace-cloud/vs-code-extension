@@ -64,6 +64,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
+| When the account changed: a change this window makes, or a read that differs from the last one | `account/account.ts` (`createAccount`, `onDidChange`) | the status bar, the registry view, the Stacks tree |
 | The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
 | What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
 | Which stack of a root a stack command no row names acts on | `stacks/stack-pick.ts` (`pickStack`) | the palette's Preview, Apply and Scan; Import Existing Resources |
@@ -199,7 +200,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 
 - `registry-reads.ts`: `registry list --axis module --limit 500`, `registry get`, `registry describe`, `org current`, each
   in the home. The sidebar reads once, unfiltered, and the page filters as the developer searches and picks categories; a
-  row's versions are read on expand. The view reads again when it becomes visible and after each account change.
+  row's versions are read on expand. The view reads again when it becomes visible and at each change of the account,
+  made in this window or found outside it (see Account).
 - The sidebar's states come from a failed list's `reason`: `unauthenticated` → Sign In, `no_organization` → Select
   Organization, anything else its message with Retry. An empty registry shows "No modules are published yet" with the
   publishing guide link the list itself carries.
@@ -222,13 +224,21 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   change of the workspace's folders reads the tree again, and a root whose folder left the workspace is dropped and
   found again.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
-  `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
-  the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
-  root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the root its run was over,
-  so `no_certification` and `stale_certification` offer Validate on it.
-- Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges. Each tick of the
-  runner's store (a run started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root
-  that run was about, its `RunCtx.root`, whatever the tree ran since.
+  `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. A run row's `contextValue`
+  is a list of tokens: `laceRun`, then `ended` when its `run list` document carries a `completedAt` and `running` when
+  it carries none, then `portal` when the CLI gave the run its page. Each run menu entry's `when` matches a token:
+  Cancel Run `running`, Open in Portal `portal` (`__tests__/manifest.test.ts` reads every one against each state a run
+  row draws). A run action invoked with no run row says it acts on a run of the Stacks view and runs nothing. The tree
+  opens no session: the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick
+  a stack of the named root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the
+  root its run was over, so `no_certification` and `stale_certification` offer Validate on it.
+- Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges; the tree redraws
+  the row picked before and the row picked now, the objects `getChildren` gave (VS Code redraws an element by
+  identity). A read of the whole tree drops every row VS Code holds until it settles, and a row's menu command run in
+  that time arrives with no row, so only what may change the list reads it whole: a tick, a change of the account, the
+  view shown again, a change of the workspace's folders, and Refresh Stacks. Each tick of the runner's store (a run
+  started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root that run was about,
+  its `RunCtx.root`, whatever the tree ran since.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
@@ -330,8 +340,16 @@ cancellable progress notification); Sign Out runs `lace logout`. Organization an
 its team, listed and saved with `--org` naming the organization just picked, so the saved team is that organization's
 even while `LACE_ORGANIZATION` sets another; an organization with no team says teams are created in the portal, with Open
 Portal on the page `team list` names (`createUrl`). The status bar item shows the selection and runs Select
-Organization; it is read again after each change and when the window regains focus. Nothing is cached.
-A failed account command offers the way out its reason names (`vscode/offers.ts`).
+Organization.
+
+The account's one change event (`onDidChange`) fires after each sign-in, sign-out or saved selection this window makes,
+and when a read of the account differs from the last one. A read is who is signed in (`whoami`'s user, or the reason
+its failure gives) and the selection (`org current`, `team current`); `lace logout` clears only the credentials, so the
+selection alone cannot see it. The account is read when the window starts, after each change made here, when the
+window regains focus (a terminal or another window outside it) and when a command line running `lace` ends in an
+integrated terminal with shell integration (`window.onDidEndTerminalShellExecution`), which changes no focus. The status
+bar, the registry view and the Stacks tree read again on the event. Nothing is cached but the last read. A failed
+account command offers the way out its reason names (`vscode/offers.ts`).
 
 ## The chat tools
 
@@ -411,7 +429,8 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   so the real caller, mapping and codecs run), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root
   sessions with the real rule for holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
   `diagnostics/__tests__/fake-problems-api.ts`, `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand
-  back the button clicked, string or item).
+  back the button clicked, string or item), `account/__tests__/fake-outside.ts` (what tells the window the account may
+  have changed outside it: focus, and a command line ending in an integrated terminal).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
   mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is
@@ -433,10 +452,10 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   `xvfb-run`.
 - **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
   organization and team) is unit-tested over scripted commands.
-- **Repository tests** in `src/__tests__/`: the manifest against the features, the tracked pins (published versions
-  only, and a lockfile that locks exactly what the manifests name), the configuration
-  (every tsconfig include holds tracked files, every workflow runs on `develop` or `main`), the host bundle's
-  imports (only `vscode`, `node:*`, `@lace-cloud/host`, `@lace-cloud/canvas/engine`, `@lace-cloud/proto`,
+- **Repository tests** in `src/__tests__/`: the manifest against the features (and each run row's menu against the
+  run's state), the tracked pins (published versions only, and a lockfile that locks exactly what the manifests name),
+  the configuration (every tsconfig include holds tracked files, every workflow runs on `develop` or `main`), the host
+  bundle's imports (only `vscode`, `node:*`, `@lace-cloud/host`, `@lace-cloud/canvas/engine`, `@lace-cloud/proto`,
   `@lace-cloud/chat-core`), the bundles (one React per page, no canvas or engine in the registry pages, the host bundle
   loading in Node with `vscode` stubbed), the text-level instructions, and the README naming every command, setting and
   tool.

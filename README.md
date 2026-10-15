@@ -128,7 +128,8 @@ row for its versions. The organization shown is the one the Lace CLI has selecte
   outputs as Lace certified them (describing a version downloads and certifies it, so it loads after the rest),
   **Versions** and **Examples**, with **Add to Canvas** in the header.
 - Signed out, the view offers **Sign In**; with no organization selected, **Select Organization**; with no module
-  published, it says so and links to the guide on publishing one.
+  published, it says so and links to the guide on publishing one. A sign-in, sign-out or organization picked in a
+  terminal reaches the view as described under [Sign-in, organization and team](#sign-in-organization-and-team).
 - A placement the registry refuses says why, naming the module; **Show Details** opens the full message in the "Lace"
   Output channel.
 
@@ -138,8 +139,8 @@ The **Stacks** view lists the stacks deployed from the current module directory 
 its ten most recent runs. The view's description names the module; it follows the canvas or `.tf` file you turn to, and
 **Lace: Show Stacks of a Module**, in its title bar while the workspace holds more than one module, picks another.
 
-- On a stack: **Preview**, **Apply** and **Scan for Drift**. On a run: **Follow Logs**, **Cancel Run** and
-  **Open in Portal**.
+- On a stack: **Preview**, **Apply** and **Scan for Drift**. On a run: **Follow Logs**, **Cancel Run** while the run
+  has not ended, and **Open in Portal** when the run has a page there.
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
   the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. An apply held for approval
@@ -183,6 +184,10 @@ to its team; **Lace: Select Team** picks a team of the current organization, and
 offers **Open Portal** on the page that makes one. The status bar shows the selection, and clicking it selects an
 organization. When `LACE_ORGANIZATION` or `LACE_TEAM` is set in the engine's environment, that variable decides, and the
 pick says so.
+
+A `lace login`, `lace logout`, `lace org use` or `lace team use` run in VS Code's integrated terminal reaches the status
+bar, the Registry view and the Stacks view when the command ends (the terminal's shell integration, on by default,
+tells VS Code it ended); one run in a terminal outside VS Code, when the window regains focus.
 
 ## Lace in VS Code's chat
 
