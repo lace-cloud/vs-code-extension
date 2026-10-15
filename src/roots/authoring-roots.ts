@@ -187,6 +187,16 @@ export function rootOfPath(
   return { folder: innermost.folder, relative: innermost.below.split(sep).join('/') };
 }
 
+// The root a run names: the directory its context's `root` names, as
+// `rootPath` spells it. Undefined for a context that names none, or a
+// directory under no folder.
+export function rootOfRun(
+  folders: readonly vscode.WorkspaceFolder[],
+  ctx: { readonly root?: string },
+): AuthoringRoot | undefined {
+  return ctx.root === undefined ? undefined : rootOfPath(folders, ctx.root);
+}
+
 const depth = (root: AuthoringRoot): number =>
   root.relative === '' ? 0 : root.relative.split('/').length;
 

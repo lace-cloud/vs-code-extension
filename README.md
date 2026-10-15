@@ -42,8 +42,8 @@ diagnostic names no file.
 A directory with no `.tf` file opens an empty canvas you can edit: the module starts there, as it would in a new `.tf`
 file, and Generate writes its first `.tf` files. In a workspace with no `.tf` file and no canvas open, **Lace: Open
 Canvas** from the Command Palette and placing a registry module start the module in the workspace folder; in a
-workspace of several folders you pick which. The extension writes no Terraform of its own; only Generate, Format and
-Convert write source files.
+workspace of several folders you pick which. The extension writes no Terraform of its own; only Generate, Format,
+Convert and Import Existing Resources write source files.
 
 ## Modules, canvases and authoring sessions
 
@@ -80,9 +80,12 @@ files, and one side is taken whole. To edit the files by hand, generate first.
 is in it. The first
 Generate on a hand-written module writes it in that style: comments, blank lines, argument order and the file a block sits
 in are not carried through. A module whose own `.tf` declares managed resources is not in Lace style: its canvas opens
-read-only and reads **Needs conversion**, and its **Convert** runs `lace module convert`, which composes each of those
-resources into a module of its own. A module whose Terraform does not parse opens with the canvas locked until it parses
-again.
+read-only, and its banner says "This Terraform is not in lace shape yet" and offers two choices. **Convert** runs
+`lace module convert`, which restructures the module in place, each of those resources composed into a module of its
+own, so a stack's apply creates only what its state does not hold yet. **Import existing resources** restructures it the
+same way and adds import blocks from a statefile you pick, so an empty stack's first apply adopts the resources that
+statefile records instead of creating them again (see the Stacks view). A module whose Terraform does not parse opens
+with the canvas locked until it parses again.
 
 ## Saving follows `files.autoSave`
 
@@ -139,12 +142,13 @@ its ten most recent runs. The view's description names the module; it follows th
   **Open in Portal**.
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
-  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. A module with no current
-  certification offers **Validate**. An apply held for approval names the change request the run waits on: each
-  requirement with its state and whether Lace or a change-management system decides it, and each record that system
-  keeps, with its state and **Open** on the record's page.
+  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. An apply held for approval
+  names the change request the run waits on: each requirement with its state and whether Lace or a change-management
+  system decides it, and each record that system keeps, with its state and **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
   document.
+- A stack command refused because the module has no current certification offers **Validate**, which validates that
+  module.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal.
@@ -152,14 +156,21 @@ its ten most recent runs. The view's description names the module; it follows th
   **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
-  portal), **Create Stack in Terminal** (no stack deployed from the module yet), or **Retry**.
-- A stack is created once, in a terminal. **Create Stack in Terminal** types
-  `lace stack create SLUG --source . --connection CONNECTION_ID`, with the CLI at `lace.binaryPath` written as the shell of
-  your default terminal profile calls a program (PowerShell, Command Prompt, fish, nushell or a POSIX shell), into a
-  terminal at the module directory, unsent: replace `SLUG` with the new stack's slug and `CONNECTION_ID` with the ID of
-  the cloud connection it deploys through (`conn_…`, as `lace connection list` lists them), then run it. Preview, Apply
-  and Scan Stack from the Command Palette on a module with no stack say so. The stack is bound to the module's place in
-  its git repository, and the view lists it once you refresh.
+  portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.
+- **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it asks
+  for the new stack's slug, then for the cloud connection it deploys through, picked from your team's connections as
+  `lace connection list` lists them, and creates it under a progress notification. The stack is bound to the module's
+  place in its git repository, and the view lists it. A team with no cloud connection yet is told so, with
+  **Open Portal**, where connections are added. **Preview**, **Apply** and **Scan for Drift** from the Command Palette
+  on a module with no stack say to create one in the Stacks view.
+- **Lace: Import Existing Resources** (`lace.importResources`), also on the canvas's banner for a module not in Lace
+  style, adopts resources that already exist into a stack of the module (`lace stack import`): you pick the stack,
+  then the statefile that records them, any file you name. It saves the module's open `.tf` editors, then restructures
+  the module as Convert does and writes an import block for each resource the statefile records, under a progress
+  notification. Review the change in git, commit it, then apply the stack to adopt them. An import that cannot derive
+  an import ID for some resources writes nothing and offers **Import the rest**, which names them, then imports the
+  others from the same statefile under a progress notification and leaves those to be created anew. Lace refuses an
+  import into a stack that already holds state.
 
 ## Sign-in, organization and team
 
@@ -263,6 +274,7 @@ The extension runs one Lace engine per window, started when something first need
 | Lace: Generate                       | `lace.generate`                | Generates the saved canvas to the module's `.tf` files, with no tab, after saving the module's open `.tf` editors. |
 | Lace: Validate Module                | `lace.validateModule`          | Runs `lace module validate` on the module's Terraform and writes its certification under `.lace/`.              |
 | Lace: Convert Module                 | `lace.convertModule`           | Runs `lace module convert`, which rewrites the module's Terraform in Lace style, and reports as Validate does; an open canvas picks the rewritten files up. |
+| Lace: Import Existing Resources      | `lace.importResources`         | Runs `lace stack import` on a stack of the module you pick, with a statefile you pick: converts the module as Convert does and adds an import block for each resource the statefile records. Also on the canvas's banner. |
 | Lace: Format Module                  | `lace.formatModule`            | Runs `lace module fmt` and names the files it changed.                                                           |
 | Lace: Scan Module                    | `lace.scanModule`              | Runs `lace module scan` (tfsec).                                                                                 |
 | Lace: Generate Docs                  | `lace.generateDocs`            | Runs `lace module docs` (terraform-docs) and opens the markdown in an untitled editor; your save is the write. Also on the Explorer folder menu. |
@@ -281,7 +293,7 @@ The extension runs one Lace engine per window, started when something first need
 | Lace: Cancel Run                     | `lace.cancelRun`               | Cancels a run. On a run row.                                                                                     |
 | Lace: Open in Portal                 | `lace.openRunInPortal`         | Opens a run's page in the Lace portal. On a run row.                                                             |
 | Lace: Open Portal                    | `lace.stacks.openPortal`       | Opens the portal page the Stacks view's failure names. In the view.                                              |
-| Lace: Create Stack in Terminal       | `lace.stacks.createInTerminal` | Types `lace stack create`, with placeholders, into a terminal at the module directory. In the view.          |
+| Lace: Create Stack                   | `lace.stacks.create`           | Creates a stack of the module, asking for its slug and its cloud connection. In the view, while no stack is deployed from the module. |
 | Lace: Start Engine                   | `lace.startEngine`             | Starts the Lace engine.                                                                                          |
 | Lace: Stop Engine                    | `lace.stopEngine`              | Stops the Lace engine.                                                                                           |
 | Lace: Restart Engine                 | `lace.restartEngine`           | Restarts the Lace engine.                                                                                        |
@@ -289,8 +301,9 @@ The extension runs one Lace engine per window, started when something first need
 
 The module commands act on the module directory chosen as described above. Validate, Convert, Format, Scan and Generate
 Docs run on the module's files as the same command typed in a terminal there would, and open no session. Generate,
-Format and Convert write the module's `.tf` files, so they save its open `.tf` editors first; Validate, Scan and Generate
-Docs read the files as they are on disk, as the chat's validate tool and the canvas's Validate do, and write nothing.
+Format, Convert and Import Existing Resources write the module's `.tf` files, so they save its open `.tf` editors first;
+Validate, Scan and Generate Docs read the files as they are on disk, as the chat's validate tool and the canvas's
+Validate do, and write nothing.
 Lace binds no keys of its own.
 
 ## Settings

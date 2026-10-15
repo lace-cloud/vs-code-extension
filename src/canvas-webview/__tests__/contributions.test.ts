@@ -69,3 +69,31 @@ describe('Open source on a Diagnostics row', () => {
     );
   });
 });
+
+describe('Import existing resources on the source-refused banner', () => {
+  const importResources = (host: HostCaller) => {
+    const action = hostContributions(host).actions.find(({ id }) => id === 'import-resources');
+    if (!action) throw new Error('no Import existing resources action');
+    return action;
+  };
+
+  test("is a host action on the banner's row while the tree is out of lace shape, after Convert's choice, needing no row datum", () => {
+    expect(importResources(fakeHost())).toEqual({
+      id: 'import-resources',
+      label: 'Import existing resources',
+      choice:
+        "Import existing resources restructures it the same way and adds import blocks from a statefile you pick, so an empty stack's first apply adopts the resources that statefile records instead of creating them again.",
+      placement: { row: 'source-refused' },
+      requiredPorts: [],
+      requiredContext: ['root', 'needsConversion'],
+      binding: { kind: 'host', run: expect.any(Function) },
+    });
+  });
+
+  test('asks the host to import existing resources into a stack of the panel’s root', async () => {
+    const host = fakeHost();
+    const rt = { ports: { presenter: { notify: vi.fn() } } } as unknown as BindingRuntime;
+    await (importResources(host).binding as HostBinding).run(rt, {}, {});
+    expect(host.call).toHaveBeenCalledWith('importResources', {});
+  });
+});

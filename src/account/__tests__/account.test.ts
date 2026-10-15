@@ -1,6 +1,7 @@
 import { CommandExitError } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
+import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import { accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
 import { selectionStatus } from '../scope';
 
@@ -331,7 +332,9 @@ describe('an account command that fails', () => {
     const window = {
       createStatusBarItem: () => ({ show: vi.fn(), hide: vi.fn(), dispose: vi.fn() }),
       onDidChangeWindowState: () => ({ dispose: () => {} }),
-      showErrorMessage: vi.fn(async () => 'Sign In'),
+      showErrorMessage: vi.fn(async (_text: string, ...buttons: Button[]) =>
+        clicked(buttons, 'Sign In'),
+      ),
       showWarningMessage: vi.fn(),
       showInformationMessage: vi.fn(),
     };
@@ -360,7 +363,7 @@ describe('an account command that fails', () => {
       vi.fn(),
     );
     await handlers.get(SELECT_ORGANIZATION)?.();
-    expect(window.showErrorMessage).toHaveBeenCalledWith('no credentials', 'Sign In');
+    expect(shownBy(window.showErrorMessage)).toEqual([['no credentials', 'Sign In']]);
     expect(offers.signIn).toHaveBeenCalledTimes(1);
   });
 });

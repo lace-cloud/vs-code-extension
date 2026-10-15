@@ -96,7 +96,7 @@
       {
         "view": "laceStacks",
         "when": "lace.stacks.state == noStack",
-        "contents": "No stack is deployed from this module yet. A stack is created once, in a terminal: `lace stack create` in the module's directory, with the new stack's slug and the ID of the cloud connection it deploys through (`lace connection list`).\n[Create Stack in Terminal](command:lace.stacks.createInTerminal)"
+        "contents": "No stack is deployed from this module yet.\n[Create Stack](command:lace.stacks.create)"
       },
       {
         "view": "laceStacks",
@@ -183,8 +183,8 @@
         "title": "Lace: Open Portal"
       },
       {
-        "command": "lace.stacks.createInTerminal",
-        "title": "Lace: Create Stack in Terminal"
+        "command": "lace.stacks.create",
+        "title": "Lace: Create Stack"
       },
       {
         "command": "lace.save",
@@ -201,6 +201,10 @@
       {
         "command": "lace.convertModule",
         "title": "Lace: Convert Module"
+      },
+      {
+        "command": "lace.importResources",
+        "title": "Lace: Import Existing Resources"
       },
       {
         "command": "lace.formatModule",
@@ -255,7 +259,7 @@
           "when": "false"
         },
         {
-          "command": "lace.stacks.createInTerminal",
+          "command": "lace.stacks.create",
           "when": "false"
         },
         {
@@ -272,6 +276,10 @@
         },
         {
           "command": "lace.convertModule",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.importResources",
           "when": "workspaceFolderCount > 0"
         },
         {
@@ -628,11 +636,11 @@
     ]
   },
   "dependencies": {
-    "@lace-cloud/canvas": "0.24.0",
-    "@lace-cloud/chat-core": "0.24.0",
-    "@lace-cloud/design-tokens": "0.24.0",
-    "@lace-cloud/host": "0.24.0",
-    "@lace-cloud/proto": "0.24.0",
+    "@lace-cloud/canvas": "0.25.0",
+    "@lace-cloud/chat-core": "0.25.0",
+    "@lace-cloud/design-tokens": "0.25.0",
+    "@lace-cloud/host": "0.25.0",
+    "@lace-cloud/proto": "0.25.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",

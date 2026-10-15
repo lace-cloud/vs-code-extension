@@ -10,6 +10,7 @@ import {
 } from '../../engine/__tests__/real-engine';
 import { folder } from '../../roots/__tests__/fake-uri';
 import type { RootSources } from '../../roots/authoring-roots';
+import { shownBy } from '../../vscode/__tests__/fake-messages';
 import {
   type AuthoringApi,
   authoringCommands,
@@ -184,10 +185,12 @@ describe('the module commands on the real engine, with no canvas open', () => {
     const { table, api } = window(repository);
 
     await table[CONVERT_MODULE]();
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith(
-      '1 Terraform construct(s) could not be auto-converted; the residual report names each',
-      'Validate',
-    );
+    expect(shownBy(api.window.showErrorMessage)).toEqual([
+      [
+        '1 Terraform construct(s) could not be auto-converted; the residual report names each',
+        'Validate',
+      ],
+    ]);
     expect(readFileSync(join(root, 'main.tf'), 'utf8')).toBe(CHECKED);
   });
 
@@ -196,7 +199,7 @@ describe('the module commands on the real engine, with no canvas open', () => {
     const { table, api } = window(repository);
 
     await table[GENERATE_DOCS]();
-    const missing = api.window.showErrorMessage.mock.calls;
+    const missing = shownBy(api.window.showErrorMessage);
     if (missing.length > 0) {
       expect(missing).toEqual([[expect.stringContaining('terraform-docs'), 'Install']]);
     } else {

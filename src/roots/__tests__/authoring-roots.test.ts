@@ -9,6 +9,7 @@ import {
   rootAt,
   rootLabel,
   rootOfPath,
+  rootOfRun,
   rootPath,
   rootToAct,
   rootUri,
@@ -615,5 +616,13 @@ describe('the root a directory path names', () => {
   test('is undefined for a path under no folder', () => {
     expect(rootOfPath([repo], '/work/other')).toBeUndefined();
     expect(rootOfPath([repo], '/work/repository')).toBeUndefined();
+  });
+});
+
+describe('the root a run names', () => {
+  test('is the root of the directory its context names, and none for a context that names none or a directory under no folder', () => {
+    expect(rootOfRun([repo], { root: '/work/repo/infra/prod' })).toEqual(prod);
+    expect(rootOfRun([repo], {})).toBeUndefined();
+    expect(rootOfRun([repo], { root: '/work/other' })).toBeUndefined();
   });
 });

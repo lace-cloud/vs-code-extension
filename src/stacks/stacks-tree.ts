@@ -14,14 +14,15 @@
 // window's runner over a `RunCtx` naming the root and the stack; the tree
 // restates no argument and no confirmation. The tree opens no session: the
 // commands run on the Terraform on disk. Open in portal opens the page the
-// CLI gave the run.
+// CLI gave the run. From the palette, Preview, Apply and Scan act on a stack
+// of the root `rootToAct` names, picked by the one stack pick (`pickStack`).
 //
-// A stack is created in a terminal, as one-time setup: with no stack
-// deployed from the root, the view's action types the complete `lace stack
-// create` line into a terminal at the root, unsent, with a placeholder for
-// each argument the command requires, for the developer to fill in and run.
-// The line calls the CLI as the terminal's shell calls a program by its
-// path (`shellLine`, over the shell `env.shell` names).
+// With no stack deployed from the root, the view's action is Create Stack:
+// the package's `create` binding run through the runner over the view's
+// root, under a progress notification until its run ends
+// (`runUnderProgress`). The runner's form asks for what `stack create`
+// needs; the package's notice says the stack was created, and its tick
+// reads the tree again, which lists it.
 //
 // Selecting a stack picks it for the root, and the root's canvas draws its
 // badges. An apply runs under a progress notification and says how it
@@ -38,19 +39,18 @@
 // one; or several do, and Choose Module picks one. When the stacks cannot be
 // listed, the view says why by the failure's reason, with the one action
 // that gets past it.
-import {
-  type ActionContribution,
-  CORE_COMMAND_ACTIONS,
-  type CommandFailure,
-  type RunCtx,
-  type StackRef,
+import type {
+  ActionContribution,
+  CommandFailure,
+  RunCtx,
+  StackRef,
 } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import type { RunnerHost } from '../engine/runner-host';
+import { binding, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
   candidates,
@@ -59,7 +59,7 @@ import {
   type RootSources,
   rootAt,
   rootLabel,
-  rootOfPath,
+  rootOfRun,
   rootPath,
   rootToAct,
   rootUri,
@@ -68,8 +68,9 @@ import {
 import type { RootState } from '../state/root-state';
 import { registerCommands } from '../vscode/commands';
 import { notice, type OfferActions } from '../vscode/offers';
-import { shellLine } from '../vscode/shell-line';
+import { runUnderProgress } from '../vscode/run-progress';
 import type { RunOutput } from './run-output';
+import type { PickStack } from './stack-pick';
 import {
   outcomeNotice,
   previewText,
@@ -99,12 +100,8 @@ export const STACK_COMMANDS = {
   cancel: 'lace.cancelRun',
   openInPortal: 'lace.openRunInPortal',
   openPortal: 'lace.stacks.openPortal',
-  createInTerminal: 'lace.stacks.createInTerminal',
+  create: 'lace.stacks.create',
 } as const;
-
-// What the terminal is given after the CLI's path: `stack create` with a
-// placeholder for each argument it requires, in the root (`--source .`).
-const CREATE_LINE = 'stack create SLUG --source . --connection CONNECTION_ID';
 
 // How many of a stack's runs its row lists.
 const RECENT_RUNS = 10;
@@ -119,23 +116,22 @@ export type StacksTreeApi = {
   window: Pick<
     typeof vscode.window,
     | 'createTreeView'
-    | 'showQuickPick'
     | 'withProgress'
     | 'showInformationMessage'
     | 'showWarningMessage'
     | 'showErrorMessage'
     | 'onDidChangeActiveTextEditor'
-    | 'createTerminal'
     | 'showTextDocument'
   >;
   workspace: Pick<
     typeof vscode.workspace,
-    'registerTextDocumentContentProvider' | 'openTextDocument' | 'onDidChangeWorkspaceFolders'
+    | 'registerTextDocumentContentProvider'
+    | 'openTextDocument'
+    | 'onDidChangeWorkspaceFolders'
+    | 'workspaceFolders'
   >;
   commands: Pick<typeof vscode.commands, 'registerCommand' | 'executeCommand'>;
-  env: Pick<typeof vscode.env, 'shell'> & {
-    openExternal: (uri: vscode.Uri) => Thenable<boolean>;
-  };
+  env: { openExternal: (uri: vscode.Uri) => Thenable<boolean> };
   Uri: Pick<typeof vscode.Uri, 'parse' | 'from'>;
   EventEmitter: typeof vscode.EventEmitter;
   ThemeIcon: typeof vscode.ThemeIcon;
@@ -153,27 +149,22 @@ export type StacksTreeOptions = {
   rootState: RootState;
   panels: Pick<CanvasPanels, 'tick' | 'onDidChangeActive'>;
   sources: RootSources;
+  pickStack: PickStack;
   // Lace: Validate Module on a root: what an apply's notice offers.
   validate: (root: AuthoringRoot) => Promise<void>;
-  // The Lace CLI the engine runs, as a terminal would name it.
-  binaryPath: () => string;
   report: (what: string, error: unknown) => void;
 };
 
-const binding = (id: string): ActionContribution => {
-  const found = CORE_COMMAND_ACTIONS.find((action) => action.id === id);
-  if (!found) throw new Error(`the canvas package carries no binding ${id}`);
-  return found;
-};
-
 export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
-  const { api, commands, runner, runOutput, rootState, panels, sources, report } = options;
+  const { api, commands, runner, runOutput, rootState, panels, sources, pickStack, report } =
+    options;
   const BINDINGS = {
     preview: binding('preview'),
     apply: binding('apply'),
     scan: binding('scan'),
     followLogs: binding('follow-logs'),
     cancel: binding('run-cancel'),
+    create: binding('create'),
   };
 
   let root: AuthoringRoot | undefined;
@@ -369,14 +360,14 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (settled.outcome.kind === 'running') return;
     const said = outcomeNotice(stack.slug, settled.outcome);
     const offers = { ...options.offers, validate: () => options.validate(of) };
-    const answer = await notice(api, offers, said.level, said.text, said.offers, [SHOW_OUTPUT]);
-    if (answer === SHOW_OUTPUT) runOutput.show(stack.slug);
+    const showOutput = { title: SHOW_OUTPUT };
+    const chosen = await notice(api, offers, said.level, said.text, said.offers, [showOutput]);
+    if (chosen === showOutput) runOutput.show(stack.slug);
   }
 
   // A stack row, or, from the palette, a stack of the root the developer
-  // names to `verb` a stack of, picked from its stacks. A root not named is
-  // said as `rootToAct` says it; a root with no stack says so, and how one
-  // is created.
+  // names to `verb` a stack of, by the one stack pick. A root not named is
+  // said as `rootToAct` says it.
   async function stackOf(
     row: Extract<Row, { kind: 'stack' }> | undefined,
     verb: string,
@@ -384,25 +375,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (row) return { of: row.root, stack: stackRef(row.stack) };
     const of = await rootToAct(sources, api.window, `${verb} a stack of`);
     if (!of) return undefined;
-    const listed = await commandDocument(await commands.anywhere(), 'stack list', {
-      source: rootPath(of),
-    });
-    if (listed.items.length === 0) {
-      void api.window.showInformationMessage(
-        `No stack is deployed from ${rootLabel(of, sources.folders())} yet. A stack is created once, in a terminal: Create Stack in Terminal in the Stacks view types the command.`,
-      );
-      return undefined;
-    }
-    const picked = rootState.stack(of)?.id;
-    const chosen = await api.window.showQuickPick(
-      listed.items.map((stack) => ({
-        label: stack.name,
-        description: stack.id === picked ? `${stack.slug} · on the canvas` : stack.slug,
-        stack,
-      })),
-      { placeHolder: `A stack deployed from ${rootLabel(of, sources.folders())}` },
-    );
-    return chosen && { of, stack: stackRef(chosen.stack) };
+    const stack = await pickStack(of, verb);
+    return stack && { of, stack };
   }
 
   const onStack =
@@ -446,7 +420,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   });
   const offTick = runner.onDidTick((ctx) => {
     refresh();
-    const ran = ctx.root === undefined ? undefined : rootOfPath(sources.folders(), ctx.root);
+    const ran = rootOfRun(sources.folders(), ctx);
     if (ran) panels.tick(ran);
   });
 
@@ -513,11 +487,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       [STACK_COMMANDS.openPortal]: async () => {
         if (refusal?.url !== undefined) await api.env.openExternal(api.Uri.parse(refusal.url));
       },
-      [STACK_COMMANDS.createInTerminal]: async () => {
-        if (!root) return;
-        const terminal = api.window.createTerminal({ name: 'Lace', cwd: rootUri(root) });
-        terminal.show();
-        terminal.sendText(shellLine(api.env.shell, options.binaryPath(), CREATE_LINE), false);
+      [STACK_COMMANDS.create]: async () => {
+        if (root) await runUnderProgress(api, runner, BINDINGS.create, { root: rootPath(root) });
       },
     }),
   ];

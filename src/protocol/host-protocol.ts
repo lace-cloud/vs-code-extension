@@ -62,11 +62,14 @@ export type SourceLocation = { file: string; line?: number; column?: number };
 
 // Webview → host, answered. `openSource` opens the file at its line and
 // column in the editor beside the canvas; it answers `null` once the
-// editor shows it, and fails with what stopped it.
+// editor shows it, and fails with what stopped it. `importResources` runs
+// Import Existing Resources on the panel's root and answers `null` once it
+// has ended.
 export type HostCalls = {
   boot: { request: Record<string, never>; response: Boot };
   confirm: { request: ConfirmSpec; response: boolean };
   openSource: { request: SourceLocation; response: null };
+  importResources: { request: Record<string, never>; response: null };
 };
 
 // Webview → host, one way. `focus` is the page's own window gaining or
@@ -95,7 +98,7 @@ type ReplyFrame = { kind: 'reply'; id: string; response: unknown };
 type FailFrame = { kind: 'fail'; id: string; message: string };
 type EventFrame = { kind: 'event'; event: PageEvent };
 
-const CALLS: readonly (keyof HostCalls)[] = ['boot', 'confirm', 'openSource'];
+const CALLS: readonly (keyof HostCalls)[] = ['boot', 'confirm', 'openSource', 'importResources'];
 const NOTICES: readonly HostNotice['op'][] = [
   'arrangement',
   'notify',
@@ -225,6 +228,7 @@ export function serveHost(port: RawPort, handlers: HostHandlers): () => void {
     if (!isCall(name)) return fail(`unknown call: ${name}`);
     const answer = (): Promise<unknown> => {
       if (name === 'boot') return handlers.boot({});
+      if (name === 'importResources') return handlers.importResources({});
       if (name === 'openSource') {
         const location = sourceLocationOf(request);
         return location
