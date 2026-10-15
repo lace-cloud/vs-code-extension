@@ -71,6 +71,19 @@ const NO_AGENT = {
   pending: 0,
   bound: 0,
 };
+// A preview of prod: one bucket to add, no policy, no Agent bound.
+const PROD_PREVIEW = {
+  stack: { id: 'stk_1', slug: 'prod' },
+  treeHash: 'h1',
+  plan: {
+    summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
+    human: '+ aws_s3_bucket.b',
+  },
+  policy: null,
+  advisories: NO_AGENT,
+};
+const PROD_PREVIEW_TEXT =
+  'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n';
 const COMPLETED = '2026-09-01T01:00:00Z';
 const applyResult = (error: string | null = null) => ({
   type: 'result',
@@ -993,20 +1006,7 @@ describe('a stack row', () => {
       scripts: {
         ...listed,
         'run list': { documents: [runs(run('run_1', 'applying'))] },
-        'stack preview': {
-          documents: [
-            {
-              stack: { id: 'stk_1', slug: 'prod' },
-              treeHash: 'h1',
-              plan: {
-                summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
-                human: '+ aws_s3_bucket.b',
-              },
-              policy: null,
-              advisories: NO_AGENT,
-            },
-          ],
-        },
+        'stack preview': { documents: [PROD_PREVIEW] },
         'stack scan': { documents: [{ triggered: true, reason: null, settled: null }] },
         'run logs': {
           documents: [
@@ -1034,9 +1034,7 @@ describe('a stack row', () => {
       ['run cancel', { run: 'run_1' }],
     ]);
     expect(ran.find((c) => c.path === 'stack preview')?.cwd).toBe('/work/repo/infra/prod');
-    expect(t.opened).toEqual([
-      'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n',
-    ]);
+    expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
     expect(t.channels.get('Lace: prod')).toEqual(['── lace run logs run_1 ──', 'line one']);
     expect(t.shownChannels).toContain('Lace: prod');
   });
@@ -1333,6 +1331,51 @@ describe("the view's progress", () => {
     t.commands.held[0].finish([], new CommandExitError(1, 'Error: no\n'));
     await settled();
     expect(overView(t)).toEqual([{ ended: true }]);
+  });
+
+  test('is drawn while a preview runs, and ends when its plan lands, which opens then', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack preview': { held: true } } });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.preview, row);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+    expect(t.opened).toEqual([]);
+
+    t.commands.held[0].finish([PROD_PREVIEW]);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
+  });
+
+  test('ends when a preview fails, which opens nothing', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack preview': { held: true } } });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.preview, row);
+    await settled();
+    t.commands.held[0].finish([], new CommandExitError(1, 'Error: no\n'));
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(t.opened).toEqual([]);
+  });
+
+  // A follow is a subscription to a run's logs, not a command under way.
+  test("is not drawn while a run's logs are followed", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        ...listed,
+        'run list': { documents: [runs(run('run_1', 'applying'))] },
+        'run logs': { held: true },
+      },
+    });
+    const [row] = await t.children();
+    const [runRow] = await t.children(row);
+
+    await t.command(STACK_COMMANDS.followLogs, runRow);
+    await settled();
+    expect(overView(t)).toEqual([]);
   });
 
   test('is drawn while an apply runs, and ends when its run settles', async () => {

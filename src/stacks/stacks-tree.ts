@@ -42,8 +42,8 @@
 // one; a preview opens as a read-only document; each tick of the runner's
 // store (a run started or settled, a scan or a cancel done) reads the tree
 // again and tells the canvas of the root that run was about that its reads
-// are stale. The view draws its progress while the store marks a command
-// running (`commandRunning`), and ends it when the store marks none.
+// are stale. The view draws its progress while the store says a command is
+// under way (`commandRunning`), and ends it when the store says none is.
 //
 // With no root found, the view says why, by the reason finding one gave: no
 // folder is open; no directory holds a module yet, and Open Canvas starts
@@ -119,10 +119,12 @@ export const STACK_COMMANDS = {
 const RECENT_RUNS = 10;
 const SHOW_OUTPUT = 'Show Output';
 
-// Whether the runner's store marks a command running: the run slot's run,
-// or a command's running mark (`running`, by the target it runs on).
-function commandRunning({ run, running }: ResultSlots): boolean {
-  return run?.outcome.kind === 'running' || running.size > 0;
+// Whether the runner's store says a command is under way: the run slot's
+// run, the preview slot's preview, or a command's running mark (`running`,
+// by the target it runs on). A follow is a subscription to a run's logs,
+// not a command under way.
+function commandRunning({ run, preview, running }: ResultSlots): boolean {
+  return run?.outcome.kind === 'running' || preview?.outcome.kind === 'running' || running.size > 0;
 }
 
 export type Row =
@@ -440,7 +442,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     provideTextDocumentContent: (uri) => previews.get(uri.path) ?? '',
   });
 
-  // The view's progress while the store marks a command running: the
+  // The view's progress while the store says a command is under way: the
   // function that ends the one drawn, while one is.
   let endProgress: (() => void) | undefined;
   const drawProgress = (slots: ResultSlots) => {
@@ -456,21 +458,22 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }
   };
 
-  // What the runner's store says, as it says it: a new preview opens; a run
-  // redraws its stack's row; the view's progress follows the running mark;
-  // each tick reads the tree again and tells the canvas of the root the
-  // ticking run was about.
+  // What the runner's store says, as it says it: a preview opens once its
+  // plan lands; a run redraws its stack's row; the view's progress follows
+  // what is under way; each tick reads the tree again and tells the canvas
+  // of the root the ticking run was about.
   let shownPreview: object | undefined;
   const offStore = runner.store.subscribe(() => {
     const slots = runner.store.getSnapshot();
     const { preview, run } = slots;
     drawProgress(slots);
     redraw([run?.readOver.stack]);
-    if (preview && preview.token !== shownPreview) {
+    if (preview?.outcome.kind === 'succeeded' && preview.token !== shownPreview) {
+      const { data } = preview.outcome;
       shownPreview = preview.token;
       previewCount += 1;
-      const path = `/${preview.data.stack.slug}-${previewCount}.plan`;
-      previews.set(path, previewText(preview.data));
+      const path = `/${data.stack.slug}-${previewCount}.plan`;
+      previews.set(path, previewText(data));
       void api.workspace
         .openTextDocument(api.Uri.from({ scheme: PREVIEW_SCHEME, path }))
         .then((document) => api.window.showTextDocument(document, { preview: false }))
