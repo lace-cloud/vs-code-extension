@@ -1,4 +1,4 @@
-import type { LaceReason } from '@lace-cloud/canvas/engine';
+import { CommandUnobservedError, type LaceReason } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { folder } from '../../roots/__tests__/fake-uri';
@@ -128,6 +128,19 @@ describe('the stack pick', () => {
       { level: 'error', text: 'No team is selected', buttons: ['Select Team', 'Open Portal'] },
     ]);
     expect(t.offers.selectTeam).toHaveBeenCalled();
+    expect(t.picks[0]).toMatchObject({ visible: false, items: [] });
+  });
+
+  test('a list whose stream ended before it finished closes the pick and says to list again', async () => {
+    const t = setup({ 'stack list': { fails: new CommandUnobservedError() } });
+    expect(await t.pickStack(prod, 'apply')).toBeUndefined();
+    expect(t.messages).toEqual([
+      {
+        level: 'error',
+        text: 'the stream ended before `lace stack list` finished; run it again',
+        buttons: [],
+      },
+    ]);
     expect(t.picks[0]).toMatchObject({ visible: false, items: [] });
   });
 });
