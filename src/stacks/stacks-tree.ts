@@ -221,7 +221,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       const state = refusedState(refusal);
       setState(
         state === 'noTeam' ? await teamState() : state,
-        state === 'failed' ? failureText(error) : undefined,
+        state === 'failed' ? failureText(error, { kind: 'read', path: 'stack list' }) : undefined,
       );
       return [];
     }
@@ -258,7 +258,13 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
         run,
       }));
     } catch (error) {
-      return [{ kind: 'note', text: failureText(error), icon: 'error' }];
+      return [
+        {
+          kind: 'note',
+          text: failureText(error, { kind: 'read', path: 'run list' }),
+          icon: 'error',
+        },
+      ];
     }
   }
 

@@ -4,6 +4,7 @@ import {
   CommandExitError,
   type CommandFailure,
   type CommandRun,
+  CommandUnobservedError,
   type LaceReason,
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
@@ -432,6 +433,25 @@ describe('the stacks of the current root', () => {
     });
   });
 
+  test("a stack whose runs' list ended before it finished shows a row that says to list them again", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'run list': { fails: new CommandUnobservedError() },
+      },
+    });
+    const [prodRow] = await t.children();
+    const runRows = await t.children(prodRow);
+
+    expect(runRows.map((row) => t.item(row))).toMatchObject([
+      {
+        label: 'the stream ended before `lace run list` finished; run it again',
+        iconPath: { id: 'error' },
+      },
+    ]);
+  });
+
   test('turning to a canvas whose folder has left the workspace leaves the view on its root', async () => {
     const api = folder('/work/api', 0);
     const web = folder('/work/web', 1);
@@ -824,7 +844,7 @@ describe('Create Stack', () => {
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
   });
 
-  test('a refusal of stack create says what the CLI says', async () => {
+  test("a refusal of stack create says its failure document's message", async () => {
     const t = setup({
       root: prod,
       scripts: {
@@ -840,7 +860,7 @@ describe('Create Stack', () => {
     await settled();
     expect(t.messages).toContainEqual({
       level: 'error',
-      text: 'Error: not_git_repository\n',
+      text: 'not_git_repository',
       buttons: [],
     });
   });
@@ -931,7 +951,7 @@ describe('a stack row', () => {
         'stack preview': refusal('no_certification'),
         'module validate': { documents: [validation('/work/repo/infra/prod', [])] },
       },
-      answers: { 'Error: no_certification\n': 'Validate' },
+      answers: { no_certification: 'Validate' },
     });
     const [row] = await t.children();
     await t.command(STACK_COMMANDS.preview, row);
@@ -940,7 +960,7 @@ describe('a stack row', () => {
 
     expect(t.messages[0]).toEqual({
       level: 'error',
-      text: 'Error: no_certification\n',
+      text: 'no_certification',
       buttons: ['Validate'],
     });
     expect(t.commands.invoked.find((c) => c.path === 'module validate')?.cwd).toBe(
@@ -1083,7 +1103,7 @@ describe('an apply', () => {
         },
       },
       answers: {
-        'Error: no_certification': clicked,
+        no_certification: clicked,
         'Validated infra/staging: lossy, 1 diagnostic.': 'Show Report',
       },
     });
@@ -1092,7 +1112,7 @@ describe('an apply', () => {
     await settled();
     expect(t.messages).toContainEqual({
       level: 'error',
-      text: 'Error: no_certification',
+      text: 'no_certification',
       buttons: ['Validate', 'Show Output'],
     });
 
