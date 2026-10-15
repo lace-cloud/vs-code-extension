@@ -125,7 +125,7 @@ describe('the registry sidebar page', () => {
     const html = sidebar(loaded({ organization: 'acme-org' }));
     const picker = html.match(/<button type="button" class="org-picker"[^>]*>(.*?)<\/button>/);
     expect(picker?.[0]).toContain('title="Select Organization"');
-    expect(picker?.[1].replace(/<[^>]*>/g, '')).toBe('Organization acme-org');
+    expect(textOf(picker?.[1] ?? '')).toBe('Organization acme-org');
     expect(picker?.[1]).toMatch(
       /<span class="org-picker-name">acme-org<\/span><svg class="org-picker-chevron"[^>]* aria-hidden="true"/,
     );
@@ -167,9 +167,28 @@ describe("the registry sidebar's stylesheet", () => {
   });
 });
 
-// The text an element of `html` holds, found by its id, with its tags
-// dropped.
-const textOf = (html: string, id: string | undefined): string | undefined => {
+// The entities React's static markup writes in text, and what each says.
+const ENTITIES: Readonly<Record<string, string>> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#x27;': "'",
+};
+
+// The text `markup` reads as: the markup split into its tags and the runs
+// of text between them, each run's entities decoded in one pass, the runs
+// joined.
+const textOf = (markup: string): string =>
+  [...markup.matchAll(/<[^>]*>|[^<]+/g)]
+    .map(([token]) => token)
+    .filter((token) => !token.startsWith('<'))
+    .map((text) => text.replace(/&(?:amp|lt|gt|quot|#x27);/g, (entity) => ENTITIES[entity]))
+    .join('')
+    .trim();
+
+// The text an element of `html` holds, found by its id.
+const elementText = (html: string, id: string | undefined): string | undefined => {
   if (id === undefined) return undefined;
   const at = html.indexOf(`id="${id}"`);
   if (at < 0) return undefined;
@@ -178,12 +197,7 @@ const textOf = (html: string, id: string | undefined): string | undefined => {
   let depth = 0;
   for (const match of html.slice(open).matchAll(new RegExp(`<(/?)${tag}\\b[^>]*>`, 'g'))) {
     depth += match[1] === '/' ? -1 : 1;
-    if (depth === 0) {
-      return html
-        .slice(open, open + (match.index ?? 0))
-        .replace(/<[^>]*>/g, '')
-        .trim();
-    }
+    if (depth === 0) return textOf(html.slice(open, open + (match.index ?? 0)));
   }
   return undefined;
 };
@@ -214,8 +228,8 @@ describe('what the registry sidebar says to a screen reader', () => {
   test("a module button is named by the module's name and version, and described by its categories", () => {
     const html = moduleRow();
     const open = attributesOf(html, 'module-open');
-    expect(textOf(html, open['aria-labelledby'])).toBe('ACME DB v2.0.0');
-    expect(textOf(html, open['aria-describedby'])).toBe('data');
+    expect(elementText(html, open['aria-labelledby'])).toBe('ACME DB v2.0.0');
+    expect(elementText(html, open['aria-describedby'])).toBe('data');
   });
 
   // A row action is named by its title alone, its glyph hidden: its tooltip
