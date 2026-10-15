@@ -1,8 +1,10 @@
 // The manifest and activation agree. Every command, view and Language Model
 // Tool the manifest contributes is one a feature registers, and the
 // features register nothing the manifest lacks. Every menu entry and
-// welcome link names a contributed command, every view a `when` clause
-// names is contributed, and the settings are the ones the extension reads.
+// welcome link names a contributed command or one of VS Code's own, every
+// view a `when` clause names is contributed, a view's welcome for a state
+// offers the one action that gets past it, and the settings are the ones
+// the extension reads.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
@@ -98,6 +100,12 @@ const views = (): View[] => contributes.views.laceContainer;
 const menuEntries = (): MenuEntry[] => Object.values<MenuEntry[]>(contributes.menus).flat();
 const welcomes = (): { view: string; when?: string; contents: string }[] =>
   contributes.viewsWelcome;
+// The commands a welcome's links run, in order.
+const linkedCommands = (contents: string): string[] =>
+  [...contents.matchAll(/\(command:([\w.]+)\)/g)].map(([, command]) => command);
+// VS Code's own commands live in its own namespaces, which no extension
+// contributes to; the extension's are all `lace.`.
+const VS_CODE_OWN = /^(workbench|vscode)\./;
 
 describe('the manifest', () => {
   test('declares exactly the commands the features register', () => {
@@ -126,15 +134,30 @@ describe('the manifest', () => {
     expect(registered().tools).toEqual([...declared].sort());
   });
 
-  test('names only contributed commands in its menus and welcome links', () => {
+  test("names in its menus and welcome links only a contributed command or one of VS Code's own", () => {
     const commands = new Set(declaredCommands());
     const named = [
       ...menuEntries().map((entry) => entry.command),
-      ...welcomes().flatMap((welcome) =>
-        [...welcome.contents.matchAll(/\(command:([\w.]+)\)/g)].map(([, command]) => command),
-      ),
+      ...welcomes().flatMap((welcome) => linkedCommands(welcome.contents)),
     ];
-    expect(named.filter((command) => !commands.has(command))).toEqual([]);
+    expect(named.filter((command) => !commands.has(command) && !VS_CODE_OWN.test(command))).toEqual(
+      [],
+    );
+    expect(declaredCommands().filter((command) => VS_CODE_OWN.test(command))).toEqual([]);
+  });
+
+  // The welcome with no state is the one shown before the view's first read;
+  // every other is a state the view says why it is in.
+  test('offers in every welcome for a state the one action that gets past it', () => {
+    const offered = welcomes()
+      .filter((welcome) => (welcome.when ?? '').includes('=='))
+      .map((welcome) => [welcome.when, linkedCommands(welcome.contents).length]);
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered.filter(([, links]) => links !== 1)).toEqual([]);
+  });
+
+  test('holds no inline code in a welcome, where VS Code draws the backticks as typed', () => {
+    expect(welcomes().filter((welcome) => welcome.contents.includes('`'))).toEqual([]);
   });
 
   test('names only contributed views in its when clauses and welcomes', () => {
