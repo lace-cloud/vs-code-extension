@@ -39,9 +39,10 @@ diagnostics in the Problems panel, and adds palette commands for everything that
    Source Control, where git shows the diff.
 
 Under the module's `.lace/` directory, a stack's **Apply** reads `verdict.json`, `bundle.pb` and `tree-manifest.json`
-from the tree, and the pre-commit hook that `lace hooks install` writes stages them; `.lace/.canvas/state.lace` is the
-module's canvas state, derived from the `.tf` files when it is absent or its base no longer matches them, and `.lace/.canvas/state.lace.lock` is the running
-engine's lock.
+from the working tree, never from git, and the pre-commit hook that `lace hooks install` writes stages them;
+`.lace/.canvas/state.lace` is the module's canvas state, derived from the `.tf` files when it is absent, or when its
+base differs from them and it holds no edits the files lack; `.lace/.canvas/state.lace.lock` is the running engine's
+lock.
 
 Each entry of the canvas's Diagnostics list has **Open source**, which opens the file the diagnostic names at its line
 and column, beside the canvas. For one located on the canvas alone, such as a required input not set, it says the
