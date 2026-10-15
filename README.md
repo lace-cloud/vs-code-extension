@@ -40,7 +40,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 
 Under the module's `.lace/` directory, a stack's **Apply** reads `verdict.json`, `bundle.pb` and `tree-manifest.json`
 from the tree, and the pre-commit hook that `lace hooks install` writes stages them; `.lace/.canvas/state.lace` is the
-module's canvas state, re-derived from the `.tf` files when absent, and `.lace/.canvas/state.lace.lock` is the running
+module's canvas state, derived from the `.tf` files when it is absent or its base no longer matches them, and `.lace/.canvas/state.lace.lock` is the running
 engine's lock.
 
 Each entry of the canvas's Diagnostics list has **Open source**, which opens the file the diagnostic names at its line
