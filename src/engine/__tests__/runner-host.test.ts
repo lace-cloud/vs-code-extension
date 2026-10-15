@@ -118,8 +118,10 @@ async function hasEnded(ended: Promise<void>): Promise<boolean> {
 const STATE = '/home/dev/pulled.tfstate';
 const IMPORTED = {
   stack: STACK,
+  changed: true,
   written: ['main.tf'],
   removed: [],
+  diagnostics: [],
   importBlocks: 2,
   importResiduals: [],
   validate: {

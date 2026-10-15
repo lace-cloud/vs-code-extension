@@ -44,6 +44,7 @@ import {
   type ActionContribution,
   type ActionRunnerOptions,
   type ActionTarget,
+  answering,
   CORE_COMMAND_ACTIONS,
   type CommandFailure,
   type CommandsPort,
@@ -116,17 +117,6 @@ export function binding(id: string): ActionContribution {
   const found = CORE_COMMAND_ACTIONS.find((action) => action.id === id);
   if (!found) throw new Error(`the canvas package carries no binding ${id}`);
   return found;
-}
-
-// The package actions that answer `failure`: each placed on a failure's row
-// whose `answers` names the failure's reason.
-function answering(failure: CommandFailure): readonly ActionContribution[] {
-  return CORE_COMMAND_ACTIONS.filter(
-    ({ placement, answers = [] }) =>
-      typeof placement === 'object' &&
-      placement.row === 'failure' &&
-      answers.includes(failure.reason),
-  );
 }
 
 // One run the host started: its action and context, how much of it is
@@ -274,7 +264,11 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
       return {
         ctx: noticed.ctx,
         answers: (failure) =>
-          answering(failure).map((action) => ({ action, ctx: noticed.ctx, target: { failure } })),
+          answering(CORE_COMMAND_ACTIONS, failure).map((action) => ({
+            action,
+            ctx: noticed.ctx,
+            target: { failure },
+          })),
       };
     },
   });

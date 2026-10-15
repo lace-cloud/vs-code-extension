@@ -134,8 +134,8 @@ host draws the store. A binding that declares the root runs in it. The host runs
   title its prompts carry too.
 - The window's presenter is told the `RunCtx` of the run a notice is about. A failure's notice offers the ways out its
   reason names, Validate on the run's root among them when that root is under a workspace folder, and after them each
-  package action placed on a failure's row whose `answers` names the reason (`import-partial`, Import the rest, on
-  `import_residual`). The one chosen runs under a progress notification over the failed run's own `RunCtx` object, so
+  package action that answers the reason, as the package's `answering` lists them (`import-partial`, Import the rest,
+  on `import_residual`). The one chosen runs under a progress notification over the failed run's own `RunCtx` object, so
   it reuses the statefile that run was given. The runner's requirement check gates it.
 
 ## The canvas tab

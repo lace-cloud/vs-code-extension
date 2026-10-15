@@ -25,8 +25,10 @@ const RESIDUAL: CommandFailure = {
 };
 const imported = (residuals: CommandFailure['importResiduals'] = []) => ({
   stack: { id: 'stk_1', slug: 'prod' },
+  changed: true,
   written: ['main.tf'],
   removed: [],
+  diagnostics: [],
   importBlocks: 2,
   importResiduals: residuals,
   validate: {
