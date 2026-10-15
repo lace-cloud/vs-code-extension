@@ -429,8 +429,14 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   manifest command registered, an engine of the extension's protocol), the palette's module commands (Validate,
   Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit, a hand
   edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that
-  holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder. CI runs it under
-  `xvfb-run`.
+  holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder.
+- **CI** (`.github/workflows/ci.yml`, every PR to `develop`) runs lint, typecheck, the `unit` tests, the build, the
+  `build` tests and the `engine` tests on Linux and on Windows, and the window e2e on Linux alone, under `xvfb-run`.
+  Both run the release `LACE_CLI_VERSION` names. On Linux the CLI's published installer installs it; on Windows, which
+  the installer refuses, the job downloads the release's `lace-cli-windows-amd64-<version>.exe` with its `.sha256` and
+  `.minisig` and checks them as the installer does (the checksum, then the signature by the installer's key, whose
+  trusted comment names that object and its digest) before it puts the binary on `PATH` as `lace.exe`. `.gitattributes`
+  checks every text file out with LF, the line ending biome checks, on Windows too.
 - **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
   organization and team) is unit-tested over scripted commands.
 - **Repository tests** in `src/__tests__/`: the manifest against the features, the tracked pins (published versions
