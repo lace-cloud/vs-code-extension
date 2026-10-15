@@ -18,7 +18,7 @@ import type { CommandFailure, PresenterPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type ByReason, byReason } from '../engine/command-outcome';
 import type { RunnerPresenter } from '../engine/runner-host';
-import { type AuthoringRoot, type RootSources, rootOfPath } from '../roots/authoring-roots';
+import { type AuthoringRoot, type RootSources, rootOfRun } from '../roots/authoring-roots';
 import { type RunProgressApi, runUnderProgress } from './run-progress';
 
 export type Offer =
@@ -140,8 +140,7 @@ export function offeringPresenter(options: OfferingPresenterOptions): RunnerPres
   return (runner) => ({
     notify: (level, text, failure) => {
       const run = runner.noticed();
-      const at = run?.ctx.root;
-      const root = at === undefined ? undefined : rootOfPath(sources.folders(), at);
+      const root = run === undefined ? undefined : rootOfRun(sources.folders(), run.ctx);
       const ways = root === undefined ? actions : { ...actions, validate: () => validate(root) };
       const answers = failure === undefined || run === undefined ? [] : run.answers(failure);
       const buttons = answers.map((answer) => ({ title: answer.action.label, answer }));

@@ -8,7 +8,7 @@ import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
 import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
-import { importResources, importResourcesCommand } from '../import-resources';
+import { importResourcesCommand, resourceImporter } from '../import-resources';
 import { stackPick } from '../stack-pick';
 import { memento, stack, stacks } from './stack-fixtures';
 
@@ -130,10 +130,10 @@ function setup(options: Options) {
     sources,
     offers,
   });
-  const importInto = importResources({ api: api as never, sources, runner, pickStack });
-  const palette = importResourcesCommand(window as never, sources, importInto);
+  const importResources = resourceImporter({ api: api as never, sources, runner, pickStack });
+  const palette = importResourcesCommand(window as never, sources, importResources);
   const imports = () => commands.invoked.filter(({ path }) => path === 'stack import');
-  return { commands, window, messages, progress, importInto, palette, imports };
+  return { commands, window, messages, progress, importResources, palette, imports };
 }
 
 describe('Import Existing Resources', () => {
@@ -144,7 +144,7 @@ describe('Import Existing Resources', () => {
       scripts: { ...LISTED, 'stack import': { held: true } },
       documents: [edited, elsewhere],
     });
-    const done = t.importInto(prod);
+    const done = t.importResources(prod);
     await settled();
 
     expect(edited.save).toHaveBeenCalledOnce();
@@ -173,7 +173,7 @@ describe('Import Existing Resources', () => {
   test('stops at a root with no stack, and saves and imports nothing', async () => {
     const edited = document('/work/repo/infra/prod/main.tf', true);
     const t = setup({ scripts: { 'stack list': { documents: [stacks()] } }, documents: [edited] });
-    await t.importInto(prod);
+    await t.importResources(prod);
 
     expect(t.messages).toEqual([
       {
@@ -192,7 +192,7 @@ describe('Import Existing Resources', () => {
       scripts: { ...LISTED, 'stack import': { documents: [imported()] } },
       documents: [document('/work/repo/infra/prod/main.tf', true, false)],
     });
-    await t.importInto(prod);
+    await t.importResources(prod);
 
     expect(t.messages).toEqual([
       {
@@ -207,7 +207,7 @@ describe('Import Existing Resources', () => {
   test('a dismissed statefile ends the run and imports nothing', async () => {
     const t = setup({ scripts: { ...LISTED, 'stack import': { documents: [imported()] } } });
     t.window.showOpenDialog.mockResolvedValueOnce(undefined as never);
-    await t.importInto(prod);
+    await t.importResources(prod);
 
     expect(t.imports()).toEqual([]);
     expect(t.progress).toEqual([{ title: 'Import existing resources: prod', ended: true }]);
@@ -221,7 +221,7 @@ describe('Import Existing Resources', () => {
       },
       answers: { 'Error: 1 resource has no import id\n': 'Import the rest' },
     });
-    await t.importInto(prod);
+    await t.importResources(prod);
     await settled();
     await settled();
     expect(t.progress).toEqual([

@@ -106,13 +106,13 @@ describe('the answerer', () => {
         kind: 'input',
         options: {
           title: 'Create stack: infra/prod',
-          prompt: "The new stack's slug",
+          prompt: 'The slug',
           validateInput: expect.any(Function),
         },
       },
     ]);
     const { validateInput } = t.window.showInputBox.mock.calls[0][0];
-    expect(validateInput?.('')).toBe("Type the stack's slug");
+    expect(validateInput?.('')).toBe('Type the slug');
     expect(validateInput?.('prod')).toBeUndefined();
     expect(form.submit).toHaveBeenCalledWith({ slug: 'prod' });
   });
@@ -137,7 +137,7 @@ describe('the answerer', () => {
         kind: 'pick',
         options: {
           title: 'Create stack: infra/prod',
-          placeHolder: 'The cloud connection the stack deploys through',
+          placeHolder: 'The cloud connection',
         },
         items: [
           { label: 'AWS prod', description: 'aws · ready · conn_1', id: 'conn_1' },
@@ -176,6 +176,7 @@ describe('the answerer', () => {
           canSelectFiles: true,
           canSelectFolders: false,
           canSelectMany: false,
+          openLabel: 'Select Statefile',
           defaultUri: expect.objectContaining({ path: PROD }),
         },
       },
@@ -201,8 +202,7 @@ describe('the answerer', () => {
   });
 
   test('an empty connection list cancels the form and says a connection is added in the portal, with Open Portal on the page the list names', async () => {
-    const said =
-      'The team has no cloud connection yet. Add one in the portal, then create the stack.';
+    const said = 'The team has no cloud connection yet. Add one in the portal.';
     const t = setup({
       scripts: { 'connection list': { documents: [connections()] } },
       inputs: ['prod'],

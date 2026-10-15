@@ -3,7 +3,7 @@
 // organization selected: a developer home of the test's own.
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CORE_COMMAND_ACTIONS, type CommandFailure, type RunSlot } from '@lace-cloud/canvas/engine';
+import type { CommandFailure, RunSlot } from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
 import {
   afterTest,
@@ -15,7 +15,7 @@ import {
   until,
 } from '../../engine/__tests__/real-engine';
 import { commandDocument, commandOutcome } from '../../engine/command-outcome';
-import { type Answerer, createRunnerHost } from '../../engine/runner-host';
+import { type Answerer, binding, createRunnerHost } from '../../engine/runner-host';
 import { refusedState } from '../stack-rows';
 
 // A git repository with two module directories.
@@ -38,12 +38,6 @@ function window(home: string, answerer: Answerer = (form) => form.cancel()) {
   afterTest(() => runner.dispose());
   return { commands, runner, notices };
 }
-
-const binding = (id: string) => {
-  const found = CORE_COMMAND_ACTIONS.find((action) => action.id === id);
-  if (!found) throw new Error(`no binding ${id}`);
-  return found;
-};
 
 // The run slot once it settles.
 function settledRun(runner: ReturnType<typeof createRunnerHost>): Promise<NonNullable<RunSlot>> {

@@ -2,12 +2,12 @@
 // Create Stack, Import Existing Resources, and the package action a
 // failure's notice offers (Import the rest). The notification is titled by
 // the run (`runTitle`): its action, and what it acts on, the stack, else the
-// authoring root by its name in the workspace; the run's prompts carry the
-// same title.
+// root the run names (`rootOfRun`) by its name in the workspace; the run's
+// prompts carry the same title.
 import type { ActionContribution, ActionTarget, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import type { RunnerHost } from '../engine/runner-host';
-import { rootLabel, rootOfPath } from '../roots/authoring-roots';
+import { type AuthoringRoot, rootLabel, rootOfRun } from '../roots/authoring-roots';
 
 export type RunProgressApi = {
   window: Pick<typeof vscode.window, 'withProgress'>;
@@ -15,13 +15,15 @@ export type RunProgressApi = {
   ProgressLocation: Pick<typeof vscode.ProgressLocation, 'Notification'>;
 };
 
-// The title of a run of `action` over `ctx`, among the workspace's `folders`.
+// The title of a run of `action` over `ctx`, whose root among the
+// workspace's `folders` is `root` (`rootOfRun`); a directory under no
+// folder is called by its path.
 export function runTitle(
   action: ActionContribution,
   ctx: RunCtx,
+  root: AuthoringRoot | undefined,
   folders: readonly vscode.WorkspaceFolder[],
 ): string {
-  const root = ctx.root === undefined ? undefined : rootOfPath(folders, ctx.root);
   const subject = ctx.stack?.slug ?? (root === undefined ? ctx.root : rootLabel(root, folders));
   return subject === undefined ? action.label : `${action.label}: ${subject}`;
 }
@@ -35,10 +37,11 @@ export async function runUnderProgress(
   ctx: RunCtx,
   target: ActionTarget = {},
 ): Promise<void> {
+  const folders = api.workspace.workspaceFolders ?? [];
   await api.window.withProgress(
     {
       location: api.ProgressLocation.Notification,
-      title: runTitle(action, ctx, api.workspace.workspaceFolders ?? []),
+      title: runTitle(action, ctx, rootOfRun(folders, ctx), folders),
     },
     async () => {
       const { ended } = await runner.run(action, ctx, target);

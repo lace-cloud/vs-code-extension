@@ -20,9 +20,9 @@
 // With no stack deployed from the root, the view's action is Create Stack:
 // the package's `create` binding run through the runner over the view's
 // root, under a progress notification until its run ends
-// (`runUnderProgress`). The runner's form
-// asks for what `stack create` needs; the package's notice says the stack
-// was created, and its tick reads the tree again, which lists it.
+// (`runUnderProgress`). The runner's form asks for what `stack create`
+// needs; the package's notice says the stack was created, and its tick
+// reads the tree again, which lists it.
 //
 // Selecting a stack picks it for the root, and the root's canvas draws its
 // badges. An apply runs under a progress notification and says how it
@@ -59,7 +59,7 @@ import {
   type RootSources,
   rootAt,
   rootLabel,
-  rootOfPath,
+  rootOfRun,
   rootPath,
   rootToAct,
   rootUri,
@@ -420,7 +420,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   });
   const offTick = runner.onDidTick((ctx) => {
     refresh();
-    const ran = ctx.root === undefined ? undefined : rootOfPath(sources.folders(), ctx.root);
+    const ran = rootOfRun(sources.folders(), ctx);
     if (ran) panels.tick(ran);
   });
 

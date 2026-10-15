@@ -21,16 +21,12 @@ import { placeModule } from './registry/place-module';
 import { registryMarks } from './registry/registry-marks';
 import { registryReads } from './registry/registry-reads';
 import { createRegistryView, REFRESH_REGISTRY, REGISTRY_VIEW } from './registry/registry-view';
-import {
-  type AuthoringRoot,
-  type RootSources,
-  startingSources,
-  workspaceRootSources,
-} from './roots/authoring-roots';
+import { type RootSources, startingSources, workspaceRootSources } from './roots/authoring-roots';
 import {
   IMPORT_RESOURCES,
-  importResources,
+  type ImportResources,
   importResourcesCommand,
+  resourceImporter,
 } from './stacks/import-resources';
 import { createRunOutput, type RunOutput } from './stacks/run-output';
 import { type PickStack, stackPick } from './stacks/stack-pick';
@@ -75,7 +71,7 @@ export type Host = WindowBase & {
   operations: CanvasOperations;
   modules: ModuleCommands;
   pickStack: PickStack;
-  importResources: (root: AuthoringRoot) => Promise<void>;
+  importResources: ImportResources;
 };
 
 export function windowHost(base: WindowBase): Host {
@@ -105,7 +101,7 @@ export function windowHost(base: WindowBase): Host {
     // the panels, so they are built after them; a page's notice or banner
     // action comes long after both exist.
     validate: (root) => modules.validate(root),
-    importResources: (root) => importInto(root),
+    importResources: (root) => importResources(root),
     generated: (root, written) => modules.generated(root, written),
     report,
   });
@@ -136,7 +132,7 @@ export function windowHost(base: WindowBase): Host {
     onRunLog: runOutput.append,
   });
   const pickStack = stackPick({ api, commands, rootState, sources, offers });
-  const importInto = importResources({ api, sources, runner, pickStack });
+  const importResources = resourceImporter({ api, sources, runner, pickStack });
   return {
     ...base,
     rootState,
@@ -150,7 +146,7 @@ export function windowHost(base: WindowBase): Host {
     operations,
     modules,
     pickStack,
-    importResources: importInto,
+    importResources,
   };
 }
 

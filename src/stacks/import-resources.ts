@@ -11,11 +11,10 @@
 // editor are saved first, as Convert saves them: the import writes over
 // what the developer sees. The import runs under a progress notification
 // until its run ends (`runUnderProgress`); the runner's form asks for the
-// statefile, and the
-// package's notice says what the import did. A failure is shown with its
-// ways out, and an import that stopped at resources it cannot adopt
-// (`import_residual`) offers the package's Import the rest, which reads the
-// statefile this run was given.
+// statefile, and the package's notice says what the import did. A failure
+// is shown with its ways out, and an import that stopped at resources it
+// cannot adopt (`import_residual`) offers the package's Import the rest,
+// which reads the statefile this run was given.
 import type * as vscode from 'vscode';
 import { saveTerraformBuffers } from '../commands/terraform-buffers';
 import { binding, type RunnerHost } from '../engine/runner-host';
@@ -31,7 +30,10 @@ import type { PickStack } from './stack-pick';
 
 export const IMPORT_RESOURCES = 'lace.importResources';
 
-export type ImportResourcesOptions = {
+// Imports existing resources into a stack of `root`.
+export type ImportResources = (root: AuthoringRoot) => Promise<void>;
+
+export type ResourceImporterOptions = {
   api: RunProgressApi & {
     window: Pick<typeof vscode.window, 'showErrorMessage'>;
     workspace: Pick<typeof vscode.workspace, 'textDocuments'>;
@@ -41,10 +43,7 @@ export type ImportResourcesOptions = {
   pickStack: PickStack;
 };
 
-// Imports existing resources into a stack of `root`.
-export function importResources(
-  options: ImportResourcesOptions,
-): (root: AuthoringRoot) => Promise<void> {
+export function resourceImporter(options: ResourceImporterOptions): ImportResources {
   const { api, sources, runner, pickStack } = options;
   const IMPORT = binding('import');
   return async (root) => {
@@ -65,10 +64,10 @@ export function importResources(
 export function importResourcesCommand(
   window: Pick<typeof vscode.window, 'showInformationMessage'>,
   sources: RootSources,
-  importInto: (root: AuthoringRoot) => Promise<void>,
+  importResources: ImportResources,
 ): (pointedAt?: vscode.Uri) => Promise<void> {
   return async (pointedAt) => {
     const root = await rootToAct(sources, window, 'import existing resources into', pointedAt);
-    if (root) await importInto(root);
+    if (root) await importResources(root);
   };
 }

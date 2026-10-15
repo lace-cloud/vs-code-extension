@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { binding } from '../../engine/runner-host';
 import { folder } from '../../roots/__tests__/fake-uri';
+import { rootOfRun } from '../../roots/authoring-roots';
 import { runTitle, runUnderProgress } from '../run-progress';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -29,7 +30,7 @@ describe("a run's title", () => {
     ],
     ['nothing else when the run names neither', {}, 'create', 'Create stack'],
   ])('names its action and %s', (_what, ctx, id, title) => {
-    expect(runTitle(binding(id), ctx, [repo])).toBe(title);
+    expect(runTitle(binding(id), ctx, rootOfRun([repo], ctx), [repo])).toBe(title);
   });
 });
 

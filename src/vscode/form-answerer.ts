@@ -1,9 +1,10 @@
 // The answerer of the window's runner: the VS Code prompt that asks for each
 // argument a package binding leaves to its host, by the argument's name, in
-// the order the form lists them. Each prompt is titled as the run's
-// progress is (`runTitle`): the action, and what its run acts on. A
-// dismissed prompt cancels the form. The runner host reuses what a run's context was
-// answered before, so a form asks only what that context never answered.
+// the order the form lists them. A prompt's words are about its argument
+// alone; its title is the run's (`runTitle`), the action and what the run
+// acts on, the title its progress carries too. A dismissed prompt cancels
+// the form. The runner host reuses what a run's context was answered
+// before, so a form asks only what that context never answered.
 //
 //   slug        an input box that refuses an empty value; the slug's own
 //               rule is the CLI's and the API's
@@ -13,8 +14,8 @@
 //               out its reason names; an empty one cancels it and says a
 //               connection is added in the portal, with Open Portal on the
 //               page the list names (`createUrl`)
-//   state       an open dialog for one file of any name, opened at the
-//               authoring root
+//   state       an open dialog for one statefile of any name, opened at the
+//               root the run names
 //
 // An argument with no prompt here cancels the form, and the notice says
 // this window cannot ask for it.
@@ -23,12 +24,7 @@ import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
 import type { Answerer, Form } from '../engine/runner-host';
-import {
-  type AuthoringRoot,
-  type RootSources,
-  rootOfPath,
-  rootUri,
-} from '../roots/authoring-roots';
+import { type AuthoringRoot, type RootSources, rootOfRun, rootUri } from '../roots/authoring-roots';
 import { notice, type OfferActions, offersFor } from './offers';
 import { runTitle } from './run-progress';
 
@@ -58,8 +54,7 @@ type Asking = { title: string; root: AuthoringRoot | undefined };
 // The value a prompt was given, or undefined when the form is cancelled.
 type Prompt = (asking: Asking) => Promise<string | undefined>;
 
-const NO_CONNECTION =
-  'The team has no cloud connection yet. Add one in the portal, then create the stack.';
+const NO_CONNECTION = 'The team has no cloud connection yet. Add one in the portal.';
 
 export function formAnswerer(options: FormAnswererOptions): Answerer {
   const { api, commands, offers, sources, report } = options;
@@ -71,8 +66,8 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     slug: async ({ title }) =>
       api.window.showInputBox({
         title,
-        prompt: "The new stack's slug",
-        validateInput: (value) => (value === '' ? "Type the stack's slug" : undefined),
+        prompt: 'The slug',
+        validateInput: (value) => (value === '' ? 'Type the slug' : undefined),
       }),
     connection: async ({ title }) => {
       let listed: JsonOf<'connection list'>;
@@ -96,7 +91,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
           description: `${connection.provider_type} · ${connection.status} · ${connection.id}`,
           id: connection.id,
         })),
-        { title, placeHolder: 'The cloud connection the stack deploys through' },
+        { title, placeHolder: 'The cloud connection' },
       );
       return picked?.id;
     },
@@ -106,6 +101,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
         canSelectFiles: true,
         canSelectFolders: false,
         canSelectMany: false,
+        openLabel: 'Select Statefile',
         ...(root === undefined ? {} : { defaultUri: rootUri(root) }),
       });
       return picked?.[0]?.fsPath;
@@ -115,8 +111,8 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
   // What the prompts of a run of `action` over `ctx` ask with.
   function asking(action: ActionContribution, ctx: RunCtx): Asking {
     const folders = sources.folders();
-    const root = ctx.root === undefined ? undefined : rootOfPath(folders, ctx.root);
-    return { title: runTitle(action, ctx, folders), root };
+    const root = rootOfRun(folders, ctx);
+    return { title: runTitle(action, ctx, root, folders), root };
   }
 
   async function answer(form: Form, action: ActionContribution, ctx: RunCtx): Promise<void> {
