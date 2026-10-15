@@ -105,7 +105,14 @@ function setup(options: Options) {
   };
   const runner = createRunnerHost({
     commands: () => commands.commands.anywhere(),
-    presenter: offeringPresenter(api as never, offers, async () => true, report),
+    presenter: offeringPresenter({
+      api: api as never,
+      actions: offers,
+      confirm: async () => true,
+      validate: vi.fn(),
+      sources,
+      report,
+    }),
     answerer: formAnswerer({
       api: api as never,
       commands: commands.commands,

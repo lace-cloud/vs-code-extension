@@ -69,6 +69,8 @@ type Shown = {
   level: string;
   text: string;
   failure?: CommandFailure;
+  // The `RunCtx` of the run the notice is about.
+  ctx?: RunCtx;
   answers: readonly FailureAnswer[];
 };
 
@@ -82,11 +84,18 @@ function host(scripts: Parameters<typeof fakeCommands>[0], confirmed = true) {
   const forms: { form: Form; action: string; ctx: RunCtx }[] = [];
   const runners = createRunnerHost({
     commands: async () => window.commands.port,
-    presenter: (answers) => ({
+    presenter: (noticed) => ({
       notify: (...said) => {
         notify(...said);
         const [level, text, failure] = said;
-        shown.push({ level, text, failure, answers: failure ? answers(failure) : [] });
+        const run = noticed();
+        shown.push({
+          level,
+          text,
+          failure,
+          ctx: run?.ctx,
+          answers: failure && run ? run.answers(failure) : [],
+        });
       },
       confirm,
     }),
@@ -459,6 +468,16 @@ describe('a failure a package action answers', () => {
 
     await runners.run(action('import'), { root: '/repo/infra', stack: STACK });
     expect(forms.map(({ form }) => form.missing)).toEqual([['state'], ['state']]);
+  });
+
+  test('is told with the RunCtx of the run it is about, the one the run was started with', async () => {
+    const { runners, forms, shown } = host({ 'stack import': refused(RESIDUAL_FAILURE) });
+    const ctx = { root: '/repo/infra', stack: STACK };
+    await runners.run(action('import'), ctx);
+    forms[0].form.submit({ state: STATE });
+    await settled();
+    expect(shown).toHaveLength(1);
+    expect(shown[0].ctx).toBe(ctx);
   });
 
   test('a failure no package action answers offers none', async () => {

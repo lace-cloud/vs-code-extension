@@ -113,12 +113,6 @@ export function windowHost(base: WindowBase): Host {
     activeCanvas: panels.activeRoot,
     openCanvases: panels.roots,
   });
-  const runner = createRunnerHost({
-    commands: () => commands.anywhere(),
-    presenter: offeringPresenter(api, offers, createConfirm(api.window), report),
-    answerer: formAnswerer({ api, commands, offers, sources, report }),
-    onRunLog: runOutput.append,
-  });
   const operations = canvasOperations({ workspace: api.workspace, rootSessions });
   const modules = authoringCommands({
     api,
@@ -127,6 +121,19 @@ export function windowHost(base: WindowBase): Host {
     commands,
     log,
     offers,
+  });
+  const runner = createRunnerHost({
+    commands: () => commands.anywhere(),
+    presenter: offeringPresenter({
+      api,
+      actions: offers,
+      confirm: createConfirm(api.window),
+      validate: modules.validate,
+      sources,
+      report,
+    }),
+    answerer: formAnswerer({ api, commands, offers, sources, report }),
+    onRunLog: runOutput.append,
   });
   const pickStack = stackPick({ api, commands, rootState, sources, offers });
   const importInto = importResources({ api, sources, runner, pickStack });

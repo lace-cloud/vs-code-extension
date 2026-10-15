@@ -254,12 +254,14 @@ describe("the answerer of the window's runner", () => {
   function window(t: ReturnType<typeof setup>) {
     return createRunnerHost({
       commands: () => t.commands.commands.anywhere(),
-      presenter: offeringPresenter(
-        { window: t.window as never },
-        t.offers,
-        async () => true,
-        t.report,
-      ),
+      presenter: offeringPresenter({
+        api: { window: t.window as never },
+        actions: t.offers,
+        confirm: async () => true,
+        validate: vi.fn(),
+        sources: { folders: () => [repo] },
+        report: t.report,
+      }),
       answerer: t.answerer,
       onRunLog: () => {},
     });

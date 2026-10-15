@@ -129,9 +129,11 @@ host draws the store. A binding that declares the root runs in it. The host runs
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
   each invocation it started. `run` resolves when the runner's call does, with `ended`, which Create Stack and Import
   Existing Resources show a progress notification against.
-- A notice of a failure offers, after the window's own ways out, each package action placed on a failure's row whose
-  `answers` names the failure's reason (`import-partial`, Import the rest, on `import_residual`), run over the failed
-  run's own `RunCtx` object, so it reuses the statefile that run was given. The runner's requirement check gates it.
+- The window's presenter is told the `RunCtx` of the run a notice is about. A failure's notice offers the ways out its
+  reason names, Validate on the run's root among them when that root is under a workspace folder, and after them each
+  package action placed on a failure's row whose `answers` names the reason (`import-partial`, Import the rest, on
+  `import_residual`), run over the failed run's own `RunCtx` object, so it reuses the statefile that run was given.
+  The runner's requirement check gates it.
 
 ## The canvas tab
 
@@ -219,7 +221,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
   `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
   the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
-  root with the one stack pick (`stacks/stack-pick.ts`).
+  root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the root its run was over,
+  so `no_certification` and `stale_certification` offer Validate on it.
 - Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges. Each tick of the
   runner's store (a run started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root
   that run was about, its `RunCtx.root`, whatever the tree ran since.
@@ -291,11 +294,11 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
 - A failure is the shared notice of `vscode/offers.ts`, with the ways out its reason names: `tool_missing` names the
   tool with **Install** on the URL the failure carries; `source_refused` (a Convert stopped at Terraform it cannot
   represent as written) offers **Validate** of the same root, whose report names what is refused; `not_git_repository`
-  offers nothing, its message says to run `git init`. Validate is offered only by a notice whose place supplies Validate
-  on the root the failure is about; the window's runner supplies none. Validate and Convert run through the commands
-  mapping, not the runner: the package's bindings for them hand the presenter a verdict line and no document. Generate
-  Docs opens the markdown in an untitled editor and writes nothing into the tree (a README beside the `.tf` would move
-  the tree's hash).
+  offers nothing, its message says to run `git init`. A notice that names the root a failure is about offers Validate on
+  that root: a module command's, a canvas page's, an apply's, and a notice of the window's runner, whose run's `RunCtx`
+  names it. Validate and Convert run through the commands mapping, not the runner: the package's bindings for them hand
+  the presenter a verdict line and no document. Generate Docs opens the markdown in an untitled editor and writes
+  nothing into the tree (a README beside the `.tf` would move the tree's hash).
 
 ## Problems
 

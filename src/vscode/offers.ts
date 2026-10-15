@@ -8,14 +8,15 @@
 // portal, and the page of each record a change-management system keeps of
 // its change request, where the record carries one.
 //
-// Validate acts on a root: a notice offers it only where the place that
-// shows the notice supplies Validate on the root the failure is about (a
-// module command's notice, a canvas page's, an apply's); the window's
-// runner supplies none.
+// Validate acts on a root: a notice that names the root the failure is
+// about offers Validate on that root, the palette's Validate. A notice of
+// the window's runner names the root its run's `RunCtx` names, when that
+// root is under a workspace folder.
 import type { CommandFailure, PresenterPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type ByReason, byReason } from '../engine/command-outcome';
 import type { RunnerPresenter } from '../engine/runner-host';
+import { type AuthoringRoot, type RootSources, rootOfPath } from '../roots/authoring-roots';
 
 export type Offer =
   | { kind: 'signIn' }
@@ -113,21 +114,32 @@ export async function notice(
   return answer;
 }
 
-// The presenter of the window's runner: each notice with its offers, and
-// after them the package actions that answer its failure, the one chosen
-// run; and the typed confirmation a binding asks for.
-export function offeringPresenter(
-  api: NoticeApi,
-  actions: OfferActions,
-  confirm: NonNullable<PresenterPort['confirm']>,
-  report: (what: string, error: unknown) => void,
-): RunnerPresenter {
-  return (answers) => ({
+export type OfferingPresenterOptions = {
+  api: NoticeApi;
+  actions: OfferActions;
+  confirm: NonNullable<PresenterPort['confirm']>;
+  // Lace: Validate Module on a root.
+  validate: (root: AuthoringRoot) => Promise<void>;
+  sources: Pick<RootSources, 'folders'>;
+  report: (what: string, error: unknown) => void;
+};
+
+// The presenter of the window's runner: each notice with its offers,
+// Validate on the root of the run it is about among them, and after them
+// the package actions that answer its failure, the one chosen run; and the
+// typed confirmation a binding asks for.
+export function offeringPresenter(options: OfferingPresenterOptions): RunnerPresenter {
+  const { api, actions, confirm, validate, sources, report } = options;
+  return (noticed) => ({
     notify: (level, text, failure) => {
-      const answering = failure === undefined ? [] : answers(failure);
-      const labels = answering.map(({ label }) => label);
-      notice(api, actions, level, text, offersFor(failure), labels)
-        .then((chosen) => answering.find(({ label }) => label === chosen)?.run())
+      const run = noticed();
+      const at = run?.ctx.root;
+      const root = at === undefined ? undefined : rootOfPath(sources.folders(), at);
+      const ways = root === undefined ? actions : { ...actions, validate: () => validate(root) };
+      const answers = failure === undefined || run === undefined ? [] : run.answers(failure);
+      const labels = answers.map(({ label }) => label);
+      notice(api, ways, level, text, offersFor(failure), labels)
+        .then((chosen) => answers.find(({ label }) => label === chosen)?.run())
         .catch((error) => report('acting on a Lace notice', error));
     },
     confirm,

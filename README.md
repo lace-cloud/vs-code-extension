@@ -142,12 +142,13 @@ its ten most recent runs. The view's description names the module; it follows th
   **Open in Portal**.
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
-  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. A module with no current
-  certification offers **Validate**. An apply held for approval names the change request the run waits on: each
-  requirement with its state and whether Lace or a change-management system decides it, and each record that system
-  keeps, with its state and **Open** on the record's page.
+  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. An apply held for approval
+  names the change request the run waits on: each requirement with its state and whether Lace or a change-management
+  system decides it, and each record that system keeps, with its state and **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
   document.
+- A stack command refused because the module has no current certification offers **Validate**, which validates that
+  module.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal.

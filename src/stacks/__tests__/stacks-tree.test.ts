@@ -304,7 +304,15 @@ function setup(options: Options) {
   const report = vi.fn();
   const runner = createRunnerHost({
     commands: () => mapping.anywhere(),
-    presenter: offeringPresenter(api as never, offers, async () => true, vi.fn()),
+    presenter: offeringPresenter({
+      api: api as never,
+      actions: offers,
+      confirm: async () => true,
+      // The palette's Validate, built below over the same commands.
+      validate: (root) => modules.validate(root),
+      sources,
+      report: vi.fn(),
+    }),
     answerer: formAnswerer({ api: api as never, commands: mapping, offers, sources, report }),
     onRunLog: (line, made) => {
       ran.push(made);
@@ -889,6 +897,31 @@ describe('a stack row', () => {
       description: 'prod · on the canvas',
       iconPath: { id: 'layers-active' },
     });
+  });
+
+  test("a Preview refused for no certification offers Validate on the run's root, which validates that root", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        ...listed,
+        'stack preview': refusal('no_certification'),
+        'module validate': { documents: [validation('/work/repo/infra/prod', [])] },
+      },
+      answers: { 'Error: no_certification\n': 'Validate' },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.preview, row);
+    await settled();
+    await settled();
+
+    expect(t.messages[0]).toEqual({
+      level: 'error',
+      text: 'Error: no_certification\n',
+      buttons: ['Validate'],
+    });
+    expect(t.commands.invoked.find((c) => c.path === 'module validate')?.cwd).toBe(
+      '/work/repo/infra/prod',
+    );
   });
 
   test("runs the package's bindings over the root and the stack: Preview, Scan, Follow logs, Cancel", async () => {

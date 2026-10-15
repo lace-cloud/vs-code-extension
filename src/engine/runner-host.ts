@@ -33,11 +33,12 @@
 //   refusal, which the runner always states (`presenter.notify`) and says
 //   nothing else before a command starts. `run` resolves when the runner's
 //   call does, with the run's end, which a trigger shows progress against.
-// - A notice of a failure offers, beside the window's own ways out, each
-//   package action placed on a failure's row whose `answers` names the
-//   failure's reason, run over the failed run's own `RunCtx` object, so it
-//   reuses what that run was answered. The runner's own requirement check
-//   still gates it.
+// - A notice: the window's presenter is told the `RunCtx` of the run it is
+//   about, so a notice of a failure offers the ways out of that run's root,
+//   and, beside them, each package action placed on a failure's row whose
+//   `answers` names the failure's reason, run over the failed run's own
+//   `RunCtx` object, so it reuses what that run was answered. The runner's
+//   own requirement check still gates it.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   type ActionContribution,
@@ -67,10 +68,17 @@ export type Answerer = (form: Form, run: { action: ActionContribution; ctx: RunC
 // run's `RunCtx`.
 export type FailureAnswer = { label: string; run: () => Promise<void> };
 
-// The window's presenter for the runner, made with what answers a failure.
-export type RunnerPresenter = (
-  answers: (failure: CommandFailure) => readonly FailureAnswer[],
-) => PresenterPort;
+// The run a notice is about: its `RunCtx`, and the package actions that
+// answer a failure of it.
+export type Noticed = {
+  ctx: RunCtx;
+  answers: (failure: CommandFailure) => readonly FailureAnswer[];
+};
+
+// The window's presenter for the runner. `noticed` names the run a notice
+// is about while the presenter is told the notice, and none for a notice
+// of no run.
+export type RunnerPresenter = (noticed: () => Noticed | undefined) => PresenterPort;
 
 export type RunnerHost = {
   readonly store: ResultStore;
@@ -251,18 +259,23 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
       );
   }
 
-  // The window's presenter, with each notice of a failure offering the
-  // package actions that answer it, over the failed run's `RunCtx`. A notice
-  // or a confirmation answered no settles a starting run's start.
-  const shown = options.presenter((failure) => {
-    const failed = runContext.getStore();
-    if (!failed) return [];
-    return answering(failure).map((action) => ({
-      label: action.label,
-      run: async () => {
-        await run(action, failed.ctx, { failure });
-      },
-    }));
+  // The window's presenter, told the run each notice is about: its
+  // `RunCtx`, and the package actions that answer a failure of it, over
+  // that `RunCtx`. A notice or a confirmation answered no settles a starting
+  // run's start.
+  const shown = options.presenter(() => {
+    const noticed = runContext.getStore();
+    if (!noticed) return undefined;
+    return {
+      ctx: noticed.ctx,
+      answers: (failure) =>
+        answering(failure).map((action) => ({
+          label: action.label,
+          run: async () => {
+            await run(action, noticed.ctx, { failure });
+          },
+        })),
+    };
   });
   const confirm = shown.confirm;
   const presenter: PresenterPort = {

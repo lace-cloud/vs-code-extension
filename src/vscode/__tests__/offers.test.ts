@@ -1,6 +1,13 @@
 import type { CommandFailure, LaceReason } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
+import type { Noticed } from '../../engine/runner-host';
 import { notice, type OfferActions, offeringPresenter, offersFor } from '../offers';
+
+const STACK = { id: 'stk_1', slug: 'prod' };
+const CERTIFICATION: CommandFailure = {
+  reason: 'no_certification',
+  message: 'no certification',
+};
 
 const actions = (): OfferActions => ({
   signIn: vi.fn(),
@@ -122,6 +129,24 @@ describe("a change request's records", () => {
 
 describe("the presenter of the window's runner", () => {
   const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const repo = {
+    uri: { scheme: 'file', path: '/work/repo', fsPath: '/work/repo' },
+    name: 'repo',
+    index: 0,
+  };
+
+  function presenter(shown: ReturnType<typeof window>, noticed: () => Noticed | undefined) {
+    const validate = vi.fn(async () => {});
+    const made = offeringPresenter({
+      api: { window: shown } as never,
+      actions: actions(),
+      confirm: vi.fn(),
+      validate,
+      sources: { folders: () => [repo as never] },
+      report: vi.fn(),
+    })(noticed);
+    return { made, validate };
+  }
 
   test("offers, after the failure's ways out, the package actions that answer it, and runs the one chosen", async () => {
     const failure: CommandFailure = {
@@ -132,9 +157,9 @@ describe("the presenter of the window's runner", () => {
     const shown = window('Answer');
     const run = vi.fn(async () => {});
     const answers = vi.fn(() => [{ label: 'Answer', run }]);
-    const presenter = offeringPresenter({ window: shown } as never, actions(), vi.fn(), vi.fn());
+    const { made } = presenter(shown, () => ({ ctx: { stack: STACK }, answers }));
 
-    presenter(answers).notify('error', 'No team is selected', failure);
+    made.notify('error', 'No team is selected', failure);
     await settled();
     expect(answers).toHaveBeenCalledWith(failure);
     expect(shown.showErrorMessage).toHaveBeenCalledWith(
@@ -146,12 +171,38 @@ describe("the presenter of the window's runner", () => {
     expect(run).toHaveBeenCalledOnce();
   });
 
+  test('a failure of a run whose RunCtx names a root offers Validate on that root, which the one chosen validates', async () => {
+    const shown = window('Validate');
+    const { made, validate } = presenter(shown, () => ({
+      ctx: { root: '/work/repo/infra/prod', stack: STACK },
+      answers: () => [],
+    }));
+
+    made.notify('error', 'no certification', CERTIFICATION);
+    await settled();
+    expect(shown.showErrorMessage).toHaveBeenCalledWith('no certification', 'Validate');
+    expect(validate).toHaveBeenCalledWith({ folder: repo, relative: 'infra/prod' });
+  });
+
+  test.each([
+    ['names no root', { stack: STACK }],
+    ['names a root under no workspace folder', { root: '/elsewhere/infra', stack: STACK }],
+  ])('a failure of a run whose RunCtx %s offers no Validate', async (_why, ctx) => {
+    const shown = window('Validate');
+    const { made, validate } = presenter(shown, () => ({ ctx, answers: () => [] }));
+
+    made.notify('error', 'no certification', CERTIFICATION);
+    await settled();
+    expect(shown.showErrorMessage).toHaveBeenCalledWith('no certification');
+    expect(validate).not.toHaveBeenCalled();
+  });
+
   test('asks for no answer of a notice that carries no failure', async () => {
     const shown = window();
     const answers = vi.fn(() => []);
-    const presenter = offeringPresenter({ window: shown } as never, actions(), vi.fn(), vi.fn());
+    const { made } = presenter(shown, () => ({ ctx: { stack: STACK }, answers }));
 
-    presenter(answers).notify('info', 'Created stack prod');
+    made.notify('info', 'Created stack prod');
     await settled();
     expect(answers).not.toHaveBeenCalled();
     expect(shown.showInformationMessage).toHaveBeenCalledWith('Created stack prod');
