@@ -22,6 +22,23 @@ describe('the README', () => {
     expect(unnamed(Object.keys(manifest.contributes.configuration.properties))).toEqual([]);
   });
 
+  // A Settings row is `| \`id\` | default | what it does |`, and its default
+  // cell opens with the value the manifest contributes, in backticks.
+  test("says every setting's contributed default in the Settings table", () => {
+    const rows = new Map(
+      [...readme.matchAll(/^\|\s*`([\w.]+)`\s*\|\s*([^|]*?)\s*\|/gm)].map(([, id, cell]) => [
+        id,
+        cell,
+      ]),
+    );
+    const properties: Record<string, { default: unknown }> =
+      manifest.contributes.configuration.properties;
+    const said = Object.keys(properties).map((id) => [id, rows.get(id)?.split(' ')[0]]);
+    expect(said).toEqual(
+      Object.entries(properties).map(([id, p]) => [id, `\`${String(p.default)}\``]),
+    );
+  });
+
   test('names every chat tool by its name and its reference', () => {
     const tools: { name: string; toolReferenceName: string }[] =
       manifest.contributes.languageModelTools;

@@ -114,6 +114,20 @@ describe('the engine starts on demand', () => {
     expect(engine.state()).toBe('error');
   });
 
+  test('a start that fails before its handshake names PATH and the setting', async () => {
+    const manager = fakeManager();
+    manager.failure = new Error('Failed to spawn engine: spawn lace ENOENT');
+    const asked = createEngine(manager, { ...settings, binaryPath: () => 'lace' })
+      .caller()
+      .catch((error) => error.message);
+    await tick();
+    manager.come();
+
+    expect(await asked).toBe(
+      'The Lace engine did not start from lace (the setting lace.binaryPath): Failed to spawn engine: spawn lace ENOENT. Install the Lace CLI so lace is on PATH, or set lace.binaryPath to the full path of its executable.',
+    );
+  });
+
   test('an engine of another protocol names the side that is behind', async () => {
     const said = async (engineProtocol: string) => {
       const manager = fakeManager();
@@ -241,6 +255,17 @@ describe('the engine settings', () => {
     expect(read.binaryPath()).toBe('/b/lace');
     expect(getConfiguration).toHaveBeenCalledWith('lace');
   });
+
+  test('run the lace on PATH while lace.binaryPath is not set', () => {
+    const getConfiguration = () => ({ get: (_key: string, fallback: unknown) => fallback });
+    expect(engineSettings({ getConfiguration } as never).binaryPath()).toBe('lace');
+  });
+
+  test('run the executable lace.binaryPath names, as it is spelled', () => {
+    const named = 'C:\\Users\\dev\\scoop\\shims\\lace.exe';
+    const getConfiguration = () => ({ get: () => named });
+    expect(engineSettings({ getConfiguration } as never).binaryPath()).toBe(named);
+  });
 });
 
 describe('the engine controls', () => {
@@ -303,7 +328,7 @@ describe('the engine controls', () => {
 
     expect(api.window.showErrorMessage).toHaveBeenCalledTimes(1);
     expect(api.window.showErrorMessage).toHaveBeenCalledWith(
-      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): exited before its handshake',
+      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): exited before its handshake. Install the Lace CLI so lace is on PATH, or set lace.binaryPath to the full path of its executable.',
     );
   });
 });

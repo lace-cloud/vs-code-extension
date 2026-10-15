@@ -4,7 +4,7 @@
 // welcome link names a contributed command or one of VS Code's own, every
 // view a `when` clause names is contributed, a view's welcome for a state
 // offers the one action that gets past it, and the settings are the ones
-// the extension reads.
+// the extension reads, with the defaults it reads.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
@@ -172,23 +172,28 @@ describe('the manifest', () => {
     expect(named.filter((id) => !ids.has(id))).toEqual([]);
   });
 
-  test('declares exactly the settings the extension reads', () => {
-    const read: string[] = [];
+  // VS Code answers a setting no one set with the manifest's default, never
+  // with the fallback the code passes, so the two are one value.
+  test('declares exactly the settings the extension reads, each with the default it reads', () => {
+    const read = new Map<string, unknown>();
     const settings = engineSettings({
       getConfiguration: (section?: string) =>
         ({
           get: (key: string, fallback: unknown) => {
-            read.push(`${section}.${key}`);
+            read.set(`${section}.${key}`, fallback);
             return fallback;
           },
         }) as never,
     });
     settings.binaryPath();
     settings.autoRestart();
-    expect(Object.keys(contributes.configuration.properties)).toEqual(read);
-    expect(contributes.configuration.properties['lace.binaryPath'].scope).toBe(
-      'machine-overridable',
-    );
+    const properties: Record<string, { default: unknown; scope?: string }> =
+      contributes.configuration.properties;
+    expect(Object.keys(properties)).toEqual([...read.keys()]);
+    expect(
+      Object.fromEntries(Object.entries(properties).map(([id, p]) => [id, p.default])),
+    ).toEqual(Object.fromEntries(read));
+    expect(properties['lace.binaryPath'].scope).toBe('machine-overridable');
   });
 
   test('runs only in a trusted folder on disk', () => {
