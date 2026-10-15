@@ -122,8 +122,8 @@ favourites (the star), recently used, your organization's modules and the public
 row for its versions. The organization shown is the one the Lace CLI has selected; its picker runs
 **Lace: Select Organization**.
 
-- **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens or comes
-  forward without taking focus, so you see the edit land.
+- **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens beside the
+  file you are editing, or comes forward, without taking focus, so you see the edit land.
 - Clicking a row opens **module detail**: **Details** renders the module's README, **Interface** lists its inputs and
   outputs as Lace certified them (describing a version downloads and certifies it, so it loads after the rest),
   **Versions** and **Examples**, with **Add to Canvas** in the header.
@@ -244,8 +244,8 @@ what was applied.
   other; pairs that tie come back for you to choose between.
 - A registry module named with a version (`author/name@version`) is placed at that version.
 
-- The change tool opens or brings forward the module's canvas tab without taking focus, so every edit lands where you can
-  see it, one undo step each.
+- The change tool opens the module's canvas tab beside the file you are editing, or brings it forward, without taking
+  focus, so every edit lands where you can see it, one undo step each.
 - Every result carries the current canvas. Values an input marks `sensitive` are withheld.
 - No tool asks for confirmation. The save and generate tools tell your assistant to call them only when you ask.
   Describe and Generate open no tab; Save acts only on a canvas that is open, since unsaved edits exist only there.
