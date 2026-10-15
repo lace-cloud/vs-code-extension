@@ -35,8 +35,9 @@ export function addModuleToCanvas(options: {
   const { api, reads, place, offers } = options;
   return async () => {
     const listed = reads.list().then((outcome) => documentOf('registry list', outcome));
+    let picked: (vscode.QuickPickItem & { row: RegistryRow }) | undefined;
     try {
-      const picked = await pickFrom(
+      picked = await pickFrom<vscode.QuickPickItem & { row: RegistryRow }>(
         api.window,
         listed.then(({ items, publishingGuideUrl }) => ({
           items: items.map((row: RegistryRow) => ({
@@ -56,11 +57,12 @@ export function addModuleToCanvas(options: {
         })),
         { placeholder: 'Which module?', matchOnDescription: true, matchOnDetail: true },
       );
-      if (!picked) return;
-      const { author, name, version } = picked.row;
-      await place({ author, name, version });
     } catch (error) {
       await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
+      return;
     }
+    if (!picked) return;
+    const { author, name, version } = picked.row;
+    await place({ author, name, version });
   };
 }
