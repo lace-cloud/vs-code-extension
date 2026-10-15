@@ -37,6 +37,23 @@ describe('the commands mapping', () => {
     expect(invoke.request).toMatchObject({ path: ['whoami'], workingDirectory: '/home/dev' });
   });
 
+  test("the engine's Invoke stream says the command started before it says how it exited", async () => {
+    const engine = fakeEngine();
+    const events: Record<string, unknown>[] = [];
+    for await (const event of engine.caller.stream(
+      'Invoke',
+      { path: ['whoami'], working_directory: '/home/dev' },
+      new AbortController().signal,
+    )) {
+      events.push(event as Record<string, unknown>);
+    }
+
+    const said = events.map((event) =>
+      Object.keys(event).filter((key) => event[key] !== undefined),
+    );
+    expect(said).toEqual([['started'], ['exit']]);
+  });
+
   test('opens no session and no stream of session state', async () => {
     const engine = fakeEngine();
     const mapping = createCommandsMapping({ caller: async () => engine.caller }, '/home/dev');
