@@ -531,8 +531,8 @@ describe('the stacks of the current root', () => {
       'no folder is open',
       { folders: [] },
       'noFolder',
-      'No folder is open. Open the folder that holds the module to see the stacks deployed from it.',
-      [],
+      'No folder is open. Open the folder that holds the module to see the stacks deployed from it.\n[Open Folder](command:workbench.action.files.openFolder)',
+      ['workbench.action.files.openFolder'],
     ],
     [
       'no directory holds a module',
