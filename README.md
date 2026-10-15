@@ -19,8 +19,9 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. When the CLI and the extension speak different engine
-  protocols, the extension says which of the two to update.
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 6, which Lace CLI
+  v2.51.0 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
+  to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
 - A Lace account for the registry and the stacks. Sign in from VS Code with **Lace: Sign In**.
@@ -278,6 +279,10 @@ per-environment values go to the stack commands, and a conflict or a locked canv
 The extension runs one Lace engine per window, started when something first needs it. The status bar shows its state
 (**Lace Engine: running**); clicking it opens the "Lace" Output channel. The engine exits with the window, and with
 `lace.autoRestart` on it is restarted when it exits unexpectedly.
+
+An engine that does not start says where the CLI was read from (`lace.binaryPath`) and what happened. When no executable
+is found there, it also says to install the Lace CLI so `lace` is on your `PATH`, or to set `lace.binaryPath` to the
+full path of its executable.
 
 ## Commands
 
