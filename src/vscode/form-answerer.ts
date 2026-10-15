@@ -22,7 +22,7 @@ import type { JsonOf, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import type { Answerer } from '../engine/runner-host';
+import type { Answerer, Form } from '../engine/runner-host';
 import {
   type AuthoringRoot,
   type RootSources,
@@ -121,7 +121,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     return { title: subject === undefined ? label : `${label}: ${subject}`, root };
   }
 
-  async function answer(form: Parameters<Answerer>[0], label: string, ctx: RunCtx): Promise<void> {
+  async function answer(form: Form, label: string, ctx: RunCtx): Promise<void> {
     const unasked = form.missing.filter((name) => !Object.hasOwn(PROMPTS, name));
     if (unasked.length > 0) {
       form.cancel();
