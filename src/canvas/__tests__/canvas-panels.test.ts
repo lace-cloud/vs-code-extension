@@ -5,6 +5,7 @@ import type { RootHold } from '../../engine/root-sessions';
 import { folder, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
+import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import { createCanvasPanels } from '../canvas-panels';
 
 const repo = folder('/work/repo');
@@ -148,7 +149,7 @@ function setup(
       showInformationMessage: vi.fn(async () => undefined),
       showWarningMessage: vi.fn(async () => undefined),
       showErrorMessage: vi.fn(
-        async (_text: string, ..._labels: string[]): Promise<string | undefined> => undefined,
+        async (_text: string, ..._buttons: Button[]): Promise<Button | undefined> => undefined,
       ),
       showTextDocument: vi.fn(async () => {}),
     },
@@ -519,8 +520,8 @@ describe('the page and the host', () => {
 
   test("a notice the page sends with a command's failure offers the ways out its reason names; Validate validates the panel's root", async () => {
     const { canvasPanels, panels, api, offers, validate } = setup();
-    api.window.showErrorMessage.mockImplementation(async (text) =>
-      text.startsWith('Error: 1 construct') ? 'Validate' : 'Open Portal',
+    api.window.showErrorMessage.mockImplementation(async (text, ...buttons) =>
+      clicked(buttons, text.startsWith('Error: 1 construct') ? 'Validate' : 'Open Portal'),
     );
     await canvasPanels.ensure(prod);
     const page = panels[0];
@@ -534,10 +535,10 @@ describe('the page and the host', () => {
       failure: { reason: 'source_refused', message: '1 construct could not be converted' },
     });
     await settled();
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith(
+    expect(shownBy(api.window.showErrorMessage)).toContainEqual([
       'Error: 1 construct could not be converted',
       'Validate',
-    );
+    ]);
     expect(validate).toHaveBeenCalledWith(prod);
 
     notice({
@@ -547,11 +548,11 @@ describe('the page and the host', () => {
       failure: { reason: 'no_team', message: 'no team', url: 'https://portal/teams/new' },
     });
     await settled();
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith(
+    expect(shownBy(api.window.showErrorMessage)).toContainEqual([
       'no team',
       'Select Team',
       'Open Portal',
-    );
+    ]);
     expect(offers.openPortal).toHaveBeenCalledWith({
       kind: 'openPortal',
       url: 'https://portal/teams/new',

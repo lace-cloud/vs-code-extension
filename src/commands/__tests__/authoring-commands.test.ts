@@ -15,6 +15,7 @@ import {
 import { folder, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { VALIDATED } from '../../tools/__tests__/fake-session';
+import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import type { OfferActions } from '../../vscode/offers';
 import {
   type AuthoringApi,
@@ -42,9 +43,15 @@ function fakeApi(answer?: string) {
   const textDocuments: ReturnType<typeof document>[] = [];
   const api = {
     window: {
-      showInformationMessage: vi.fn(async () => answer),
-      showWarningMessage: vi.fn(async () => answer),
-      showErrorMessage: vi.fn(async () => answer),
+      showInformationMessage: vi.fn(async (_text: string, ...buttons: Button[]) =>
+        clicked(buttons, answer),
+      ),
+      showWarningMessage: vi.fn(async (_text: string, ...buttons: Button[]) =>
+        clicked(buttons, answer),
+      ),
+      showErrorMessage: vi.fn(async (_text: string, ...buttons: Button[]) =>
+        clicked(buttons, answer),
+      ),
       showTextDocument: vi.fn(async () => ({})),
       withProgress: vi.fn((_options, task) => task({ report: vi.fn() }, {})),
       setStatusBarMessage: vi.fn(),
@@ -443,10 +450,9 @@ describe('Validate and Scan', () => {
     );
     await table[GENERATE_DOCS]();
 
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith(
-      'terraform-docs is not installed',
-      'Install',
-    );
+    expect(shownBy(api.window.showErrorMessage)).toEqual([
+      ['terraform-docs is not installed', 'Install'],
+    ]);
     expect(offers.install).toHaveBeenCalledWith({
       kind: 'install',
       url: 'https://terraform-docs.io',
@@ -461,7 +467,7 @@ describe('Validate and Scan', () => {
     );
     await table[VALIDATE_MODULE]();
 
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith('sign in first', 'Sign In');
+    expect(shownBy(api.window.showErrorMessage)).toEqual([['sign in first', 'Sign In']]);
     expect(offers.signIn).toHaveBeenCalledOnce();
   });
 
@@ -565,7 +571,7 @@ describe('Convert', () => {
       { answer: 'Sign In' },
     );
     await table[CONVERT_MODULE]();
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith('sign in to Lace', 'Sign In');
+    expect(shownBy(api.window.showErrorMessage)).toEqual([['sign in to Lace', 'Sign In']]);
     expect(offers.signIn).toHaveBeenCalledOnce();
   });
 
@@ -593,7 +599,7 @@ describe('Convert', () => {
       { answer: 'Validate' },
     );
     await table[CONVERT_MODULE]();
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith(failure.message, 'Validate');
+    expect(shownBy(api.window.showErrorMessage)).toEqual([[failure.message, 'Validate']]);
     expect(invoked).toEqual([
       { cwd: PROD, path: 'module convert', args: {} },
       { cwd: PROD, path: 'module validate', args: {} },

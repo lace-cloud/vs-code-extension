@@ -360,8 +360,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (settled.outcome.kind === 'running') return;
     const said = outcomeNotice(stack.slug, settled.outcome);
     const offers = { ...options.offers, validate: () => options.validate(of) };
-    const answer = await notice(api, offers, said.level, said.text, said.offers, [SHOW_OUTPUT]);
-    if (answer === SHOW_OUTPUT) runOutput.show(stack.slug);
+    const showOutput = { title: SHOW_OUTPUT };
+    const chosen = await notice(api, offers, said.level, said.text, said.offers, [showOutput]);
+    if (chosen === showOutput) runOutput.show(stack.slug);
   }
 
   // A stack row, or, from the palette, a stack of the root the developer

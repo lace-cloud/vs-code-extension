@@ -2,6 +2,7 @@ import type { ActionContribution, CommandFailure, LaceReason } from '@lace-cloud
 import { describe, expect, test, vi } from 'vitest';
 import type { Noticed } from '../../engine/runner-host';
 import { notice, type OfferActions, offeringPresenter, offersFor } from '../offers';
+import { type Button, clicked, shownBy } from './fake-messages';
 
 const STACK = { id: 'stk_1', slug: 'prod' };
 const CERTIFICATION: CommandFailure = {
@@ -18,11 +19,11 @@ const actions = (): OfferActions => ({
   openRecord: vi.fn(),
 });
 
-const window = (answer?: string) => ({
-  showErrorMessage: vi.fn(async (_text: string, ..._labels: string[]) => answer),
-  showWarningMessage: vi.fn(async () => undefined),
-  showInformationMessage: vi.fn(async () => undefined),
-});
+// A window whose boxes click the button titled `answer`.
+const window = (answer?: string) => {
+  const box = () => vi.fn(async (_text: string, ...buttons: Button[]) => clicked(buttons, answer));
+  return { showErrorMessage: box(), showWarningMessage: box(), showInformationMessage: box() };
+};
 
 describe('the ways out of a failure', () => {
   test('are read from its reason, and the page to open from the URL it carries', () => {
@@ -46,7 +47,7 @@ describe('the ways out of a failure', () => {
     expect(offersFor({ ...failure('unspecified'), apiCode: 'not_found' })).toEqual([]);
   });
 
-  test('a notice shows them at its level, and the one chosen runs', async () => {
+  test('a notice shows them at its level, then its own buttons, and the offer chosen runs', async () => {
     const shown = window('Open Portal');
     const act = actions();
     const answer = await notice(
@@ -55,15 +56,12 @@ describe('the ways out of a failure', () => {
       'error',
       'no team',
       offersFor({ reason: 'no_team', message: 'no team', url: 'https://portal/teams/new' }),
-      ['Show Output'],
+      [{ title: 'Show Output' }],
     );
-    expect(shown.showErrorMessage).toHaveBeenCalledWith(
-      'no team',
-      'Select Team',
-      'Open Portal',
-      'Show Output',
-    );
-    expect(answer).toBe('Open Portal');
+    expect(shownBy(shown.showErrorMessage)).toEqual([
+      ['no team', 'Select Team', 'Open Portal', 'Show Output'],
+    ]);
+    expect(answer).toBeUndefined();
     expect(act.openPortal).toHaveBeenCalledWith({
       kind: 'openPortal',
       url: 'https://portal/teams/new',
@@ -81,7 +79,7 @@ describe('the ways out of a failure', () => {
       'no certification',
       offersFor(failure),
     );
-    expect(unnamed.showErrorMessage).toHaveBeenCalledWith('no certification');
+    expect(shownBy(unnamed.showErrorMessage)).toEqual([['no certification']]);
 
     const named = window('Validate');
     const validate = vi.fn();
@@ -92,19 +90,32 @@ describe('the ways out of a failure', () => {
       'no certification',
       offersFor(failure),
     );
-    expect(named.showErrorMessage).toHaveBeenCalledWith('no certification', 'Validate');
+    expect(shownBy(named.showErrorMessage)).toEqual([['no certification', 'Validate']]);
     expect(validate).toHaveBeenCalledWith({ kind: 'validate' });
+  });
+
+  test("one click is one choice: a button of the notice's own titled as an offer runs no offer", async () => {
+    const shown = window();
+    const act = actions();
+    const own = { title: 'Sign In' };
+    shown.showErrorMessage.mockImplementation(async (_text, ...buttons) => buttons.at(-1));
+    const answer = await notice(
+      { window: shown } as never,
+      act,
+      'error',
+      'sign in first',
+      offersFor({ reason: 'unauthenticated', message: 'sign in first' }),
+      [own],
+    );
+    expect(shownBy(shown.showErrorMessage)).toEqual([['sign in first', 'Sign In', 'Sign In']]);
+    expect(answer).toBe(own);
+    expect(act.signIn).not.toHaveBeenCalled();
   });
 });
 
 describe("a change request's records", () => {
   test('are offered by the record each opens, and the one chosen opens its page', async () => {
-    const shown = {
-      ...window(),
-      showInformationMessage: vi.fn(
-        async (_text: string, ..._labels: string[]) => 'Open jsm CHG-7',
-      ),
-    };
+    const shown = window('Open jsm CHG-7');
     const act = actions();
     const page = { kind: 'openRecord', record: 'jsm CHG-7', url: 'https://jsm/CHG-7' } as const;
     const answer = await notice(
@@ -113,15 +124,12 @@ describe("a change request's records", () => {
       'info',
       'awaits approval',
       [{ kind: 'openRecord', record: 'snow CHG-1', url: 'https://snow/CHG-1' }, page],
-      ['Show Output'],
+      [{ title: 'Show Output' }],
     );
-    expect(shown.showInformationMessage).toHaveBeenCalledWith(
-      'awaits approval',
-      'Open snow CHG-1',
-      'Open jsm CHG-7',
-      'Show Output',
-    );
-    expect(answer).toBe('Open jsm CHG-7');
+    expect(shownBy(shown.showInformationMessage)).toEqual([
+      ['awaits approval', 'Open snow CHG-1', 'Open jsm CHG-7', 'Show Output'],
+    ]);
+    expect(answer).toBeUndefined();
     expect(act.openRecord).toHaveBeenCalledOnce();
     expect(act.openRecord).toHaveBeenCalledWith(page);
   });
@@ -178,12 +186,9 @@ describe("the presenter of the window's runner", () => {
     made.notify('error', 'No team is selected', failure);
     await settled();
     expect(answers).toHaveBeenCalledWith(failure);
-    expect(shown.showErrorMessage).toHaveBeenCalledWith(
-      'No team is selected',
-      'Select Team',
-      'Open Portal',
-      'Answer',
-    );
+    expect(shownBy(shown.showErrorMessage)).toEqual([
+      ['No team is selected', 'Select Team', 'Open Portal', 'Answer'],
+    ]);
     expect(run).toHaveBeenCalledWith(answer.action, ctx, { failure });
     expect(progress).toEqual([{ title: 'Answer: prod', ended: true }]);
   });
@@ -197,7 +202,7 @@ describe("the presenter of the window's runner", () => {
 
     made.notify('error', 'no certification', CERTIFICATION);
     await settled();
-    expect(shown.showErrorMessage).toHaveBeenCalledWith('no certification', 'Validate');
+    expect(shownBy(shown.showErrorMessage)).toEqual([['no certification', 'Validate']]);
     expect(validate).toHaveBeenCalledWith({ folder: repo, relative: 'infra/prod' });
   });
 
@@ -210,7 +215,25 @@ describe("the presenter of the window's runner", () => {
 
     made.notify('error', 'no certification', CERTIFICATION);
     await settled();
-    expect(shown.showErrorMessage).toHaveBeenCalledWith('no certification');
+    expect(shownBy(shown.showErrorMessage)).toEqual([['no certification']]);
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  test('a package action titled as an offer runs alone when its own button is clicked', async () => {
+    const shown = window();
+    shown.showErrorMessage.mockImplementation(async (_text, ...buttons) => buttons.at(-1));
+    const ctx = { root: '/work/repo/infra/prod', stack: STACK };
+    const answer = {
+      action: { label: 'Validate' } as ActionContribution,
+      ctx,
+      target: { failure: CERTIFICATION },
+    };
+    const { made, validate, run } = presenter(shown, () => ({ ctx, answers: () => [answer] }));
+
+    made.notify('error', 'no certification', CERTIFICATION);
+    await settled();
+    expect(shownBy(shown.showErrorMessage)).toEqual([['no certification', 'Validate', 'Validate']]);
+    expect(run).toHaveBeenCalledWith(answer.action, ctx, { failure: CERTIFICATION });
     expect(validate).not.toHaveBeenCalled();
   });
 

@@ -94,27 +94,31 @@ type NoticeApi = {
   >;
 };
 
-// Shows a notice at `level` with those of `offered` that `actions` can take
-// and `extra` labels as its buttons; resolves with the label chosen. An
-// offer chosen is run here.
-export async function notice(
+// Shows a notice at `level` whose buttons are those of `offered` that
+// `actions` can take, then `extra`. Every button is its own item, and VS Code
+// hands back the item clicked, so one click is exactly one choice, whatever
+// the buttons' titles: an offer chosen is run here, and an item of `extra`
+// chosen is what the notice resolves with.
+export async function notice<T extends vscode.MessageItem>(
   api: NoticeApi,
   actions: OfferActions,
   level: 'info' | 'warn' | 'error',
   text: string,
   offered: readonly Offer[],
-  extra: readonly string[] = [],
-): Promise<string | undefined> {
-  const offers = offered.filter((offer) => actions[offer.kind] !== undefined);
-  const labels = [...offers.map(offerLabel), ...extra];
-  const answer = await (level === 'error'
-    ? api.window.showErrorMessage(text, ...labels)
+  extra: readonly T[] = [],
+): Promise<T | undefined> {
+  const offers = offered
+    .filter((offer) => actions[offer.kind] !== undefined)
+    .map((offer) => ({ title: offerLabel(offer), offer }));
+  const buttons = [...offers, ...extra];
+  const clicked = await (level === 'error'
+    ? api.window.showErrorMessage(text, ...buttons)
     : level === 'warn'
-      ? api.window.showWarningMessage(text, ...labels)
-      : api.window.showInformationMessage(text, ...labels));
-  const chosen = offers.find((offer) => offerLabel(offer) === answer);
-  if (chosen) await (actions[chosen.kind] as (offer: Offer) => unknown)(chosen);
-  return answer;
+      ? api.window.showWarningMessage(text, ...buttons)
+      : api.window.showInformationMessage(text, ...buttons));
+  const offer = offers.find((button) => button === clicked)?.offer;
+  if (offer) await (actions[offer.kind] as (chosen: Offer) => unknown)(offer);
+  return extra.find((item) => item === clicked);
 }
 
 export type OfferingPresenterOptions = {
@@ -128,9 +132,9 @@ export type OfferingPresenterOptions = {
 };
 
 // The presenter of the window's runner: each notice with its offers,
-// Validate on the root of the run it is about among them, and after them
-// the package actions that answer its failure, the one chosen run; and the
-// typed confirmation a binding asks for.
+// Validate on the root of the run it is about among them, and after them a
+// button for each package action that answers its failure, the one clicked
+// run; and the typed confirmation a binding asks for.
 export function offeringPresenter(options: OfferingPresenterOptions): RunnerPresenter {
   const { api, actions, confirm, validate, sources, report } = options;
   return (runner) => ({
@@ -140,11 +144,12 @@ export function offeringPresenter(options: OfferingPresenterOptions): RunnerPres
       const root = at === undefined ? undefined : rootOfPath(sources.folders(), at);
       const ways = root === undefined ? actions : { ...actions, validate: () => validate(root) };
       const answers = failure === undefined || run === undefined ? [] : run.answers(failure);
-      const labels = answers.map(({ action }) => action.label);
-      notice(api, ways, level, text, offersFor(failure), labels)
+      const buttons = answers.map((answer) => ({ title: answer.action.label, answer }));
+      notice(api, ways, level, text, offersFor(failure), buttons)
         .then((chosen) => {
-          const answer = answers.find(({ action }) => action.label === chosen);
-          return answer && runUnderProgress(api, runner, answer.action, answer.ctx, answer.target);
+          if (!chosen) return;
+          const { action, ctx, target } = chosen.answer;
+          return runUnderProgress(api, runner, action, ctx, target);
         })
         .catch((error) => report('acting on a Lace notice', error));
     },

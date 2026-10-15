@@ -4,6 +4,7 @@ import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { folder } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
+import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
 import type { OfferActions } from '../../vscode/offers';
 import { stackPick } from '../stack-pick';
 import { memento, stack, stacks } from './stack-fixtures';
@@ -18,9 +19,9 @@ function setup(
   const commands = fakeCommands(scripts);
   const messages: { level: string; text: string; buttons: string[] }[] = [];
   const message = (level: string) =>
-    vi.fn(async (text: string, ...buttons: string[]) => {
-      messages.push({ level, text, buttons });
-      return options.answer;
+    vi.fn(async (text: string, ...buttons: Button[]) => {
+      messages.push({ level, text, buttons: buttons.map(titleOf) });
+      return clicked(buttons, await options.answer);
     });
   const window = {
     showQuickPick: vi.fn(

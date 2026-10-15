@@ -6,6 +6,7 @@ import { binding, createRunnerHost, type Form } from '../../engine/runner-host';
 import { folder, uri } from '../../roots/__tests__/fake-uri';
 import { formAnswerer } from '../form-answerer';
 import { type OfferActions, offeringPresenter } from '../offers';
+import { type Button, clicked, titleOf } from './fake-messages';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -43,9 +44,9 @@ function setup(options: Options = {}) {
   const asked: { kind: string; options: unknown; items?: unknown }[] = [];
   const messages: { level: string; text: string; buttons: string[] }[] = [];
   const message = (level: string) =>
-    vi.fn(async (text: string, ...buttons: string[]) => {
-      messages.push({ level, text, buttons });
-      return options.answers?.[text];
+    vi.fn(async (text: string, ...buttons: Button[]) => {
+      messages.push({ level, text, buttons: buttons.map(titleOf) });
+      return clicked(buttons, await options.answers?.[text]);
     });
   const window = {
     showInputBox: vi.fn(async (opened: vscode.InputBoxOptions) => {

@@ -5,6 +5,7 @@ import { createRunnerHost } from '../../engine/runner-host';
 import { folder, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
+import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
 import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { importResources, importResourcesCommand } from '../import-resources';
@@ -57,9 +58,9 @@ function setup(options: Options) {
   const commands = fakeCommands(options.scripts);
   const messages: { level: string; text: string; buttons: string[] }[] = [];
   const message = (level: string) =>
-    vi.fn(async (text: string, ...buttons: string[]) => {
-      messages.push({ level, text, buttons });
-      return options.answers?.[text];
+    vi.fn(async (text: string, ...buttons: Button[]) => {
+      messages.push({ level, text, buttons: buttons.map(titleOf) });
+      return clicked(buttons, await options.answers?.[text]);
     });
   // Each progress notification: its title, and whether its task has ended.
   const progress: { title?: string; ended: boolean }[] = [];
