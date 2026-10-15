@@ -68,7 +68,7 @@ describe('a command outcome', () => {
     const failed = await rejection(SCANNED, new CommandExitError(2, 'Error: boom\n'));
     expect(failed).toBeInstanceOf(CommandFailedError);
     expect(failed).toMatchObject({ command: SCANNED, failure: undefined });
-    expect(failureText(failed)).toBe('Error: boom\n');
+    expect(failureText(failed)).toBe('Error: boom');
     expect(failureOf(failed)).toBeUndefined();
   });
 

@@ -387,7 +387,7 @@ describe('signing in', () => {
     });
     await failed.account.signIn();
     expect(failed.api.window.showErrorMessage).toHaveBeenCalledWith(
-      'Lace sign-in failed: Error: sign-in expired\n',
+      'Lace sign-in failed: Error: sign-in expired',
     );
     expect(failed.changed).not.toHaveBeenCalled();
   });
@@ -643,7 +643,7 @@ describe('an account command that fails', () => {
     ]);
   });
 
-  test('a save of the organization that wrote no document says what the CLI wrote; one whose stream ended, that it may have made changes', async () => {
+  test('a save of the organization that wrote no document says what the CLI wrote, or its exit code when it wrote nothing; one whose stream ended, that it may have made changes', async () => {
     // What Select Organization says when its `org use` fails with `fails`.
     const saying = async (fails: Error) => {
       const { account, commands } = await setup(
@@ -659,7 +659,10 @@ describe('an account command that fails', () => {
       return shownBy(window.showErrorMessage);
     };
     expect(await saying(new CommandExitError(1, 'Error: the config file is read-only\n'))).toEqual([
-      ['Error: the config file is read-only\n'],
+      ['Error: the config file is read-only'],
+    ]);
+    expect(await saying(new CommandExitError(2, ''))).toEqual([
+      ['the command exited with code 2 and wrote nothing'],
     ]);
     const unobserved = new CommandUnobservedError();
     expect(await saying(unobserved)).toEqual([[unobserved.message]]);
