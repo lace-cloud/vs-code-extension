@@ -10,7 +10,7 @@ import { moduleKey, moduleLabel, type RegistryRow } from '../protocol/registry-p
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import { pickFrom } from '../vscode/pick';
 import type { PlacedModule } from './place-module';
-import type { RegistryReads } from './registry-reads';
+import { REGISTRY_LIST, type RegistryReads } from './registry-reads';
 
 export const ADD_MODULE = 'lace.addModuleToCanvas';
 
@@ -34,7 +34,7 @@ export function addModuleToCanvas(options: {
 }): () => Promise<void> {
   const { api, reads, place, offers } = options;
   return async () => {
-    const listed = reads.list().then((outcome) => documentOf('registry list', outcome));
+    const listed = reads.list().then((outcome) => documentOf(REGISTRY_LIST, outcome));
     let picked: (vscode.QuickPickItem & { row: RegistryRow }) | undefined;
     try {
       picked = await pickFrom<vscode.QuickPickItem & { row: RegistryRow }>(
@@ -58,13 +58,7 @@ export function addModuleToCanvas(options: {
         { placeholder: 'Which module?', matchOnDescription: true, matchOnDetail: true },
       );
     } catch (error) {
-      await notice(
-        api,
-        offers,
-        'error',
-        failureText(error, { kind: 'read', path: 'registry list' }),
-        offersFor(failureOf(error)),
-      );
+      await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
       return;
     }
     if (!picked) return;

@@ -304,25 +304,25 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     [GENERATE_CANVAS]: generate,
     [VALIDATE_MODULE]: inRoot(
       { verb: 'validate', doing: 'validating', writes: false },
-      (port) => commandOutcome(port, 'module validate', {}),
+      (port) => commandOutcome(port, { kind: 'write', path: 'module validate' }, {}),
       (root, label, document) =>
         showReport(root, validatedText(label, document), diagnosticsOfDocument(document)),
     ),
     [CONVERT_MODULE]: inRoot(
       { verb: 'convert', doing: 'converting', writes: true },
-      (port) => commandOutcome(port, 'module convert', {}),
+      (port) => commandOutcome(port, { kind: 'write', path: 'module convert' }, {}),
       (root, label, document) =>
         showReport(root, convertedText(label, document), diagnosticsOfDocument(document)),
     ),
     [SCAN_MODULE]: inRoot(
       { verb: 'scan', doing: 'scanning', writes: false },
-      (port) => commandOutcome(port, 'module scan', {}),
+      (port) => commandOutcome(port, { kind: 'read', path: 'module scan' }, {}),
       (root, label, document) =>
         showReport(root, `Scanned ${label}`, diagnosticsOfDocument(document)),
     ),
     [FORMAT_MODULE]: inRoot(
       { verb: 'format', doing: 'formatting', writes: true },
-      (port) => commandOutcome(port, 'module fmt', {}),
+      (port) => commandOutcome(port, { kind: 'write', path: 'module fmt' }, {}),
       (_root, label, { changed }) => {
         void api.window.showInformationMessage(
           changed.length === 0
@@ -333,7 +333,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     ),
     [GENERATE_DOCS]: inRoot(
       { verb: 'document', doing: 'generating the docs of', writes: false },
-      (port) => commandOutcome(port, 'module docs', {}),
+      (port) => commandOutcome(port, { kind: 'read', path: 'module docs' }, {}),
       async (_root, _label, { markdown }) => {
         const document = await api.workspace.openTextDocument({
           language: 'markdown',

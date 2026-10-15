@@ -3,11 +3,19 @@
 // reads a directory. The module axis only, and up to the most rows one
 // `registry list` returns.
 import type { BoundPath, JsonOf } from '@lace-cloud/canvas/engine';
-import { type CommandOutcome, commandOutcome } from '../engine/command-outcome';
+import {
+  type CommandOutcome,
+  commandOutcome,
+  failureText,
+  type LaceCommand,
+} from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
 import type { Read } from '../protocol/registry-protocol';
 
 export const LIST_LIMIT = 500;
+
+// The registry's modules, as the sidebar and Add Module read them.
+export const REGISTRY_LIST: LaceCommand<'registry list'> = { kind: 'read', path: 'registry list' };
 
 // A module's registry reference, as the registry commands take it.
 const artifact = (key: string): string => `module/${key}`;
@@ -23,18 +31,24 @@ export type RegistryReads = {
 export function registryReads(commands: Pick<CommandsMapping, 'anywhere'>): RegistryReads {
   return {
     list: async () =>
-      commandOutcome(await commands.anywhere(), 'registry list', {
+      commandOutcome(await commands.anywhere(), REGISTRY_LIST, {
         axis: 'module',
         limit: LIST_LIMIT,
       }),
     get: async (key) =>
-      commandOutcome(await commands.anywhere(), 'registry get', { artifact: artifact(key) }),
+      commandOutcome(
+        await commands.anywhere(),
+        { kind: 'read', path: 'registry get' },
+        { artifact: artifact(key) },
+      ),
     describe: async (key, version) =>
-      commandOutcome(await commands.anywhere(), 'registry describe', {
-        artifact: artifact(key),
-        version,
-      }),
-    organization: async () => commandOutcome(await commands.anywhere(), 'org current', {}),
+      commandOutcome(
+        await commands.anywhere(),
+        { kind: 'read', path: 'registry describe' },
+        { artifact: artifact(key), version },
+      ),
+    organization: async () =>
+      commandOutcome(await commands.anywhere(), { kind: 'read', path: 'org current' }, {}),
   };
 }
 
@@ -51,6 +65,6 @@ export async function asRead<P extends BoundPath>(
       : { kind: 'failed', message: outcome.failure.message };
   } catch (error) {
     report(error);
-    return { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
+    return { kind: 'failed', message: failureText(error) };
   }
 }

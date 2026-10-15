@@ -219,9 +219,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   async function stackRows(of: AuthoringRoot): Promise<Row[]> {
     let stacks: Stack[];
     try {
-      const listed = await commandDocument(await commands.anywhere(), 'stack list', {
-        source: rootPath(of),
-      });
+      const listed = await commandDocument(
+        await commands.anywhere(),
+        { kind: 'read', path: 'stack list' },
+        { source: rootPath(of) },
+      );
       stacks = listed.items;
     } catch (error) {
       refusal = failureOf(error);
@@ -229,7 +231,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       const state = refusedState(refusal);
       setState(
         state === 'noTeam' ? await teamState() : state,
-        state === 'failed' ? failureText(error, { kind: 'read', path: 'stack list' }) : undefined,
+        state === 'failed' ? failureText(error) : undefined,
       );
       return [];
     }
@@ -244,7 +246,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // none and the portal makes one.
   async function teamState(): Promise<StacksState> {
     try {
-      const teams = await commandDocument(await commands.anywhere(), 'team list', {});
+      const teams = await commandDocument(
+        await commands.anywhere(),
+        { kind: 'read', path: 'team list' },
+        {},
+      );
       return teams.items.length === 0 ? 'teamlessOrganization' : 'noTeam';
     } catch (error) {
       report('listing the teams of the organization', error);
@@ -254,10 +260,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   async function runRows(row: Extract<Row, { kind: 'stack' }>): Promise<Row[]> {
     try {
-      const listed = await commandDocument(await commands.anywhere(), 'run list', {
-        stack: row.stack.id,
-        limit: RECENT_RUNS,
-      });
+      const listed = await commandDocument(
+        await commands.anywhere(),
+        { kind: 'read', path: 'run list' },
+        { stack: row.stack.id, limit: RECENT_RUNS },
+      );
       if (listed.items.length === 0) return [{ kind: 'note', text: 'No runs yet', icon: 'info' }];
       return listed.items.map((run) => ({
         kind: 'run',
@@ -266,13 +273,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
         run,
       }));
     } catch (error) {
-      return [
-        {
-          kind: 'note',
-          text: failureText(error, { kind: 'read', path: 'run list' }),
-          icon: 'error',
-        },
-      ];
+      return [{ kind: 'note', text: failureText(error), icon: 'error' }];
     }
   }
 

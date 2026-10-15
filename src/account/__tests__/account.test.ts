@@ -1,4 +1,4 @@
-import { CommandExitError } from '@lace-cloud/canvas/engine';
+import { CommandExitError, CommandUnobservedError } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import {
   fakeCommands,
@@ -8,7 +8,7 @@ import {
 } from '../../engine/__tests__/fake-commands';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
-import { accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
+import { type Account, accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
 import { selectionStatus } from '../scope';
 import { outsideSignals, signedInAs } from './fake-outside';
 
@@ -581,11 +581,9 @@ describe('the account changed outside this window', () => {
 });
 
 describe('an account command that fails', () => {
-  test('says why with the ways out its reason names', async () => {
-    const { account, commands } = await setup({
-      'org list': refused({ reason: 'unauthenticated', message: 'no credentials' }),
-      'org current': { documents: [current(null)] },
-    });
+  // The account's palette commands over `account`, with a window whose error
+  // notices answer Sign In.
+  function controls(account: Account, commands: ReturnType<typeof fakeCommands>) {
     const handlers = new Map<string, () => Promise<void>>();
     const window = {
       createStatusBarItem: () => ({ show: vi.fn(), hide: vi.fn(), dispose: vi.fn() }),
@@ -619,8 +617,51 @@ describe('an account command that fails', () => {
       offers,
       vi.fn(),
     );
-    await handlers.get(SELECT_ORGANIZATION)?.();
+    return { window, offers, run: async (id: string) => handlers.get(id)?.() };
+  }
+
+  test('says why with the ways out its reason names', async () => {
+    const { account, commands } = await setup({
+      'org list': refused({ reason: 'unauthenticated', message: 'no credentials' }),
+      'org current': { documents: [current(null)] },
+    });
+    const { window, offers, run } = controls(account, commands);
+    await run(SELECT_ORGANIZATION);
     expect(shownBy(window.showErrorMessage)).toEqual([['no credentials', 'Sign In']]);
     expect(offers.signIn).toHaveBeenCalledTimes(1);
+  });
+
+  test('a read whose stream ended says to run that read again', async () => {
+    const { account, commands } = await setup({
+      'org list': { fails: new CommandUnobservedError() },
+      'org current': { documents: [current('acme')] },
+    });
+    const { window, run } = controls(account, commands);
+    await run(SELECT_ORGANIZATION);
+    expect(shownBy(window.showErrorMessage)).toEqual([
+      ['the stream ended before `lace org list` finished; run it again'],
+    ]);
+  });
+
+  test('a save of the organization that wrote no document says what the CLI wrote; one whose stream ended, that it may have made changes', async () => {
+    // What Select Organization says when its `org use` fails with `fails`.
+    const saying = async (fails: Error) => {
+      const { account, commands } = await setup(
+        {
+          'org list': { documents: [ORGS] },
+          'org current': { documents: [current('acme')] },
+          'org use': { fails },
+        },
+        ['globex'],
+      );
+      const { window, run } = controls(account, commands);
+      await run(SELECT_ORGANIZATION);
+      return shownBy(window.showErrorMessage);
+    };
+    expect(await saying(new CommandExitError(1, 'Error: the config file is read-only\n'))).toEqual([
+      ['Error: the config file is read-only\n'],
+    ]);
+    const unobserved = new CommandUnobservedError();
+    expect(await saying(unobserved)).toEqual([[unobserved.message]]);
   });
 });

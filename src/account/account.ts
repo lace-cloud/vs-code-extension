@@ -53,7 +53,7 @@ const LACE_COMMAND = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
 // The account as the CLI reads it, as one value two reads are compared by.
 async function accountRead(commands: CommandsPort): Promise<string> {
   const [who, selection] = await Promise.all([
-    commandOutcome(commands, 'whoami', {}),
+    commandOutcome(commands, { kind: 'read', path: 'whoami' }, {}),
     currentSelection(commands),
   ]);
   const signedIn = who.kind === 'result' ? who.document.user.id : who.failure.reason;
@@ -164,19 +164,13 @@ export function accountControls(
   };
   void refresh();
   const offChange = account.onDidChange(() => void refresh());
-  // Each of these commands changes the account (`logout`, `org use`, `team
-  // use`), so one whose stream ended under it may have changed it.
+  // A failure is said for the command of the flow that failed, a read or a
+  // write (`CommandFailedError`).
   const offering = (act: () => Promise<void>) => async () => {
     try {
       await act();
     } catch (error) {
-      await notice(
-        api,
-        offers,
-        'error',
-        failureText(error, { kind: 'write' }),
-        offersFor(failureOf(error)),
-      );
+      await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
     }
   };
   const registered = registerCommands(api, {

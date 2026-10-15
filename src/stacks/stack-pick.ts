@@ -45,7 +45,9 @@ export function stackPick(options: StackPickOptions): PickStack {
     const label = rootLabel(root, sources.folders());
     const listed = commands
       .anywhere()
-      .then((home) => commandDocument(home, 'stack list', { source: rootPath(root) }));
+      .then((home) =>
+        commandDocument(home, { kind: 'read', path: 'stack list' }, { source: rootPath(root) }),
+      );
     try {
       const chosen = await pickFrom(
         api.window,
@@ -67,13 +69,7 @@ export function stackPick(options: StackPickOptions): PickStack {
       );
       return chosen && stackRef(chosen.stack);
     } catch (error) {
-      await notice(
-        api,
-        offers,
-        'error',
-        failureText(error, { kind: 'read', path: 'stack list' }),
-        offersFor(failureOf(error)),
-      );
+      await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
       return undefined;
     }
   };

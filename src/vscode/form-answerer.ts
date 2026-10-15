@@ -75,7 +75,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     connection: async ({ title }) => {
       const listed = commands
         .anywhere()
-        .then((home) => commandDocument(home, 'connection list', {}));
+        .then((home) => commandDocument(home, { kind: 'read', path: 'connection list' }, {}));
       try {
         const picked = await pickFrom(
           api.window,
@@ -96,15 +96,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
         );
         return picked?.id;
       } catch (error) {
-        shown(
-          notice(
-            api,
-            offers,
-            'error',
-            failureText(error, { kind: 'read', path: 'connection list' }),
-            offersFor(failureOf(error)),
-          ),
-        );
+        shown(notice(api, offers, 'error', failureText(error), offersFor(failureOf(error))));
         return undefined;
       }
     },

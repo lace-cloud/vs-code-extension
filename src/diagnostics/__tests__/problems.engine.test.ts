@@ -21,7 +21,11 @@ describe('Problems on the real engine', () => {
     const { rootSessions, commands, reports } = realEngine();
     await rootSessions.acquire(root);
 
-    const outcome = await commandOutcome(await commands.at(root), 'module validate', {});
+    const outcome = await commandOutcome(
+      await commands.at(root),
+      { kind: 'write', path: 'module validate' },
+      {},
+    );
     expect(outcome.kind).toBe('result');
 
     const fake = fakeProblemsApi([folder(repository)]);

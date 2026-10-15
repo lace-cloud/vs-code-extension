@@ -8,9 +8,14 @@
 // shown once, beside a way to copy it, and each page is opened once. The
 // sign-in waits on the person in the browser, under a progress notification
 // whose Cancel withdraws it.
-import { CommandExitError, type CommandsPort, type JsonOf } from '@lace-cloud/canvas/engine';
+import {
+  CommandExitError,
+  type CommandsPort,
+  failureSays,
+  type JsonOf,
+} from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
-import { commandDocument, failureText } from '../engine/command-outcome';
+import { commandDocument } from '../engine/command-outcome';
 
 export type SignInApi = {
   window: Pick<
@@ -90,7 +95,7 @@ export async function signIn(
       } catch (error) {
         if (!(error instanceof CommandExitError && error.code === CANCELLED)) {
           void api.window.showErrorMessage(
-            `Lace sign-in failed: ${failureText(error, { kind: 'write' })}`,
+            `Lace sign-in failed: ${failureSays(error, { kind: 'write' }).message}`,
           );
         }
         return undefined;
@@ -106,7 +111,7 @@ export async function signOut(
   commands: CommandsPort,
   window: Pick<typeof vscode.window, 'showInformationMessage'>,
 ): Promise<void> {
-  const { loggedOut } = await commandDocument(commands, 'logout', {});
+  const { loggedOut } = await commandDocument(commands, { kind: 'write', path: 'logout' }, {});
   void window.showInformationMessage(
     loggedOut ? 'Signed out of Lace.' : 'You were not signed in to Lace.',
   );

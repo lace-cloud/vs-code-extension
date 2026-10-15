@@ -44,16 +44,16 @@ const described = (slug: string, current: Current): string =>
 // current` reports there.
 const teamsIn = (commands: CommandsPort, scope: { org?: string }) =>
   Promise.all([
-    commandDocument(commands, 'team list', scope),
-    commandDocument(commands, 'team current', scope),
+    commandDocument(commands, { kind: 'read', path: 'team list' }, scope),
+    commandDocument(commands, { kind: 'read', path: 'team current' }, scope),
   ]);
 
 // Picks an organization from `lace org list`, saves it with `lace org use`
 // and goes on to its team. Resolves true when a choice was saved.
 export async function selectOrganization(commands: CommandsPort, api: ScopeApi): Promise<boolean> {
   const listed = Promise.all([
-    commandDocument(commands, 'org list', {}),
-    commandDocument(commands, 'org current', {}),
+    commandDocument(commands, { kind: 'read', path: 'org list' }, {}),
+    commandDocument(commands, { kind: 'read', path: 'org current' }, {}),
   ]);
   const picked = await pickFrom(
     api.window,
@@ -74,7 +74,7 @@ export async function selectOrganization(commands: CommandsPort, api: ScopeApi):
   );
   if (!picked) return false;
   const scope = { org: picked.slug };
-  const saved = commandDocument(commands, 'org use', scope);
+  const saved = commandDocument(commands, { kind: 'write', path: 'org use' }, scope);
   await pickTeam(
     commands,
     api,
@@ -123,7 +123,11 @@ async function pickTeam(
     { placeholder: asking('team') },
   );
   if (!picked) return false;
-  await commandDocument(commands, 'team use', { team: picked.slug, ...scope });
+  await commandDocument(
+    commands,
+    { kind: 'write', path: 'team use' },
+    { team: picked.slug, ...scope },
+  );
   return true;
 }
 
@@ -131,8 +135,8 @@ export type Selection = { organization: Current; team: Current };
 
 export async function currentSelection(commands: CommandsPort): Promise<Selection> {
   const [organization, team] = await Promise.all([
-    commandDocument(commands, 'org current', {}),
-    commandDocument(commands, 'team current', {}),
+    commandDocument(commands, { kind: 'read', path: 'org current' }, {}),
+    commandDocument(commands, { kind: 'read', path: 'team current' }, {}),
   ]);
   return { organization, team };
 }
