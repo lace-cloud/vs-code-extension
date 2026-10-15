@@ -364,9 +364,9 @@
       "properties": {
         "lace.binaryPath": {
           "type": "string",
-          "default": "/usr/local/bin/lace",
+          "default": "lace",
           "scope": "machine-overridable",
-          "description": "Path to the Lace CLI binary."
+          "description": "The Lace CLI the engine runs: lace, the one on PATH, or the full path of an executable (on Windows lace.exe, which where.exe lace prints)."
         },
         "lace.autoRestart": {
           "type": "boolean",
