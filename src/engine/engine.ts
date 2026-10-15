@@ -23,7 +23,10 @@ export type EngineState = ServerState;
 
 // What the developer is told about an engine that did not come up. One
 // whose handshake names another protocol is a Lace CLI of another release,
-// and which side to update follows from which side is behind.
+// and which side to update follows from which side is behind. Any other
+// failure says where the engine is read from and how to point it at a Lace
+// CLI: the setting's value is spawned as given, so a bare `lace` is the one
+// on PATH, which on Windows is a `lace.exe` (a `.cmd` or `.bat` is not found).
 function startFailure(binaryPath: string, cause: unknown): string {
   if (cause instanceof EngineProtocolMismatchError) {
     return cause.engineTooOld
@@ -31,7 +34,7 @@ function startFailure(binaryPath: string, cause: unknown): string {
       : `The Lace CLI at ${binaryPath} is newer than this extension: it speaks engine protocol ${cause.engineProtocol} and this extension speaks ${cause.requiredProtocol}. Update the Lace extension.`;
   }
   const message = cause instanceof Error ? cause.message : String(cause);
-  return `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${message}`;
+  return `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${message}. Install the Lace CLI so lace is on PATH, or set lace.binaryPath to the full path of its executable.`;
 }
 
 // The engine did not come up: the binary is missing or not executable, it
@@ -88,13 +91,16 @@ export type EngineSettings = {
   autoRestart: () => boolean;
 };
 
-// The one reader of the `lace.*` engine settings.
+// The one reader of the `lace.*` engine settings. The CLI's own install puts
+// `lace` on PATH, so that is the engine unless `lace.binaryPath` names
+// another; the manifest contributes the same default, which is what VS Code
+// answers for a setting no one set.
 export function engineSettings(
   workspace: Pick<typeof vscode.workspace, 'getConfiguration'>,
 ): EngineSettings {
   const lace = () => workspace.getConfiguration('lace');
   return {
-    binaryPath: () => lace().get<string>('binaryPath', '/usr/local/bin/lace'),
+    binaryPath: () => lace().get<string>('binaryPath', 'lace'),
     autoRestart: () => lace().get<boolean>('autoRestart', true),
   };
 }
