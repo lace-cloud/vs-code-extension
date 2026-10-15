@@ -84,8 +84,8 @@ The three vitest projects are told apart by file name: `*.test.ts(x)` is `unit`,
 starts the engine as one window has it, in a git repository and a developer home of the test's own (`signedOutHome()`
 leaves the developer signed out with no saved selection). The engine is `bin/lace` when one is there, else the `lace` on
 `PATH`, at the version `LACE_CLI_VERSION` names (`src/engine/__tests__/engine-binary.mjs`, which the window e2e reads
-too). To run the extension, press F5 (**Run Extension**); `lace.binaryPath` names the CLI, `/usr/local/bin/lace` by
-default.
+too). To run the extension, press F5 (**Run Extension**); the engine is the `lace` on `PATH` unless `lace.binaryPath`
+names another executable.
 
 ### End-to-end tests
 
