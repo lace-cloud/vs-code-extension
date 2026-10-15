@@ -96,7 +96,15 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
         );
         return picked?.id;
       } catch (error) {
-        shown(notice(api, offers, 'error', failureText(error), offersFor(failureOf(error))));
+        shown(
+          notice(
+            api,
+            offers,
+            'error',
+            failureText(error, { kind: 'read', path: 'connection list' }),
+            offersFor(failureOf(error)),
+          ),
+        );
         return undefined;
       }
     },

@@ -1,4 +1,8 @@
-import type { CommandFailure, RunCtx } from '@lace-cloud/canvas/engine';
+import {
+  type CommandFailure,
+  CommandUnobservedError,
+  type RunCtx,
+} from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
@@ -272,6 +276,22 @@ describe('the answerer', () => {
     expect(t.asked).toEqual([]);
   });
 
+  test('a connection list whose stream ended before it finished closes the pick, cancels the form and says to list again', async () => {
+    const t = setup({ scripts: { 'connection list': { fails: new CommandUnobservedError() } } });
+    const form = t.answer('create', ['connection'], { root: PROD });
+    await settled();
+
+    expect(form.cancel).toHaveBeenCalledOnce();
+    expect(t.messages).toEqual([
+      {
+        level: 'error',
+        text: 'the stream ended before `lace connection list` finished; run it again',
+        buttons: [],
+      },
+    ]);
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
+  });
+
   test('an argument with no prompt cancels the form, asks nothing and says this window cannot ask for it', async () => {
     const t = setup();
     const form = t.answer('create', ['slug', 'region'], { root: PROD });
@@ -326,7 +346,7 @@ describe("the answerer of the window's runner", () => {
               }),
       },
       files: [['/home/dev/pulled.tfstate']],
-      answers: { 'Error: 1 resource has no import id\n': 'Import the rest' },
+      answers: { '1 resource has no import id': 'Import the rest' },
     });
     await window(t).run(binding('import'), { root: PROD, stack: STACK });
     await settled();
