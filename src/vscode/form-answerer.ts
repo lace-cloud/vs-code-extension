@@ -1,8 +1,8 @@
 // The answerer of the window's runner: the VS Code prompt that asks for each
 // argument a package binding leaves to its host, by the argument's name, in
-// the order the form lists them. Each prompt is titled by the action and
-// what its run acts on: the stack, else the authoring root. A dismissed
-// prompt cancels the form. The runner host reuses what a run's context was
+// the order the form lists them. Each prompt is titled as the run's
+// progress is (`runTitle`): the action, and what its run acts on. A
+// dismissed prompt cancels the form. The runner host reuses what a run's context was
 // answered before, so a form asks only what that context never answered.
 //
 //   slug        an input box that refuses an empty value; the slug's own
@@ -18,7 +18,7 @@
 //
 // An argument with no prompt here cancels the form, and the notice says
 // this window cannot ask for it.
-import type { JsonOf, RunCtx } from '@lace-cloud/canvas/engine';
+import type { ActionContribution, JsonOf, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
@@ -26,11 +26,11 @@ import type { Answerer, Form } from '../engine/runner-host';
 import {
   type AuthoringRoot,
   type RootSources,
-  rootLabel,
   rootOfPath,
   rootUri,
 } from '../roots/authoring-roots';
 import { notice, type OfferActions, offersFor } from './offers';
+import { runTitle } from './run-progress';
 
 export type FormAnswererOptions = {
   api: {
@@ -112,25 +112,23 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     },
   };
 
-  // The prompts' title: the action, and the stack its run acts on, else the
-  // authoring root by its name in the workspace.
-  function asking(label: string, ctx: RunCtx): Asking {
+  // What the prompts of a run of `action` over `ctx` ask with.
+  function asking(action: ActionContribution, ctx: RunCtx): Asking {
     const folders = sources.folders();
     const root = ctx.root === undefined ? undefined : rootOfPath(folders, ctx.root);
-    const subject = ctx.stack?.slug ?? (root === undefined ? ctx.root : rootLabel(root, folders));
-    return { title: subject === undefined ? label : `${label}: ${subject}`, root };
+    return { title: runTitle(action, ctx, folders), root };
   }
 
-  async function answer(form: Form, label: string, ctx: RunCtx): Promise<void> {
+  async function answer(form: Form, action: ActionContribution, ctx: RunCtx): Promise<void> {
     const unasked = form.missing.filter((name) => !Object.hasOwn(PROMPTS, name));
     if (unasked.length > 0) {
       form.cancel();
       void api.window.showWarningMessage(
-        `${label} needs ${unasked.join(', ')}, which this window cannot ask for`,
+        `${action.label} needs ${unasked.join(', ')}, which this window cannot ask for`,
       );
       return;
     }
-    const ask = asking(label, ctx);
+    const ask = asking(action, ctx);
     const values: Record<string, string> = {};
     for (const name of form.missing) {
       const value = await PROMPTS[name](ask);
@@ -144,7 +142,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
   }
 
   return (form, { action, ctx }) => {
-    answer(form, action.label, ctx).catch((error) => {
+    answer(form, action, ctx).catch((error) => {
       form.cancel();
       report(`asking for what ${action.label} needs`, error);
     });

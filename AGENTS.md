@@ -53,6 +53,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
 | Running a package binding (Stacks rows, stack palette commands, Create Stack, Import Existing Resources, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, Import Existing Resources, the offers |
 | How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
+| A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a failure's package answer, the answerer |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
@@ -127,13 +128,15 @@ host draws the store. A binding that declares the root runs in it. The host runs
   runs in the run's context again.
 - A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
-  each invocation it started. `run` resolves when the runner's call does, with `ended`, which Create Stack and Import
-  Existing Resources show a progress notification against.
+  each invocation it started. `run` resolves when the runner's call does, with `ended`. A run a trigger starts (Create
+  Stack, Import Existing Resources, a failure's package answer) runs under a progress notification until it ends
+  (`vscode/run-progress.ts`), titled by its action and what it acts on, the stack, else the root (`runTitle`), the
+  title its prompts carry too.
 - The window's presenter is told the `RunCtx` of the run a notice is about. A failure's notice offers the ways out its
   reason names, Validate on the run's root among them when that root is under a workspace folder, and after them each
   package action placed on a failure's row whose `answers` names the reason (`import-partial`, Import the rest, on
-  `import_residual`), run over the failed run's own `RunCtx` object, so it reuses the statefile that run was given.
-  The runner's requirement check gates it.
+  `import_residual`). The one chosen runs under a progress notification over the failed run's own `RunCtx` object, so
+  it reuses the statefile that run was given. The runner's requirement check gates it.
 
 ## The canvas tab
 
@@ -241,8 +244,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   (Choose Module). When the stacks cannot be listed, it selects the welcome view by the failure's reason: `signedOut`,
   `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no
   portal URL), `noStack`, `failed`. The tree does not offer `lace stack destroy`; it is a terminal command.
-- `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding run
-  through the runner over the view's root, under a progress notification ("Creating a stack for <root>") until its run
+- `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
+  run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
   ends. The runner's form asks for the slug and the connection; the package's notice says "Created stack <slug>", and
   its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason, through the offers
   (`not_git_repository` and `no_origin_remote` say the CLI's message).
@@ -251,12 +254,13 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   the Stacks view." and shows no empty pick.
 - **Import Existing Resources** (`stacks/import-resources.ts`) is a stack command the host draws: the canvas's
   source-refused banner offers it beside Convert on the panel's root, and **Lace: Import Existing Resources**
-  (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the one
-  stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, then runs the
-  package's `import` binding over `{root, stack}` under a progress notification ("Importing into <stack>") until its
-  run ends; the form asks for the statefile. The package's notice says what the import did, and an import that stopped
-  at `import_residual` offers Import the rest over the same run's context. Nothing detects a statefile and nothing
-  filters the stacks by their state: the CLI refuses a stack that holds state (`stack_has_state`).
+  (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the
+  one stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, then runs
+  the package's `import` binding over `{root, stack}` under a progress notification ("Import existing resources:
+  <stack>") until its run ends; the form asks for the statefile. The package's notice says what the import did, and an
+  import that stopped at `import_residual` offers Import the rest over the same run's context. Nothing detects a
+  statefile and nothing filters the stacks by their state: the CLI refuses a stack that holds state
+  (`stack_has_state`).
 
 ## Module commands
 

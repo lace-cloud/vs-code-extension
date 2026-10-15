@@ -64,9 +64,9 @@ export type Form = NonNullable<PendingForm>;
 // and the `RunCtx` of the run the form is for.
 export type Answerer = (form: Form, run: { action: ActionContribution; ctx: RunCtx }) => void;
 
-// A package action that answers a failure, bound to run over the failed
-// run's `RunCtx`.
-export type FailureAnswer = { label: string; run: () => Promise<void> };
+// A package action that answers a failure, to run over the failed run's
+// `RunCtx` with the failure as its target.
+export type FailureAnswer = { action: ActionContribution; ctx: RunCtx; target: ActionTarget };
 
 // The run a notice is about: its `RunCtx`, and the package actions that
 // answer a failure of it.
@@ -75,10 +75,13 @@ export type Noticed = {
   answers: (failure: CommandFailure) => readonly FailureAnswer[];
 };
 
-// The window's presenter for the runner. `noticed` names the run a notice
-// is about while the presenter is told the notice, and none for a notice
-// of no run.
-export type RunnerPresenter = (noticed: () => Noticed | undefined) => PresenterPort;
+// The window's presenter for the runner, made with the runner's `run`, which
+// runs an answer, and `noticed`, which names the run a notice is about while
+// the presenter is told the notice, and none for a notice of no run.
+export type RunnerPresenter = (runner: {
+  run: RunnerHost['run'];
+  noticed: () => Noticed | undefined;
+}) => PresenterPort;
 
 export type RunnerHost = {
   readonly store: ResultStore;
@@ -263,19 +266,17 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
   // `RunCtx`, and the package actions that answer a failure of it, over
   // that `RunCtx`. A notice or a confirmation answered no settles a starting
   // run's start.
-  const shown = options.presenter(() => {
-    const noticed = runContext.getStore();
-    if (!noticed) return undefined;
-    return {
-      ctx: noticed.ctx,
-      answers: (failure) =>
-        answering(failure).map((action) => ({
-          label: action.label,
-          run: async () => {
-            await run(action, noticed.ctx, { failure });
-          },
-        })),
-    };
+  const shown = options.presenter({
+    run,
+    noticed: () => {
+      const noticed = runContext.getStore();
+      if (!noticed) return undefined;
+      return {
+        ctx: noticed.ctx,
+        answers: (failure) =>
+          answering(failure).map((action) => ({ action, ctx: noticed.ctx, target: { failure } })),
+      };
+    },
   });
   const confirm = shown.confirm;
   const presenter: PresenterPort = {

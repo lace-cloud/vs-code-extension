@@ -10,7 +10,8 @@
 // with no stack. The root's Terraform files with unsaved changes in an
 // editor are saved first, as Convert saves them: the import writes over
 // what the developer sees. The import runs under a progress notification
-// until its run ends; the runner's form asks for the statefile, and the
+// until its run ends (`runUnderProgress`); the runner's form asks for the
+// statefile, and the
 // package's notice says what the import did. A failure is shown with its
 // ways out, and an import that stopped at resources it cannot adopt
 // (`import_residual`) offers the package's Import the rest, which reads the
@@ -25,15 +26,15 @@ import {
   rootPath,
   rootToAct,
 } from '../roots/authoring-roots';
+import { type RunProgressApi, runUnderProgress } from '../vscode/run-progress';
 import type { PickStack } from './stack-pick';
 
 export const IMPORT_RESOURCES = 'lace.importResources';
 
 export type ImportResourcesOptions = {
-  api: {
-    window: Pick<typeof vscode.window, 'withProgress' | 'showErrorMessage'>;
+  api: RunProgressApi & {
+    window: Pick<typeof vscode.window, 'showErrorMessage'>;
     workspace: Pick<typeof vscode.workspace, 'textDocuments'>;
-    ProgressLocation: Pick<typeof vscode.ProgressLocation, 'Notification'>;
   };
   sources: Pick<RootSources, 'folders'>;
   runner: Pick<RunnerHost, 'run'>;
@@ -55,13 +56,7 @@ export function importResources(
       );
       return;
     }
-    await api.window.withProgress(
-      { location: api.ProgressLocation.Notification, title: `Importing into ${stack.slug}` },
-      async () => {
-        const { ended } = await runner.run(IMPORT, { root: rootPath(root), stack });
-        await ended;
-      },
-    );
+    await runUnderProgress(api, runner, IMPORT, { root: rootPath(root), stack });
   };
 }
 

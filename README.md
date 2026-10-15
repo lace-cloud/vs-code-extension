@@ -164,13 +164,13 @@ its ten most recent runs. The view's description names the module; it follows th
   **Open Portal**, where connections are added. **Preview**, **Apply** and **Scan for Drift** from the Command Palette
   on a module with no stack say to create one in the Stacks view.
 - **Lace: Import Existing Resources** (`lace.importResources`), also on the canvas's banner for a module not in Lace
-  style, adopts resources that already exist into a stack of the module (`lace stack import`): you pick the stack, then
-  the statefile that records them, any file you name. It saves the module's open `.tf` editors, then restructures the
-  module as Convert does and writes an import block for each resource the statefile records, under a progress
-  notification. Review the change in git, commit it, then apply the stack to adopt them. An import that cannot derive an
-  import ID for some resources writes nothing and offers **Import the rest**, which names them, then imports the others
-  from the same statefile and leaves those to be created anew. Lace refuses an import into a stack that already holds
-  state.
+  style, adopts resources that already exist into a stack of the module (`lace stack import`): you pick the stack,
+  then the statefile that records them, any file you name. It saves the module's open `.tf` editors, then restructures
+  the module as Convert does and writes an import block for each resource the statefile records, under a progress
+  notification. Review the change in git, commit it, then apply the stack to adopt them. An import that cannot derive
+  an import ID for some resources writes nothing and offers **Import the rest**, which names them, then imports the
+  others from the same statefile under a progress notification and leaves those to be created anew. Lace refuses an
+  import into a stack that already holds state.
 
 ## Sign-in, organization and team
 

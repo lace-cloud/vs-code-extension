@@ -19,7 +19,8 @@
 //
 // With no stack deployed from the root, the view's action is Create Stack:
 // the package's `create` binding run through the runner over the view's
-// root, under a progress notification until its run ends. The runner's form
+// root, under a progress notification until its run ends
+// (`runUnderProgress`). The runner's form
 // asks for what `stack create` needs; the package's notice says the stack
 // was created, and its tick reads the tree again, which lists it.
 //
@@ -67,6 +68,7 @@ import {
 import type { RootState } from '../state/root-state';
 import { registerCommands } from '../vscode/commands';
 import { notice, type OfferActions } from '../vscode/offers';
+import { runUnderProgress } from '../vscode/run-progress';
 import type { RunOutput } from './run-output';
 import type { PickStack } from './stack-pick';
 import {
@@ -123,7 +125,10 @@ export type StacksTreeApi = {
   >;
   workspace: Pick<
     typeof vscode.workspace,
-    'registerTextDocumentContentProvider' | 'openTextDocument' | 'onDidChangeWorkspaceFolders'
+    | 'registerTextDocumentContentProvider'
+    | 'openTextDocument'
+    | 'onDidChangeWorkspaceFolders'
+    | 'workspaceFolders'
   >;
   commands: Pick<typeof vscode.commands, 'registerCommand' | 'executeCommand'>;
   env: { openExternal: (uri: vscode.Uri) => Thenable<boolean> };
@@ -373,21 +378,6 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     return stack && { of, stack };
   }
 
-  // Create Stack on the view's root: under a progress notification until
-  // its run ends.
-  async function create(of: AuthoringRoot): Promise<void> {
-    await api.window.withProgress(
-      {
-        location: api.ProgressLocation.Notification,
-        title: `Creating a stack for ${rootLabel(of, sources.folders())}`,
-      },
-      async () => {
-        const { ended } = await runner.run(BINDINGS.create, { root: rootPath(of) });
-        await ended;
-      },
-    );
-  }
-
   const onStack =
     (verb: string, act: (of: AuthoringRoot, stack: StackRef) => Promise<void>) =>
     async (row?: Extract<Row, { kind: 'stack' }>) => {
@@ -497,7 +487,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
         if (refusal?.url !== undefined) await api.env.openExternal(api.Uri.parse(refusal.url));
       },
       [STACK_COMMANDS.create]: async () => {
-        if (root) await create(root);
+        if (root) await runUnderProgress(api, runner, BINDINGS.create, { root: rootPath(root) });
       },
     }),
   ];

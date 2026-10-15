@@ -4,9 +4,11 @@
 // can take offers nothing, and the message says what happened. A notice of
 // the window's runner offers, after those, each package action that answers
 // the failure (`FailureAnswer`, which the runner host binds to the failed
-// run). Beside an apply held for approval: the held Run's page in the
-// portal, and the page of each record a change-management system keeps of
-// its change request, where the record carries one.
+// run); the one chosen runs as every run a trigger starts does, under a
+// progress notification until it ends (`runUnderProgress`). Beside an apply
+// held for approval: the held Run's page in the portal, and the page of each
+// record a change-management system keeps of its change request, where the
+// record carries one.
 //
 // Validate acts on a root: a notice that names the root the failure is
 // about offers Validate on that root, the palette's Validate. A notice of
@@ -17,6 +19,7 @@ import type * as vscode from 'vscode';
 import { type ByReason, byReason } from '../engine/command-outcome';
 import type { RunnerPresenter } from '../engine/runner-host';
 import { type AuthoringRoot, type RootSources, rootOfPath } from '../roots/authoring-roots';
+import { type RunProgressApi, runUnderProgress } from './run-progress';
 
 export type Offer =
   | { kind: 'signIn' }
@@ -115,7 +118,7 @@ export async function notice(
 }
 
 export type OfferingPresenterOptions = {
-  api: NoticeApi;
+  api: NoticeApi & RunProgressApi;
   actions: OfferActions;
   confirm: NonNullable<PresenterPort['confirm']>;
   // Lace: Validate Module on a root.
@@ -130,16 +133,19 @@ export type OfferingPresenterOptions = {
 // typed confirmation a binding asks for.
 export function offeringPresenter(options: OfferingPresenterOptions): RunnerPresenter {
   const { api, actions, confirm, validate, sources, report } = options;
-  return (noticed) => ({
+  return (runner) => ({
     notify: (level, text, failure) => {
-      const run = noticed();
+      const run = runner.noticed();
       const at = run?.ctx.root;
       const root = at === undefined ? undefined : rootOfPath(sources.folders(), at);
       const ways = root === undefined ? actions : { ...actions, validate: () => validate(root) };
       const answers = failure === undefined || run === undefined ? [] : run.answers(failure);
-      const labels = answers.map(({ label }) => label);
+      const labels = answers.map(({ action }) => action.label);
       notice(api, ways, level, text, offersFor(failure), labels)
-        .then((chosen) => answers.find(({ label }) => label === chosen)?.run())
+        .then((chosen) => {
+          const answer = answers.find(({ action }) => action.label === chosen);
+          return answer && runUnderProgress(api, runner, answer.action, answer.ctx, answer.target);
+        })
         .catch((error) => report('acting on a Lace notice', error));
     },
     confirm,

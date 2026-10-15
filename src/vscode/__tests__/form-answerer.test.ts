@@ -57,6 +57,7 @@ function setup(options: Options = {}) {
       const id = options.picks?.shift();
       return items.find((item) => item.id === id);
     }),
+    withProgress: vi.fn(async (_opened: unknown, task: () => Promise<unknown>) => task()),
     showOpenDialog: vi.fn(async (opened: vscode.OpenDialogOptions) => {
       asked.push({ kind: 'file', options: opened });
       return options.files?.shift()?.map((path) => uri(path));
@@ -255,7 +256,11 @@ describe("the answerer of the window's runner", () => {
     return createRunnerHost({
       commands: () => t.commands.commands.anywhere(),
       presenter: offeringPresenter({
-        api: { window: t.window as never },
+        api: {
+          window: t.window as never,
+          workspace: { workspaceFolders: [repo] },
+          ProgressLocation: { Notification: 15 } as never,
+        },
         actions: t.offers,
         confirm: async () => true,
         validate: vi.fn(),

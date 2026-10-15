@@ -47,7 +47,7 @@ src/
   autosave/               when a canvas saves, from files.autoSave
   tools/                  the chat tools as Language Model Tools
   protocol/               the webview ↔ host protocols, shared by both bundles
-  vscode/                 command registration, dialogs, notices with their offers, a run form's prompts, webview HTML
+  vscode/                 command registration, dialogs, notices and their offers, a run's prompts and progress, webview
   webview/                the page side of a webview: its postMessage pair; the canvas's theme from VS Code's
 resources/instructions/   the text-level instructions contributed to the developer's coding assistant
 packages/host-e2e/        the window e2e (a real VS Code against a real engine)

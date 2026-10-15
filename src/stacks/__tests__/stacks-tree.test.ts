@@ -838,7 +838,7 @@ describe('Create Stack', () => {
       },
     ]);
     // The view's own progress, while an invocation is under way, has no title.
-    expect(t.progress.flatMap((p) => p.title ?? [])).toEqual(['Creating a stack for infra/prod']);
+    expect(t.progress.flatMap((p) => p.title ?? [])).toEqual(['Create stack: infra/prod']);
     expect(done).toBe(false);
 
     created = true;
@@ -877,7 +877,7 @@ describe('Create Stack', () => {
     await t.children();
     await t.command(STACK_COMMANDS.create);
     expect(t.commands.paths()).toEqual(['stack list']);
-    expect(t.progress.flatMap((p) => p.title ?? [])).toEqual(['Creating a stack for infra/prod']);
+    expect(t.progress.flatMap((p) => p.title ?? [])).toEqual(['Create stack: infra/prod']);
   });
 });
 

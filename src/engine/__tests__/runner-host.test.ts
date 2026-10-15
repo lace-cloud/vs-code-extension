@@ -84,7 +84,7 @@ function host(scripts: Parameters<typeof fakeCommands>[0], confirmed = true) {
   const forms: { form: Form; action: string; ctx: RunCtx }[] = [];
   const runners = createRunnerHost({
     commands: async () => window.commands.port,
-    presenter: (noticed) => ({
+    presenter: ({ noticed }) => ({
       notify: (...said) => {
         notify(...said);
         const [level, text, failure] = said;
@@ -442,9 +442,15 @@ describe('a failure a package action answers', () => {
 
     const [failed] = shown.filter((notice) => notice.failure !== undefined);
     expect(failed).toMatchObject({ level: 'error', failure: RESIDUAL_FAILURE });
-    expect(failed.answers.map(({ label }) => label)).toEqual(['Import the rest']);
+    const [answer] = failed.answers;
+    expect(answer).toEqual({
+      action: action('import-partial'),
+      ctx,
+      target: { failure: RESIDUAL_FAILURE },
+    });
+    expect(answer.ctx).toBe(ctx);
 
-    await failed.answers[0].run();
+    await runners.run(answer.action, answer.ctx, answer.target);
     await settled();
     expect(forms).toHaveLength(1);
     expect(presenter.confirm).toHaveBeenCalledWith({

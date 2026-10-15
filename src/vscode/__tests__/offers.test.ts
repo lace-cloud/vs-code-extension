@@ -1,4 +1,4 @@
-import type { CommandFailure, LaceReason } from '@lace-cloud/canvas/engine';
+import type { ActionContribution, CommandFailure, LaceReason } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type { Noticed } from '../../engine/runner-host';
 import { notice, type OfferActions, offeringPresenter, offersFor } from '../offers';
@@ -135,17 +135,32 @@ describe("the presenter of the window's runner", () => {
     index: 0,
   };
 
+  // The presenter over `shown`, telling it `noticed`, with the runner's run
+  // and each progress notification recorded: its title, and whether its
+  // task has ended.
   function presenter(shown: ReturnType<typeof window>, noticed: () => Noticed | undefined) {
     const validate = vi.fn(async () => {});
+    const run = vi.fn(async () => ({ ended: Promise.resolve() }));
+    const progress: { title?: string; ended: boolean }[] = [];
+    const withProgress = vi.fn(async (opened: { title?: string }, task: () => Promise<unknown>) => {
+      const entry = { title: opened.title, ended: false };
+      progress.push(entry);
+      await task();
+      entry.ended = true;
+    });
     const made = offeringPresenter({
-      api: { window: shown } as never,
+      api: {
+        window: { ...shown, withProgress },
+        workspace: { workspaceFolders: [repo] },
+        ProgressLocation: { Notification: 15 },
+      } as never,
       actions: actions(),
       confirm: vi.fn(),
       validate,
       sources: { folders: () => [repo as never] },
       report: vi.fn(),
-    })(noticed);
-    return { made, validate };
+    })({ run, noticed });
+    return { made, validate, run, progress };
   }
 
   test("offers, after the failure's ways out, the package actions that answer it, and runs the one chosen", async () => {
@@ -155,9 +170,10 @@ describe("the presenter of the window's runner", () => {
       url: 'https://portal/teams/new',
     };
     const shown = window('Answer');
-    const run = vi.fn(async () => {});
-    const answers = vi.fn(() => [{ label: 'Answer', run }]);
-    const { made } = presenter(shown, () => ({ ctx: { stack: STACK }, answers }));
+    const ctx = { stack: STACK };
+    const answer = { action: { label: 'Answer' } as ActionContribution, ctx, target: { failure } };
+    const answers = vi.fn(() => [answer]);
+    const { made, run, progress } = presenter(shown, () => ({ ctx, answers }));
 
     made.notify('error', 'No team is selected', failure);
     await settled();
@@ -168,7 +184,8 @@ describe("the presenter of the window's runner", () => {
       'Open Portal',
       'Answer',
     );
-    expect(run).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledWith(answer.action, ctx, { failure });
+    expect(progress).toEqual([{ title: 'Answer: prod', ended: true }]);
   });
 
   test('a failure of a run whose RunCtx names a root offers Validate on that root, which the one chosen validates', async () => {

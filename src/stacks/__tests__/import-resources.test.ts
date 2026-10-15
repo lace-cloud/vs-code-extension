@@ -84,7 +84,7 @@ function setup(options: Options) {
   };
   const api = {
     window,
-    workspace: { textDocuments: options.documents ?? [] },
+    workspace: { textDocuments: options.documents ?? [], workspaceFolders: [repo] },
     ProgressLocation: { Notification: 15 },
   };
   const offers: OfferActions = {
@@ -155,11 +155,11 @@ describe('Import Existing Resources', () => {
         args: { stack: 'stk_1', state: STATE },
       },
     ]);
-    expect(t.progress).toEqual([{ title: 'Importing into prod', ended: false }]);
+    expect(t.progress).toEqual([{ title: 'Import existing resources: prod', ended: false }]);
 
     t.commands.held[0].finish([imported()]);
     await done;
-    expect(t.progress).toEqual([{ title: 'Importing into prod', ended: true }]);
+    expect(t.progress).toEqual([{ title: 'Import existing resources: prod', ended: true }]);
     expect(t.messages).toEqual([
       {
         level: 'info',
@@ -209,23 +209,29 @@ describe('Import Existing Resources', () => {
     await t.importInto(prod);
 
     expect(t.imports()).toEqual([]);
-    expect(t.progress).toEqual([{ title: 'Importing into prod', ended: true }]);
+    expect(t.progress).toEqual([{ title: 'Import existing resources: prod', ended: true }]);
   });
 
-  test('an import that stops at resources it cannot adopt offers Import the rest, which imports past them with the same statefile', async () => {
+  test('an import that stops at resources it cannot adopt offers Import the rest, which imports past them with the same statefile under a progress notification until its run ends', async () => {
     const t = setup({
       scripts: {
         ...LISTED,
-        'stack import': (args) =>
-          args.allowPartial
-            ? { documents: [imported(RESIDUAL.importResiduals)] }
-            : refused(RESIDUAL),
+        'stack import': (args) => (args.allowPartial ? { held: true } : refused(RESIDUAL)),
       },
       answers: { 'Error: 1 resource has no import id\n': 'Import the rest' },
     });
     await t.importInto(prod);
     await settled();
     await settled();
+    expect(t.progress).toEqual([
+      { title: 'Import existing resources: prod', ended: true },
+      { title: 'Import the rest: prod', ended: false },
+    ]);
+
+    t.commands.held[0].finish([imported(RESIDUAL.importResiduals)]);
+    await settled();
+    await settled();
+    expect(t.progress.at(-1)).toEqual({ title: 'Import the rest: prod', ended: true });
 
     expect(t.messages[0]).toEqual({
       level: 'error',
