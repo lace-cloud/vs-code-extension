@@ -51,6 +51,7 @@ function registered() {
           return disposable;
         },
         onDidChangeWindowState: () => disposable,
+        onDidEndTerminalShellExecution: () => disposable,
         onDidChangeActiveTextEditor: () => disposable,
         showErrorMessage: vi.fn(),
       },

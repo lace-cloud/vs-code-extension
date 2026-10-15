@@ -1,9 +1,15 @@
 import { CommandExitError } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
-import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
+import {
+  fakeCommands,
+  type Invoked,
+  refused,
+  type Script,
+} from '../../engine/__tests__/fake-commands';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import { accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
 import { selectionStatus } from '../scope';
+import { outsideSignals, signedInAs } from './fake-outside';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -36,10 +42,26 @@ type Current = { slug: string; source: 'config' | 'env' } | { slug: null; source
 const current = (slug: string | null, source: 'config' | 'env' = 'config'): Current =>
   slug === null ? { slug: null, source: null } : { slug, source };
 
-function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | undefined)[] = []) {
+const SIGNED_OUT = refused({ reason: 'unauthenticated', message: 'no credentials found' });
+
+// What a command of the account ran: the invocations it made, up to the
+// account's own read that follows a change, which begins with `whoami`.
+const ranBy = (invoked: readonly Invoked[]): Invoked[] => {
+  const read = invoked.findIndex((call) => call.path === 'whoami');
+  return read === -1 ? [...invoked] : invoked.slice(0, read);
+};
+
+// An account over scripted commands, once its first read of the account
+// has settled; `since()` is what was invoked after that.
+async function setup(
+  scripts: Parameters<typeof fakeCommands>[0],
+  picks: (string | undefined)[] = [],
+) {
   const commands = fakeCommands(scripts);
+  const outside = outsideSignals();
   const api = {
     window: {
+      ...outside.window,
       withProgress: vi.fn(async (_options, task) =>
         task({ report: vi.fn() }, { onCancellationRequested: () => ({ dispose: () => {} }) }),
       ),
@@ -56,15 +78,19 @@ function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | und
     Uri: { parse: (url: string) => ({ url }) },
     ProgressLocation: { Notification: 15 },
   };
-  const account = createAccount(commands.commands, api as never);
+  const report = vi.fn();
+  const account = createAccount(commands.commands, api as never, report);
   const changed = vi.fn();
   account.onDidChange(changed);
-  return { commands, api, account, changed };
+  await settled();
+  const from = commands.invoked.length;
+  const since = () => ranBy(commands.invoked.slice(from));
+  return { commands, api, account, changed, outside, report, since };
 }
 
 describe('selecting the organization', () => {
   test('picks from org list, marks the current one, runs org use and goes on to the team', async () => {
-    const { commands, api, account, changed } = setup(
+    const { api, account, changed, since } = await setup(
       {
         'org list': { documents: [ORGS] },
         'org current': { documents: [current('acme')] },
@@ -87,21 +113,24 @@ describe('selecting the organization', () => {
     ]);
     expect(orgOptions.placeHolder).toBe('Select a Lace organization');
     expect(
-      commands.invoked.filter((c) => c.path.startsWith('team ')).map((c) => [c.path, c.args]),
+      since()
+        .filter((c) => c.path.startsWith('team '))
+        .map((c) => [c.path, c.args]),
     ).toEqual([
       ['team list', { org: 'globex' }],
       ['team current', { org: 'globex' }],
       ['team use', { team: 'data', org: 'globex' }],
     ]);
-    expect(commands.invoked.filter((c) => c.path.endsWith(' use')).map((c) => c.path)).toEqual([
-      'org use',
-      'team use',
-    ]);
+    expect(
+      since()
+        .filter((c) => c.path.endsWith(' use'))
+        .map((c) => c.path),
+    ).toEqual(['org use', 'team use']);
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
   test('with the organization set by the environment, the pick says so', async () => {
-    const { api, account } = setup({
+    const { api, account } = await setup({
       'org list': { documents: [ORGS] },
       'org current': { documents: [current('acme', 'env')] },
     });
@@ -116,7 +145,7 @@ describe('selecting the organization', () => {
   });
 
   test('dismissing the pick saves nothing and announces nothing', async () => {
-    const { commands, account, changed } = setup({
+    const { commands, account, changed } = await setup({
       'org list': { documents: [ORGS] },
       'org current': { documents: [current('acme')] },
     });
@@ -128,7 +157,7 @@ describe('selecting the organization', () => {
 
 describe('selecting the team', () => {
   test('lists and saves a team of the current organization, naming none', async () => {
-    const { commands, account } = setup(
+    const { account, since } = await setup(
       {
         'team list': { documents: [teams('platform', 'data')] },
         'team current': { documents: [current('platform')] },
@@ -137,7 +166,7 @@ describe('selecting the team', () => {
       ['data'],
     );
     await account.selectTeam();
-    expect(commands.invoked.map((c) => [c.path, c.args])).toEqual([
+    expect(since().map((c) => [c.path, c.args])).toEqual([
       ['team list', {}],
       ['team current', {}],
       ['team use', { team: 'data' }],
@@ -145,7 +174,7 @@ describe('selecting the team', () => {
   });
 
   test('an organization with no team says teams are made in the portal, with no empty pick', async () => {
-    const { api, account, commands, changed } = setup({
+    const { api, account, commands, changed } = await setup({
       'team list': { documents: [teams()] },
       'team current': { documents: [current(null)] },
     });
@@ -162,7 +191,7 @@ describe('selecting the team', () => {
   });
 
   test('Open Portal on an organization with no team opens the page team list names for making one', async () => {
-    const { api, account } = setup({
+    const { api, account } = await setup({
       'team list': { documents: [teams()] },
       'team current': { documents: [current(null)] },
     });
@@ -175,7 +204,7 @@ describe('selecting the team', () => {
 
 describe('signing in', () => {
   test('shows the code once, opens the page once, and announces the change', async () => {
-    const { api, account, changed, commands } = setup({
+    const { api, account, changed, since } = await setup({
       login: {
         documents: [
           { type: 'code', code: 'ABCD-2345' },
@@ -188,7 +217,7 @@ describe('signing in', () => {
     });
     await account.signIn();
 
-    expect(commands.invoked.map((c) => [c.path, c.args])).toEqual([['login', {}]]);
+    expect(since().map((c) => [c.path, c.args])).toEqual([['login', {}]]);
     const codes = (api.window.showInformationMessage.mock.calls as unknown[][]).filter(([text]) =>
       String(text).includes('ABCD-2345'),
     );
@@ -209,7 +238,7 @@ describe('signing in', () => {
   });
 
   test('the device flow opens the page its code carries', async () => {
-    const { api, account } = setup({
+    const { api, account } = await setup({
       login: {
         documents: [
           { type: 'code', code: 'WDJB-MJHT', verificationUrl: 'https://github.com/login/device' },
@@ -222,12 +251,16 @@ describe('signing in', () => {
   });
 
   test('a cancelled sign-in says nothing; a failed one says why; neither announces a change', async () => {
-    const cancelled = setup({ login: { fails: new CommandExitError(130, 'Error: cancelled') } });
+    const cancelled = await setup({
+      login: { fails: new CommandExitError(130, 'Error: cancelled') },
+    });
     await cancelled.account.signIn();
     expect(cancelled.api.window.showErrorMessage).not.toHaveBeenCalled();
     expect(cancelled.changed).not.toHaveBeenCalled();
 
-    const failed = setup({ login: { fails: new CommandExitError(1, 'Error: sign-in expired\n') } });
+    const failed = await setup({
+      login: { fails: new CommandExitError(1, 'Error: sign-in expired\n') },
+    });
     await failed.account.signIn();
     expect(failed.api.window.showErrorMessage).toHaveBeenCalledWith(
       'Lace sign-in failed: Error: sign-in expired',
@@ -236,7 +269,9 @@ describe('signing in', () => {
   });
 
   test('signing out runs logout and announces the change', async () => {
-    const { api, account, changed } = setup({ logout: { documents: [{ loggedOut: true }] } });
+    const { api, account, changed } = await setup({
+      logout: { documents: [{ loggedOut: true }] },
+    });
     await account.signOut();
     expect(api.window.showInformationMessage).toHaveBeenCalledWith('Signed out of Lace.');
     expect(changed).toHaveBeenCalledTimes(1);
@@ -258,15 +293,16 @@ describe('the status bar', () => {
     });
   });
 
-  test('reads the selection at start, after a change and when the window regains focus', async () => {
+  test('reads the selection at start, after a change, and when the account changed outside this window', async () => {
     const scripts: Record<string, Script> = {
+      whoami: { documents: [signedInAs('usr_1')] },
       'org list': { documents: [ORGS] },
       'org current': { documents: [current('acme')] },
       'org use': { documents: [{ organization: 'globex', team: null }] },
       'team list': { documents: [teams()] },
       'team current': { documents: [current(null)] },
     };
-    const { account, commands } = setup(scripts as never, ['globex']);
+    const { account, commands, outside } = await setup(scripts as never, ['globex']);
     const status = {
       text: '',
       tooltip: '',
@@ -275,7 +311,6 @@ describe('the status bar', () => {
       hide: vi.fn(),
       dispose: vi.fn(),
     };
-    const windowState = new Set<(s: { focused: boolean }) => void>();
     const registered: string[] = [];
     const controls = accountControls(
       {
@@ -287,10 +322,6 @@ describe('the status bar', () => {
         },
         window: {
           createStatusBarItem: () => status,
-          onDidChangeWindowState: (listener: (s: { focused: boolean }) => void) => {
-            windowState.add(listener);
-            return { dispose: () => windowState.delete(listener) };
-          },
           showErrorMessage: vi.fn(),
         },
       } as never,
@@ -309,7 +340,7 @@ describe('the status bar', () => {
     expect(status.text).toBe('$(organization) globex');
 
     scripts['org current'] = { documents: [current('initech', 'env')] };
-    for (const listener of windowState) listener({ focused: true });
+    outside.focus();
     await settled();
     expect(status.text).toBe('$(organization) initech');
     expect(registered).toEqual([
@@ -322,16 +353,118 @@ describe('the status bar', () => {
   });
 });
 
+describe('the account changed outside this window', () => {
+  // The account a developer signed in as `usr_1` with `acme` selected has:
+  // scripts the test changes as a terminal would.
+  const signedIn = (): Record<string, Script> => ({
+    whoami: { documents: [signedInAs('usr_1')] },
+    'org current': { documents: [current('acme')] },
+    'team current': { documents: [current('platform')] },
+  });
+  const reads = (invoked: readonly Invoked[]) =>
+    invoked.filter((call) => call.path === 'whoami').length;
+
+  test('the window regaining focus reads the account, and announces nothing while it is as it was', async () => {
+    const { commands, changed, outside } = await setup(signedIn() as never);
+    expect(reads(commands.invoked)).toBe(1);
+
+    outside.focus();
+    await settled();
+    outside.focus(false);
+    await settled();
+
+    expect(reads(commands.invoked)).toBe(2);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  test('a focus that reads another selection announces it once', async () => {
+    const scripts = signedIn();
+    const { changed, outside } = await setup(scripts as never);
+
+    scripts['org current'] = { documents: [current('globex')] };
+    outside.focus();
+    await settled();
+    outside.focus();
+    await settled();
+
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a lace command ending in the integrated terminal reads the account: lace logout announces the sign-out', async () => {
+    const scripts = signedIn();
+    const { commands, changed, outside } = await setup(scripts as never);
+
+    outside.ended('git status');
+    outside.ended('echo lace logout');
+    await settled();
+    expect(reads(commands.invoked)).toBe(1);
+
+    scripts.whoami = SIGNED_OUT;
+    outside.ended('lace logout');
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    outside.ended('lace whoami');
+    await settled();
+    expect(reads(commands.invoked)).toBe(3);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('another developer signed in is another account', async () => {
+    const scripts = signedIn();
+    const { changed, outside } = await setup(scripts as never);
+    scripts.whoami = { documents: [signedInAs('usr_2')] };
+    outside.ended('lace login');
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a change this window makes is announced once, and the focus after it finds the account as it is now', async () => {
+    let signedOut = false;
+    const { account, changed, outside } = await setup({
+      ...signedIn(),
+      whoami: () => (signedOut ? SIGNED_OUT : { documents: [signedInAs('usr_1')] }),
+      logout: () => {
+        signedOut = true;
+        return { documents: [{ loggedOut: true }] };
+      },
+    } as never);
+    await account.signOut();
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    outside.focus();
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a read that fails is reported and announces nothing; once disposed, the window is not listened to', async () => {
+    const { account, changed, outside, report, commands } = await setup({
+      ...signedIn(),
+      whoami: { fails: new Error('the engine stopped') },
+    } as never);
+    outside.focus();
+    await settled();
+    expect(changed).not.toHaveBeenCalled();
+    expect(report).toHaveBeenCalledWith('reading the Lace account', expect.any(Error));
+
+    account.dispose();
+    outside.focus();
+    outside.ended('lace logout');
+    await settled();
+    expect(reads(commands.invoked)).toBe(2);
+  });
+});
+
 describe('an account command that fails', () => {
   test('says why with the ways out its reason names', async () => {
-    const { account, commands } = setup({
+    const { account, commands } = await setup({
       'org list': refused({ reason: 'unauthenticated', message: 'no credentials' }),
       'org current': { documents: [current(null)] },
     });
     const handlers = new Map<string, () => Promise<void>>();
     const window = {
       createStatusBarItem: () => ({ show: vi.fn(), hide: vi.fn(), dispose: vi.fn() }),
-      onDidChangeWindowState: () => ({ dispose: () => {} }),
       showErrorMessage: vi.fn(async (_text: string, ...buttons: Button[]) =>
         clicked(buttons, 'Sign In'),
       ),
