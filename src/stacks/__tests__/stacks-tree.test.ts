@@ -15,6 +15,7 @@ import { folder, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
+import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
 import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
@@ -182,16 +183,19 @@ function setup(options: Options) {
   const activeEditor = new Emitter<unknown>();
   // A change of the workspace's folders, told once `folders` holds them.
   const workspaceFolders = new Emitter<vscode.WorkspaceFoldersChangeEvent>();
+  const quickPicks = fakeQuickPicks<{ label: string; stack?: { slug: string }; id?: string }>(
+    (items) => {
+      const picked = options.picks?.shift();
+      return items.find((item) => (item.stack?.slug ?? item.id) === picked);
+    },
+  );
   const api = {
     window: {
       createTreeView: (_id: string, { treeDataProvider }: { treeDataProvider: never }) => {
         provider = treeDataProvider;
         return view;
       },
-      showQuickPick: vi.fn(async (items: { stack?: { slug: string }; id?: string }[]) => {
-        const picked = options.picks?.shift();
-        return items.find((item) => (item.stack?.slug ?? item.id) === picked);
-      }),
+      createQuickPick: quickPicks.createQuickPick,
       showInputBox: vi.fn(async () => options.inputs?.shift()),
       withProgress: vi.fn(
         async (opts: { title?: string }, task: (p: never, t: never) => unknown) => {
@@ -367,6 +371,7 @@ function setup(options: Options) {
     contexts,
     choices,
     messages,
+    picks: quickPicks.picks,
     channels,
     shownChannels,
     opened,
@@ -711,7 +716,7 @@ describe('a stack command from the palette with no root named', () => {
     STACK_COMMANDS.preview,
     STACK_COMMANDS.apply,
     STACK_COMMANDS.scan,
-  ])('%s on a module with no stack says so and how one is created, with no empty pick', async (id) => {
+  ])('%s on a module with no stack says so and how one is created, and leaves no pick open', async (id) => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.command(id);
     await settled();
@@ -722,7 +727,7 @@ describe('a stack command from the palette with no root named', () => {
         buttons: [],
       },
     ]);
-    expect(t.api.window.showQuickPick).not.toHaveBeenCalled();
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
     expect(t.commands.paths()).toEqual(['stack list']);
   });
 

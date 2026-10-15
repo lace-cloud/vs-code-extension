@@ -2,6 +2,7 @@ import { CommandExitError } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
+import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
 import { accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
 import { selectionStatus } from '../scope';
 
@@ -38,6 +39,13 @@ const current = (slug: string | null, source: 'config' | 'env' = 'config'): Curr
 
 function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | undefined)[] = []) {
   const commands = fakeCommands(scripts);
+  // Each pick answers with the item of the next slug in `picks`; none dismisses it.
+  const quickPicks = fakeQuickPicks<{ label: string; description?: string; slug: string }>(
+    (items) => {
+      const slug = picks.shift();
+      return items.find((item) => item.slug === slug);
+    },
+  );
   const api = {
     window: {
       withProgress: vi.fn(async (_options, task) =>
@@ -47,10 +55,7 @@ function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | und
         async (_text: string, ..._actions: string[]): Promise<string | undefined> => undefined,
       ),
       showErrorMessage: vi.fn(async () => undefined),
-      showQuickPick: vi.fn(async (items: { slug: string }[]) => {
-        const slug = picks.shift();
-        return items.find((item) => item.slug === slug);
-      }),
+      createQuickPick: quickPicks.createQuickPick,
     },
     env: { openExternal: vi.fn(async () => true), clipboard: { writeText: vi.fn(async () => {}) } },
     Uri: { parse: (url: string) => ({ url }) },
@@ -59,12 +64,12 @@ function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | und
   const account = createAccount(commands.commands, api as never);
   const changed = vi.fn();
   account.onDidChange(changed);
-  return { commands, api, account, changed };
+  return { commands, api, account, changed, picks: quickPicks.picks };
 }
 
 describe('selecting the organization', () => {
   test('picks from org list, marks the current one, runs org use and goes on to the team', async () => {
-    const { commands, api, account, changed } = setup(
+    const { commands, account, changed, picks } = setup(
       {
         'org list': { documents: [ORGS] },
         'org current': { documents: [current('acme')] },
@@ -77,15 +82,12 @@ describe('selecting the organization', () => {
     );
     await account.selectOrganization();
 
-    const [orgItems, orgOptions] = api.window.showQuickPick.mock.calls[0] as never as [
-      { label: string; description: string }[],
-      { placeHolder: string },
-    ];
-    expect(orgItems.map((item) => [item.label, item.description])).toEqual([
+    expect(picks[0].items.map((item) => [item.label, item.description])).toEqual([
       ['Acme', 'acme · current'],
       ['Globex', 'globex'],
     ]);
-    expect(orgOptions.placeHolder).toBe('Select a Lace organization');
+    expect(picks[0].placeholder).toBe('Select a Lace organization');
+    expect(picks[1].placeholder).toBe('Select a Lace team');
     expect(
       commands.invoked.filter((c) => c.path.startsWith('team ')).map((c) => [c.path, c.args]),
     ).toEqual([
@@ -100,17 +102,108 @@ describe('selecting the organization', () => {
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
+  test('the organization pick is on screen, busy, while the organizations are read', async () => {
+    const { commands, account, picks } = setup({
+      'org list': { held: true },
+      'org current': { documents: [current('acme')] },
+    });
+    const selecting = account.selectOrganization();
+    await settled();
+    expect(picks).toHaveLength(1);
+    expect(picks[0]).toMatchObject({
+      visible: true,
+      shownBusy: true,
+      busy: true,
+      items: [],
+      placeholder: 'Select a Lace organization',
+    });
+
+    commands.held[0].finish([ORGS]);
+    await settled();
+    expect(picks[0].busy).toBe(false);
+    expect(picks[0].items.map((item) => item.label)).toEqual(['Acme', 'Globex']);
+    picks[0].dismiss();
+    await selecting;
+  });
+
+  test('the team pick is on screen, busy, while the organization is saved and its teams are read', async () => {
+    const { commands, account, changed, picks } = setup(
+      {
+        'org list': { documents: [ORGS] },
+        'org current': { documents: [current('acme')] },
+        'org use': { held: true },
+        'team list': { documents: [teams('platform', 'data')] },
+        'team current': { documents: [current(null)] },
+        'team use': { documents: [{ organization: 'globex', team: 'data' }] },
+      },
+      ['globex', 'data'],
+    );
+    const selecting = account.selectOrganization();
+    await settled();
+    expect(picks).toHaveLength(2);
+    expect(picks[1]).toMatchObject({
+      visible: true,
+      shownBusy: true,
+      busy: true,
+      items: [],
+      placeholder: 'Select a Lace team',
+    });
+    expect(commands.paths()).toEqual(['org list', 'org current', 'org use']);
+
+    commands.held[0].finish([{ organization: 'globex', team: null }]);
+    await selecting;
+    expect(picks[1].items.map((item) => item.label)).toEqual(['Platform', 'Data']);
+    expect(commands.paths()).toEqual([
+      'org list',
+      'org current',
+      'org use',
+      'team list',
+      'team current',
+      'team use',
+    ]);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('an organization saved while its team pick was dismissed is still announced', async () => {
+    const { commands, account, changed, picks } = setup(
+      {
+        'org list': { documents: [ORGS] },
+        'org current': { documents: [current('acme')] },
+        'org use': { held: true },
+      },
+      ['globex'],
+    );
+    const selecting = account.selectOrganization();
+    await settled();
+    picks[1].dismiss();
+    commands.held[0].finish([{ organization: 'globex', team: null }]);
+    await selecting;
+    expect(commands.paths()).not.toContain('team use');
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('an organization that cannot be saved closes the team pick and fails the command', async () => {
+    const { commands, account, changed, picks } = setup(
+      {
+        'org list': { documents: [ORGS] },
+        'org current': { documents: [current('acme')] },
+        'org use': refused({ reason: 'unauthenticated', message: 'no credentials' }),
+      },
+      ['globex'],
+    );
+    await expect(account.selectOrganization()).rejects.toThrow('no credentials');
+    expect(picks[1]).toMatchObject({ visible: false, disposed: true });
+    expect(commands.paths()).not.toContain('team list');
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   test('with the organization set by the environment, the pick says so', async () => {
-    const { api, account } = setup({
+    const { account, picks } = setup({
       'org list': { documents: [ORGS] },
       'org current': { documents: [current('acme', 'env')] },
     });
     await account.selectOrganization();
-    const [, options] = api.window.showQuickPick.mock.calls[0] as never as [
-      unknown,
-      { placeHolder: string },
-    ];
-    expect(options.placeHolder).toBe(
+    expect(picks[0].placeholder).toBe(
       "The Lace engine's environment sets the organization; the choice made here is saved and applies once that variable is unset",
     );
   });
@@ -122,6 +215,19 @@ describe('selecting the organization', () => {
     });
     await account.selectOrganization();
     expect(commands.paths()).not.toContain('org use');
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  test('an account in no organization says so and leaves no pick open', async () => {
+    const { api, account, changed, picks } = setup({
+      'org list': { documents: [{ items: [] }] },
+      'org current': { documents: [current(null)] },
+    });
+    await account.selectOrganization();
+    expect(picks[0]).toMatchObject({ visible: false, items: [] });
+    expect(api.window.showInformationMessage).toHaveBeenCalledWith(
+      'Your Lace account belongs to no organization yet. Organizations are created in the portal.',
+    );
     expect(changed).not.toHaveBeenCalled();
   });
 });
@@ -144,13 +250,31 @@ describe('selecting the team', () => {
     ]);
   });
 
-  test('an organization with no team says teams are made in the portal, with no empty pick', async () => {
-    const { api, account, commands, changed } = setup({
+  test('the team pick is on screen, busy, while the teams are read', async () => {
+    const { commands, account, picks } = setup({
+      'team list': { held: true },
+      'team current': { documents: [current('platform', 'env')] },
+    });
+    const selecting = account.selectTeam();
+    await settled();
+    expect(picks[0]).toMatchObject({ visible: true, shownBusy: true, busy: true, items: [] });
+
+    commands.held[0].finish([teams('platform', 'data')]);
+    await settled();
+    expect(picks[0].placeholder).toBe(
+      "The Lace engine's environment sets the team; the choice made here is saved and applies once that variable is unset",
+    );
+    picks[0].dismiss();
+    await selecting;
+  });
+
+  test('an organization with no team says teams are made in the portal, and leaves no pick open', async () => {
+    const { api, account, commands, changed, picks } = setup({
       'team list': { documents: [teams()] },
       'team current': { documents: [current(null)] },
     });
     await account.selectTeam();
-    expect(api.window.showQuickPick).not.toHaveBeenCalled();
+    expect(picks[0]).toMatchObject({ visible: false, items: [] });
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
       'This organization has no team yet. Teams are created in the portal.',
       'Open Portal',

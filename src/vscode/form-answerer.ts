@@ -9,23 +9,26 @@
 //   slug        an input box that refuses an empty value; the slug's own
 //               rule is the CLI's and the API's
 //   connection  a pick of the team's cloud connections (`lace connection
-//               list`, in the home), each as the CLI reports it. A list that
-//               cannot be read cancels the form and says why, with the ways
-//               out its reason names; an empty one cancels it and says a
-//               connection is added in the portal, with Open Portal on the
-//               page the list names (`createUrl`)
+//               list`, in the home), each as the CLI reports it, on screen
+//               while the list is read (`pick.ts`). A list that cannot be
+//               read closes the pick, cancels the form and says why, with
+//               the ways out its reason names; an empty one closes it,
+//               cancels the form and says a connection is added in the
+//               portal, with Open Portal on the page the list names
+//               (`createUrl`)
 //   state       an open dialog for one statefile of any name, opened at the
 //               root the run names
 //
 // An argument with no prompt here cancels the form, and the notice says
 // this window cannot ask for it.
-import type { ActionContribution, JsonOf, RunCtx } from '@lace-cloud/canvas/engine';
+import type { ActionContribution, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
 import type { Answerer, Form } from '../engine/runner-host';
 import { type AuthoringRoot, type RootSources, rootOfRun, rootUri } from '../roots/authoring-roots';
 import { notice, type OfferActions, offersFor } from './offers';
+import { pickFrom } from './pick';
 import { runTitle } from './run-progress';
 
 export type FormAnswererOptions = {
@@ -33,7 +36,7 @@ export type FormAnswererOptions = {
     window: Pick<
       typeof vscode.window,
       | 'showInputBox'
-      | 'showQuickPick'
+      | 'createQuickPick'
       | 'showOpenDialog'
       | 'showInformationMessage'
       | 'showWarningMessage'
@@ -70,30 +73,32 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
         validateInput: (value) => (value === '' ? 'Type the slug' : undefined),
       }),
     connection: async ({ title }) => {
-      let listed: JsonOf<'connection list'>;
+      const listed = commands
+        .anywhere()
+        .then((home) => commandDocument(home, 'connection list', {}));
       try {
-        listed = await commandDocument(await commands.anywhere(), 'connection list', {});
+        const picked = await pickFrom(
+          api.window,
+          listed.then(({ items, createUrl }) => ({
+            items: items.map((connection) => ({
+              label: connection.name,
+              description: `${connection.provider_type} · ${connection.status} · ${connection.id}`,
+              id: connection.id,
+            })),
+            none: () =>
+              shown(
+                notice(api, offers, 'info', NO_CONNECTION, [
+                  { kind: 'openPortal', url: createUrl },
+                ]),
+              ),
+          })),
+          { title, placeholder: 'The cloud connection' },
+        );
+        return picked?.id;
       } catch (error) {
         shown(notice(api, offers, 'error', failureText(error), offersFor(failureOf(error))));
         return undefined;
       }
-      if (listed.items.length === 0) {
-        shown(
-          notice(api, offers, 'info', NO_CONNECTION, [
-            { kind: 'openPortal', url: listed.createUrl },
-          ]),
-        );
-        return undefined;
-      }
-      const picked = await api.window.showQuickPick(
-        listed.items.map((connection) => ({
-          label: connection.name,
-          description: `${connection.provider_type} · ${connection.status} · ${connection.id}`,
-          id: connection.id,
-        })),
-        { title, placeHolder: 'The cloud connection' },
-      );
-      return picked?.id;
     },
     state: async ({ title, root }) => {
       const picked = await api.window.showOpenDialog({

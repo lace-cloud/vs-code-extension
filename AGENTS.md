@@ -53,6 +53,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
 | Running a package binding (Stacks rows, stack palette commands, Create Stack, Import Existing Resources, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, Import Existing Resources, the offers |
 | How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
+| A quick pick whose items come from a read: on screen at once, busy, and filled when the read settles; a read that finds none closes it and runs the caller's own empty path, and one that fails closes it and rejects for the caller's notice | `vscode/pick.ts` (`pickFrom`) | the organization and team picks, the stack pick, the connection prompt, Add Module to Canvas |
 | A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a failure's package answer, the answerer |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
@@ -126,10 +127,10 @@ host draws the store. A binding that declares the root runs in it. The host runs
 - The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
   object was answered before is reused by argument name; the answerer (`vscode/form-answerer.ts`) asks the rest, one
   prompt per argument name: `slug` an input box that refuses an empty value, `connection` a pick from `lace connection
-  list` (a list that cannot be read, or an empty one, cancels the form and says why), `state` an open dialog for one
-  file; any other name cancels the form with a notice. A dismissed prompt cancels the form. The host keeps the form the
-  runner handed it last: a form superseded by a newer one submits and cancels nothing when its prompts settle. A submit
-  runs in the run's context again.
+  list`, on screen while the list is read (a list that cannot be read, or an empty one, closes it, cancels the form and
+  says why), `state` an open dialog for one file; any other name cancels the form with a notice. A dismissed prompt
+  cancels the form. The host keeps the form the runner handed it last: a form superseded by a newer one submits and
+  cancels nothing when its prompts settle. A submit runs in the run's context again.
 - A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
   each invocation it started. `run` resolves when the runner's call does, with `ended`. A run a trigger starts (Create
@@ -220,6 +221,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   `forbidden` are named with the module (any other reason as "the engine refused it"), and **Show Details** writes the
   engine's full message to the "Lace" Output channel.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
+- Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
+  that cannot be read closes it and says why with the ways out its reason names, and an empty registry closes it and
+  offers the publishing guide the list carries. The module picked is placed as the sidebar's "+" places it.
 
 ## Stacks tree
 
@@ -259,9 +263,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   ends. The runner's form asks for the slug and the connection; the package's notice says "Created stack <slug>", and
   its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason, through the offers
   (`not_git_repository` and `no_origin_remote` say the CLI's message).
-- The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>`; a list that cannot be read is shown
-  with the ways out its reason names, and a root with no stack says "No stack is deployed from <root> yet. Create one in
-  the Stacks view." and shows no empty pick.
+- The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>` and is on screen while the list is
+  read; a list that cannot be read closes it and is shown with the ways out its reason names, and a root with no stack
+  closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.
 - **Import Existing Resources** (`stacks/import-resources.ts`) is a stack command the host draws: the canvas's
   source-refused banner offers it beside Convert on the panel's root, and **Lace: Import Existing Resources**
   (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the
@@ -336,11 +340,14 @@ before the session closes. A change to the setting re-arms every attachment. The
 
 `account/`: Sign In runs `lace login` (the confirmation code shown once with Copy Code, the page opened once, under a
 cancellable progress notification); Sign Out runs `lace logout`. Organization and team are the CLI's: `org list`,
-`org use`, `team list`, `team use`, `org current`, `team current`, all in the home. Selecting an organization goes on to
-its team, listed and saved with `--org` naming the organization just picked, so the saved team is that organization's
-even while `LACE_ORGANIZATION` sets another; an organization with no team says teams are created in the portal, with Open
-Portal on the page `team list` names (`createUrl`). The status bar item shows the selection and runs Select
-Organization; it is read again after each change and when the window regains focus. Nothing is cached.
+`org use`, `team list`, `team use`, `org current`, `team current`, all in the home. Each pick is on screen at once and
+fills when its read settles (`vscode/pick.ts`). Selecting an organization goes on to its team: the team pick opens as
+the organization is saved, its read `org use` then the teams, listed and saved with `--org` naming the organization
+just picked, so the saved team is that organization's even while `LACE_ORGANIZATION` sets another; an organization
+with no team closes the pick and says teams are created in the portal, with Open Portal on the page `team list` names
+(`createUrl`). A team pick dismissed while the organization is saved still announces the saved organization. The
+status bar item shows the selection and runs Select Organization; it is read again after each change and when the
+window regains focus. Nothing is cached.
 A failed account command offers the way out its reason names (`vscode/offers.ts`).
 
 ## The chat tools
@@ -421,7 +428,9 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   so the real caller, mapping and codecs run), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root
   sessions with the real rule for holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
   `diagnostics/__tests__/fake-problems-api.ts`, `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand
-  back the button clicked, string or item).
+  back the button clicked, string or item), `vscode/__tests__/fake-quick-pick.ts` (VS Code's `createQuickPick`: on
+  screen from `show()` until hidden, each hiding firing `onDidHide` once, with whether it was busy when it came on
+  screen; a test's developer answers each pick once its items are in).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
   mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is

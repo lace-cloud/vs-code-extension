@@ -1,8 +1,14 @@
 // Lace: Add Module to Canvas: a quick pick over the module axis of the
-// registry, then the same placement the sidebar's "+" runs.
+// registry, on screen while the registry is read (`vscode/pick.ts`), then
+// the same placement the sidebar's "+" runs. A registry that cannot be read
+// closes the pick and says why, with the ways out its reason names; one
+// with no module closes it and offers the publishing guide the list
+// carries.
 import type * as vscode from 'vscode';
-import { SIGN_IN } from '../account/account';
+import { documentOf, failureOf, failureText } from '../engine/command-outcome';
 import { moduleKey, moduleLabel, type RegistryRow } from '../protocol/registry-protocol';
+import { notice, type OfferActions, offersFor } from '../vscode/offers';
+import { pickFrom } from '../vscode/pick';
 import type { PlacedModule } from './place-module';
 import type { RegistryReads } from './registry-reads';
 
@@ -11,61 +17,50 @@ export const ADD_MODULE = 'lace.addModuleToCanvas';
 export type AddModuleApi = {
   window: Pick<
     typeof vscode.window,
-    'showQuickPick' | 'showErrorMessage' | 'showInformationMessage' | 'withProgress'
+    'createQuickPick' | 'showErrorMessage' | 'showWarningMessage' | 'showInformationMessage'
   >;
-  commands: Pick<typeof vscode.commands, 'executeCommand'>;
   env: Pick<typeof vscode.env, 'openExternal'>;
   Uri: Pick<typeof vscode.Uri, 'parse'>;
-  ProgressLocation: Pick<typeof vscode.ProgressLocation, 'Window'>;
 };
 
-const SIGN_IN_ACTION = 'Sign In';
 const PUBLISHING_GUIDE = 'How to publish a module';
 
 export function addModuleToCanvas(options: {
   api: AddModuleApi;
   reads: Pick<RegistryReads, 'list'>;
   place: (module: PlacedModule) => Promise<void>;
+  // What a notice about a registry that cannot be read offers.
+  offers: OfferActions;
 }): () => Promise<void> {
-  const { api, reads, place } = options;
+  const { api, reads, place, offers } = options;
   return async () => {
-    const list = await api.window.withProgress(
-      { location: api.ProgressLocation.Window, title: 'Lace: reading the registry' },
-      () => reads.list(),
-    );
-    if (list.kind === 'failure') {
-      if (list.failure.reason !== 'unauthenticated') {
-        void api.window.showErrorMessage(list.failure.message);
-        return;
-      }
-      const answer = await api.window.showErrorMessage(
-        'Sign in to browse the Lace registry.',
-        SIGN_IN_ACTION,
+    const listed = reads.list().then((outcome) => documentOf('registry list', outcome));
+    try {
+      const picked = await pickFrom(
+        api.window,
+        listed.then(({ items, publishingGuideUrl }) => ({
+          items: items.map((row: RegistryRow) => ({
+            label: moduleLabel(row),
+            description: `${moduleKey(row)} ${row.version}`,
+            detail: row.description,
+            row,
+          })),
+          none: () =>
+            void api.window
+              .showInformationMessage('No modules are published yet.', PUBLISHING_GUIDE)
+              .then((answer) =>
+                answer === PUBLISHING_GUIDE
+                  ? api.env.openExternal(api.Uri.parse(publishingGuideUrl))
+                  : undefined,
+              ),
+        })),
+        { placeholder: 'Which module?', matchOnDescription: true, matchOnDetail: true },
       );
-      if (answer === SIGN_IN_ACTION) await api.commands.executeCommand(SIGN_IN);
-      return;
+      if (!picked) return;
+      const { author, name, version } = picked.row;
+      await place({ author, name, version });
+    } catch (error) {
+      await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
     }
-    const { items, publishingGuideUrl } = list.document;
-    if (items.length === 0) {
-      const answer = await api.window.showInformationMessage(
-        'No modules are published yet.',
-        PUBLISHING_GUIDE,
-      );
-      if (answer === PUBLISHING_GUIDE)
-        await api.env.openExternal(api.Uri.parse(publishingGuideUrl));
-      return;
-    }
-    const picked = await api.window.showQuickPick(
-      items.map((row: RegistryRow) => ({
-        label: moduleLabel(row),
-        description: `${moduleKey(row)} ${row.version}`,
-        detail: row.description,
-        row,
-      })),
-      { placeHolder: 'Which module?', matchOnDescription: true, matchOnDetail: true },
-    );
-    if (!picked) return;
-    const { author, name, version } = picked.row;
-    await place({ author, name, version });
   };
 }

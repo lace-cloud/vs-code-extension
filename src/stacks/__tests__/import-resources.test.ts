@@ -6,6 +6,7 @@ import { folder, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
+import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
 import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { importResourcesCommand, resourceImporter } from '../import-resources';
@@ -67,7 +68,7 @@ function setup(options: Options) {
   // Each progress notification: its title, and whether its task has ended.
   const progress: { title?: string; ended: boolean }[] = [];
   const window = {
-    showQuickPick: vi.fn(async (items: { stack: { slug: string } }[]) => items[0]),
+    createQuickPick: fakeQuickPicks((items) => items[0]).createQuickPick,
     showOpenDialog: vi.fn(async () => [uri(STATE)]),
     showInputBox: vi.fn(),
     showInformationMessage: message('info'),

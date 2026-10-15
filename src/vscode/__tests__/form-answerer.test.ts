@@ -7,6 +7,7 @@ import { folder, uri } from '../../roots/__tests__/fake-uri';
 import { formAnswerer } from '../form-answerer';
 import { type OfferActions, offeringPresenter } from '../offers';
 import { type Button, clicked, titleOf } from './fake-messages';
+import { fakeQuickPicks } from './fake-quick-pick';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -48,16 +49,22 @@ function setup(options: Options = {}) {
       messages.push({ level, text, buttons: buttons.map(titleOf) });
       return clicked(buttons, await options.answers?.[text]);
     });
+  // A pick asks once its items are in: what it says, and the items.
+  const quickPicks = fakeQuickPicks<{ label: string; id: string }>((items, pick) => {
+    asked.push({
+      kind: 'pick',
+      options: { title: pick.title, placeholder: pick.placeholder },
+      items,
+    });
+    const id = options.picks?.shift();
+    return items.find((item) => item.id === id);
+  });
   const window = {
     showInputBox: vi.fn(async (opened: vscode.InputBoxOptions) => {
       asked.push({ kind: 'input', options: opened });
       return options.inputs?.shift();
     }),
-    showQuickPick: vi.fn(async (items: { id: string }[], opened: vscode.QuickPickOptions) => {
-      asked.push({ kind: 'pick', options: opened, items });
-      const id = options.picks?.shift();
-      return items.find((item) => item.id === id);
-    }),
+    createQuickPick: quickPicks.createQuickPick,
     withProgress: vi.fn(async (_opened: unknown, task: () => Promise<unknown>) => task()),
     showOpenDialog: vi.fn(async (opened: vscode.OpenDialogOptions) => {
       asked.push({ kind: 'file', options: opened });
@@ -92,7 +99,17 @@ function setup(options: Options = {}) {
     answerer(form, { action: binding(id), ctx });
     return form;
   };
-  return { commands, window, asked, messages, offers, report, answerer, answer };
+  return {
+    commands,
+    window,
+    asked,
+    picks: quickPicks.picks,
+    messages,
+    offers,
+    report,
+    answerer,
+    answer,
+  };
 }
 
 describe('the answerer', () => {
@@ -137,7 +154,7 @@ describe('the answerer', () => {
         kind: 'pick',
         options: {
           title: 'Create stack: infra/prod',
-          placeHolder: 'The cloud connection',
+          placeholder: 'The cloud connection',
         },
         items: [
           { label: 'AWS prod', description: 'aws · ready · conn_1', id: 'conn_1' },
@@ -146,6 +163,25 @@ describe('the answerer', () => {
       },
     ]);
     expect(form.submit).toHaveBeenCalledWith({ connection: 'conn_2' });
+  });
+
+  test('the connection pick is on screen, busy and titled by the run, while the connections are listed', async () => {
+    const t = setup({ scripts: { 'connection list': { held: true } }, picks: ['conn_1'] });
+    const form = t.answer('create', ['connection'], { root: PROD });
+    await settled();
+    expect(t.picks).toHaveLength(1);
+    expect(t.picks[0]).toMatchObject({
+      visible: true,
+      shownBusy: true,
+      busy: true,
+      items: [],
+      title: 'Create stack: infra/prod',
+      placeholder: 'The cloud connection',
+    });
+
+    t.commands.held[0].finish([connections(connection('conn_1', 'AWS prod'))]);
+    await settled();
+    expect(form.submit).toHaveBeenCalledWith({ connection: 'conn_1' });
   });
 
   test('asks for each argument in the order the form lists them, and submits them together', async () => {
@@ -213,11 +249,12 @@ describe('the answerer', () => {
 
     expect(form.cancel).toHaveBeenCalledOnce();
     expect(form.submit).not.toHaveBeenCalled();
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
     expect(t.messages).toEqual([{ level: 'info', text: said, buttons: ['Open Portal'] }]);
     expect(t.offers.openPortal).toHaveBeenCalledWith({ kind: 'openPortal', url: PORTAL });
   });
 
-  test('a connection list that cannot be read cancels the form and says why, with the ways out its reason names', async () => {
+  test('a connection list that cannot be read closes the pick, cancels the form and says why, with the ways out its reason names', async () => {
     const failure: CommandFailure = { reason: 'unauthenticated', message: 'Sign in to Lace first' };
     const t = setup({
       scripts: { 'connection list': refused(failure) },
@@ -231,6 +268,7 @@ describe('the answerer', () => {
       { level: 'error', text: 'Sign in to Lace first', buttons: ['Sign In'] },
     ]);
     expect(t.offers.signIn).toHaveBeenCalled();
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
     expect(t.asked).toEqual([]);
   });
 
