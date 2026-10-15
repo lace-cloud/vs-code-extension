@@ -222,7 +222,7 @@ describe('Import Existing Resources', () => {
         ...LISTED,
         'stack import': (args) => (args.allowPartial ? { held: true } : refused(RESIDUAL)),
       },
-      answers: { 'Error: 1 resource has no import id\n': 'Import the rest' },
+      answers: { '1 resource has no import id': 'Import the rest' },
     });
     await t.importResources(prod);
     await settled();
@@ -239,7 +239,7 @@ describe('Import Existing Resources', () => {
 
     expect(t.messages[0]).toEqual({
       level: 'error',
-      text: 'Error: 1 resource has no import id\n',
+      text: '1 resource has no import id',
       buttons: ['Import the rest'],
     });
     expect(t.window.showOpenDialog).toHaveBeenCalledOnce();
