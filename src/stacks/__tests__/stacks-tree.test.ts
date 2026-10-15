@@ -1135,7 +1135,7 @@ describe('an apply', () => {
   test('held for approval, says what it waits on and offers the page of each record, which the window opens', async () => {
     const page = 'https://acme.atlassian.net/browse/CHG-42';
     const said =
-      'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: approved, decided in Lace. Requirement creq_jsm: pending, decided in its change-management system. Record jsm CHG-42: Waiting for approval, https://acme.atlassian.net/browse/CHG-42.';
+      'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: approved, decided in Lace. Requirement creq_jsm: pending, decided in jsm CHG-42. Record jsm CHG-42: open, awaiting its decision, https://acme.atlassian.net/browse/CHG-42.';
     const t = setup({
       root: prod,
       scripts: {
@@ -1151,16 +1151,18 @@ describe('an apply', () => {
                 id: 'chg_1',
                 state: 'submitted',
                 requirements: [
-                  { id: 'creq_policy', state: 'approved', decidedBy: 'lace' },
-                  { id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' },
+                  { id: 'creq_policy', state: 'approved', decidedBy: 'lace', recordId: null },
+                  { id: 'creq_jsm', state: 'pending', decidedBy: 'ecm', recordId: 'crec_jsm' },
                 ],
                 records: [
                   {
+                    id: 'crec_jsm',
                     externalSystemId: 'esys_jsm',
                     kind: 'jsm',
                     externalRef: 'CHG-42',
                     externalUrl: page,
-                    state: 'Waiting for approval',
+                    state: 'open',
+                    decision: null,
                   },
                 ],
               },

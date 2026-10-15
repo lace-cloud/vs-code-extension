@@ -2,8 +2,9 @@
 // action per way out the failure's reason names, read from the failure
 // document and never from the message; a reason with no way out the host
 // can take offers nothing, and the message says what happened. Beside an
-// apply held for approval: the page of each record a change-management
-// system keeps of its change request, where the record carries one.
+// apply held for approval: the held Run's page in the portal, and the page
+// of each record a change-management system keeps of its change request,
+// where the record carries one.
 //
 // Validate acts on a root: a notice offers it only when the place that shows
 // the notice names the root the failure is about and supplies the action, the
@@ -18,7 +19,8 @@ export type Offer =
   | { kind: 'selectOrganization' }
   | { kind: 'selectTeam' }
   | { kind: 'validate' }
-  // The page where the missing thing is made, as the failure carries it.
+  // A page in the portal: where the missing thing is made, as the failure
+  // carries it, or the held Run's, where its requirements are decided.
   | { kind: 'openPortal'; url: string }
   // The page a missing tool installs from, as the failure carries it.
   | { kind: 'install'; url: string }
