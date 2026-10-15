@@ -50,6 +50,14 @@ export class CommandFailedError extends Error {
   }
 }
 
+// The document of `path`'s outcome, for a caller that goes on only with it.
+// Throws `CommandFailedError` when the command ended on its failure
+// document.
+export function documentOf<P extends BoundPath>(path: P, outcome: CommandOutcome<P>): JsonOf<P> {
+  if (outcome.kind === 'failure') throw new CommandFailedError(path, outcome.failure);
+  return outcome.document;
+}
+
 // The document a command's outcome is, for a caller that goes on only with
 // it. Rejects with `CommandFailedError` when the command ended on its
 // failure document, and as `commandOutcome` does otherwise.
@@ -59,9 +67,7 @@ export async function commandDocument<P extends BoundPath>(
   args: ArgsOf<P>,
   signal?: AbortSignal,
 ): Promise<JsonOf<P>> {
-  const outcome = await commandOutcome(commands, path, args, signal);
-  if (outcome.kind === 'failure') throw new CommandFailedError(path, outcome.failure);
-  return outcome.document;
+  return documentOf(path, await commandOutcome(commands, path, args, signal));
 }
 
 // Why a command failed, as data, when it said.
