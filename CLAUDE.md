@@ -101,9 +101,10 @@ opens a VS Code window for a few seconds each; CI runs it under a virtual displa
 ## Branch flow and shipping
 
 - **Feature branches** branch off `develop` and open a PR to `develop`. `ci.yml` installs the dependencies from npm and
-  the `lace` CLI that `LACE_CLI_VERSION` names (the CLI's published installer, which verifies the release), then runs
-  lint, typecheck, the unit tests, the build and the bundle tests, then the engine tests and the window e2e under a
-  virtual display. `ci-summary` is `develop`'s one required status check; direct pushes to `develop` are blocked.
+  the `lace` CLI that `LACE_CLI_VERSION` names, verified against the release's signature, then runs lint, typecheck,
+  the unit tests, the build and the bundle tests, then the engine tests, on Linux and on Windows; the window e2e runs on
+  Linux alone, under a virtual display (`AGENTS.md`, "Tests"). `ci-summary` is `develop`'s one required status check;
+  direct pushes to `develop` are blocked.
 - **Every push to `develop` that touches extension source publishes a Marketplace pre-release** (`pre-release.yml`).
   Nothing is pushed to `develop` without the owner's word.
 - **`main`** accepts PRs only from `develop`. `release-guard.yml` requires the `package.json` version to have moved
