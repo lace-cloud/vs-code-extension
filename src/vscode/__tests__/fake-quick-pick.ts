@@ -8,10 +8,13 @@
 // it was busy when it came on screen (`shownBusy`).
 //
 // Given `answer`, the developer answers each pick once its items are in:
-// the item `answer` gives is accepted, and none dismisses the pick.
+// the item `answer` gives for the items and the pick is accepted, and none
+// dismisses the pick.
 type Listener = () => void;
 
 type Item = { readonly label: string };
+
+type Answer<I extends Item> = (items: readonly I[], pick: FakeQuickPick<I>) => I | undefined;
 
 export class FakeQuickPick<I extends Item = Item> {
   title: string | undefined;
@@ -27,7 +30,7 @@ export class FakeQuickPick<I extends Item = Item> {
   readonly #accepted = new Set<Listener>();
   readonly #hidden = new Set<Listener>();
 
-  constructor(private readonly answer?: (items: readonly I[]) => I | undefined) {}
+  constructor(private readonly answer?: Answer<I>) {}
 
   get items(): readonly I[] {
     return this.#items;
@@ -39,7 +42,7 @@ export class FakeQuickPick<I extends Item = Item> {
     if (answer === undefined || items.length === 0) return;
     queueMicrotask(() => {
       if (!this.visible) return;
-      const chosen = answer(items);
+      const chosen = answer(items, this);
       if (chosen === undefined) this.dismiss();
       else this.accept(chosen);
     });
@@ -83,9 +86,7 @@ export class FakeQuickPick<I extends Item = Item> {
   }
 }
 
-export function fakeQuickPicks<I extends Item = Item>(
-  answer?: (items: readonly I[]) => I | undefined,
-) {
+export function fakeQuickPicks<I extends Item = Item>(answer?: Answer<I>) {
   const picks: FakeQuickPick<I>[] = [];
   const createQuickPick = () => {
     const pick = new FakeQuickPick<I>(answer);
