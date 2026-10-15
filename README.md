@@ -119,8 +119,8 @@ change.
 
 The **Registry** view in the Lace activity bar lists the modules of the Lace registry: search, category filters,
 favourites (the star), recently used, your organization's modules and the public ones, each grouped by system. Expand a
-row for its versions. The organization shown is the one the Lace CLI has selected; its picker runs
-**Lace: Select Organization**.
+row for its versions. The **Organization** dropdown under the search shows the organization the Lace CLI has selected;
+it runs **Lace: Select Organization** to switch it.
 
 - **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens beside the
   file you are editing, or comes forward, without taking focus, so you see the edit land.
@@ -152,8 +152,8 @@ its ten most recent runs. The view's description names the module; it follows th
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal.
-- With no module to list the stacks of, the view says why: no folder is open; no directory holds a module yet, with
-  **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
+- With no module to list the stacks of, the view says why: no folder is open, with **Open Folder**; no directory holds a
+  module yet, with **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
   portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { described, LOGO, record, row, vendor } from '../../protocol/__tests__/registry-fixtures';
@@ -113,12 +115,55 @@ describe('the registry sidebar page', () => {
   });
 
   test('the organization picker shows the CLI’s selection, or the public registry', () => {
-    expect(sidebar(loaded({ organization: 'acme-org' }))).toContain('>acme-org</button>');
-    expect(sidebar(loaded())).toContain('>Public Registry</button>');
+    expect(sidebar(loaded({ organization: 'acme-org' }))).toContain(
+      '<span class="org-picker-name">acme-org</span>',
+    );
+    expect(sidebar(loaded())).toContain('<span class="org-picker-name">Public Registry</span>');
+  });
+
+  test('the organization picker is a button labelled Organization, its name before a hidden chevron', () => {
+    const html = sidebar(loaded({ organization: 'acme-org' }));
+    const picker = html.match(/<button type="button" class="org-picker"[^>]*>(.*?)<\/button>/);
+    expect(picker?.[0]).toContain('title="Select Organization"');
+    expect(picker?.[1].replace(/<[^>]*>/g, '')).toBe('Organization acme-org');
+    expect(picker?.[1]).toMatch(
+      /<span class="org-picker-name">acme-org<\/span><svg class="org-picker-chevron"[^>]* aria-hidden="true"/,
+    );
   });
 
   test('a list that filled its limit says so', () => {
     expect(sidebar(loaded({ rows: [VPC], truncated: true }))).toContain('Showing the first 1');
+  });
+});
+
+// The sidebar's stylesheet, read no further than its rules' selectors and
+// the VS Code colours they declare: how they draw is the browser's.
+describe("the registry sidebar's stylesheet", () => {
+  const rules = readFileSync(join(__dirname, '..', 'sidebar.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('}')
+    .map((rule) => rule.split('{'))
+    .map(([selectors = '', declarations = '']) => ({ selectors, declarations }));
+  // The VS Code colours the rules naming `part` declare.
+  const coloursOf = (part: RegExp): Set<string> =>
+    new Set(
+      rules
+        .filter(({ selectors }) => part.test(selectors))
+        .flatMap(({ declarations }) => [...declarations.matchAll(/--vscode-[\w-]+/g)])
+        .map(([token]) => token),
+    );
+
+  test('draws the organization picker as a VS Code dropdown, in none of the search input’s colours', () => {
+    const picker = coloursOf(/\.org-picker/);
+    const input = coloursOf(/\.search-input/);
+    for (const token of [
+      '--vscode-dropdown-background',
+      '--vscode-dropdown-border',
+      '--vscode-dropdown-foreground',
+    ]) {
+      expect(picker.has(token), token).toBe(true);
+    }
+    expect([...picker].filter((token) => input.has(token))).toEqual([]);
   });
 });
 

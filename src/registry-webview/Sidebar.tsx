@@ -1,10 +1,10 @@
 // The registry sidebar: search with category chips (CategoryChips),
 // favourites, recently used, the organization's modules and the public ones,
 // each by system, every row (ModuleRow) with its versions on expand, its "+"
-// and its star. The organization shown is the CLI's selection; its picker
-// runs the extension's Select Organization. Every control is a button of its
-// own, none inside another, so each is reached by Tab, activated by Enter
-// and Space, and announced as a control.
+// and its star. The organization shown is the CLI's selection; its picker, a
+// dropdown labelled Organization, runs the extension's Select Organization.
+// Every control is a button of its own, none inside another, so each is
+// reached by Tab, activated by Enter and Space, and announced as a control.
 import { type ReactNode, useEffect, useState } from 'react';
 import type { RegistryRow, SendSidebarMessage, SidebarState } from '../protocol/registry-protocol';
 import { moduleKey } from '../protocol/registry-protocol';
@@ -68,14 +68,10 @@ export function Sidebar({ state, send }: { state: SidebarState; send: SendSideba
           </button>
         </div>
         {state.kind === 'loaded' && (
-          <button
-            type="button"
-            className="org-picker"
-            title="Select Organization"
-            onClick={() => send({ op: 'selectOrganization' })}
-          >
-            {state.organization ?? 'Public Registry'}
-          </button>
+          <OrganizationPicker
+            organization={state.organization}
+            open={() => send({ op: 'selectOrganization' })}
+          />
         )}
       </div>
       {filter.chipsShown && (
@@ -85,6 +81,31 @@ export function Sidebar({ state, send }: { state: SidebarState; send: SendSideba
         <Content state={state} send={send} query={query} chosen={filter.applied} />
       </div>
     </>
+  );
+}
+
+// A dropdown as VS Code draws one, a box holding the value and a chevron,
+// after the label that says what it picks. The whole row is the one button,
+// so the label opens it too; the space between label and box is what a
+// screen reader hears between the two words, and in the row's flex layout it
+// takes no room.
+function OrganizationPicker({
+  organization,
+  open,
+}: {
+  organization: string | null;
+  open: () => void;
+}) {
+  return (
+    <button type="button" className="org-picker" title="Select Organization" onClick={open}>
+      <span className="org-picker-label">Organization</span>{' '}
+      <span className="org-picker-box">
+        <span className="org-picker-name">{organization ?? 'Public Registry'}</span>
+        <svg className="org-picker-chevron" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+      </span>
+    </button>
   );
 }
 
