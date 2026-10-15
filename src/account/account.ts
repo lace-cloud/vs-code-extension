@@ -164,11 +164,19 @@ export function accountControls(
   };
   void refresh();
   const offChange = account.onDidChange(() => void refresh());
+  // Each of these commands changes the account (`logout`, `org use`, `team
+  // use`), so one whose stream ended under it may have changed it.
   const offering = (act: () => Promise<void>) => async () => {
     try {
       await act();
     } catch (error) {
-      await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
+      await notice(
+        api,
+        offers,
+        'error',
+        failureText(error, { kind: 'write' }),
+        offersFor(failureOf(error)),
+      );
     }
   };
   const registered = registerCommands(api, {
