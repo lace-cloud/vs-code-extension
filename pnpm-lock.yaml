@@ -9,20 +9,20 @@ importers:
   .:
     dependencies:
       '@lace-cloud/canvas':
-        specifier: 0.25.0
-        version: 0.25.0(@types/react@18.3.28)
+        specifier: 0.26.0
+        version: 0.26.0(@types/react@18.3.28)
       '@lace-cloud/chat-core':
-        specifier: 0.25.0
-        version: 0.25.0(@types/react@18.3.28)
+        specifier: 0.26.0
+        version: 0.26.0(@types/react@18.3.28)
       '@lace-cloud/design-tokens':
-        specifier: 0.25.0
-        version: 0.25.0
+        specifier: 0.26.0
+        version: 0.26.0
       '@lace-cloud/host':
-        specifier: 0.25.0
-        version: 0.25.0
+        specifier: 0.26.0
+        version: 0.26.0
       '@lace-cloud/proto':
-        specifier: 0.25.0
-        version: 0.25.0
+        specifier: 0.26.0
+        version: 0.26.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -555,23 +555,23 @@ packages:
     peerDependencies:
       tslib: '2'
 
-  '@lace-cloud/canvas@0.25.0':
-    resolution: {integrity: sha512-XzxgiPYDhH2spZpJRZlnXZ8zoOUyPqx5lmzn3T6/DoO7NQIrjjFy+2P3wjWzEEo3llq1wT6Rl7RhZYZJO5XBbQ==}
+  '@lace-cloud/canvas@0.26.0':
+    resolution: {integrity: sha512-XeUeRwq3UV4Nh+J7PzTZ1LglsTrNBdr0N8yMdTNRfbiRxTQrqL5ZimMunpTkqaLZgypyKi2tGGwbp5LmTxmMpA==}
 
-  '@lace-cloud/chat-core@0.25.0':
-    resolution: {integrity: sha512-u6iZWMrc1XdmfvqeuvzDL2s3c3DV7SilQxrgpIU/24R5nEWQrOFpo3imeCNlWFSfa6PY7lN8Sh781ZR7QIyqTg==}
+  '@lace-cloud/chat-core@0.26.0':
+    resolution: {integrity: sha512-1KPbpAxoLPzIEglnxESLSxrwDq9648tfGXu7n+mZfxf3GVlnTeAghBImcaWDxfgjfjRWrBI0Bi7jIc3j/UBqFw==}
 
-  '@lace-cloud/design-tokens@0.25.0':
-    resolution: {integrity: sha512-T3zmVgl3i0E9iIL3BlSgtuXkCobwrGBbTYKkZ+Mgk8/3NswOVLkve/Al2EiYa5VqV1ONcSVJ0xW5vwRJlgWzPA==}
+  '@lace-cloud/design-tokens@0.26.0':
+    resolution: {integrity: sha512-TO8v9jbU7isnUsH9uXXHgeV33zV3ywvrLkhGJdTqpy8anFZjDpuS3n90+sp6ywMdkYiYn3aiB0nfLdEaIBaxyA==}
 
-  '@lace-cloud/host@0.25.0':
-    resolution: {integrity: sha512-1h9zrAH/xlxcdYhh3xLQN0LJmRcsa8iz/2B8Lo1j8ZYyzS7wySf/clLPLs00k490teRd5SPShXkcwcexj2toYw==}
+  '@lace-cloud/host@0.26.0':
+    resolution: {integrity: sha512-2lnOqA1UjFyNMstNcVJ1bGX+OcFO6I1eRQ2xp6SiDyPJHhhvXLiH2qdYv6jNwdN6SIYC3fEQFeyV5LqcCcBBxA==}
 
-  '@lace-cloud/proto@0.25.0':
-    resolution: {integrity: sha512-YWMrXP9kjsbfUSRoJbiPW6bKbb8AnU5Jh1PplYytIbqfOwv6Sy8/I6tgR0Er5Ho0vaNKu1WpAYhIpC2jiQVWGg==}
+  '@lace-cloud/proto@0.26.0':
+    resolution: {integrity: sha512-m1o8yEL2T5Z3KKDz8pQwFnZNtrZl41v2k7cMkV56Tn56c1ircKN4wdIF7n3+SUkQC9Q+JWdcnYDlQNbelypxfA==}
 
-  '@lace-cloud/ui@0.25.0':
-    resolution: {integrity: sha512-TFcOqxAJBIW0+Yfd8OkeYgJ5+O19V/DzMXjf+TzyOxGA2IQAUloKwJWR/QhmKDUTU8OlxUjOD85SgmFHtGjqOQ==}
+  '@lace-cloud/ui@0.26.0':
+    resolution: {integrity: sha512-TXir2HGTse9wH5pVLuumNfBFkbysIBGrrRjoO/pdQ0WpONIQUWUA4SzoMPu3lkDBAnqLlEERifJZJCLr+cYP8Q==}
 
   '@leichtgewicht/ip-codec@2.0.5':
     resolution: {integrity: sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw==}
@@ -3683,11 +3683,11 @@ snapshots:
       '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
       tslib: 2.8.1
 
-  '@lace-cloud/canvas@0.25.0(@types/react@18.3.28)':
+  '@lace-cloud/canvas@0.26.0(@types/react@18.3.28)':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
-      '@lace-cloud/proto': 0.25.0
-      '@lace-cloud/ui': 0.25.0
+      '@lace-cloud/proto': 0.26.0
+      '@lace-cloud/ui': 0.26.0
       '@xyflow/react': 12.10.2(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
@@ -3696,29 +3696,29 @@ snapshots:
       - '@types/react'
       - immer
 
-  '@lace-cloud/chat-core@0.25.0(@types/react@18.3.28)':
+  '@lace-cloud/chat-core@0.26.0(@types/react@18.3.28)':
     dependencies:
-      '@lace-cloud/canvas': 0.25.0(@types/react@18.3.28)
-      '@lace-cloud/proto': 0.25.0
+      '@lace-cloud/canvas': 0.26.0(@types/react@18.3.28)
+      '@lace-cloud/proto': 0.26.0
     transitivePeerDependencies:
       - '@types/react'
       - immer
 
-  '@lace-cloud/design-tokens@0.25.0': {}
+  '@lace-cloud/design-tokens@0.26.0': {}
 
-  '@lace-cloud/host@0.25.0':
+  '@lace-cloud/host@0.26.0':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
       '@grpc/grpc-js': 1.14.3
-      '@lace-cloud/proto': 0.25.0
+      '@lace-cloud/proto': 0.26.0
 
-  '@lace-cloud/proto@0.25.0':
+  '@lace-cloud/proto@0.26.0':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
 
-  '@lace-cloud/ui@0.25.0':
+  '@lace-cloud/ui@0.26.0':
     dependencies:
-      '@lace-cloud/design-tokens': 0.25.0
+      '@lace-cloud/design-tokens': 0.26.0
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
