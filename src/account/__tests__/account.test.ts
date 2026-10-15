@@ -40,10 +40,12 @@ const current = (slug: string | null, source: 'config' | 'env' = 'config'): Curr
 function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | undefined)[] = []) {
   const commands = fakeCommands(scripts);
   // Each pick answers with the item of the next slug in `picks`; none dismisses it.
-  const quickPicks = fakeQuickPicks<{ label: string; slug: string }>((items) => {
-    const slug = picks.shift();
-    return items.find((item) => item.slug === slug);
-  });
+  const quickPicks = fakeQuickPicks<{ label: string; description?: string; slug: string }>(
+    (items) => {
+      const slug = picks.shift();
+      return items.find((item) => item.slug === slug);
+    },
+  );
   const api = {
     window: {
       withProgress: vi.fn(async (_options, task) =>
