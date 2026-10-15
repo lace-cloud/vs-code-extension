@@ -10,6 +10,8 @@ import {
   CommandExitError,
   type CommandFailure,
   type CommandsPort,
+  type FailedCommand,
+  failureSays,
   type JsonOf,
   type LaceReason,
 } from '@lace-cloud/canvas/engine';
@@ -78,13 +80,13 @@ export function failureOf(error: unknown): CommandFailure | undefined {
   return undefined;
 }
 
-// What a failed command says, for a person: its failure document's message,
-// else the CLI's own text when it ran to an exit, else the error's message.
-export function failureText(error: unknown): string {
-  const failure = failureOf(error);
-  if (failure) return failure.message;
-  if (error instanceof CommandExitError) return error.stderrTail.trim();
-  return error instanceof Error ? error.message : String(error);
+// What a failed command says, for a person: the package's one reading of a
+// thrown command failure (`failureSays`). `command` is the command that
+// failed, a read by its path or a write, as a stream that ended under it
+// says that a read is to be run again and that a write may have made
+// changes. A `CommandFailedError` says its failure document's message.
+export function failureText(error: unknown, command: FailedCommand): string {
+  return failureSays(error, command).message;
 }
 
 // What the host does about a failure, by the failure's reason. Keyed by

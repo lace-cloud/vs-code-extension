@@ -2,6 +2,8 @@ import {
   CommandDetachedError,
   CommandExitError,
   type CommandFailure,
+  CommandUnobservedError,
+  type FailedCommand,
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
 import {
@@ -27,6 +29,8 @@ const NO_TOOL: CommandFailure = {
   tool: 'tfsec',
   url: 'https://example.com/tfsec',
 };
+const SCAN_RAN: FailedCommand = { kind: 'write' };
+const LISTED: FailedCommand = { kind: 'read', path: 'stack list' };
 
 describe('a command outcome', () => {
   test('is the document of a command that exited 0', async () => {
@@ -89,7 +93,7 @@ describe('a command document', () => {
     expect(failed).toBeInstanceOf(CommandFailedError);
     expect(failed).toMatchObject({ path: 'module scan', failure: NO_TOOL });
     expect(failureOf(failed)).toEqual(NO_TOOL);
-    expect(failureText(failed)).toBe('tfsec is not installed');
+    expect(failureText(failed, SCAN_RAN)).toBe('tfsec is not installed');
   });
 
   test('rejects with the exit of a command that wrote neither document', async () => {
@@ -99,20 +103,33 @@ describe('a command document', () => {
     );
     expect(failed).toBe(exit);
     expect(failureOf(failed)).toBeUndefined();
-    expect(failureText(failed)).toBe('Error: boom');
+    expect(failureText(failed, SCAN_RAN)).toBe('Error: boom\n');
   });
 });
 
 describe('what a failure says', () => {
-  test('a stream that ended on a failure document says it as data and as its message', () => {
-    const exit = new CommandExitError(1, 'Error: tfsec is not installed\n', NO_TOOL);
+  test('a stream that ended on a failure document says it as data and as its message, never what the CLI wrote on stderr', () => {
+    const exit = new CommandExitError(
+      1,
+      'Provider mirror: none\nError: tfsec is not installed\n',
+      NO_TOOL,
+    );
     expect(failureOf(exit)).toEqual(NO_TOOL);
-    expect(failureText(exit)).toBe('tfsec is not installed');
+    expect(failureText(exit, SCAN_RAN)).toBe('tfsec is not installed');
+  });
+
+  test('a read whose stream ended before its exit says to run it again; a write, that it may have made changes', () => {
+    const unobserved = new CommandUnobservedError();
+    expect(failureOf(unobserved)).toBeUndefined();
+    expect(failureText(unobserved, LISTED)).toBe(
+      'the stream ended before `lace stack list` finished; run it again',
+    );
+    expect(failureText(unobserved, SCAN_RAN)).toBe(unobserved.message);
   });
 
   test('any other error says its message and no failure', () => {
     expect(failureOf(new Error('gone'))).toBeUndefined();
-    expect(failureText(new Error('gone'))).toBe('gone');
+    expect(failureText(new Error('gone'), LISTED)).toBe('gone');
   });
 });
 
