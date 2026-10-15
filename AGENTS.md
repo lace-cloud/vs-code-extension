@@ -23,10 +23,10 @@ shows what changed after Generate.
 
 `src/extension.ts` builds the window's base: the "Lace" Output channel, the engine, the root sessions, and the autosave
 keeper observing every held session. `windowHost` (`src/features.ts`) builds the owners more than one feature reads (the
-root state, the canvas panels, the commands mapping, the account, the window's one action runner with its runs' Output
-channels and the offers its notices make, the root sources over the canvas panels' roots, Save and Generate's canvas
-operations, and the palette's module commands with their Validate on a root) and hands the same `Host` to every feature
-in `FEATURES`:
+root state, the canvas panels, the commands mapping, the account, the window's one action runner with the prompts that
+answer its forms, its runs' Output channels and the offers its notices make, the root sources over the canvas panels'
+roots, Save and Generate's canvas operations, the palette's module commands with their Validate on a root, the one stack
+pick, and Import Existing Resources on a root) and hands the same `Host` to every feature in `FEATURES`:
 
 | Feature | Registers |
 |---|---|
@@ -36,7 +36,7 @@ in `FEATURES`:
 | module commands | Save, Generate, Validate, Convert, Format, Scan, Generate Docs |
 | registry | the `laceRegistry` webview view, module detail, Refresh Registry, Add Module to Canvas |
 | account | Sign In, Sign Out, Select Organization, Select Team; the selection's status bar item |
-| stacks | the `laceStacks` tree and its commands; the runner's and the run channels' lifetime |
+| stacks | the `laceStacks` tree and its commands, Import Existing Resources; the runner's and the run channels' lifetime |
 | tools | the chat tools, where the Language Model Tools API exists |
 
 `activate` returns `{engine, rootSessions}`. `deactivate` flushes every held session's autosave, then stops the engine,
@@ -51,10 +51,11 @@ each other: every contributed command, view and tool is one a feature registers,
 | A root's session: holders, `SessionOpen`, `SessionClose`, and what observers attach to it | `engine/root-sessions.ts` | canvas panels, tools, Save, Generate, placement, Problems, autosave |
 | A canvas tool call's tool set, over the ports of its hold's session | `tools/lm-tools.ts` | that call |
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
-| Running a package binding (Stacks rows, stack palette commands) | `engine/runner-host.ts` | the Stacks tree, the offers |
+| Running a package binding (Stacks rows, stack palette commands, Create Stack, Import Existing Resources, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, Import Existing Resources, the offers |
+| How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
+| A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a failure's package answer, the answerer |
 | A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
-| How a line typed into a terminal calls a program in the terminal's shell | `vscode/shell-line.ts` (`shellLine`, over `env.shell`) | Create Stack in Terminal |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
 | Whether this window holds a root's session, root compared with root | `commands/canvas-operations.ts` (`held`) | Save, where a module command's report lands |
@@ -63,8 +64,10 @@ each other: every contributed command, view and tool is one a feature registers,
 | When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
-| The way out a failure names | `vscode/offers.ts`, by the failure's `reason` | every notice of a failed command |
+| The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
 | What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
+| Which stack of a root a stack command no row names acts on | `stacks/stack-pick.ts` (`pickStack`) | the palette's Preview, Apply and Scan; Import Existing Resources |
+| Import Existing Resources on a root | `stacks/import-resources.ts` (`resourceImporter`) | the canvas's source-refused banner, the palette |
 | Validate on a root, whatever offers it | `commands/authoring-commands.ts` (`validate`, the palette's Validate) | the palette, the Stacks tree's apply, a notice about a root |
 
 ## Engine and sessions
@@ -109,12 +112,31 @@ tool sets run theirs on the session mapping's own `commands` port, whose directo
 `{kind: 'failure', failure}`. A command can render its result and exit non-zero (`module scan` with findings, `module
 validate` when Terraform found errors), and that is a result.
 
-**The runner host** is the window's one `createActionRunner` over the home port and one result store. The Stacks tree and
-the stack palette commands run the package's bindings through it with a `RunCtx` naming the root and the stack; the
-binding owns the arguments, the confirmation and the result folding, and the host draws the store. A binding that
-declares the root runs in it. `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked
-it: the store's tick names no run, so the host runs each binding inside an async context (`AsyncLocalStorage`) carrying
-its `RunCtx` and reads it when the store notifies.
+**The runner host** is the window's one `createActionRunner` over the home port and one result store. The Stacks tree,
+the stack palette commands, Create Stack and Import Existing Resources run the package's bindings through it with a
+`RunCtx` naming the root and the stack; the binding owns the arguments, the confirmation and the result folding, and the
+host draws the store. A binding that declares the root runs in it. The host runs each binding inside an async context
+(`AsyncLocalStorage`) carrying its run, which attributes to the run what names none:
+
+- `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked it.
+- The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
+  object was answered before is reused by argument name; the answerer (`vscode/form-answerer.ts`) asks the rest, one
+  prompt per argument name: `slug` an input box that refuses an empty value, `connection` a pick from `lace connection
+  list` (a list that cannot be read, or an empty one, cancels the form and says why), `state` an open dialog for one
+  file; any other name cancels the form with a notice. A dismissed prompt cancels the form. The host keeps the form the
+  runner handed it last: a form superseded by a newer one submits and cancels nothing when its prompts settle. A submit
+  runs in the run's context again.
+- A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
+  starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
+  each invocation it started. `run` resolves when the runner's call does, with `ended`. A run a trigger starts (Create
+  Stack, Import Existing Resources, a failure's package answer) runs under a progress notification until it ends
+  (`vscode/run-progress.ts`), titled by its action and what it acts on, the stack, else the root (`runTitle`), the
+  title its prompts carry too.
+- The window's presenter is told the `RunCtx` of the run a notice is about. A failure's notice offers the ways out its
+  reason names, Validate on the run's root among them when that root is under a workspace folder, and after them each
+  package action that answers the reason, as the package's `answering` lists them (`import-partial`, Import the rest,
+  on `import_residual`). The one chosen runs under a progress notification over the failed run's own `RunCtx` object, so
+  it reuses the statefile that run was given. The runner's requirement check gates it.
 
 ## The canvas tab
 
@@ -128,10 +150,13 @@ its `RunCtx` and reads it when the store notifies.
   and mounts the canvas package's `App` with its ports: `source`, `editor`, `commands`, `context` from the engine
   mapping, `viewState` from what the host kept, and a `presenter` whose notices and confirmations are VS Code's dialogs
   (`vscode/dialogs.ts`: a modal question, or one input box that returns only the exact typed value). It passes the
-  host's one contribution (`canvas-webview/contributions.ts`): **Open source**, a host action on each row of the canvas's
-  Diagnostics list, which sends the host the row's file, line and column (`openSource`), and says so for a diagnostic
-  that names no file. The host opens the root's file at that place in the editor beside the canvas, and a file it cannot
-  open fails the call with the reason.
+  host's two contributions (`canvas-webview/contributions.ts`). **Open source**, a host action on each row of the
+  canvas's Diagnostics list, sends the host the row's file, line and column (`openSource`), and says so for a diagnostic
+  that names no file; the host opens the root's file at that place in the editor beside the canvas, and a file it cannot
+  open fails the call with the reason. **Import existing resources**, a host action on the source-refused banner's row
+  while the tree is out of lace shape (`requiredContext: ['root', 'needsConversion']`), after the package's Convert,
+  with its own `choice` sentence, asks the host to run Import Existing Resources on the panel's root
+  (`importResources`), which answers once the import's run has ended.
 - A notice from the page is the shared notice of `vscode/offers.ts`: a failure the canvas's own commands hit (its toolbar's
   Convert stopped at Terraform it cannot represent) offers the ways out its reason names, and Validate validates the
   panel's root with the palette's Validate.
@@ -147,7 +172,8 @@ its `RunCtx` and reads it when the store notifies.
 - A directory with no top-level `.tf` opens editable, on the empty module: the module starts on the canvas, and its
   first Generate writes its first `.tf` files. In a workspace where no directory holds Terraform and no canvas is open,
   Open Canvas from the palette opens the canvas of the workspace's folder, the developer's pick in a workspace of
-  several folders. The extension writes no source file: Generate, Format and Convert are the CLI's writers.
+  several folders. The extension writes no source file: Generate, Format, Convert and Import Existing Resources are the
+  CLI's writers.
 - The page reports its focus, which `onFocusChange` autosave reads. The canvas package's keymap handles its own keys;
   the extension contributes no keybinding.
 - The page follows VS Code's theme (`webview/theme.ts`): `data-theme` on `<html>`, which the canvas's design tokens
@@ -162,9 +188,10 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 
 - **The envelope**: every canvas-panel message is `{ch: 'engine', frame}` or `{ch: 'host', frame}`; `splitChannel` gives
   each protocol a port of its own over the one pair. The engine frames are `@lace-cloud/proto`'s bridge frames.
-- **The host protocol** (`host-protocol.ts`): calls from the page `boot`, `confirm` and `openSource`; notices from the page
-  `arrangement`, `notify` (with the failure document of the command it is about, when there is one), `unsaved`, `focus`,
-  `generated` (the files the canvas's own Generate wrote); events from the host `stack` and `tick`.
+- **The host protocol** (`host-protocol.ts`): calls from the page `boot`, `confirm`, `openSource` and
+  `importResources`; notices from the page `arrangement`, `notify` (with the failure document of the command it is
+  about, when there is one), `unsaved`, `focus`, `generated` (the files the canvas's own Generate wrote); events from
+  the host `stack` and `tick`.
 - **The registry protocol** (`registry-protocol.ts`): the host sends the page its whole state (`{op: 'state', state}`);
   the page says what the developer did. The registry pages reach no engine.
 
@@ -197,7 +224,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
   `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
   the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
-  root.
+  root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the root its run was over,
+  so `no_certification` and `stale_certification` offer Validate on it.
 - Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges. Each tick of the
   runner's store (a run started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root
   that run was about, its `RunCtx.root`, whatever the tree ran since.
@@ -216,19 +244,23 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   (Choose Module). When the stacks cannot be listed, it selects the welcome view by the failure's reason: `signedOut`,
   `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no
   portal URL), `noStack`, `failed`. The tree does not offer `lace stack destroy`; it is a terminal command.
-- Creating a stack is one-time setup in a terminal, not a journey of the extension. `noStack`'s action, Create Stack in
-  Terminal (`lace.stacks.createInTerminal`), types `<lace.binaryPath> stack create SLUG --source . --connection
-  CONNECTION_ID` into a terminal at the root, unsent: a placeholder for each argument `stack create` requires
-  (`stacks-tree.test.ts` reads them from the command contract), which the developer fills in before running it. The
-  terminal runs the default profile, whose shell `env.shell` names, and the line calls the CLI as that shell calls a
-  program by its path (`vscode/shell-line.ts`): PowerShell `& 'path'` (each of `' ‘ ’ ‚ ‛` doubled), Command Prompt
-  `"path"`, fish `'path'` (`\` and `'` escaped), nushell `^'path'` (a raw string when the path holds `'`), any other
-  shell POSIX single quotes. VS Code's API puts no command on a prompt unsent in the shell's syntax
-  (`shellIntegration.executeCommand` runs it), so that rule is the extension's, in that one module. With WSL as the
-  default profile, `env.shell` is `wsl.exe`, which names neither the distribution's shell nor how it mounts the Windows
-  path the setting names, so the line is written for a POSIX shell and may not run there.
-- A stack palette command (Preview, Apply, Scan Stack) on a root with no stack says so, and that Create Stack in
-  Terminal creates one; it shows no empty pick.
+- `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
+  run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
+  ends. The runner's form asks for the slug and the connection; the package's notice says "Created stack <slug>", and
+  its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason, through the offers
+  (`not_git_repository` and `no_origin_remote` say the CLI's message).
+- The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>`; a list that cannot be read is shown
+  with the ways out its reason names, and a root with no stack says "No stack is deployed from <root> yet. Create one in
+  the Stacks view." and shows no empty pick.
+- **Import Existing Resources** (`stacks/import-resources.ts`) is a stack command the host draws: the canvas's
+  source-refused banner offers it beside Convert on the panel's root, and **Lace: Import Existing Resources**
+  (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the
+  one stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, then runs
+  the package's `import` binding over `{root, stack}` under a progress notification ("Import existing resources:
+  <stack>") until its run ends; the form asks for the statefile. The package's notice says what the import did, and an
+  import that stopped at `import_residual` offers Import the rest over the same run's context. Nothing detects a
+  statefile and nothing filters the stacks by their state: the CLI refuses a stack that holds state
+  (`stack_has_state`).
 
 ## Module commands
 
@@ -238,7 +270,8 @@ whose folder has left the workspace is under no open folder, and is none); the s
 the reason `nameRoot` gives (no folder is open; no directory holds Terraform and no canvas is open; several are
 candidates and the sources have no pick to ask; the folder pointed at is outside the workspace, or is or is inside
 `.terraform` or `.lace`, which is not a module directory), and a pick the developer dismissed says nothing. The stack
-palette commands (Preview, Apply, Scan Stack, Show Stacks of a Module) name their root the same way. Open Canvas and
+palette commands (Preview, Apply, Scan Stack, Show Stacks of a Module) and Import Existing Resources name their root the
+same way. Open Canvas and
 placement name theirs over `startingSources`, whose `start` asks which workspace folder a module starts in where there
 is no candidate (a workspace of one folder is not asked); every other surface's sources have no `start`, so a module
 command in such a workspace says there is no module: an empty tree has nothing to validate. The Stacks view finds its
@@ -265,9 +298,10 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
 - A failure is the shared notice of `vscode/offers.ts`, with the ways out its reason names: `tool_missing` names the
   tool with **Install** on the URL the failure carries; `source_refused` (a Convert stopped at Terraform it cannot
   represent as written) offers **Validate** of the same root, whose report names what is refused; `not_git_repository`
-  offers nothing, its message says to run `git init`. Validate is offered only by a notice that names its root: a notice
-  the window's runner presents carries no run, so it offers none. Validate and Convert run through the commands mapping,
-  not the runner: the package's bindings for them hand the presenter a verdict line and no document. Generate Docs opens the markdown in an untitled editor and writes
+  offers nothing, its message says to run `git init`. A notice that names the root a failure is about offers Validate on
+  that root: a module command's, a canvas page's, an apply's, and a notice of the window's runner, whose run's `RunCtx`
+  names it. Validate and Convert run through the commands mapping, not the runner: the package's bindings for them hand
+  the presenter a verdict line and no document. Generate Docs opens the markdown in an untitled editor and writes
   nothing into the tree (a README beside the `.tf` would move the tree's hash).
 
 ## Problems
@@ -376,7 +410,8 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   scripts per path, recording each invocation's directory), `engine/__tests__/fake-engine.ts` (an engine at the bridge,
   so the real caller, mapping and codecs run), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root
   sessions with the real rule for holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
-  `diagnostics/__tests__/fake-problems-api.ts`.
+  `diagnostics/__tests__/fake-problems-api.ts`, `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand
+  back the button clicked, string or item).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
   mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is

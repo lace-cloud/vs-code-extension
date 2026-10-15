@@ -1,0 +1,113 @@
+import type { LaceReason } from '@lace-cloud/canvas/engine';
+import { describe, expect, test, vi } from 'vitest';
+import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
+import { folder } from '../../roots/__tests__/fake-uri';
+import type { AuthoringRoot } from '../../roots/authoring-roots';
+import { createRootState } from '../../state/root-state';
+import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
+import type { OfferActions } from '../../vscode/offers';
+import { stackPick } from '../stack-pick';
+import { memento, stack, stacks } from './stack-fixtures';
+
+const repo = folder('/work/repo');
+const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
+
+function setup(
+  scripts: Parameters<typeof fakeCommands>[0],
+  options: { pick?: string; answer?: string } = {},
+) {
+  const commands = fakeCommands(scripts);
+  const messages: { level: string; text: string; buttons: string[] }[] = [];
+  const message = (level: string) =>
+    vi.fn(async (text: string, ...buttons: Button[]) => {
+      messages.push({ level, text, buttons: buttons.map(titleOf) });
+      return clicked(buttons, await options.answer);
+    });
+  const window = {
+    showQuickPick: vi.fn(
+      async (
+        items: { label: string; description: string; stack: { slug: string } }[],
+        _options: unknown,
+      ) => items.find((item) => item.stack.slug === options.pick),
+    ),
+    showInformationMessage: message('info'),
+    showWarningMessage: message('warn'),
+    showErrorMessage: message('error'),
+  };
+  const offers: OfferActions = {
+    signIn: vi.fn(),
+    selectOrganization: vi.fn(),
+    selectTeam: vi.fn(),
+    openPortal: vi.fn(),
+    install: vi.fn(),
+    openRecord: vi.fn(),
+  };
+  const rootState = createRootState(memento());
+  const pickStack = stackPick({
+    api: { window: window as never },
+    commands: commands.commands,
+    rootState,
+    sources: { folders: () => [repo] },
+    offers,
+  });
+  return { commands, window, messages, offers, rootState, pickStack };
+}
+
+describe('the stack pick', () => {
+  test("lists the root's stacks in the home, the one on its canvas marked, and gives the one picked", async () => {
+    const t = setup(
+      { 'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] } },
+      { pick: 'qa' },
+    );
+    await t.rootState.pickStack(prod, { id: 'stk_1', slug: 'prod' });
+
+    expect(await t.pickStack(prod, 'import into')).toEqual({ id: 'stk_2', slug: 'qa' });
+    expect(t.commands.invoked).toEqual([
+      { cwd: '/home/dev', path: 'stack list', args: { source: '/work/repo/infra/prod' } },
+    ]);
+    const [items, options] = t.window.showQuickPick.mock.calls[0];
+    expect(items.map(({ label, description }) => ({ label, description }))).toEqual([
+      { label: 'Prod', description: 'prod · on the canvas' },
+      { label: 'Qa', description: 'qa' },
+    ]);
+    expect(options).toEqual({ placeHolder: 'The stack deployed from infra/prod to import into' });
+  });
+
+  test('a dismissed pick gives no stack', async () => {
+    const t = setup({ 'stack list': { documents: [stacks(stack('stk_1', 'prod'))] } });
+    expect(await t.pickStack(prod, 'preview')).toBeUndefined();
+  });
+
+  test('a root with no stack says so and where one is created, and shows no empty pick', async () => {
+    const t = setup({ 'stack list': { documents: [stacks()] } });
+    expect(await t.pickStack(prod, 'preview')).toBeUndefined();
+    expect(t.messages).toEqual([
+      {
+        level: 'info',
+        text: 'No stack is deployed from infra/prod yet. Create one in the Stacks view.',
+        buttons: [],
+      },
+    ]);
+    expect(t.window.showQuickPick).not.toHaveBeenCalled();
+  });
+
+  test('a list that cannot be read says why, with the ways out its reason names', async () => {
+    const reason: LaceReason = 'no_team';
+    const t = setup(
+      {
+        'stack list': refused({
+          reason,
+          message: 'No team is selected',
+          url: 'https://portal/teams/new',
+        }),
+      },
+      { answer: 'Select Team' },
+    );
+    expect(await t.pickStack(prod, 'apply')).toBeUndefined();
+    expect(t.messages).toEqual([
+      { level: 'error', text: 'No team is selected', buttons: ['Select Team', 'Open Portal'] },
+    ]);
+    expect(t.offers.selectTeam).toHaveBeenCalled();
+    expect(t.window.showQuickPick).not.toHaveBeenCalled();
+  });
+});

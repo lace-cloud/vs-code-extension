@@ -1,19 +1,21 @@
 // The window's runner and the Stacks tree's reads on the real engine, the
 // `lace` CLI in bin/ or on PATH (`real-engine.ts`), signed out and with no
 // organization selected: a developer home of the test's own.
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CORE_COMMAND_ACTIONS, type CommandFailure, type RunSlot } from '@lace-cloud/canvas/engine';
+import type { CommandFailure, RunSlot } from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
 import {
   afterTest,
   gitRepository,
   moduleIn,
   realEngine,
+  scratchDirectory,
   signedOutHome,
+  until,
 } from '../../engine/__tests__/real-engine';
 import { commandDocument, commandOutcome } from '../../engine/command-outcome';
-import { createRunnerHost } from '../../engine/runner-host';
+import { type Answerer, binding, createRunnerHost } from '../../engine/runner-host';
 import { refusedState } from '../stack-rows';
 
 // A git repository with two module directories.
@@ -23,24 +25,19 @@ function twoRoots(): { a: string; b: string } {
 }
 
 // The window's commands mapping, for a developer whose home is `home`, and
-// its one runner.
-function window(home: string) {
+// its one runner, whose forms `answerer` answers.
+function window(home: string, answerer: Answerer = (form) => form.cancel()) {
   const { commands } = realEngine({ home });
   const notices: { level: string; failure?: CommandFailure }[] = [];
   const runner = createRunnerHost({
     commands: () => commands.anywhere(),
-    presenter: { notify: (level, _text, failure) => notices.push({ level, failure }) },
+    presenter: () => ({ notify: (level, _text, failure) => notices.push({ level, failure }) }),
+    answerer,
     onRunLog: () => {},
   });
   afterTest(() => runner.dispose());
   return { commands, runner, notices };
 }
-
-const binding = (id: string) => {
-  const found = CORE_COMMAND_ACTIONS.find((action) => action.id === id);
-  if (!found) throw new Error(`no binding ${id}`);
-  return found;
-};
 
 // The run slot once it settles.
 function settledRun(runner: ReturnType<typeof createRunnerHost>): Promise<NonNullable<RunSlot>> {
@@ -91,5 +88,46 @@ describe('the Stacks tree signed out', () => {
     const failure = listed.kind === 'failure' ? listed.failure : undefined;
     expect(failure?.reason).toBe('unauthenticated');
     expect(refusedState(failure)).toBe('signedOut');
+  });
+});
+
+describe("a binding's form answered over the real engine", () => {
+  test("Create Stack's slug and connection reach stack create in the root, whose refusal is the CLI's by its reason, and the run ends", async () => {
+    const home = signedOutHome();
+    const { a } = twoRoots();
+    const { runner, notices } = window(home, (form) =>
+      form.submit({ slug: 'prod', connection: 'conn_1' }),
+    );
+
+    const { ended } = await runner.run(binding('create'), { root: a });
+    await ended;
+    // A failure is said once its command has ended.
+    await until('the refusal is said', () => notices.length > 0);
+    // The stack's source binding is the root's repository's `origin`, which
+    // this repository has none of.
+    expect(notices.map(({ level, failure }) => [level, failure?.reason])).toEqual([
+      ['error', 'no_origin_remote'],
+    ]);
+  });
+
+  test("Import Existing Resources' statefile reaches stack import in the root, which needs credentials, and the run ends", async () => {
+    const home = signedOutHome();
+    const { a } = twoRoots();
+    const state = join(scratchDirectory(), 'pulled.tfstate');
+    writeFileSync(
+      state,
+      JSON.stringify({ version: 4, serial: 1, lineage: 'l', outputs: {}, resources: [] }),
+    );
+    const { runner, notices } = window(home, (form) => form.submit({ state }));
+
+    const { ended } = await runner.run(binding('import'), {
+      root: a,
+      stack: { id: 'stk_a', slug: 'a' },
+    });
+    await ended;
+    await until('the refusal is said', () => notices.length > 0);
+    expect(notices.map(({ level, failure }) => [level, failure?.reason])).toEqual([
+      ['error', 'unauthenticated'],
+    ]);
   });
 });

@@ -11,7 +11,7 @@ import { authoringCommands, type ModuleCommands } from './commands/authoring-com
 import { type CanvasOperations, canvasOperations } from './commands/canvas-operations';
 import { problemsObserver } from './diagnostics/problems';
 import { type CommandsMapping, createCommandsMapping } from './engine/commands-mapping';
-import { type Engine, engineControls, engineSettings } from './engine/engine';
+import { type Engine, engineControls } from './engine/engine';
 import type { RootSessions } from './engine/root-sessions';
 import { createRunnerHost, type RunnerHost } from './engine/runner-host';
 import { moduleKey } from './protocol/registry-protocol';
@@ -22,12 +22,20 @@ import { registryMarks } from './registry/registry-marks';
 import { registryReads } from './registry/registry-reads';
 import { createRegistryView, REFRESH_REGISTRY, REGISTRY_VIEW } from './registry/registry-view';
 import { type RootSources, startingSources, workspaceRootSources } from './roots/authoring-roots';
+import {
+  IMPORT_RESOURCES,
+  type ImportResources,
+  importResourcesCommand,
+  resourceImporter,
+} from './stacks/import-resources';
 import { createRunOutput, type RunOutput } from './stacks/run-output';
+import { type PickStack, stackPick } from './stacks/stack-pick';
 import { stacksTree } from './stacks/stacks-tree';
 import { createRootState, type RootState } from './state/root-state';
 import { registerLaceTools } from './tools/lm-tools';
 import { registerCommands } from './vscode/commands';
 import { createConfirm } from './vscode/dialogs';
+import { formAnswerer } from './vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from './vscode/offers';
 
 // What activation builds first: the engine, the root sessions with their
@@ -44,11 +52,13 @@ export type WindowBase = {
 
 // What every feature is handed: the base and the window's owners that more
 // than one feature reads — what the window keeps per root, the commands
-// mapping, the account, the window's one action runner with the Output
-// channels of its runs and what its notices offer, the canvas panels, how a
-// surface names its root (a surface that starts a module adds its ask,
-// `startingSources`), the one rule of Save and of Generate, and the
-// palette's module commands, whose Validate a notice about a root offers.
+// mapping, the account, the window's one action runner with the prompts
+// that answer its forms, the Output channels of its runs and what its
+// notices offer, the canvas panels, how a surface names its root (a surface
+// that starts a module adds its ask, `startingSources`), the one rule of
+// Save and of Generate, the palette's module commands, whose Validate a
+// notice about a root offers, the one stack pick, and Import Existing
+// Resources, which the canvas's banner and the palette run.
 export type Host = WindowBase & {
   rootState: RootState;
   commands: CommandsMapping;
@@ -60,6 +70,8 @@ export type Host = WindowBase & {
   sources: RootSources;
   operations: CanvasOperations;
   modules: ModuleCommands;
+  pickStack: PickStack;
+  importResources: ImportResources;
 };
 
 export function windowHost(base: WindowBase): Host {
@@ -85,16 +97,13 @@ export function windowHost(base: WindowBase): Host {
     confirm: createConfirm(api.window),
     pageFocus: autosave.pageFocus,
     offers,
-    // The module commands name roots through the panels, so they are built
-    // after them; a page's notice is shown long after both exist.
+    // The module commands and Import Existing Resources name roots through
+    // the panels, so they are built after them; a page's notice or banner
+    // action comes long after both exist.
     validate: (root) => modules.validate(root),
+    importResources: (root) => importResources(root),
     generated: (root, written) => modules.generated(root, written),
     report,
-  });
-  const runner = createRunnerHost({
-    commands: () => commands.anywhere(),
-    presenter: offeringPresenter(api, offers, createConfirm(api.window), report),
-    onRunLog: runOutput.append,
   });
   const sources = workspaceRootSources(api, {
     activeCanvas: panels.activeRoot,
@@ -109,6 +118,21 @@ export function windowHost(base: WindowBase): Host {
     log,
     offers,
   });
+  const runner = createRunnerHost({
+    commands: () => commands.anywhere(),
+    presenter: offeringPresenter({
+      api,
+      actions: offers,
+      confirm: createConfirm(api.window),
+      validate: modules.validate,
+      sources,
+      report,
+    }),
+    answerer: formAnswerer({ api, commands, offers, sources, report }),
+    onRunLog: runOutput.append,
+  });
+  const pickStack = stackPick({ api, commands, rootState, sources, offers });
+  const importResources = resourceImporter({ api, sources, runner, pickStack });
   return {
     ...base,
     rootState,
@@ -121,6 +145,8 @@ export function windowHost(base: WindowBase): Host {
     sources,
     operations,
     modules,
+    pickStack,
+    importResources,
   };
 }
 
@@ -199,21 +225,18 @@ function accountCommands({ api, account, commands, offers, report }: Host): vsco
   return accountControls(api, account, commands, offers, report);
 }
 
-// The Stacks tree, and the lifetime of the window's runner and its runs'
-// Output channels.
+// The Stacks tree, Lace: Import Existing Resources, and the lifetime of the
+// window's runner and its runs' Output channels.
 function stacks(host: Host): vscode.Disposable {
-  const tree = stacksTree({
-    ...host,
-    validate: host.modules.validate,
-    binaryPath: engineSettings(host.api.workspace).binaryPath,
-  });
-  return {
-    dispose() {
-      tree.dispose();
-      host.runner.dispose();
-      host.runOutput.dispose();
-    },
-  };
+  const { api, sources, runner, runOutput } = host;
+  return disposingAll([
+    stacksTree({ ...host, validate: host.modules.validate }),
+    ...registerCommands(api, {
+      [IMPORT_RESOURCES]: importResourcesCommand(api.window, sources, host.importResources),
+    }),
+    runner,
+    runOutput,
+  ]);
 }
 
 // The Lace tools in VS Code's chat, run by the developer's own model. A host

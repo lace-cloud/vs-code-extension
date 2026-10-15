@@ -5,6 +5,7 @@ import type { RootHold } from '../../engine/root-sessions';
 import { folder, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
+import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import { createCanvasPanels } from '../canvas-panels';
 
 const repo = folder('/work/repo');
@@ -148,7 +149,7 @@ function setup(
       showInformationMessage: vi.fn(async () => undefined),
       showWarningMessage: vi.fn(async () => undefined),
       showErrorMessage: vi.fn(
-        async (_text: string, ..._labels: string[]): Promise<string | undefined> => undefined,
+        async (_text: string, ..._buttons: Button[]): Promise<Button | undefined> => undefined,
       ),
       showTextDocument: vi.fn(async () => {}),
     },
@@ -208,6 +209,14 @@ function setup(
     openRecord: vi.fn(),
   };
   const validate = vi.fn(async () => {});
+  // Import Existing Resources on a root, which settles when the test says.
+  const imported: { root: AuthoringRoot; end: () => void }[] = [];
+  const importResources = vi.fn(
+    (root: AuthoringRoot) =>
+      new Promise<void>((end) => {
+        imported.push({ root, end });
+      }),
+  );
   const generated = vi.fn(async () => {});
   const canvasPanels = createCanvasPanels({
     api: api as never,
@@ -219,6 +228,7 @@ function setup(
     pageFocus,
     offers,
     validate,
+    importResources,
     generated,
     report: (what, error) => reports.push({ what, error }),
   });
@@ -242,6 +252,8 @@ function setup(
     pageFocus,
     offers,
     validate,
+    importResources,
+    imported,
     generated,
   };
 }
@@ -396,6 +408,7 @@ describe('ensure', () => {
       pageFocus: vi.fn(),
       offers: {} as never,
       validate: vi.fn(),
+      importResources: vi.fn(),
       generated: vi.fn(),
       report: vi.fn(),
     });
@@ -507,8 +520,8 @@ describe('the page and the host', () => {
 
   test("a notice the page sends with a command's failure offers the ways out its reason names; Validate validates the panel's root", async () => {
     const { canvasPanels, panels, api, offers, validate } = setup();
-    api.window.showErrorMessage.mockImplementation(async (text) =>
-      text.startsWith('Error: 1 construct') ? 'Validate' : 'Open Portal',
+    api.window.showErrorMessage.mockImplementation(async (text, ...buttons) =>
+      clicked(buttons, text.startsWith('Error: 1 construct') ? 'Validate' : 'Open Portal'),
     );
     await canvasPanels.ensure(prod);
     const page = panels[0];
@@ -522,10 +535,10 @@ describe('the page and the host', () => {
       failure: { reason: 'source_refused', message: '1 construct could not be converted' },
     });
     await settled();
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith(
+    expect(shownBy(api.window.showErrorMessage)).toContainEqual([
       'Error: 1 construct could not be converted',
       'Validate',
-    );
+    ]);
     expect(validate).toHaveBeenCalledWith(prod);
 
     notice({
@@ -535,15 +548,35 @@ describe('the page and the host', () => {
       failure: { reason: 'no_team', message: 'no team', url: 'https://portal/teams/new' },
     });
     await settled();
-    expect(api.window.showErrorMessage).toHaveBeenCalledWith(
+    expect(shownBy(api.window.showErrorMessage)).toContainEqual([
       'no team',
       'Select Team',
       'Open Portal',
-    );
+    ]);
     expect(offers.openPortal).toHaveBeenCalledWith({
       kind: 'openPortal',
       url: 'https://portal/teams/new',
     });
+  });
+
+  test("Import existing resources on the banner runs Import Existing Resources on the panel's root, and the call answers once it has ended", async () => {
+    const { canvasPanels, panels, importResources, imported } = setup();
+    await canvasPanels.ensure(prod);
+    const page = panels[0];
+
+    page.receive({
+      ch: 'host',
+      frame: { kind: 'call', id: '6', name: 'importResources', request: {} },
+    });
+    await settled();
+    expect(importResources).toHaveBeenCalledWith(prod);
+    expect(page.posted).toEqual([]);
+
+    imported[0].end();
+    await settled();
+    expect(page.posted).toEqual([
+      { ch: 'host', frame: { kind: 'reply', id: '6', response: null } },
+    ]);
   });
 
   test("the canvas's own Generate ends with the notice Lace: Generate shows, for the panel's root", async () => {

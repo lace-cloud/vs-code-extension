@@ -292,49 +292,63 @@ describe('what a settled apply says', () => {
 });
 
 describe('what an apply held for approval says', () => {
-  const awaiting = (
-    requirements: { id: string; state: string; decidedBy: 'lace' | 'ecm' }[],
-    records: {
-      externalSystemId: string;
-      kind: string;
-      externalRef: string | null;
-      externalUrl: string | null;
-      state: string | null;
-    }[],
-  ) =>
+  type Requirement = {
+    id: string;
+    state: string;
+    decidedBy: 'lace' | 'ecm';
+    recordId: string | null;
+  };
+  type Record = {
+    id: string;
+    externalSystemId: string;
+    kind: string;
+    externalRef: string | null;
+    externalUrl: string | null;
+    state: string | null;
+    decision: 'approved' | 'rejected' | null;
+  };
+  const awaiting = (requirements: Requirement[], records: Record[], runUrl: string | null = null) =>
     outcomeNotice('prod', {
       kind: 'awaiting-approval',
       changeRequest: { id: 'chg_1', state: 'submitted', requirements, records },
+      runUrl,
     });
+  const jsm = (fields: Partial<Record>): Record => ({
+    id: 'crec_jsm',
+    externalSystemId: 'esys_jsm',
+    kind: 'jsm',
+    externalRef: 'CHG-42',
+    externalUrl: 'https://acme.atlassian.net/browse/CHG-42',
+    state: 'open',
+    decision: null,
+    ...fields,
+  });
+  const byJsm: Requirement = {
+    id: 'creq_jsm',
+    state: 'pending',
+    decidedBy: 'ecm',
+    recordId: 'crec_jsm',
+  };
 
   test('a change request Lace alone decides names its requirement, and offers nothing to open', () => {
-    expect(awaiting([{ id: 'creq_policy', state: 'pending', decidedBy: 'lace' }], [])).toEqual({
+    expect(
+      awaiting([{ id: 'creq_policy', state: 'pending', decidedBy: 'lace', recordId: null }], []),
+    ).toEqual({
       level: 'info',
       text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: pending, decided in Lace.',
       offers: [],
     });
   });
 
-  test('a requirement a change-management system decides names that system’s record, its state and its page, and offers the page', () => {
+  test('a requirement a change-management system decides names the record that settles it, the record its state, the system’s decision and its page, and offers the page', () => {
     expect(
       awaiting(
-        [
-          { id: 'creq_policy', state: 'approved', decidedBy: 'lace' },
-          { id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' },
-        ],
-        [
-          {
-            externalSystemId: 'esys_jsm',
-            kind: 'jsm',
-            externalRef: 'CHG-42',
-            externalUrl: 'https://acme.atlassian.net/browse/CHG-42',
-            state: 'Waiting for approval',
-          },
-        ],
+        [{ id: 'creq_policy', state: 'approved', decidedBy: 'lace', recordId: null }, byJsm],
+        [jsm({})],
       ),
     ).toEqual({
       level: 'info',
-      text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: approved, decided in Lace. Requirement creq_jsm: pending, decided in its change-management system. Record jsm CHG-42: Waiting for approval, https://acme.atlassian.net/browse/CHG-42.',
+      text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_policy: approved, decided in Lace. Requirement creq_jsm: pending, decided in jsm CHG-42. Record jsm CHG-42: open, awaiting its decision, https://acme.atlassian.net/browse/CHG-42.',
       offers: [
         {
           kind: 'openRecord',
@@ -345,41 +359,45 @@ describe('what an apply held for approval says', () => {
     });
   });
 
-  test('a record its system has not opened yet says so, and has no page to offer', () => {
-    expect(
-      awaiting(
-        [{ id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' }],
-        [
-          {
-            externalSystemId: 'esys_jsm',
-            kind: 'jsm',
-            externalRef: null,
-            externalUrl: null,
-            state: null,
-          },
-        ],
-      ),
-    ).toEqual({
-      level: 'info',
-      text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_jsm: pending, decided in its change-management system. Record jsm: not opened yet.',
-      offers: [],
-    });
+  test('the held Run’s page, where its requirements are decided, is offered first once the CLI names it', () => {
+    const runPage = 'https://lace.cloud/acme/platform/stacks/stk_1/runs/run_9';
+    expect(awaiting([byJsm], [jsm({})], runPage).offers).toEqual([
+      { kind: 'openPortal', url: runPage },
+      { kind: 'openRecord', record: 'jsm CHG-42', url: 'https://acme.atlassian.net/browse/CHG-42' },
+    ]);
+  });
+
+  test('a record says the decision its system took on it', () => {
+    expect(awaiting([byJsm], [jsm({ decision: 'approved' })]).text).toContain(
+      'Record jsm CHG-42: open, approved in jsm, https://acme.atlassian.net/browse/CHG-42.',
+    );
+  });
+
+  test('a record its system ended with no decision says so', () => {
+    expect(awaiting([byJsm], [jsm({ state: 'cancelled' })]).text).toContain(
+      'Record jsm CHG-42: cancelled, ended with no decision, https://acme.atlassian.net/browse/CHG-42.',
+    );
+  });
+
+  test('a record its system has not opened yet says so, names its system as the decider, and has no page to offer', () => {
+    expect(awaiting([byJsm], [jsm({ externalRef: null, externalUrl: null, state: null })])).toEqual(
+      {
+        level: 'info',
+        text: 'The change to prod awaits approval: change request chg_1, submitted. Requirement creq_jsm: pending, decided in jsm (record not opened yet). Record jsm: not opened yet.',
+        offers: [],
+      },
+    );
+  });
+
+  test('a requirement whose record the change request does not carry names no system', () => {
+    expect(awaiting([{ ...byJsm, recordId: null }], []).text).toContain(
+      'Requirement creq_jsm: pending, decided in its change-management system.',
+    );
   });
 
   test('a record opened but not read yet says so', () => {
-    expect(
-      awaiting(
-        [{ id: 'creq_jsm', state: 'pending', decidedBy: 'ecm' }],
-        [
-          {
-            externalSystemId: 'esys_jsm',
-            kind: 'jsm',
-            externalRef: 'CHG-42',
-            externalUrl: null,
-            state: null,
-          },
-        ],
-      ).text,
-    ).toContain('Record jsm CHG-42: not read yet.');
+    expect(awaiting([byJsm], [jsm({ externalUrl: null, state: null })]).text).toContain(
+      'Record jsm CHG-42: not read yet.',
+    );
   });
 });

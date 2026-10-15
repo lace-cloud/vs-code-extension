@@ -32,6 +32,7 @@ const handlers = (over: Partial<HostHandlers> = {}): HostHandlers => ({
   boot: async () => ({ root: '/repo', arrangement: {} }),
   confirm: async () => true,
   openSource: async () => null,
+  importResources: async () => null,
   notice: () => {},
   ...over,
 });
@@ -175,6 +176,17 @@ describe('the host protocol', () => {
       (host.call as (n: string, r: unknown) => Promise<unknown>)('shutdown', {}),
     ).rejects.toThrow('unknown call: shutdown');
     await expect(host.call('confirm', { text: 1 } as never)).rejects.toThrow('confirm: no text');
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  test('importResources reaches its own handler, and no other', async () => {
+    const { a, b } = pair();
+    const importResources = vi.fn(async () => null);
+    const confirm = vi.fn(async () => true);
+    serveHost(b, handlers({ importResources, confirm }));
+
+    expect(await hostCaller(a).call('importResources', {})).toBeNull();
+    expect(importResources).toHaveBeenCalledWith({});
     expect(confirm).not.toHaveBeenCalled();
   });
 
