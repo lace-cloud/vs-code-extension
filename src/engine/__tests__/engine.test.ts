@@ -1,6 +1,7 @@
 import type { BridgeEngineCaller } from '@lace-cloud/canvas/engine';
 import {
   EngineProtocolMismatchError,
+  EngineSpawnError,
   type EngineTransport,
   type ServerState,
 } from '@lace-cloud/host';
@@ -75,6 +76,10 @@ function fakeManager() {
 }
 
 const settings = { binaryPath: () => '/opt/lace', autoRestart: () => true };
+// The error a binary that could not be spawned rejects with, as Node's
+// spawn reports `code`.
+const spawnFailed = (code: string, binary: string) =>
+  new EngineSpawnError(Object.assign(new Error(`spawn ${binary} ${code}`), { code }));
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 const version = async (caller: BridgeEngineCaller) =>
   (await caller.unary('Initialize', {})).server_version;
@@ -99,7 +104,7 @@ describe('the engine starts on demand', () => {
 
   test('a start that fails rejects with where the binary was read from and why', async () => {
     const manager = fakeManager();
-    const cause = new Error('Failed to spawn engine: spawn /opt/lace ENOENT');
+    const cause = spawnFailed('ENOENT', '/opt/lace');
     manager.failure = cause;
     const engine = createEngine(manager, settings);
 
@@ -114,17 +119,35 @@ describe('the engine starts on demand', () => {
     expect(engine.state()).toBe('error');
   });
 
-  test('a start that fails before its handshake names PATH and the setting', async () => {
+  // What a start that failed with `failure` says, the binary read from
+  // `binaryPath`.
+  const startSays = async (failure: Error, binaryPath = '/opt/lace') => {
     const manager = fakeManager();
-    manager.failure = new Error('Failed to spawn engine: spawn lace ENOENT');
-    const asked = createEngine(manager, { ...settings, binaryPath: () => 'lace' })
+    manager.failure = failure;
+    const asked = createEngine(manager, { ...settings, binaryPath: () => binaryPath })
       .caller()
       .catch((error) => error.message);
     await tick();
     manager.come();
+    return asked;
+  };
 
-    expect(await asked).toBe(
+  test('a binary that is not found names PATH and the setting', async () => {
+    expect(await startSays(spawnFailed('ENOENT', 'lace'), 'lace')).toBe(
       'The Lace engine did not start from lace (the setting lace.binaryPath): Failed to spawn engine: spawn lace ENOENT. Install the Lace CLI so lace is on PATH, or set lace.binaryPath to the full path of its executable.',
+    );
+  });
+
+  test('any other failed start says what happened and where the binary was read from, and no remedy for a missing one', async () => {
+    expect(await startSays(spawnFailed('EACCES', '/opt/lace'))).toBe(
+      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): Failed to spawn engine: spawn /opt/lace EACCES.',
+    );
+    expect(await startSays(new Error('the engine exited before its handshake (code 1)'))).toBe(
+      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): the engine exited before its handshake (code 1).',
+    );
+    // The remedy follows the spawn error's code, never a message's text.
+    expect(await startSays(new Error('spawn /opt/lace ENOENT'))).toBe(
+      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): spawn /opt/lace ENOENT.',
     );
   });
 
@@ -328,7 +351,7 @@ describe('the engine controls', () => {
 
     expect(api.window.showErrorMessage).toHaveBeenCalledTimes(1);
     expect(api.window.showErrorMessage).toHaveBeenCalledWith(
-      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): exited before its handshake. Install the Lace CLI so lace is on PATH, or set lace.binaryPath to the full path of its executable.',
+      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): exited before its handshake.',
     );
   });
 });
