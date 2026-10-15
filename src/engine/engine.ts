@@ -19,6 +19,7 @@ import {
 import type { BridgeRequest, BridgeResponse, MessageBridge } from '@lace-cloud/proto';
 import type * as vscode from 'vscode';
 import { registerCommands } from '../vscode/commands';
+import { failureText } from './command-outcome';
 
 export type EngineState = ServerState;
 
@@ -36,8 +37,7 @@ function startFailure(binaryPath: string, cause: unknown): string {
       ? `The Lace CLI at ${binaryPath} is too old for this extension: it speaks engine protocol ${cause.engineProtocol} and this extension needs ${cause.requiredProtocol}. Update the Lace CLI, or point the setting lace.binaryPath at a newer one.`
       : `The Lace CLI at ${binaryPath} is newer than this extension: it speaks engine protocol ${cause.engineProtocol} and this extension speaks ${cause.requiredProtocol}. Update the Lace extension.`;
   }
-  const message = cause instanceof Error ? cause.message : String(cause);
-  const happened = `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${message}.`;
+  const happened = `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${failureText(cause)}.`;
   return cause instanceof EngineSpawnError && cause.code === 'ENOENT'
     ? `${happened} Install the Lace CLI so lace is on PATH, or set lace.binaryPath to the full path of its executable.`
     : happened;

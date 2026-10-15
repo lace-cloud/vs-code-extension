@@ -38,6 +38,7 @@
 // the panel's root.
 import type * as vscode from 'vscode';
 import { positionOf } from '../diagnostics/problems';
+import { failureText } from '../engine/command-outcome';
 import type { Engine } from '../engine/engine';
 import type { RootHold, RootSessions } from '../engine/root-sessions';
 import {
@@ -260,7 +261,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
           selection: new api.Range(at, character, at, character),
         });
       } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = failureText(error);
         throw new Error(`Lace could not open ${file} in ${label()}: ${reason}`);
       }
       return null;

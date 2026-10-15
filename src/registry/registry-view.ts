@@ -15,7 +15,7 @@
 import type { CommandFailure } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type Account, SELECT_ORGANIZATION, SIGN_IN } from '../account/account';
-import type { CommandOutcome } from '../engine/command-outcome';
+import { type CommandOutcome, failureText } from '../engine/command-outcome';
 import {
   moduleKey,
   type RegistryRow,
@@ -118,7 +118,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
       }
     } catch (error) {
       report('reading the Lace registry', error);
-      next = { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
+      next = { kind: 'failed', message: failureText(error) };
     }
     if (turn !== reading) return;
     shown = next;

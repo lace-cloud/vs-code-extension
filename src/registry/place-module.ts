@@ -15,7 +15,7 @@ import { type Action, ConnectError, type EditorPort, reasonWire } from '@lace-cl
 import type * as vscode from 'vscode';
 import { SIGN_IN } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
-import { type ByReason, byReason } from '../engine/command-outcome';
+import { type ByReason, byReason, failureText } from '../engine/command-outcome';
 import type { RootSessions } from '../engine/root-sessions';
 import { rootLabel, rootPath, rootToAct, type StartingSources } from '../roots/authoring-roots';
 
@@ -121,7 +121,7 @@ export function placeModule(options: PlaceOptions): (module: PlacedModule) => Pr
     } catch (error) {
       if (error instanceof ConnectError) return refused(named, label, error);
       void api.window.showErrorMessage(
-        `Lace could not add ${named} to ${label}: ${error instanceof Error ? error.message : String(error)}`,
+        `Lace could not add ${named} to ${label}: ${failureText(error)}`,
       );
     }
   };
