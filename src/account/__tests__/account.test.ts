@@ -387,7 +387,7 @@ describe('signing in', () => {
     });
     await failed.account.signIn();
     expect(failed.api.window.showErrorMessage).toHaveBeenCalledWith(
-      'Lace sign-in failed: Error: sign-in expired',
+      'Lace sign-in failed: Error: sign-in expired\n',
     );
     expect(failed.changed).not.toHaveBeenCalled();
   });

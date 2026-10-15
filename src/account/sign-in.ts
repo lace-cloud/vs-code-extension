@@ -89,7 +89,9 @@ export async function signIn(
         return user;
       } catch (error) {
         if (!(error instanceof CommandExitError && error.code === CANCELLED)) {
-          void api.window.showErrorMessage(`Lace sign-in failed: ${failureText(error)}`);
+          void api.window.showErrorMessage(
+            `Lace sign-in failed: ${failureText(error, { kind: 'write' })}`,
+          );
         }
         return undefined;
       } finally {
