@@ -312,9 +312,11 @@ function setup(options: Options) {
     report,
   });
   const children = async (row?: Row) => (await provider?.getChildren(row)) ?? [];
-  const redrawn: (Row | undefined)[] = [];
-  provider?.onDidChangeTreeData?.((row) => {
-    redrawn.push(row as Row | undefined);
+  // What each change of the tree's data named: the rows to redraw, or
+  // `undefined` for the whole tree.
+  const redrawn: (Row | Row[] | undefined)[] = [];
+  provider?.onDidChangeTreeData?.((rows) => {
+    redrawn.push(rows as Row | Row[] | undefined);
   });
   const item = (row: Row) => provider?.getTreeItem(row) as vscode.TreeItem;
   const command = (id: string, ...args: unknown[]) => handlers.get(id)?.(...args);
@@ -863,6 +865,57 @@ describe('a stack row', () => {
       description: 'prod · on the canvas',
       iconPath: { id: 'layers-active' },
     });
+  });
+
+  test('selected, redraws the row picked before and the row picked now, the rows the tree gave, never the whole tree', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+      },
+    });
+    const [prodRow, qaRow] = await t.children();
+
+    t.view.selection.fire({ selection: [prodRow] });
+    await settled();
+    t.view.selection.fire({ selection: [qaRow] });
+    await settled();
+
+    expect(t.redrawn).toHaveLength(2);
+    const [first, second] = t.redrawn as Row[][];
+    expect(first).toHaveLength(1);
+    expect(first[0]).toBe(prodRow);
+    expect(second).toHaveLength(2);
+    expect(second[0]).toBe(prodRow);
+    expect(second[1]).toBe(qaRow);
+    expect(t.item(prodRow).description).toBe('prod');
+    expect(t.item(qaRow).description).toBe('qa · on the canvas');
+  });
+
+  test('Refresh Stacks reads the whole tree again', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    await t.command(STACK_COMMANDS.refresh);
+    expect(t.redrawn).toEqual([undefined]);
+  });
+
+  test.each([
+    [STACK_COMMANDS.followLogs, 'Follow Logs'],
+    [STACK_COMMANDS.cancel, 'Cancel Run'],
+    [STACK_COMMANDS.openInPortal, 'Open in Portal'],
+  ])('%s invoked with no run row says it acts on a run of the Stacks view, and runs nothing', async (id, title) => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.command(id);
+    await settled();
+    expect(t.messages).toEqual([
+      {
+        level: 'info',
+        text: `${title} acts on a run listed in the Stacks view; choose it from that run's menu.`,
+        buttons: [],
+      },
+    ]);
+    expect(t.commands.invoked).toEqual([]);
+    expect(t.api.env.openExternal).not.toHaveBeenCalled();
   });
 
   test("a Preview refused for no certification offers Validate on the run's root, which validates that root", async () => {

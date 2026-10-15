@@ -15,7 +15,9 @@
 // restates no argument and no confirmation. The tree opens no session: the
 // commands run on the Terraform on disk. Open in portal opens the page the
 // CLI gave the run. From the palette, Preview, Apply and Scan act on a stack
-// of the root `rootToAct` names, picked by the one stack pick (`pickStack`).
+// of the root `rootToAct` names, picked by the one stack pick (`pickStack`);
+// a run's actions act only on a run row, and invoked with none they say so.
+// A run row offers Cancel only while its run is running (`runLook`).
 //
 // With no stack deployed from the root, the view's action is Create Stack:
 // the package's `create` binding run through the runner over the view's
@@ -25,7 +27,11 @@
 // reads the tree again, which lists it.
 //
 // Selecting a stack picks it for the root, and the root's canvas draws its
-// badges. An apply runs under a progress notification and says how it
+// badges; the tree redraws the row picked before and the row picked now.
+// VS Code redraws an element it was given, by identity, and keeps every
+// other row and what a context menu holds of it; a read of the whole tree
+// drops them until it settles, so only a change that may change the list
+// reads it all. An apply runs under a progress notification and says how it
 // settled (`outcomeNotice`), with the ways out its failure names (Validate
 // is the palette's, on the root the apply ran in), or, held for approval,
 // the change request it waits on, offering the page of each record that has
@@ -168,13 +174,21 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   };
 
   let root: AuthoringRoot | undefined;
-  // The stack rows shown, by stack id: the row an apply's progress redraws.
+  // The stack rows shown, by stack id: the objects `getChildren` gave, which
+  // a pick and an apply's progress redraw.
   let shown = new Map<string, Row>();
   // The refusal the view shows, kept for the welcome's action.
   let refusal: CommandFailure | undefined;
 
-  const changed = new api.EventEmitter<Row | undefined>();
+  const changed = new api.EventEmitter<Row | Row[] | undefined>();
   const refresh = () => changed.fire(undefined);
+  // Redraws the shown rows of the stacks `ids` names.
+  const redraw = (ids: readonly (string | undefined)[]) => {
+    const rows = [...new Set(ids)]
+      .map((id) => (id === undefined ? undefined : shown.get(id)))
+      .filter((row): row is Row => row !== undefined);
+    if (rows.length > 0) changed.fire(rows);
+  };
 
   const rootKey = (of: AuthoringRoot) => rootUri(of).toString();
 
@@ -386,10 +400,18 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       if (chosen) await act(chosen.of, chosen.stack);
     };
 
+  // A run row's action. Invoked with no row (from a keybinding, or a menu
+  // whose row the tree no longer holds), it says where it acts and stops.
   const onRun =
-    (act: (row: Extract<Row, { kind: 'run' }>) => Promise<unknown>) =>
-    async (row: Extract<Row, { kind: 'run' }>) => {
-      await act(row);
+    (title: string, act: (row: Extract<Row, { kind: 'run' }>) => Promise<unknown>) =>
+    async (row?: Extract<Row, { kind: 'run' }>) => {
+      if (row) {
+        await act(row);
+        return;
+      }
+      void api.window.showInformationMessage(
+        `${title} acts on a run listed in the Stacks view; choose it from that run's menu.`,
+      );
     };
 
   // Previews open as read-only documents, one per preview.
@@ -405,8 +427,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   let shownPreview: object | undefined;
   const offStore = runner.store.subscribe(() => {
     const { preview, run } = runner.store.getSnapshot();
-    const running = shown.get(run?.readOver.stack ?? '');
-    if (running) changed.fire(running);
+    redraw([run?.readOver.stack]);
     if (preview && preview.token !== shownPreview) {
       shownPreview = preview.token;
       previewCount += 1;
@@ -445,9 +466,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     previewProvider,
     view.onDidChangeSelection(({ selection: [row] }) => {
       if (row?.kind !== 'stack') return;
-      rootState
-        .pickStack(row.root, stackRef(row.stack))
-        .then(refresh, (error) => report('picking a stack', error));
+      const before = rootState.stack(row.root)?.id;
+      rootState.pickStack(row.root, stackRef(row.stack)).then(
+        () => redraw([before, row.stack.id]),
+        (error) => report('picking a stack', error),
+      );
     }),
     view.onDidChangeVisibility(({ visible }) => {
       if (visible) refresh();
@@ -472,16 +495,16 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       ),
       [STACK_COMMANDS.apply]: onStack('apply', apply),
       [STACK_COMMANDS.scan]: onStack('scan', (of, stack) => runOnStack(BINDINGS.scan, of, stack)),
-      [STACK_COMMANDS.followLogs]: onRun(async (row) => {
+      [STACK_COMMANDS.followLogs]: onRun('Follow Logs', async (row) => {
         runOutput.show(row.stack.slug);
         const ctx: RunCtx = { root: rootPath(row.root), stack: row.stack };
         await runner.run(BINDINGS.followLogs, ctx, { runId: row.run.id });
       }),
-      [STACK_COMMANDS.cancel]: onRun(async (row) => {
+      [STACK_COMMANDS.cancel]: onRun('Cancel Run', async (row) => {
         const ctx: RunCtx = { root: rootPath(row.root), stack: row.stack };
         await runner.run(BINDINGS.cancel, ctx, { runId: row.run.id });
       }),
-      [STACK_COMMANDS.openInPortal]: onRun(async (row) => {
+      [STACK_COMMANDS.openInPortal]: onRun('Open in Portal', async (row) => {
         if (row.run.url !== undefined) await api.env.openExternal(api.Uri.parse(row.run.url));
       }),
       [STACK_COMMANDS.openPortal]: async () => {
