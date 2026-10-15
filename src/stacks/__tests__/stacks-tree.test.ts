@@ -142,7 +142,15 @@ function setup(options: Options) {
   const shownChannels: string[] = [];
   let content: vscode.TextDocumentContentProvider | undefined;
   const opened: string[] = [];
-  const progress: { title?: string; reports: string[]; cancel: () => void }[] = [];
+  // Each progress the window shows: a notification's title, or the view it
+  // is drawn over, and whether its task has ended.
+  const progress: {
+    title?: string;
+    view?: string;
+    reports: string[];
+    cancel: () => void;
+    ended: boolean;
+  }[] = [];
   const activeEditor = new Emitter<unknown>();
   // A change of the workspace's folders, told once `folders` holds them.
   const workspaceFolders = new Emitter<vscode.WorkspaceFoldersChangeEvent>();
@@ -161,18 +169,29 @@ function setup(options: Options) {
       createQuickPick: quickPicks.createQuickPick,
       showInputBox: vi.fn(async () => options.inputs?.shift()),
       withProgress: vi.fn(
-        async (opts: { title?: string }, task: (p: never, t: never) => unknown) => {
+        async (
+          opts: { title?: string; location: number | { viewId: string } },
+          task: (p: never, t: never) => unknown,
+        ) => {
           const cancelled = new Emitter<void>();
           const entry = {
             title: opts.title,
+            view: typeof opts.location === 'object' ? opts.location.viewId : undefined,
             reports: [] as string[],
             cancel: () => cancelled.fire(),
+            ended: false,
           };
           progress.push(entry);
-          return task(
-            { report: ({ message }: { message: string }) => entry.reports.push(message) } as never,
-            { onCancellationRequested: cancelled.event } as never,
-          );
+          try {
+            return await task(
+              {
+                report: ({ message }: { message: string }) => entry.reports.push(message),
+              } as never,
+              { onCancellationRequested: cancelled.event } as never,
+            );
+          } finally {
+            entry.ended = true;
+          }
         },
       ),
       showInformationMessage: answer('info'),
@@ -830,7 +849,7 @@ describe('Create Stack', () => {
         args: { source: '/work/repo/infra/prod', slug: 'prod', connection: 'conn_1' },
       },
     ]);
-    // The view's own progress, while an invocation is under way, has no title.
+    // The view's own progress, drawn while the store marks a command running, has no title.
     expect(t.progress.flatMap((p) => p.title ?? [])).toEqual(['Create stack: infra/prod']);
     expect(done).toBe(false);
 
@@ -1277,5 +1296,56 @@ describe('an apply', () => {
       text: 'Cancelled the apply of prod.',
       buttons: ['Show Output'],
     });
+  });
+});
+
+describe("the view's progress", () => {
+  const listed = { 'stack list': { documents: [stacks(stack('stk_1', 'prod'))] } };
+  const overView = (t: ReturnType<typeof setup>) =>
+    t.progress.filter((p) => p.view === 'laceStacks').map(({ ended }) => ({ ended }));
+
+  test("is drawn from the store's running mark, from the moment it is set until it is cleared", async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    const token = {};
+    t.runner.store.begin(
+      'notify',
+      token,
+      { stack: 'stk_1' },
+      { target: {}, on: 'stack:stk_1', path: 'stack scan', label: 'Scan for drift' },
+    );
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+
+    t.runner.store.detach('notify', token);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+  });
+
+  test('is drawn while a scan of a stack runs, and ends when it ends, however it ends', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack scan': { held: true } } });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.scan, row);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+
+    t.commands.held[0].finish([], new CommandExitError(1, 'Error: no\n'));
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+  });
+
+  test('is drawn while an apply runs, and ends when its run settles', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack apply': { held: true } } });
+    const [row] = await t.children();
+
+    const applying = t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+
+    t.commands.held[0].finish([applyResult()]);
+    await applying;
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
   });
 });

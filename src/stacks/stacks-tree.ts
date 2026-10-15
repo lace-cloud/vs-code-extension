@@ -42,7 +42,8 @@
 // one; a preview opens as a read-only document; each tick of the runner's
 // store (a run started or settled, a scan or a cancel done) reads the tree
 // again and tells the canvas of the root that run was about that its reads
-// are stale.
+// are stale. The view draws its progress while the store marks a command
+// running (`commandRunning`), and ends it when the store marks none.
 //
 // With no root found, the view says why, by the reason finding one gave: no
 // folder is open; no directory holds a module yet, and Open Canvas starts
@@ -52,6 +53,7 @@
 import type {
   ActionContribution,
   CommandFailure,
+  ResultSlots,
   RunCtx,
   StackRef,
 } from '@lace-cloud/canvas/engine';
@@ -116,6 +118,12 @@ export const STACK_COMMANDS = {
 // How many of a stack's runs its row lists.
 const RECENT_RUNS = 10;
 const SHOW_OUTPUT = 'Show Output';
+
+// Whether the runner's store marks a command running: the run slot's run,
+// or a command's running mark (`running`, by the target it runs on).
+function commandRunning({ run, running }: ResultSlots): boolean {
+  return run?.outcome.kind === 'running' || running.size > 0;
+}
 
 export type Row =
   | { kind: 'stack'; root: AuthoringRoot; stack: Stack }
@@ -431,12 +439,31 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     provideTextDocumentContent: (uri) => previews.get(uri.path) ?? '',
   });
 
+  // The view's progress while the store marks a command running: the
+  // function that ends the one drawn, while one is.
+  let endProgress: (() => void) | undefined;
+  const drawProgress = (slots: ResultSlots) => {
+    const running = commandRunning(slots);
+    if (running && !endProgress) {
+      const ended = new Promise<void>((resolve) => {
+        endProgress = resolve;
+      });
+      void api.window.withProgress({ location: { viewId: STACKS_VIEW } }, () => ended);
+    } else if (!running && endProgress) {
+      endProgress();
+      endProgress = undefined;
+    }
+  };
+
   // What the runner's store says, as it says it: a new preview opens; a run
-  // redraws its stack's row; each tick reads the tree again and tells the
-  // canvas of the root the ticking run was about.
+  // redraws its stack's row; the view's progress follows the running mark;
+  // each tick reads the tree again and tells the canvas of the root the
+  // ticking run was about.
   let shownPreview: object | undefined;
   const offStore = runner.store.subscribe(() => {
-    const { preview, run } = runner.store.getSnapshot();
+    const slots = runner.store.getSnapshot();
+    const { preview, run } = slots;
+    drawProgress(slots);
     redraw([run?.readOver.stack]);
     if (preview && preview.token !== shownPreview) {
       shownPreview = preview.token;
@@ -453,21 +480,6 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     refresh();
     const ran = rootOfRun(sources.folders(), ctx);
     if (ran) panels.tick(ran);
-  });
-
-  const offBusy = runner.onDidChangeBusy((busy) => {
-    if (!busy) return;
-    void api.window.withProgress(
-      { location: { viewId: STACKS_VIEW } },
-      () =>
-        new Promise<void>((resolve) => {
-          const off = runner.onDidChangeBusy((still) => {
-            if (still) return;
-            off();
-            resolve();
-          });
-        }),
-    );
   });
 
   const subscriptions: vscode.Disposable[] = [
@@ -536,7 +548,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       offAccount();
       offStore();
       offTick();
-      offBusy();
+      endProgress?.();
       for (const subscription of subscriptions) subscription.dispose();
     },
   };
