@@ -22,7 +22,7 @@ function installOn(platform, pinned, bin) {
 
 // The release `LACE_CLI_VERSION` names: the file without its comment lines
 // and whitespace, as CI reads it.
-function pinnedVersion(repository) {
+export function pinnedVersion(repository) {
   return readFileSync(join(repository, 'LACE_CLI_VERSION'), 'utf8')
     .split('\n')
     .filter((line) => !line.startsWith('#'))
