@@ -10,7 +10,6 @@ import {
   CommandExitError,
   type CommandFailure,
   type CommandsPort,
-  type FailedCommand,
   failureSays,
   type JsonOf,
   type LaceReason,
@@ -20,16 +19,12 @@ export type CommandOutcome<P extends BoundPath> =
   | { kind: 'result'; document: JsonOf<P>; exitCode: number }
   | { kind: 'failure'; failure: CommandFailure };
 
-// A command the host runs: its path, and whether it reads or writes, as the
-// package names a failed one (`FailedCommand`): a read whose stream ended
-// under it is run again, a write may have made changes.
-export type LaceCommand<P extends BoundPath = BoundPath> = FailedCommand & { path: P };
-
 // A command that failed, as a caller reads it: `message`, the package's one
-// reading of the failure for the command it was (`failureSays`), and
-// `failure`, the failure document, when the command wrote one. Every failure
-// of a command run through `commandOutcome` rejects with one, so a caller
-// that runs several commands says the failure of the one that failed.
+// reading of the failure (`failureSays`, which says a stream that ended
+// under a command by the effect the CLI declares for it), and `failure`, the
+// failure document, when the command wrote one. Every failure of a command
+// run through `commandOutcome` rejects with one, so a caller that runs
+// several commands says the failure of the one that failed.
 export class CommandFailedError extends Error {
   readonly failure: CommandFailure | undefined;
 
@@ -39,19 +34,19 @@ export class CommandFailedError extends Error {
   }
 }
 
-// Runs `command` to its exit and reads its outcome. Rejects with the
-// `CommandFailedError` of `command` when it exited non-zero with neither
+// Runs `lace <path>` to its exit and reads its outcome. Rejects with the
+// `CommandFailedError` of the command when it exited non-zero with neither
 // document, exited 0 with none, ended without its exit, or was detached by
 // `signal`.
 export async function commandOutcome<P extends BoundPath>(
   commands: Pick<CommandsPort, 'invoke'>,
-  command: LaceCommand<P>,
+  path: P,
   args: ArgsOf<P>,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<CommandOutcome<P>> {
   let last: { document: JsonOf<P> } | null = null;
   try {
-    for await (const document of commands.invoke(command.path, args, signal).events) {
+    for await (const document of commands.invoke(path, args, signal).events) {
       last = { document };
     }
   } catch (error) {
@@ -59,10 +54,10 @@ export async function commandOutcome<P extends BoundPath>(
       if (error.failure) return { kind: 'failure', failure: error.failure };
       if (last) return { kind: 'result', document: last.document, exitCode: error.code };
     }
-    throw new CommandFailedError(failureSays(error, command));
+    throw new CommandFailedError(failureSays(error));
   }
   if (!last) {
-    throw new CommandFailedError({ message: `lace ${command.path} exited without a document` });
+    throw new CommandFailedError({ message: `lace ${path} exited without a document` });
   }
   return { kind: 'result', document: last.document, exitCode: 0 };
 }
@@ -81,11 +76,11 @@ export function documentOf<P extends BoundPath>(outcome: CommandOutcome<P>): Jso
 // it. Rejects as `documentOf` throws and as `commandOutcome` rejects.
 export async function commandDocument<P extends BoundPath>(
   commands: Pick<CommandsPort, 'invoke'>,
-  command: LaceCommand<P>,
+  path: P,
   args: ArgsOf<P>,
   signal?: AbortSignal,
 ): Promise<JsonOf<P>> {
-  return documentOf(await commandOutcome(commands, command, args, signal));
+  return documentOf(await commandOutcome(commands, path, args, signal));
 }
 
 // Why a command failed, as data, when it said.
@@ -95,7 +90,7 @@ export function failureOf(error: unknown): CommandFailure | undefined {
 
 // What a failure says, for a person. A command run through `commandOutcome`
 // fails with a `CommandFailedError`, whose message is the package's reading
-// for the command it was; any other error, such as an engine that did not
+// of its failure; any other error, such as an engine that did not
 // start, is no command's failure and says its own message.
 export function failureText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

@@ -260,16 +260,18 @@ type ToolRootSources = Pick<RootSources, 'folders' | 'openCanvases' | 'terraform
 
 // The directory a tool's `root` spells: its absolute path, as `rootPath`
 // spells a root; else its path in the workspace as `rootName` names it,
-// `.` for a folder itself.
+// `.` for a folder itself. A `\` separates as `/` does, so a path a
+// developer or a model spells as Windows does names the same directory.
 function spelledDirectory(
   folders: readonly vscode.WorkspaceFolder[],
   given: string,
 ): vscode.Uri | undefined {
-  if (isAbsolute(given)) {
-    const root = rootOfPath(folders, given);
+  const slashed = given.replaceAll('\\', '/');
+  if (isAbsolute(slashed)) {
+    const root = rootOfPath(folders, slashed);
     return root && rootUri(root);
   }
-  const spelled = posix.normalize(given.replace(/\/+$/, ''));
+  const spelled = posix.normalize(slashed.replace(/\/+$/, ''));
   return workspaceDirectory(folders, spelled === '.' ? '' : spelled);
 }
 

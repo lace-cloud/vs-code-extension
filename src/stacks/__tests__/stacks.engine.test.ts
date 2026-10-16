@@ -65,7 +65,7 @@ describe('one runner for the window', () => {
     const { a, b } = twoRoots();
     const { commands, runner } = window(home);
     // `a` is certified; `b` is not.
-    await commandDocument(await commands.at(a), { kind: 'write', path: 'module validate' }, {});
+    await commandDocument(await commands.at(a), 'module validate', {});
 
     await runner.run(binding('apply'), { root: a, stack: { id: 'stk_a', slug: 'a' } });
     // Past `a`'s certification, the apply needs credentials, which are
@@ -84,11 +84,7 @@ describe('the Stacks tree signed out', () => {
     const home = signedOutHome();
     const { a } = twoRoots();
     const { commands } = window(home);
-    const listed = await commandOutcome(
-      await commands.anywhere(),
-      { kind: 'read', path: 'stack list' },
-      { source: a },
-    );
+    const listed = await commandOutcome(await commands.anywhere(), 'stack list', { source: a });
     const failure = listed.kind === 'failure' ? listed.failure : undefined;
     expect(failure?.reason).toBe('unauthenticated');
     expect(refusedState(failure)).toBe('signedOut');

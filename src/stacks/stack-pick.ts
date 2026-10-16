@@ -10,7 +10,6 @@ import type { StackRef } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import { LACE_COMMANDS } from '../engine/lace-commands';
 import {
   type AuthoringRoot,
   type RootSources,
@@ -46,9 +45,7 @@ export function stackPick(options: StackPickOptions): PickStack {
     const label = rootLabel(root, sources.folders());
     const listed = commands
       .anywhere()
-      .then((home) =>
-        commandDocument(home, LACE_COMMANDS['stack list'], { source: rootPath(root) }),
-      );
+      .then((home) => commandDocument(home, 'stack list', { source: rootPath(root) }));
     try {
       const chosen = await pickFrom(
         api.window,

@@ -277,7 +277,9 @@ describe('the answerer', () => {
   });
 
   test('a connection list whose stream ended before it finished closes the pick, cancels the form and says to list again', async () => {
-    const t = setup({ scripts: { 'connection list': { fails: new CommandUnobservedError() } } });
+    const t = setup({
+      scripts: { 'connection list': { fails: new CommandUnobservedError('connection list') } },
+    });
     const form = t.answer('create', ['connection'], { root: PROD });
     await settled();
 
@@ -285,7 +287,7 @@ describe('the answerer', () => {
     expect(t.messages).toEqual([
       {
         level: 'error',
-        text: 'the stream ended before `lace connection list` finished; run it again',
+        text: "the engine's stream ended before `lace connection list` exited; run it again",
         buttons: [],
       },
     ]);

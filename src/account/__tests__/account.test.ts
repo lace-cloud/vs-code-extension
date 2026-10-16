@@ -633,13 +633,13 @@ describe('an account command that fails', () => {
 
   test('a read whose stream ended says to run that read again', async () => {
     const { account, commands } = await setup({
-      'org list': { fails: new CommandUnobservedError() },
+      'org list': { fails: new CommandUnobservedError('org list') },
       'org current': { documents: [current('acme')] },
     });
     const { window, run } = controls(account, commands);
     await run(SELECT_ORGANIZATION);
     expect(shownBy(window.showErrorMessage)).toEqual([
-      ['the stream ended before `lace org list` finished; run it again'],
+      ["the engine's stream ended before `lace org list` exited; run it again"],
     ]);
   });
 
@@ -664,7 +664,10 @@ describe('an account command that fails', () => {
     expect(await saying(new CommandExitError(2, ''))).toEqual([
       ['the command exited with code 2 and wrote nothing'],
     ]);
-    const unobserved = new CommandUnobservedError();
-    expect(await saying(unobserved)).toEqual([[unobserved.message]]);
+    expect(await saying(new CommandUnobservedError('org use'))).toEqual([
+      [
+        "the engine's stream ended before `lace org use` exited: it ran and may have made changes, but its outcome is unknown",
+      ],
+    ]);
   });
 });

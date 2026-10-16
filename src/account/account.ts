@@ -15,7 +15,6 @@ import type { CommandsPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandOutcome, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import { LACE_COMMANDS } from '../engine/lace-commands';
 import { registerCommands } from '../vscode/commands';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import {
@@ -49,12 +48,12 @@ export type AccountApi = SignInApi &
   };
 
 // A command line that runs the `lace` CLI, named bare or by its path.
-const LACE_COMMAND = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
+const LACE_COMMAND_LINE = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
 
 // The account as the CLI reads it, as one value two reads are compared by.
 async function accountRead(commands: CommandsPort): Promise<string> {
   const [who, selection] = await Promise.all([
-    commandOutcome(commands, LACE_COMMANDS.whoami, {}),
+    commandOutcome(commands, 'whoami', {}),
     currentSelection(commands),
   ]);
   const signedIn = who.kind === 'result' ? who.document.user.id : who.failure.reason;
@@ -103,7 +102,7 @@ export function createAccount(
     if (state.focused) void readAgain();
   });
   const terminal = api.window.onDidEndTerminalShellExecution(({ execution }) => {
-    if (LACE_COMMAND.test(execution.commandLine.value.trimStart())) void readAgain();
+    if (LACE_COMMAND_LINE.test(execution.commandLine.value.trimStart())) void readAgain();
   });
 
   return {
