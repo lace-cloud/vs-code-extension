@@ -2,7 +2,7 @@ import type { CommandFailure } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
@@ -154,9 +154,9 @@ describe('Import Existing Resources', () => {
     expect(elsewhere.save).not.toHaveBeenCalled();
     expect(t.imports()).toEqual([
       {
-        cwd: '/work/repo/infra/prod',
+        cwd: fsPath('/work/repo/infra/prod'),
         path: 'stack import',
-        args: { stack: 'stk_1', state: STATE },
+        args: { stack: 'stk_1', state: fsPath(STATE) },
       },
     ]);
     expect(t.progress).toEqual([{ title: 'Import existing resources: prod', ended: false }]);
@@ -244,15 +244,15 @@ describe('Import Existing Resources', () => {
     });
     expect(t.window.showOpenDialog).toHaveBeenCalledOnce();
     expect(t.imports().map(({ args }) => args)).toEqual([
-      { stack: 'stk_1', state: STATE },
-      { stack: 'stk_1', allowPartial: true, state: STATE },
+      { stack: 'stk_1', state: fsPath(STATE) },
+      { stack: 'stk_1', allowPartial: true, state: fsPath(STATE) },
     ]);
   });
 
   test('from the palette, imports into a stack of the root it is pointed at', async () => {
     const t = setup({ scripts: { ...LISTED, 'stack import': { documents: [imported()] } } });
     await t.palette(uri('/work/repo/infra/prod'));
-    expect(t.imports().map(({ cwd }) => cwd)).toEqual(['/work/repo/infra/prod']);
+    expect(t.imports().map(({ cwd }) => cwd)).toEqual([fsPath('/work/repo/infra/prod')]);
   });
 
   test('from the palette, with no module to name, says why and imports nothing', async () => {
