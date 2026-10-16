@@ -132,12 +132,12 @@ describe('the stack pick', () => {
   });
 
   test('a list whose stream ended before it finished closes the pick and says to list again', async () => {
-    const t = setup({ 'stack list': { fails: new CommandUnobservedError() } });
+    const t = setup({ 'stack list': { fails: new CommandUnobservedError('stack list') } });
     expect(await t.pickStack(prod, 'apply')).toBeUndefined();
     expect(t.messages).toEqual([
       {
         level: 'error',
-        text: 'the stream ended before `lace stack list` finished; run it again',
+        text: "the engine's stream ended before `lace stack list` exited; run it again",
         buttons: [],
       },
     ]);

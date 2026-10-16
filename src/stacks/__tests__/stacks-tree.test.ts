@@ -470,7 +470,7 @@ describe('the stacks of the current root', () => {
       root: prod,
       scripts: {
         'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
-        'run list': { fails: new CommandUnobservedError() },
+        'run list': { fails: new CommandUnobservedError('run list') },
       },
     });
     const [prodRow] = await t.children();
@@ -478,7 +478,7 @@ describe('the stacks of the current root', () => {
 
     expect(runRows.map((row) => t.item(row))).toMatchObject([
       {
-        label: 'the stream ended before `lace run list` finished; run it again',
+        label: "the engine's stream ended before `lace run list` exited; run it again",
         iconPath: { id: 'error' },
       },
     ]);

@@ -38,9 +38,10 @@
 // markdown opens in an untitled editor, and the developer's save is the
 // write.
 import {
+  type ArgsOf,
   type BoundPath,
+  COMMANDS,
   type CommandFailure,
-  type CommandsPort,
   diagnosticsOfDocument,
   type GenerateEvent,
   type JsonOf,
@@ -49,9 +50,8 @@ import {
 import type { Diagnostic } from '@lace-cloud/proto';
 import type * as vscode from 'vscode';
 import { saveFailureText } from '../autosave/autosave-policy';
-import { type CommandOutcome, commandOutcome } from '../engine/command-outcome';
+import { commandOutcome } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import { LACE_COMMANDS } from '../engine/lace-commands';
 import {
   type AuthoringRoot,
   fileUri,
@@ -237,24 +237,24 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     );
   }
 
-  // Names the root and runs one command in it under a progress notification
-  // that names the root; a failure is shown where the developer acted, a
-  // document goes to `show`. `rewritesTree` says the command rewrites the
-  // root's Terraform files, so the root's unsaved Terraform buffers are saved
-  // before it runs; it is not the command's read/write kind (`LACE_COMMANDS`),
-  // which says whether the command may have made changes at all: Validate
-  // writes the root's certification and rewrites no Terraform. Nothing runs
+  // Names the root and runs `lace <path>` in it under a progress
+  // notification that names the root; a failure is shown where the developer
+  // acted, a document goes to `show`. A command the CLI declares a rewrite
+  // (`COMMANDS[path].effect`) writes the root's Terraform files, so the
+  // root's unsaved Terraform buffers are saved before it runs. Nothing runs
   // when no root is named or a buffer did not save.
   function inRoot<P extends BoundPath>(
-    { verb, doing, rewritesTree }: { verb: string; doing: string; rewritesTree: boolean },
-    run: (commands: CommandsPort) => Promise<CommandOutcome<P>>,
+    { verb, doing, path, args }: { verb: string; doing: string; path: P; args: ArgsOf<P> },
     show: (root: AuthoringRoot, label: string, document: JsonOf<P>) => Promise<void> | void,
   ): (pointedAt?: vscode.Uri) => Promise<void> {
     return async (pointedAt) => {
       const root = await named(verb, pointedAt);
       if (!root) return;
       const label = labelOf(root);
-      if (rewritesTree && !(await saveTerraformBuffers(api.workspace, root))) {
+      if (
+        COMMANDS[path].effect === 'rewrite' &&
+        !(await saveTerraformBuffers(api.workspace, root))
+      ) {
         void api.window.showErrorMessage(
           `A Terraform file in ${label} did not save, so Lace did not ${verb} it.`,
         );
@@ -262,7 +262,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
       }
       const outcome = await api.window.withProgress(
         { location: api.ProgressLocation.Notification, title: `Lace: ${doing} ${label}` },
-        async () => run(await commands.at(rootPath(root))),
+        async () => commandOutcome(await commands.at(rootPath(root)), path, args),
       );
       if (outcome.kind === 'failure') await showFailure(root, outcome.failure);
       else await show(root, label, outcome.document);
@@ -307,26 +307,22 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     [SAVE_CANVAS]: save,
     [GENERATE_CANVAS]: generate,
     [VALIDATE_MODULE]: inRoot(
-      { verb: 'validate', doing: 'validating', rewritesTree: false },
-      (port) => commandOutcome(port, LACE_COMMANDS['module validate'], {}),
+      { verb: 'validate', doing: 'validating', path: 'module validate', args: {} },
       (root, label, document) =>
         showReport(root, validatedText(label, document), diagnosticsOfDocument(document)),
     ),
     [CONVERT_MODULE]: inRoot(
-      { verb: 'convert', doing: 'converting', rewritesTree: true },
-      (port) => commandOutcome(port, LACE_COMMANDS['module convert'], {}),
+      { verb: 'convert', doing: 'converting', path: 'module convert', args: {} },
       (root, label, document) =>
         showReport(root, convertedText(label, document), diagnosticsOfDocument(document)),
     ),
     [SCAN_MODULE]: inRoot(
-      { verb: 'scan', doing: 'scanning', rewritesTree: false },
-      (port) => commandOutcome(port, LACE_COMMANDS['module scan'], {}),
+      { verb: 'scan', doing: 'scanning', path: 'module scan', args: {} },
       (root, label, document) =>
         showReport(root, `Scanned ${label}`, diagnosticsOfDocument(document)),
     ),
     [FORMAT_MODULE]: inRoot(
-      { verb: 'format', doing: 'formatting', rewritesTree: true },
-      (port) => commandOutcome(port, LACE_COMMANDS['module fmt'], {}),
+      { verb: 'format', doing: 'formatting', path: 'module fmt', args: {} },
       (_root, label, { changed }) => {
         void api.window.showInformationMessage(
           changed.length === 0
@@ -336,8 +332,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
       },
     ),
     [GENERATE_DOCS]: inRoot(
-      { verb: 'document', doing: 'generating the docs of', rewritesTree: false },
-      (port) => commandOutcome(port, LACE_COMMANDS['module docs'], {}),
+      { verb: 'document', doing: 'generating the docs of', path: 'module docs', args: {} },
       async (_root, _label, { markdown }) => {
         const document = await api.workspace.openTextDocument({
           language: 'markdown',

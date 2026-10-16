@@ -62,7 +62,6 @@ import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import { LACE_COMMANDS } from '../engine/lace-commands';
 import { binding, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
@@ -222,7 +221,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   async function stackRows(of: AuthoringRoot): Promise<Row[]> {
     let stacks: Stack[];
     try {
-      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['stack list'], {
+      const listed = await commandDocument(await commands.anywhere(), 'stack list', {
         source: rootPath(of),
       });
       stacks = listed.items;
@@ -247,11 +246,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // none and the portal makes one.
   async function teamState(): Promise<StacksState> {
     try {
-      const teams = await commandDocument(
-        await commands.anywhere(),
-        LACE_COMMANDS['team list'],
-        {},
-      );
+      const teams = await commandDocument(await commands.anywhere(), 'team list', {});
       return teams.items.length === 0 ? 'teamlessOrganization' : 'noTeam';
     } catch (error) {
       report('listing the teams of the organization', error);
@@ -261,7 +256,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   async function runRows(row: Extract<Row, { kind: 'stack' }>): Promise<Row[]> {
     try {
-      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['run list'], {
+      const listed = await commandDocument(await commands.anywhere(), 'run list', {
         stack: row.stack.id,
         limit: RECENT_RUNS,
       });
