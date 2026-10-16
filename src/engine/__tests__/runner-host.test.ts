@@ -216,22 +216,22 @@ describe('the runner host', () => {
     expect(runners.store).toBe(store);
   });
 
-  test('says when an invocation is under way, however it ends', async () => {
-    const { window, runners } = host({
-      'run logs': { held: true },
-      'stack scan': { fails: new CommandExitError(1, 'Error: no') },
-    });
-    const busy: boolean[] = [];
-    runners.onDidChangeBusy((b) => busy.push(b));
+  test('the store it hands out marks a command running from its start to its end, however it ends', async () => {
+    const { window, runners } = host({ 'stack scan': { held: true } });
+    const running = () =>
+      [...runners.store.getSnapshot().running].map(([on, { path }]) => [on, path]);
 
-    await runners.run(action('follow-logs'), { stack: STACK }, { runId: 'run_1' });
     await runners.run(action('scan'), { stack: STACK });
-    await settled();
-    expect(busy).toEqual([true]);
+    await runners.run(action('scan'), { stack: { id: 'stk_2', slug: 'qa' } });
+    expect(running()).toEqual([
+      ['stack:stk_1', 'stack scan'],
+      ['stack:stk_2', 'stack scan'],
+    ]);
 
-    window.commands.held[0].finish([{ type: 'result', status: 'apply_succeeded' }]);
+    window.commands.held[0].finish([{ triggered: true, reason: null, settled: null }]);
+    window.commands.held[1].finish([], new CommandExitError(1, 'Error: no\n'));
     await settled();
-    expect(busy).toEqual([true, false]);
+    expect(running()).toEqual([]);
   });
 
   test('cancel is the explicit cancel of the running slot', async () => {

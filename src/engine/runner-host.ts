@@ -11,8 +11,9 @@
 // runs in the `RunCtx`'s root, which the runner names as the invocation's
 // working directory; any other runs in the home. A restarted engine is a
 // new port: the next run builds the runner again over it, keeping the
-// store. Every invocation the runner starts is counted, so a surface can
-// show that one is under way.
+// store. What is running is the store's to say, and the host keeps no count
+// of its own: the Stacks view's `commandRunning` is the one place that asks
+// it whether any command is under way.
 //
 // Each run is carried through everything the runner does for it in an
 // async context (`AsyncLocalStorage`), which attributes to the run what
@@ -97,9 +98,6 @@ export type RunnerHost = {
   onDidTick: (listener: (ctx: RunCtx) => void) => () => void;
   // The explicit user cancel of the `kind` slot's invocation.
   cancel: (kind: ResultKind) => Promise<void>;
-  // `listener` is called with true when the first invocation starts and
-  // false when the last one ends.
-  onDidChangeBusy: (listener: (busy: boolean) => void) => () => void;
   dispose: () => void;
 };
 
@@ -158,7 +156,6 @@ function startSettled(run: Run): void {
 
 export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
   const store = createResultStore();
-  const busyListeners = new Set<(busy: boolean) => void>();
   const tickListeners = new Set<(ctx: RunCtx) => void>();
   // The run whose binding is executing.
   const runContext = new AsyncLocalStorage<Run>();
@@ -175,37 +172,27 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
     const run = runContext.getStore();
     if (run) for (const listener of [...tickListeners]) listener(run.ctx);
   });
-  let running = 0;
   let built: Built | undefined;
 
-  const changed = (by: number) => {
-    const was = running > 0;
-    running += by;
-    if (was !== running > 0) for (const listener of [...busyListeners]) listener(running > 0);
-  };
-
-  // `port` with each invocation counted from its start to the end of its
-  // events, however they end, and held by the run that started it. The call
-  // reaches `port` whole: the working directory the runner names for a
+  // `port` with each invocation held by the run that started it, from its
+  // start to the end of its events, however they end. The call reaches
+  // `port` whole: the working directory the runner names for a
   // root-declaring binding included.
-  const counted = (port: CommandsPort): CommandsPort => ({
+  const heldByRun = (port: CommandsPort): CommandsPort => ({
     available: () => port.available(),
     invoke(...call) {
       const run = runContext.getStore();
       const invocation = port.invoke(...call);
-      changed(1);
-      if (run) {
-        hold(run);
-        startSettled(run);
-      }
-      async function* events() {
+      if (!run) return invocation;
+      hold(run);
+      startSettled(run);
+      const events = async function* () {
         try {
           yield* invocation.events;
         } finally {
-          changed(-1);
-          if (run) release(run);
+          release(run);
         }
-      }
+      };
       return { events: events(), cancel: () => invocation.cancel() };
     },
   });
@@ -297,7 +284,7 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
       built?.runner.dispose();
       built = {
         port,
-        runner: createActionRunner({ commands: counted(port), presenter }, store, {
+        runner: createActionRunner({ commands: heldByRun(port), presenter }, store, {
           onRunLog: options.onRunLog,
           onPendingFormChange: formChanged,
         }),
@@ -330,10 +317,6 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
     },
     async cancel(kind) {
       await built?.runner.cancel(kind);
-    },
-    onDidChangeBusy(listener) {
-      busyListeners.add(listener);
-      return () => busyListeners.delete(listener);
     },
     dispose() {
       offStore();

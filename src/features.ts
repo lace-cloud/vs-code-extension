@@ -78,7 +78,7 @@ export function windowHost(base: WindowBase): Host {
   const { api, context, engine, rootSessions, autosave, log, report } = base;
   const rootState = createRootState(context.workspaceState);
   const commands = createCommandsMapping(engine);
-  const account = createAccount(commands, api);
+  const account = createAccount(commands, api, report);
   const runOutput = createRunOutput(api.window);
   const offers: OfferActions = {
     signIn: () => account.signIn(),
@@ -212,17 +212,17 @@ function registry(host: Host): vscode.Disposable {
     api.window.registerWebviewViewProvider(REGISTRY_VIEW, view),
     ...registerCommands(api, {
       [REFRESH_REGISTRY]: view.refresh,
-      [ADD_MODULE]: addModuleToCanvas({ api, reads, place }),
+      [ADD_MODULE]: addModuleToCanvas({ api, reads, place, offers: host.offers }),
     }),
     view,
     details,
   ]);
 }
 
-// Sign In, Sign Out, Select Organization and Select Team, and the status
-// bar item showing the selection.
+// Sign In, Sign Out, Select Organization and Select Team, the status bar
+// item showing the selection, and the lifetime of the window's account.
 function accountCommands({ api, account, commands, offers, report }: Host): vscode.Disposable {
-  return accountControls(api, account, commands, offers, report);
+  return disposingAll([accountControls(api, account, commands, offers, report), account]);
 }
 
 // The Stacks tree, Lace: Import Existing Resources, and the lifetime of the

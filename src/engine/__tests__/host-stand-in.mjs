@@ -4,9 +4,9 @@
 // alive until something ends it.
 //
 //   node host-stand-in.mjs <engine binary> <root>
-import { execFileSync } from 'node:child_process';
 import { bridgeCaller, openEngineSession } from '@lace-cloud/canvas/engine';
 import { ServerManager, serveEngineBridge } from '@lace-cloud/host';
+import { childProcesses } from './os-processes.mjs';
 
 const [binary, root] = process.argv.slice(2);
 
@@ -30,8 +30,8 @@ serveEngineBridge({ post: deliver(toCaller), onMessage: listen(toHost) }, manage
 const caller = bridgeCaller({ post: deliver(toHost), onMessage: listen(toCaller) });
 
 const session = await openEngineSession(caller, { root });
-const enginePid = execFileSync('pgrep', ['-P', String(process.pid)], { encoding: 'utf8' }).trim();
+const [engine] = childProcesses(process.pid).filter(({ command }) => command.includes(binary));
 process.stdout.write(
-  `${JSON.stringify({ enginePid: Number(enginePid), sessionId: session.ports.context.sessionId })}\n`,
+  `${JSON.stringify({ enginePid: engine.pid, sessionId: session.ports.context.sessionId })}\n`,
 );
 setInterval(() => {}, 1000);

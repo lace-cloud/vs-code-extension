@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.12.0",
+  "version": "0.14.0",
   "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
@@ -61,7 +61,7 @@
       {
         "view": "laceStacks",
         "when": "lace.stacks.state == noFolder",
-        "contents": "No folder is open. Open the folder that holds the module to see the stacks deployed from it."
+        "contents": "No folder is open. Open the folder that holds the module to see the stacks deployed from it.\n[Open Folder](command:workbench.action.files.openFolder)"
       },
       {
         "view": "laceStacks",
@@ -339,22 +339,22 @@
         },
         {
           "command": "lace.openRunInPortal",
-          "when": "view == laceStacks && viewItem =~ /^laceRun portal$/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b.*\\bportal\\b/",
           "group": "inline"
         },
         {
           "command": "lace.followRunLogs",
-          "when": "view == laceStacks && viewItem =~ /^laceRun/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b/",
           "group": "1_run@1"
         },
         {
           "command": "lace.openRunInPortal",
-          "when": "view == laceStacks && viewItem =~ /^laceRun portal$/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b.*\\bportal\\b/",
           "group": "1_run@2"
         },
         {
           "command": "lace.cancelRun",
-          "when": "view == laceStacks && viewItem =~ /^laceRun/",
+          "when": "view == laceStacks && viewItem =~ /^laceRun\\b.*\\brunning\\b/",
           "group": "2_cancel@1"
         }
       ]
@@ -364,9 +364,9 @@
       "properties": {
         "lace.binaryPath": {
           "type": "string",
-          "default": "/usr/local/bin/lace",
+          "default": "lace",
           "scope": "machine-overridable",
-          "description": "Path to the Lace CLI binary."
+          "description": "The Lace CLI the engine runs: lace, the one on PATH, or the full path of an executable (on Windows lace.exe, which where.exe lace prints)."
         },
         "lace.autoRestart": {
           "type": "boolean",
@@ -636,11 +636,11 @@
     ]
   },
   "dependencies": {
-    "@lace-cloud/canvas": "0.25.0",
-    "@lace-cloud/chat-core": "0.25.0",
-    "@lace-cloud/design-tokens": "0.25.0",
-    "@lace-cloud/host": "0.25.0",
-    "@lace-cloud/proto": "0.25.0",
+    "@lace-cloud/canvas": "0.27.0",
+    "@lace-cloud/chat-core": "0.27.0",
+    "@lace-cloud/design-tokens": "0.27.0",
+    "@lace-cloud/host": "0.27.0",
+    "@lace-cloud/proto": "0.27.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",

@@ -1,0 +1,4 @@
+# Every text file is checked out with LF on every platform: biome checks LF
+# line endings, and Git for Windows checks text out with CRLF by default
+# (core.autocrlf=true), which fails the lint on every file.
+* text=auto eol=lf

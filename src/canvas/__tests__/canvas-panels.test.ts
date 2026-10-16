@@ -2,15 +2,17 @@ import type { CanvasSource, SourceEnd } from '@lace-cloud/canvas/engine';
 import type { MessageBridge } from '@lace-cloud/proto';
 import { describe, expect, test, vi } from 'vitest';
 import type { RootHold } from '../../engine/root-sessions';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
-import { createCanvasPanels } from '../canvas-panels';
+import { CANVAS_VIEW_TYPE, createCanvasPanels } from '../canvas-panels';
 
 const repo = folder('/work/repo');
 const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
 const other: AuthoringRoot = { folder: repo, relative: 'infra/other' };
+// The directory of `prod` as the engine is told it.
+const PROD = fsPath('/work/repo/infra/prod');
 
 const frame = (over: Partial<CanvasSource> = {}): CanvasSource =>
   ({ unsaved: false, sourceRefused: false, ...over }) as CanvasSource;
@@ -139,6 +141,8 @@ function setup(
   const folderChanges = new Set<() => void>();
   const api = {
     window: {
+      // The text editor the developer is in, when the active group holds one.
+      activeTextEditor: undefined as object | undefined,
       createWebviewPanel: vi.fn((_type, title, showOptions) => {
         events.push(`create:${title}:${showOptions.preserveFocus}`);
         const made = fakePanel();
@@ -265,15 +269,16 @@ describe('ensure', () => {
     const { canvasPanels, events, holds, panels } = setup();
     const made = await canvasPanels.ensure(prod);
 
-    expect(events).toEqual(['acquire:/work/repo/infra/prod', 'create:infra/prod:false', 'serve']);
-    expect(made.hold).toBe(holds.get('/work/repo/infra/prod')?.hold);
+    expect(events).toEqual([`acquire:${PROD}`, 'create:infra/prod:false', 'serve']);
+    expect(made.hold).toBe(holds.get(PROD)?.hold);
     expect(panels[0].panel.webview.html).toContain('canvas-webview.js');
     expect(panels[0].panel.webview.html).toContain("script-src 'nonce-");
   });
 
-  test('two ensure calls give one panel; the second reveals it', async () => {
+  test('two ensure calls give one panel; a later one reveals it in its own column', async () => {
     const { canvasPanels, panels, api } = setup();
     const [a, b] = await Promise.all([canvasPanels.ensure(prod), canvasPanels.ensure(prod)]);
+    api.window.activeTextEditor = {};
     const c = await canvasPanels.ensure(prod, { preserveFocus: true });
 
     expect(a).toBe(b);
@@ -282,10 +287,37 @@ describe('ensure', () => {
     expect(panels[0].panel.reveal).toHaveBeenCalledWith(undefined, true);
   });
 
-  test('with preserveFocus the panel is created without taking focus', async () => {
-    const { canvasPanels, events } = setup();
+  const shownIn = (viewColumn: number, preserveFocus: boolean) => [
+    CANVAS_VIEW_TYPE,
+    'infra/prod',
+    { viewColumn, preserveFocus },
+    expect.anything(),
+  ];
+
+  test('opened without focus while a text editor is active, the panel is created beside it, taking no focus', async () => {
+    const { canvasPanels, api } = setup();
+    api.window.activeTextEditor = {};
     await canvasPanels.ensure(prod, { preserveFocus: true });
-    expect(events).toContain('create:infra/prod:true');
+    expect(api.window.createWebviewPanel).toHaveBeenCalledWith(
+      ...shownIn(api.ViewColumn.Beside, true),
+    );
+  });
+
+  test('opened without focus with no text editor active, the panel is created in the active group, taking no focus', async () => {
+    const { canvasPanels, api } = setup();
+    await canvasPanels.ensure(prod, { preserveFocus: true });
+    expect(api.window.createWebviewPanel).toHaveBeenCalledWith(
+      ...shownIn(api.ViewColumn.Active, true),
+    );
+  });
+
+  test('opened with focus, the panel is created in the active group over the text editor there', async () => {
+    const { canvasPanels, api } = setup();
+    api.window.activeTextEditor = {};
+    await canvasPanels.ensure(prod);
+    expect(api.window.createWebviewPanel).toHaveBeenCalledWith(
+      ...shownIn(api.ViewColumn.Active, false),
+    );
   });
 
   test('in a workspace of several folders the title names the folder first', async () => {
@@ -331,9 +363,9 @@ describe('ensure', () => {
     expect(page.panel.title).toBe('web/infra/prod ●');
 
     changeFolders([api]);
-    expect(page.panel.title).toBe('/work/web/infra/prod ●');
+    expect(page.panel.title).toBe(`${fsPath('/work/web/infra/prod')} ●`);
     expect(page.disposed()).toBe(false);
-    expect(holds.get('/work/web/infra/prod')?.hold.release).not.toHaveBeenCalled();
+    expect(holds.get(fsPath('/work/web/infra/prod'))?.hold.release).not.toHaveBeenCalled();
   });
 
   test('a failure the panel reports names the root as the workspace names it then', async () => {
@@ -385,7 +417,7 @@ describe('ensure', () => {
     await expect(canvasPanels.ensure(prod)).rejects.toBe(restarted);
     await settled();
     expect(panels[0].disposed()).toBe(true);
-    expect(holds.get('/work/repo/infra/prod')?.hold.release).toHaveBeenCalledOnce();
+    expect(holds.get(PROD)?.hold.release).toHaveBeenCalledOnce();
     expect(pageFocus).toHaveBeenCalledWith('session', false);
 
     const made = await canvasPanels.ensure(prod);
@@ -435,7 +467,7 @@ describe('the page and the host', () => {
         frame: {
           kind: 'reply',
           id: '1',
-          response: { root: '/work/repo/infra/prod', arrangement: { saved: 1 } },
+          response: { root: PROD, arrangement: { saved: 1 } },
         },
       },
     ]);
@@ -624,7 +656,7 @@ describe('the stack, the tick and the focus', () => {
           kind: 'reply',
           id: '1',
           response: {
-            root: '/work/repo/infra/prod',
+            root: PROD,
             arrangement: {},
             stack: { id: 'stk_1', slug: 'prod' },
           },
@@ -694,7 +726,7 @@ describe('a reboot', () => {
     const before = panels[0].panel.webview.html;
     events.length = 0;
 
-    holds.get('/work/repo/infra/prod')?.renew();
+    holds.get(PROD)?.renew();
     await settled();
 
     expect(events).toEqual(['unserve', 'serve']);
@@ -707,7 +739,7 @@ describe('closing the tab', () => {
   test('disposes the bridge, then releases the hold', async () => {
     const { canvasPanels, panels, holds, events } = setup();
     await canvasPanels.ensure(prod);
-    const hold = holds.get('/work/repo/infra/prod')!;
+    const hold = holds.get(PROD)!;
     hold.hold.release.mockImplementation(async () => {
       events.push('release');
     });

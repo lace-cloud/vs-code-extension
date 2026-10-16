@@ -27,6 +27,7 @@ import {
   type SourcePort,
 } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
+import { failureText } from '../engine/command-outcome';
 import type { RootSession, SessionObserver } from '../engine/root-sessions';
 
 export const AUTOSAVE_MODES = ['off', 'afterDelay', 'onFocusChange', 'onWindowChange'] as const;
@@ -80,7 +81,7 @@ export function saveFailureText(named: string, error: unknown): string {
   if (error instanceof ConnectError) {
     return `The canvas of ${named} was not saved (${error.apiCode ?? reasonWire(error.reason)}): ${error.message}`;
   }
-  return `Lace could not save the canvas of ${named}: ${error instanceof Error ? error.message : String(error)}`;
+  return `Lace could not save the canvas of ${named}: ${failureText(error)}`;
 }
 
 type PolicyApi = {

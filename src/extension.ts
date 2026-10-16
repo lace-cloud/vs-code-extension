@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { createAutosaveKeeper } from './autosave/autosave-policy';
+import { failureText } from './engine/command-outcome';
 import { createEngine, type Engine, engineManager, engineSettings } from './engine/engine';
 import { createRootSessions, type RootSessions } from './engine/root-sessions';
 import { FEATURES, windowHost } from './features';
@@ -16,8 +17,7 @@ export function activate(context: vscode.ExtensionContext): LaceExtension {
     engineManager(settings, (line) => log.appendLine(line)),
     settings,
   );
-  const report = (what: string, error: unknown) =>
-    log.appendLine(`${what}: ${error instanceof Error ? error.message : String(error)}`);
+  const report = (what: string, error: unknown) => log.appendLine(`${what}: ${failureText(error)}`);
   const rootSessions = createRootSessions({ engine, report });
   // Attached for the window's whole life: deactivation's dispose of the root
   // sessions flushes every session's autosave and detaches it.

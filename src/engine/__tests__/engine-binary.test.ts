@@ -1,6 +1,7 @@
 // The engine the engine tests and the window e2e run is the released CLI
 // LACE_CLI_VERSION names, and nothing else: a binary that says another
-// version is refused, whichever way it was found.
+// version is refused, whichever way it was found, and a refusal names the
+// way to install that release on the developer's OS.
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,7 +22,8 @@ function repository(): string {
 }
 
 // A `lace` at `path` that answers `lace version -o json` with `version`,
-// and refuses any other arguments.
+// and refuses any other arguments. It is a POSIX shell script, which Windows
+// does not execute: a test that runs one is a `withShellScript` test.
 function lace(path: string, version: string): string {
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(
@@ -32,14 +34,16 @@ function lace(path: string, version: string): string {
   return path;
 }
 
+const withShellScript = test.runIf(process.platform !== 'win32');
+
 describe('the engine the tests run', () => {
-  test('is the bin/lace of the version LACE_CLI_VERSION names', () => {
+  withShellScript('is the bin/lace of the version LACE_CLI_VERSION names', () => {
     const repo = repository();
     const binary = lace(join(repo, 'bin', 'lace'), 'v2.40.0');
     expect(releasedEngine(repo)).toEqual({ binary });
   });
 
-  test('a build that says another version is refused, naming both versions', () => {
+  withShellScript('a build that says another version is refused, naming both versions', () => {
     const repo = repository();
     lace(join(repo, 'bin', 'lace'), 'dev');
     const engine = releasedEngine(repo);
@@ -48,7 +52,7 @@ describe('the engine the tests run', () => {
     expect(engine).toMatchObject({ refusal: expect.stringContaining('v2.40.0') });
   });
 
-  test('a binary a run names is held to the same version', () => {
+  withShellScript('a binary a run names is held to the same version', () => {
     const repo = repository();
     lace(join(repo, 'bin', 'lace'), 'v2.40.0');
     const older = lace(join(repo, 'elsewhere', 'lace'), 'v2.38.0');
@@ -65,5 +69,34 @@ describe('the engine the tests run', () => {
     expect(releasedEngine(repo, missing)).toMatchObject({
       refusal: expect.stringContaining(`no engine at ${missing}`),
     });
+  });
+});
+
+describe('the install a refusal names', () => {
+  test('on Windows is Scoop or the release .exe, at the version LACE_CLI_VERSION names, never the installer', () => {
+    const repo = repository();
+    const engine = releasedEngine(repo, join(repo, 'nowhere', 'lace.exe'), 'win32');
+    expect(engine).toMatchObject({
+      refusal: expect.stringContaining(
+        'scoop install https://releases.lace.cloud/lace.json, while v2.40.0 is the newest release',
+      ),
+    });
+    expect(engine).toMatchObject({
+      refusal: expect.stringContaining(
+        `https://releases.lace.cloud/lace-cli-windows-amd64-v2.40.0.exe (checked against its .sha256) as ${join(repo, 'bin', 'lace.exe')}`,
+      ),
+    });
+    expect(engine).toMatchObject({ refusal: expect.not.stringContaining('install.sh') });
+  });
+
+  test('on every other OS is the installer, at the version LACE_CLI_VERSION names', () => {
+    const repo = repository();
+    const engine = releasedEngine(repo, join(repo, 'nowhere', 'lace'), 'linux');
+    expect(engine).toMatchObject({
+      refusal: expect.stringContaining(
+        `curl -fsSL https://releases.lace.cloud/install.sh | sh -s -- --version v2.40.0 --install-dir ${join(repo, 'bin')}`,
+      ),
+    });
+    expect(engine).toMatchObject({ refusal: expect.not.stringContaining('scoop') });
   });
 });

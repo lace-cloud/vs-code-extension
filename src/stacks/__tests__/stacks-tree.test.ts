@@ -4,6 +4,7 @@ import {
   CommandExitError,
   type CommandFailure,
   type CommandRun,
+  CommandUnobservedError,
   type LaceReason,
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
@@ -11,16 +12,17 @@ import type * as vscode from 'vscode';
 import { authoringCommands } from '../../commands/authoring-commands';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
+import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
 import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
 import { stackPick } from '../stack-pick';
 import { type Row, STACK_COMMANDS, STACKS_CHOICE, STACKS_STATE, stacksTree } from '../stacks-tree';
-import { memento, stack, stacks } from './stack-fixtures';
+import { memento, run, runs, stack, stacks } from './stack-fixtures';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -62,45 +64,6 @@ const teams = (...slugs: string[]) => ({
   createUrl: TEAM_CREATE_URL,
 });
 
-const run = (id: string, status: string, url?: string) => ({
-  id,
-  stackId: 'stk_1',
-  orgId: 'org_1',
-  teamId: 'team_1',
-  kind: 'apply',
-  status,
-  initiatedByUserId: null,
-  initiatedVia: 'cli',
-  runnerIdentity: null,
-  runnerLocation: null,
-  bundleSnapshotId: null,
-  sourceCommitSha: null,
-  sourceRef: null,
-  sourcePrUrl: null,
-  sourceOverride: false,
-  planResourceAdd: 1,
-  planResourceChange: 2,
-  planResourceDestroy: 0,
-  planLocation: null,
-  planHumanLocation: null,
-  applyLogLocation: null,
-  policyResultsLocation: null,
-  policyPassed: null,
-  policyResolution: null,
-  changeRequestId: null,
-  cancelReason: null,
-  startedAt: null,
-  completedAt: null,
-  errorMessage: null,
-  sourceTreeHash: null,
-  attestationStatus: null,
-  attestedAt: null,
-  attestation: null,
-  createdAt: '2026-09-01T00:00:00Z',
-  updatedAt: '2026-09-01T00:00:00Z',
-  ...(url === undefined ? {} : { url }),
-});
-const runs = (...items: ReturnType<typeof run>[]) => ({ items, nextCursor: null, hasMore: false });
 // The Advisories of a preview of a stack no Agent is bound at Preview on.
 const NO_AGENT = {
   queue: { manifestation: 'preview', floor: 0.5, entries: [], belowFloor: 0 },
@@ -108,9 +71,23 @@ const NO_AGENT = {
   pending: 0,
   bound: 0,
 };
+// A preview of prod: one bucket to add, no policy, no Agent bound.
+const PROD_PREVIEW = {
+  stack: { id: 'stk_1', slug: 'prod' },
+  treeHash: 'h1',
+  plan: {
+    summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
+    human: '+ aws_s3_bucket.b',
+  },
+  policy: null,
+  advisories: NO_AGENT,
+};
+const PROD_PREVIEW_TEXT =
+  'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n';
+const COMPLETED = '2026-09-01T01:00:00Z';
 const applyResult = (error: string | null = null) => ({
   type: 'result',
-  run: run('run_9', error ? 'apply_failed' : 'apply_succeeded'),
+  run: run('run_9', error ? 'apply_failed' : 'apply_succeeded', { completedAt: COMPLETED }),
   summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
   workspaceDir: '/cache',
   error,
@@ -178,34 +155,56 @@ function setup(options: Options) {
   const shownChannels: string[] = [];
   let content: vscode.TextDocumentContentProvider | undefined;
   const opened: string[] = [];
-  const progress: { title?: string; reports: string[]; cancel: () => void }[] = [];
+  // Each progress the window shows: a notification's title, or the view it
+  // is drawn over, and whether its task has ended.
+  const progress: {
+    title?: string;
+    view?: string;
+    reports: string[];
+    cancel: () => void;
+    ended: boolean;
+  }[] = [];
   const activeEditor = new Emitter<unknown>();
   // A change of the workspace's folders, told once `folders` holds them.
   const workspaceFolders = new Emitter<vscode.WorkspaceFoldersChangeEvent>();
+  const quickPicks = fakeQuickPicks<{ label: string; stack?: { slug: string }; id?: string }>(
+    (items) => {
+      const picked = options.picks?.shift();
+      return items.find((item) => (item.stack?.slug ?? item.id) === picked);
+    },
+  );
   const api = {
     window: {
       createTreeView: (_id: string, { treeDataProvider }: { treeDataProvider: never }) => {
         provider = treeDataProvider;
         return view;
       },
-      showQuickPick: vi.fn(async (items: { stack?: { slug: string }; id?: string }[]) => {
-        const picked = options.picks?.shift();
-        return items.find((item) => (item.stack?.slug ?? item.id) === picked);
-      }),
+      createQuickPick: quickPicks.createQuickPick,
       showInputBox: vi.fn(async () => options.inputs?.shift()),
       withProgress: vi.fn(
-        async (opts: { title?: string }, task: (p: never, t: never) => unknown) => {
+        async (
+          opts: { title?: string; location: number | { viewId: string } },
+          task: (p: never, t: never) => unknown,
+        ) => {
           const cancelled = new Emitter<void>();
           const entry = {
             title: opts.title,
+            view: typeof opts.location === 'object' ? opts.location.viewId : undefined,
             reports: [] as string[],
             cancel: () => cancelled.fire(),
+            ended: false,
           };
           progress.push(entry);
-          return task(
-            { report: ({ message }: { message: string }) => entry.reports.push(message) } as never,
-            { onCancellationRequested: cancelled.event } as never,
-          );
+          try {
+            return await task(
+              {
+                report: ({ message }: { message: string }) => entry.reports.push(message),
+              } as never,
+              { onCancellationRequested: cancelled.event } as never,
+            );
+          } finally {
+            entry.ended = true;
+          }
         },
       ),
       showInformationMessage: answer('info'),
@@ -350,9 +349,11 @@ function setup(options: Options) {
     report,
   });
   const children = async (row?: Row) => (await provider?.getChildren(row)) ?? [];
-  const redrawn: (Row | undefined)[] = [];
-  provider?.onDidChangeTreeData?.((row) => {
-    redrawn.push(row as Row | undefined);
+  // What each change of the tree's data named: the rows to redraw, or
+  // `undefined` for the whole tree.
+  const redrawn: (Row | Row[] | undefined)[] = [];
+  provider?.onDidChangeTreeData?.((rows) => {
+    redrawn.push(rows as Row | Row[] | undefined);
   });
   const item = (row: Row) => provider?.getTreeItem(row) as vscode.TreeItem;
   const command = (id: string, ...args: unknown[]) => handlers.get(id)?.(...args);
@@ -367,6 +368,7 @@ function setup(options: Options) {
     contexts,
     choices,
     messages,
+    picks: quickPicks.picks,
     channels,
     shownChannels,
     opened,
@@ -409,7 +411,7 @@ describe('the stacks of the current root', () => {
     const rows = await t.children();
 
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
-      ['stack list', { source: '/work/repo/infra/prod' }],
+      ['stack list', { source: fsPath('/work/repo/infra/prod') }],
     ]);
     expect(t.view.description).toBe('infra/prod');
     expect(t.contexts).toEqual(['stacks']);
@@ -422,7 +424,7 @@ describe('the stacks of the current root', () => {
     });
   });
 
-  test('a stack expands to its recent runs; a run with a page offers it', async () => {
+  test('a stack expands to its recent runs, each row saying whether its run ended; a run with a page offers it', async () => {
     const t = setup({
       root: prod,
       scripts: {
@@ -430,8 +432,11 @@ describe('the stacks of the current root', () => {
         'run list': {
           documents: [
             runs(
-              run('run_1', 'apply_succeeded', 'https://portal/o/t/stacks/stk_1/runs/run_1'),
-              run('run_2', 'plan_failed'),
+              run('run_1', 'apply_succeeded', {
+                completedAt: COMPLETED,
+                url: 'https://portal/o/t/stacks/stk_1/runs/run_1',
+              }),
+              run('run_2', 'applying'),
             ),
           ],
         },
@@ -448,16 +453,35 @@ describe('the stacks of the current root', () => {
       {
         label: 'apply · run_1',
         description: 'apply_succeeded · +1 ~2 -0',
-        contextValue: 'laceRun portal',
+        contextValue: 'laceRun ended portal',
         iconPath: { id: 'pass-filled' },
       },
-      { label: 'apply · run_2', contextValue: 'laceRun', iconPath: { id: 'error' } },
+      { label: 'apply · run_2', contextValue: 'laceRun running', iconPath: { id: 'sync~spin' } },
     ]);
 
     await t.command(STACK_COMMANDS.openInPortal, runRows[0]);
     expect(t.api.env.openExternal).toHaveBeenCalledWith({
       url: 'https://portal/o/t/stacks/stk_1/runs/run_1',
     });
+  });
+
+  test("a stack whose runs' list ended before it finished shows a row that says to list them again", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'run list': { fails: new CommandUnobservedError() },
+      },
+    });
+    const [prodRow] = await t.children();
+    const runRows = await t.children(prodRow);
+
+    expect(runRows.map((row) => t.item(row))).toMatchObject([
+      {
+        label: 'the stream ended before `lace run list` finished; run it again',
+        iconPath: { id: 'error' },
+      },
+    ]);
   });
 
   test('turning to a canvas whose folder has left the workspace leaves the view on its root', async () => {
@@ -476,8 +500,8 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
-      { source: '/work/api/infra/prod' },
-      { source: '/work/api/infra/prod' },
+      { source: fsPath('/work/api/infra/prod') },
+      { source: fsPath('/work/api/infra/prod') },
     ]);
   });
 
@@ -488,7 +512,7 @@ describe('the stacks of the current root', () => {
     expect(t.redrawn).toEqual([undefined]);
     await t.children();
     expect(t.view.description).toBe('infra/staging');
-    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/staging' });
+    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
   });
 
   test("in a workspace of several folders, the view names its root as the root's canvas tab is titled", async () => {
@@ -532,10 +556,10 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
-      { source: '/work/api/infra/prod' },
-      { source: '/work/api/infra/prod' },
-      { source: '/work/web/infra/prod' },
-      { source: '/work/api/infra/prod' },
+      { source: fsPath('/work/api/infra/prod') },
+      { source: fsPath('/work/api/infra/prod') },
+      { source: fsPath('/work/web/infra/prod') },
+      { source: fsPath('/work/api/infra/prod') },
     ]);
   });
 
@@ -559,8 +583,8 @@ describe('the stacks of the current root', () => {
       'no folder is open',
       { folders: [] },
       'noFolder',
-      'No folder is open. Open the folder that holds the module to see the stacks deployed from it.',
-      [],
+      'No folder is open. Open the folder that holds the module to see the stacks deployed from it.\n[Open Folder](command:workbench.action.files.openFolder)',
+      ['workbench.action.files.openFolder'],
     ],
     [
       'no directory holds a module',
@@ -605,7 +629,7 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('repo');
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
-      ['stack list', { source: '/work/repo' }],
+      ['stack list', { source: fsPath('/work/repo') }],
     ]);
   });
 
@@ -669,7 +693,7 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('infra/new');
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
-      ['stack list', { source: '/work/repo/infra/new' }],
+      ['stack list', { source: fsPath('/work/repo/infra/new') }],
     ]);
   });
 
@@ -683,7 +707,7 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.messages).toEqual([]);
     expect(t.view.description).toBe('infra/new');
-    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/new' });
+    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/new') });
   });
 });
 
@@ -711,7 +735,7 @@ describe('a stack command from the palette with no root named', () => {
     STACK_COMMANDS.preview,
     STACK_COMMANDS.apply,
     STACK_COMMANDS.scan,
-  ])('%s on a module with no stack says so and how one is created, with no empty pick', async (id) => {
+  ])('%s on a module with no stack says so and how one is created, and leaves no pick open', async (id) => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.command(id);
     await settled();
@@ -722,7 +746,7 @@ describe('a stack command from the palette with no root named', () => {
         buttons: [],
       },
     ]);
-    expect(t.api.window.showQuickPick).not.toHaveBeenCalled();
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
     expect(t.commands.paths()).toEqual(['stack list']);
   });
 
@@ -833,12 +857,12 @@ describe('Create Stack', () => {
 
     expect(t.commands.invoked.filter((c) => c.path === 'stack create')).toEqual([
       {
-        cwd: '/work/repo/infra/prod',
+        cwd: fsPath('/work/repo/infra/prod'),
         path: 'stack create',
-        args: { source: '/work/repo/infra/prod', slug: 'prod', connection: 'conn_1' },
+        args: { source: fsPath('/work/repo/infra/prod'), slug: 'prod', connection: 'conn_1' },
       },
     ]);
-    // The view's own progress, while an invocation is under way, has no title.
+    // The view's own progress, drawn while the store marks a command running, has no title.
     expect(t.progress.flatMap((p) => p.title ?? [])).toEqual(['Create stack: infra/prod']);
     expect(done).toBe(false);
 
@@ -852,7 +876,7 @@ describe('Create Stack', () => {
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
   });
 
-  test('a refusal of stack create says what the CLI says', async () => {
+  test("a refusal of stack create says its failure document's message", async () => {
     const t = setup({
       root: prod,
       scripts: {
@@ -868,7 +892,7 @@ describe('Create Stack', () => {
     await settled();
     expect(t.messages).toContainEqual({
       level: 'error',
-      text: 'Error: not_git_repository\n',
+      text: 'not_git_repository',
       buttons: [],
     });
   });
@@ -900,6 +924,57 @@ describe('a stack row', () => {
     });
   });
 
+  test('selected, redraws the row picked before and the row picked now, the rows the tree gave, never the whole tree', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+      },
+    });
+    const [prodRow, qaRow] = await t.children();
+
+    t.view.selection.fire({ selection: [prodRow] });
+    await settled();
+    t.view.selection.fire({ selection: [qaRow] });
+    await settled();
+
+    expect(t.redrawn).toHaveLength(2);
+    const [first, second] = t.redrawn as Row[][];
+    expect(first).toHaveLength(1);
+    expect(first[0]).toBe(prodRow);
+    expect(second).toHaveLength(2);
+    expect(second[0]).toBe(prodRow);
+    expect(second[1]).toBe(qaRow);
+    expect(t.item(prodRow).description).toBe('prod');
+    expect(t.item(qaRow).description).toBe('qa · on the canvas');
+  });
+
+  test('Refresh Stacks reads the whole tree again', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    await t.command(STACK_COMMANDS.refresh);
+    expect(t.redrawn).toEqual([undefined]);
+  });
+
+  test.each([
+    STACK_COMMANDS.followLogs,
+    STACK_COMMANDS.cancel,
+    STACK_COMMANDS.openInPortal,
+  ])('%s invoked with no run row says it acts on a run of the Stacks view, and runs nothing', async (id) => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.command(id);
+    await settled();
+    expect(t.messages).toEqual([
+      {
+        level: 'info',
+        text: "This command acts on a run listed in the Stacks view; choose it from that run's menu.",
+        buttons: [],
+      },
+    ]);
+    expect(t.commands.invoked).toEqual([]);
+    expect(t.api.env.openExternal).not.toHaveBeenCalled();
+  });
+
   test("a Preview refused for no certification offers Validate on the run's root, which validates that root", async () => {
     const t = setup({
       root: prod,
@@ -908,7 +983,7 @@ describe('a stack row', () => {
         'stack preview': refusal('no_certification'),
         'module validate': { documents: [validation('/work/repo/infra/prod', [])] },
       },
-      answers: { 'Error: no_certification\n': 'Validate' },
+      answers: { no_certification: 'Validate' },
     });
     const [row] = await t.children();
     await t.command(STACK_COMMANDS.preview, row);
@@ -917,11 +992,11 @@ describe('a stack row', () => {
 
     expect(t.messages[0]).toEqual({
       level: 'error',
-      text: 'Error: no_certification\n',
+      text: 'no_certification',
       buttons: ['Validate'],
     });
     expect(t.commands.invoked.find((c) => c.path === 'module validate')?.cwd).toBe(
-      '/work/repo/infra/prod',
+      fsPath('/work/repo/infra/prod'),
     );
   });
 
@@ -931,20 +1006,7 @@ describe('a stack row', () => {
       scripts: {
         ...listed,
         'run list': { documents: [runs(run('run_1', 'applying'))] },
-        'stack preview': {
-          documents: [
-            {
-              stack: { id: 'stk_1', slug: 'prod' },
-              treeHash: 'h1',
-              plan: {
-                summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
-                human: '+ aws_s3_bucket.b',
-              },
-              policy: null,
-              advisories: NO_AGENT,
-            },
-          ],
-        },
+        'stack preview': { documents: [PROD_PREVIEW] },
         'stack scan': { documents: [{ triggered: true, reason: null, settled: null }] },
         'run logs': {
           documents: [
@@ -952,7 +1014,7 @@ describe('a stack row', () => {
             { type: 'result', status: 'apply_succeeded' },
           ],
         },
-        'run cancel': { documents: [run('run_1', 'cancelled')] },
+        'run cancel': { documents: [run('run_1', 'cancelled', { completedAt: COMPLETED })] },
       },
     });
     const [row] = await t.children();
@@ -971,10 +1033,8 @@ describe('a stack row', () => {
       ['run logs', { run: 'run_1', follow: true }],
       ['run cancel', { run: 'run_1' }],
     ]);
-    expect(ran.find((c) => c.path === 'stack preview')?.cwd).toBe('/work/repo/infra/prod');
-    expect(t.opened).toEqual([
-      'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n',
-    ]);
+    expect(ran.find((c) => c.path === 'stack preview')?.cwd).toBe(fsPath('/work/repo/infra/prod'));
+    expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
     expect(t.channels.get('Lace: prod')).toEqual(['── lace run logs run_1 ──', 'line one']);
     expect(t.shownChannels).toContain('Lace: prod');
   });
@@ -1006,7 +1066,7 @@ describe('an apply', () => {
     expect(t.commands.invoked.find((c) => c.path === 'stack apply')?.args).toEqual({
       stack: 'stk_1',
     });
-    expect(t.ran.every((made) => made.ctx.root === '/work/repo/infra/prod')).toBe(true);
+    expect(t.ran.every((made) => made.ctx.root === fsPath('/work/repo/infra/prod'))).toBe(true);
     expect(t.channels.get('Lace: prod')).toEqual([
       '── lace stack apply ──',
       'Preview Advisory:',
@@ -1060,7 +1120,7 @@ describe('an apply', () => {
         },
       },
       answers: {
-        'Error: no_certification': clicked,
+        no_certification: clicked,
         'Validated infra/staging: lossy, 1 diagnostic.': 'Show Report',
       },
     });
@@ -1069,7 +1129,7 @@ describe('an apply', () => {
     await settled();
     expect(t.messages).toContainEqual({
       level: 'error',
-      text: 'Error: no_certification',
+      text: 'no_certification',
       buttons: ['Validate', 'Show Output'],
     });
 
@@ -1085,7 +1145,7 @@ describe('an apply', () => {
     await settled();
 
     expect(t.commands.invoked.filter((c) => c.path === 'module validate')).toEqual([
-      { cwd: '/work/repo/infra/staging', path: 'module validate', args: {} },
+      { cwd: fsPath('/work/repo/infra/staging'), path: 'module validate', args: {} },
     ]);
     expect(t.messages).toContainEqual({
       level: 'warn',
@@ -1094,7 +1154,7 @@ describe('an apply', () => {
     });
     expect(t.log.lines).toEqual([
       'Validated infra/staging: lossy, 1 diagnostic.',
-      '  /work/repo/infra/staging/main.tf:4:2: error: not set',
+      `  ${fsPath('/work/repo/infra/staging/main.tf')}:4:2: error: not set`,
     ]);
   });
 
@@ -1234,5 +1294,101 @@ describe('an apply', () => {
       text: 'Cancelled the apply of prod.',
       buttons: ['Show Output'],
     });
+  });
+});
+
+describe("the view's progress", () => {
+  const listed = { 'stack list': { documents: [stacks(stack('stk_1', 'prod'))] } };
+  const overView = (t: ReturnType<typeof setup>) =>
+    t.progress.filter((p) => p.view === 'laceStacks').map(({ ended }) => ({ ended }));
+
+  test("is drawn from the store's running mark, from the moment it is set until it is cleared", async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    const token = {};
+    t.runner.store.begin(
+      'notify',
+      token,
+      { stack: 'stk_1' },
+      { target: {}, on: 'stack:stk_1', path: 'stack scan', label: 'Scan for drift' },
+    );
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+
+    t.runner.store.detach('notify', token);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+  });
+
+  test('is drawn while a scan of a stack runs, and ends when it ends, however it ends', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack scan': { held: true } } });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.scan, row);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+
+    t.commands.held[0].finish([], new CommandExitError(1, 'Error: no\n'));
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+  });
+
+  test('is drawn while a preview runs, and ends when its plan lands, which opens then', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack preview': { held: true } } });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.preview, row);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+    expect(t.opened).toEqual([]);
+
+    t.commands.held[0].finish([PROD_PREVIEW]);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
+  });
+
+  test('ends when a preview fails, which opens nothing', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack preview': { held: true } } });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.preview, row);
+    await settled();
+    t.commands.held[0].finish([], new CommandExitError(1, 'Error: no\n'));
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(t.opened).toEqual([]);
+  });
+
+  // A follow is a subscription to a run's logs, not a command under way.
+  test("is not drawn while a run's logs are followed", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        ...listed,
+        'run list': { documents: [runs(run('run_1', 'applying'))] },
+        'run logs': { held: true },
+      },
+    });
+    const [row] = await t.children();
+    const [runRow] = await t.children(row);
+
+    await t.command(STACK_COMMANDS.followLogs, runRow);
+    await settled();
+    expect(overView(t)).toEqual([]);
+  });
+
+  test('is drawn while an apply runs, and ends when its run settles', async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'stack apply': { held: true } } });
+    const [row] = await t.children();
+
+    const applying = t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    expect(overView(t)).toEqual([{ ended: false }]);
+
+    t.commands.held[0].finish([applyResult()]);
+    await applying;
+    await settled();
+    expect(overView(t)).toEqual([{ ended: true }]);
   });
 });

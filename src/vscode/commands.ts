@@ -1,6 +1,7 @@
 // Command registration: every command of the extension is registered through
 // here, so a command that fails says so once, where the developer acted.
 import type * as vscode from 'vscode';
+import { failureText } from '../engine/command-outcome';
 
 type CommandsApi = {
   commands: Pick<typeof vscode.commands, 'registerCommand'>;
@@ -15,7 +16,7 @@ export function registerCommands(api: CommandsApi, table: CommandTable): vscode.
       try {
         await run(...args);
       } catch (error) {
-        void api.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+        void api.window.showErrorMessage(failureText(error));
       }
     }),
   );

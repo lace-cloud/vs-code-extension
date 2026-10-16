@@ -1,12 +1,17 @@
-import type { CommandFailure, RunCtx } from '@lace-cloud/canvas/engine';
+import {
+  type CommandFailure,
+  CommandUnobservedError,
+  type RunCtx,
+} from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { binding, createRunnerHost, type Form } from '../../engine/runner-host';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import { formAnswerer } from '../form-answerer';
 import { type OfferActions, offeringPresenter } from '../offers';
 import { type Button, clicked, titleOf } from './fake-messages';
+import { fakeQuickPicks } from './fake-quick-pick';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -48,16 +53,22 @@ function setup(options: Options = {}) {
       messages.push({ level, text, buttons: buttons.map(titleOf) });
       return clicked(buttons, await options.answers?.[text]);
     });
+  // A pick asks once its items are in: what it says, and the items.
+  const quickPicks = fakeQuickPicks<{ label: string; id: string }>((items, pick) => {
+    asked.push({
+      kind: 'pick',
+      options: { title: pick.title, placeholder: pick.placeholder },
+      items,
+    });
+    const id = options.picks?.shift();
+    return items.find((item) => item.id === id);
+  });
   const window = {
     showInputBox: vi.fn(async (opened: vscode.InputBoxOptions) => {
       asked.push({ kind: 'input', options: opened });
       return options.inputs?.shift();
     }),
-    showQuickPick: vi.fn(async (items: { id: string }[], opened: vscode.QuickPickOptions) => {
-      asked.push({ kind: 'pick', options: opened, items });
-      const id = options.picks?.shift();
-      return items.find((item) => item.id === id);
-    }),
+    createQuickPick: quickPicks.createQuickPick,
     withProgress: vi.fn(async (_opened: unknown, task: () => Promise<unknown>) => task()),
     showOpenDialog: vi.fn(async (opened: vscode.OpenDialogOptions) => {
       asked.push({ kind: 'file', options: opened });
@@ -92,7 +103,17 @@ function setup(options: Options = {}) {
     answerer(form, { action: binding(id), ctx });
     return form;
   };
-  return { commands, window, asked, messages, offers, report, answerer, answer };
+  return {
+    commands,
+    window,
+    asked,
+    picks: quickPicks.picks,
+    messages,
+    offers,
+    report,
+    answerer,
+    answer,
+  };
 }
 
 describe('the answerer', () => {
@@ -137,7 +158,7 @@ describe('the answerer', () => {
         kind: 'pick',
         options: {
           title: 'Create stack: infra/prod',
-          placeHolder: 'The cloud connection',
+          placeholder: 'The cloud connection',
         },
         items: [
           { label: 'AWS prod', description: 'aws · ready · conn_1', id: 'conn_1' },
@@ -146,6 +167,25 @@ describe('the answerer', () => {
       },
     ]);
     expect(form.submit).toHaveBeenCalledWith({ connection: 'conn_2' });
+  });
+
+  test('the connection pick is on screen, busy and titled by the run, while the connections are listed', async () => {
+    const t = setup({ scripts: { 'connection list': { held: true } }, picks: ['conn_1'] });
+    const form = t.answer('create', ['connection'], { root: PROD });
+    await settled();
+    expect(t.picks).toHaveLength(1);
+    expect(t.picks[0]).toMatchObject({
+      visible: true,
+      shownBusy: true,
+      busy: true,
+      items: [],
+      title: 'Create stack: infra/prod',
+      placeholder: 'The cloud connection',
+    });
+
+    t.commands.held[0].finish([connections(connection('conn_1', 'AWS prod'))]);
+    await settled();
+    expect(form.submit).toHaveBeenCalledWith({ connection: 'conn_1' });
   });
 
   test('asks for each argument in the order the form lists them, and submits them together', async () => {
@@ -181,7 +221,7 @@ describe('the answerer', () => {
         },
       },
     ]);
-    expect(form.submit).toHaveBeenCalledWith({ state: '/home/dev/pulled.tfstate' });
+    expect(form.submit).toHaveBeenCalledWith({ state: fsPath('/home/dev/pulled.tfstate') });
   });
 
   test.each([
@@ -213,11 +253,12 @@ describe('the answerer', () => {
 
     expect(form.cancel).toHaveBeenCalledOnce();
     expect(form.submit).not.toHaveBeenCalled();
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
     expect(t.messages).toEqual([{ level: 'info', text: said, buttons: ['Open Portal'] }]);
     expect(t.offers.openPortal).toHaveBeenCalledWith({ kind: 'openPortal', url: PORTAL });
   });
 
-  test('a connection list that cannot be read cancels the form and says why, with the ways out its reason names', async () => {
+  test('a connection list that cannot be read closes the pick, cancels the form and says why, with the ways out its reason names', async () => {
     const failure: CommandFailure = { reason: 'unauthenticated', message: 'Sign in to Lace first' };
     const t = setup({
       scripts: { 'connection list': refused(failure) },
@@ -231,7 +272,24 @@ describe('the answerer', () => {
       { level: 'error', text: 'Sign in to Lace first', buttons: ['Sign In'] },
     ]);
     expect(t.offers.signIn).toHaveBeenCalled();
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
     expect(t.asked).toEqual([]);
+  });
+
+  test('a connection list whose stream ended before it finished closes the pick, cancels the form and says to list again', async () => {
+    const t = setup({ scripts: { 'connection list': { fails: new CommandUnobservedError() } } });
+    const form = t.answer('create', ['connection'], { root: PROD });
+    await settled();
+
+    expect(form.cancel).toHaveBeenCalledOnce();
+    expect(t.messages).toEqual([
+      {
+        level: 'error',
+        text: 'the stream ended before `lace connection list` finished; run it again',
+        buttons: [],
+      },
+    ]);
+    expect(t.picks).toMatchObject([{ visible: false, items: [] }]);
   });
 
   test('an argument with no prompt cancels the form, asks nothing and says this window cannot ask for it', async () => {
@@ -288,7 +346,7 @@ describe("the answerer of the window's runner", () => {
               }),
       },
       files: [['/home/dev/pulled.tfstate']],
-      answers: { 'Error: 1 resource has no import id\n': 'Import the rest' },
+      answers: { '1 resource has no import id': 'Import the rest' },
     });
     await window(t).run(binding('import'), { root: PROD, stack: STACK });
     await settled();
@@ -296,8 +354,8 @@ describe("the answerer of the window's runner", () => {
 
     expect(t.asked.map(({ kind }) => kind)).toEqual(['file']);
     expect(t.commands.invoked.map(({ args }) => args)).toEqual([
-      { stack: 'stk_1', state: '/home/dev/pulled.tfstate' },
-      { stack: 'stk_1', allowPartial: true, state: '/home/dev/pulled.tfstate' },
+      { stack: 'stk_1', state: fsPath('/home/dev/pulled.tfstate') },
+      { stack: 'stk_1', allowPartial: true, state: fsPath('/home/dev/pulled.tfstate') },
     ]);
   });
 

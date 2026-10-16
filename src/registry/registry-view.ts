@@ -3,9 +3,9 @@
 // host reads the module axis of the registry once, unfiltered, and the
 // page narrows it as the developer searches and picks categories; a row's
 // versions are read when it is expanded. The view reads again each time it
-// becomes visible, since a terminal or another window can sign in or out
-// or select another organization, and at each change of account this
-// window makes, from whichever surface made it.
+// becomes visible and at each change of the account: one this window makes,
+// from whichever surface made it, and one a terminal or another window
+// made, which the account finds when it reads itself again (`account.ts`).
 //
 // Signed out and no organization are the states the list's failure names
 // by its reason; any other failure shows its message with Retry. The
@@ -15,7 +15,7 @@
 import type { CommandFailure } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type Account, SELECT_ORGANIZATION, SIGN_IN } from '../account/account';
-import type { CommandOutcome } from '../engine/command-outcome';
+import { type CommandOutcome, failureText } from '../engine/command-outcome';
 import {
   moduleKey,
   type RegistryRow,
@@ -118,7 +118,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
       }
     } catch (error) {
       report('reading the Lace registry', error);
-      next = { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
+      next = { kind: 'failed', message: failureText(error) };
     }
     if (turn !== reading) return;
     shown = next;
