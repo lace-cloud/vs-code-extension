@@ -29,7 +29,7 @@ import {
   VALIDATE_MODULE,
 } from '../authoring-commands';
 import { canvasOperations } from '../canvas-operations';
-import { saveTerraformBuffers } from '../terraform-buffers';
+import { saveBuffersBefore, saveTerraformBuffers } from '../terraform-buffers';
 
 const repo = folder('/work/repo');
 const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
@@ -642,6 +642,18 @@ describe('saving buffers', () => {
     expect(
       await saveTerraformBuffers({ textDocuments: [] } as unknown as typeof vscode.workspace, prod),
     ).toBe(true);
+  });
+
+  test.each([
+    ['module scan', false],
+    ['module docs', false],
+    ['module fmt', true],
+    ['stack import', true],
+  ] as const)('before `lace %s`, saves the root’s dirty Terraform only when the CLI declares it a rewrite: %s', async (path, saves) => {
+    const dirty = document(`${PROD}/main.tf`, true);
+    const workspace = { textDocuments: [dirty] } as unknown as typeof vscode.workspace;
+    expect(await saveBuffersBefore(workspace, prod, path)).toBe(true);
+    expect(dirty.save.mock.calls.length > 0).toBe(saves);
   });
 });
 

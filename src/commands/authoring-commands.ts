@@ -40,7 +40,6 @@
 import {
   type ArgsOf,
   type BoundPath,
-  COMMANDS,
   type CommandFailure,
   diagnosticsOfDocument,
   type GenerateEvent,
@@ -63,7 +62,7 @@ import {
 } from '../roots/authoring-roots';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import { type CanvasOperations, notDoneText } from './canvas-operations';
-import { saveTerraformBuffers } from './terraform-buffers';
+import { saveBuffersBefore } from './terraform-buffers';
 
 export const SAVE_CANVAS = 'lace.save';
 export const GENERATE_CANVAS = 'lace.generate';
@@ -239,10 +238,10 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
 
   // Names the root and runs `lace <path>` in it under a progress
   // notification that names the root; a failure is shown where the developer
-  // acted, a document goes to `show`. A command the CLI declares a rewrite
-  // (`COMMANDS[path].effect`) writes the root's Terraform files, so the
-  // root's unsaved Terraform buffers are saved before it runs. Nothing runs
-  // when no root is named or a buffer did not save.
+  // acted, a document goes to `show`. The root's unsaved Terraform buffers
+  // are saved first when the CLI declares the command a rewrite
+  // (`saveBuffersBefore`). Nothing runs when no root is named or a buffer
+  // did not save.
   function inRoot<P extends BoundPath>(
     { verb, doing, path, args }: { verb: string; doing: string; path: P; args: ArgsOf<P> },
     show: (root: AuthoringRoot, label: string, document: JsonOf<P>) => Promise<void> | void,
@@ -251,10 +250,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
       const root = await named(verb, pointedAt);
       if (!root) return;
       const label = labelOf(root);
-      if (
-        COMMANDS[path].effect === 'rewrite' &&
-        !(await saveTerraformBuffers(api.workspace, root))
-      ) {
+      if (!(await saveBuffersBefore(api.workspace, root, path))) {
         void api.window.showErrorMessage(
           `A Terraform file in ${label} did not save, so Lace did not ${verb} it.`,
         );

@@ -55,7 +55,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
 | A quick pick whose items come from a read: on screen at once, busy, and filled when the read settles; a read that finds none closes it and runs the caller's own empty path, and one that fails closes it and rejects for the caller's notice | `vscode/pick.ts` (`pickFrom`) | the organization and team picks, the stack pick, the connection prompt, Add Module to Canvas |
 | A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a failure's package answer, the answerer |
-| A CLI command's effect, as the CLI declares it: a `read` changes nothing, a `write` may change something before its stream ends, a `rewrite` writes the module's own Terraform files | the package's `COMMANDS` (`COMMANDS[path].effect`) | what a stream that ended under a command says (`failureSays`); the module commands, which save the root's dirty `.tf` editors before a rewrite |
+| A CLI command's effect, as the CLI declares it: a `read` changes nothing, a `write` may change something before its stream ends, a `rewrite` writes the module's own Terraform files | the package's `COMMANDS` (`COMMANDS[path].effect`) | what a stream that ended under a command says (`failureSays`); `saveBuffersBefore` (`commands/terraform-buffers.ts`), which saves the root's dirty `.tf` editors before a rewrite, for the module commands and Import Existing Resources |
 | A command's outcome: its document or its failure, and every failure of it as a `CommandFailedError`: its `message`, the package's reading of the failure, and its `failure` document when it wrote one | `engine/command-outcome.ts` (`commandOutcome`) | every command's caller |
 | What a failed command says: its failure document's message when it wrote one, the CLI's stderr when it wrote none, its exit code when it wrote nothing at all, and for a stream that ended under it, by the command's effect, that a read is to be run again or that a write or a rewrite ran and may have made changes | the package's `failureSays`, which `commandOutcome` reads into its `CommandFailedError`, and sign-in for `lace login`'s own stream; `failureText` says a failure | every notice of a failed command, the Stacks view's message and rows |
 | What is under way | the package's result store, the runner host's `store`, asked through the package's `commandUnderWay` | the Stacks view's progress (`stacks/stacks-tree.ts`) |
@@ -293,7 +293,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 - **Import Existing Resources** (`stacks/import-resources.ts`) is a stack command the host draws: the canvas's
   source-refused banner offers it beside Convert on the panel's root, and **Lace: Import Existing Resources**
   (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the
-  one stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, then runs
+  one stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, the CLI
+  declaring `stack import` a rewrite (`saveBuffersBefore`), then runs
   the package's `import` binding over `{root, stack}` under a progress notification ("Import existing resources:
   <stack>") until its run ends; the form asks for the statefile. The package's notice says what the import did, and an
   import that stopped at `import_residual` offers Import the rest over the same run's context. Nothing detects a
@@ -324,7 +325,7 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
   docs` through `commands.at(root)`, with no session. **Convert Module** (`lace.convertModule`) runs `module convert` the
   same way and reports as Validate does, with no confirmation (the canvas action has none); an open canvas picks the
   rewritten Terraform up live. Format and Convert are the commands the CLI declares rewrites (`COMMANDS[path].effect`):
-  they write the root's Terraform, so they first save its dirty `.tf` editors, as Generate does; Validate, Scan and Generate Docs read the files as they are on disk, as in a terminal. One operation
+  they write the root's Terraform, so they first save its dirty `.tf` editors (`saveBuffersBefore`), as Generate does; Validate, Scan and Generate Docs read the files as they are on disk, as in a terminal. One operation
   behaves the same by every trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read
   writes nothing into the tree (a save before it would, and with saved but ungenerated canvas edits it would raise the
   conflict unasked).

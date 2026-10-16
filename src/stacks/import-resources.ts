@@ -8,7 +8,8 @@
 //
 // The stack is the one stack pick's (`pickStack`), which stops at a root
 // with no stack. The root's Terraform files with unsaved changes in an
-// editor are saved first, as Convert saves them: the import writes over
+// editor are saved first, as Convert saves them, since the CLI declares
+// `stack import` a rewrite (`saveBuffersBefore`): the import writes over
 // what the developer sees. The import runs under a progress notification
 // until its run ends (`runUnderProgress`); the runner's form asks for the
 // statefile, and the package's notice says what the import did. A failure
@@ -16,7 +17,7 @@
 // cannot adopt (`import_residual`) offers the package's Import the rest,
 // which reads the statefile this run was given.
 import type * as vscode from 'vscode';
-import { saveTerraformBuffers } from '../commands/terraform-buffers';
+import { saveBuffersBefore } from '../commands/terraform-buffers';
 import { binding, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
@@ -49,7 +50,7 @@ export function resourceImporter(options: ResourceImporterOptions): ImportResour
   return async (root) => {
     const stack = await pickStack(root, 'import into');
     if (!stack) return;
-    if (!(await saveTerraformBuffers(api.workspace, root))) {
+    if (!(await saveBuffersBefore(api.workspace, root, 'stack import'))) {
       void api.window.showErrorMessage(
         `A Terraform file in ${rootLabel(root, sources.folders())} did not save, so Lace did not import into ${stack.slug}.`,
       );
