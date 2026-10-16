@@ -88,11 +88,11 @@ protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protoc
 engine of another protocol is refused with a message that names which side to update. A start the spawn refused (the
 `EngineSpawnError` `@lace-cloud/host` rejects with) says where the binary was read from, what happened, and, by its
 `code`, how to get past it: a binary that is not found (`ENOENT`), to install the Lace CLI so `lace` is on `PATH` or to
-set `lace.binaryPath` to its executable's full path; a `.cmd` or `.bat` binary the spawn refused (`EINVAL`), that Windows cannot
-start one directly and to point `lace.binaryPath` at `lace.exe`. Any other failed start says where the binary was read
-from and what happened. The extension host reaches the engine
-through an in-process bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same typed mapping a webview
-holds over its bridge. `whenRunning` waits for a restart that `lace.autoRestart` or the developer starts.
+set `lace.binaryPath` to its executable's full path; a `.cmd` or `.bat` binary the spawn refused (`EINVAL`), that
+Windows cannot start one directly and to point `lace.binaryPath` at `lace.exe`. Any other failed start says where the
+binary was read from and what happened. The extension host reaches the engine through an in-process bridge of its own
+(`bridgeCaller` over `serveEngineBridge`), the same typed mapping a webview holds over its bridge. `whenRunning` waits
+for a restart that `lace.autoRestart` or the developer starts.
 
 **One session per authoring root, `root-sessions.ts` its only owner.**
 
@@ -131,9 +131,8 @@ the stack palette commands, Create Stack and Import Existing Resources run the p
 `RunCtx` naming the root and the stack; the binding owns the arguments, the confirmation and the result folding, and the
 host draws the store. A binding that declares the root runs in it. What is under way is the store's to say, and the
 Stacks view is the one place that asks it whether any command is, through the package's `commandUnderWay`; the host
-keeps no count of its own.
-The host runs each binding inside an async context (`AsyncLocalStorage`) carrying its run, which attributes to the run
-what names none:
+keeps no count of its own. The host runs each binding inside an async context (`AsyncLocalStorage`) carrying its run,
+which attributes to the run what names none:
 
 - `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked it.
 - The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
@@ -292,14 +291,13 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.
 - **Import Existing Resources** (`stacks/import-resources.ts`) is a stack command the host draws: the canvas's
   source-refused banner offers it beside Convert on the panel's root, and **Lace: Import Existing Resources**
-  (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the
-  one stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, the CLI
-  declaring `stack import` a rewrite (`saveBuffersBefore`), then runs
-  the package's `import` binding over `{root, stack}` under a progress notification ("Import existing resources:
-  <stack>") until its run ends; the form asks for the statefile. The package's notice says what the import did, and an
-  import that stopped at `import_residual` offers Import the rest over the same run's context. Nothing detects a
-  statefile and nothing filters the stacks by their state: the CLI refuses a stack that holds state
-  (`stack_has_state`).
+  (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the one
+  stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, the CLI declaring
+  `stack import` a rewrite (`saveBuffersBefore`), then runs the package's `import` binding over `{root, stack}` under a
+  progress notification ("Import existing resources: <stack>") until its run ends; the form asks for the statefile. The
+  package's notice says what the import did, and an import that stopped at `import_residual` offers Import the rest over
+  the same run's context. Nothing detects a statefile and nothing filters the stacks by their state: the CLI refuses a
+  stack that holds state (`stack_has_state`).
 
 ## Module commands
 
@@ -322,13 +320,13 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
   Generate that wrote no file says that nothing was written and offers nothing) or the engine's refusal (an unsaved
   canvas offers **Save**).
 - **Validate**, **Format**, **Scan** and **Generate Docs** run `module validate`, `module fmt`, `module scan`, `module
-  docs` through `commands.at(root)`, with no session. **Convert Module** (`lace.convertModule`) runs `module convert` the
-  same way and reports as Validate does, with no confirmation (the canvas action has none); an open canvas picks the
+  docs` through `commands.at(root)`, with no session. **Convert Module** (`lace.convertModule`) runs `module convert`
+  the same way and reports as Validate does, with no confirmation (the canvas action has none); an open canvas picks the
   rewritten Terraform up live. Format and Convert are the commands the CLI declares rewrites (`COMMANDS[path].effect`):
-  they write the root's Terraform, so they first save its dirty `.tf` editors (`saveBuffersBefore`), as Generate does; Validate, Scan and Generate Docs read the files as they are on disk, as in a terminal. One operation
-  behaves the same by every trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read
-  writes nothing into the tree (a save before it would, and with saved but ungenerated canvas edits it would raise the
-  conflict unasked).
+  they write the root's Terraform, so they first save its dirty `.tf` editors (`saveBuffersBefore`), as Generate does;
+  Validate, Scan and Generate Docs read the files as they are on disk, as in a terminal. One operation behaves the same
+  by every trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read writes nothing into
+  the tree (a save before it would, and with saved but ungenerated canvas edits it would raise the conflict unasked).
 - A report reaches Problems when this window holds the root's session (`operations.held`, which reads each held session's
   path back as the root it names and compares roots; the engine publishes the result to the session);
   otherwise it is the command's result: a notification with the verdict, when the run reached one (a tree Lace's rules or
@@ -402,11 +400,11 @@ a handler on chat-core's one tool contract.
 **The adapter** (`tools/lm-tools.ts`) adds what only VS Code knows:
 
 - the `root` input every tool requires: the module directory's path in the workspace (`.` for a folder itself, the
-  folder's name first in a multi-root workspace) or its absolute path, `\` separating as `/` does, so a path spelled
-  as Windows spells it names the same directory; named as a directory pointed at is (`placeOf`):
-  any directory there under a workspace folder that is not, and is not inside, `.terraform` or `.lace`, one with no
-  Terraform yet included, where the canvas tools start a module; any other is an error listing the directories that
-  hold Terraform and the roots of the canvases open;
+  folder's name first in a multi-root workspace) or its absolute path, `\` separating as `/` does, so a path spelled as
+  Windows spells it names the same directory; named as a directory pointed at is (`placeOf`): any directory there under
+  a workspace folder that is not, and is not inside, `.terraform` or `.lace`, one with no Terraform yet included, where
+  the canvas tools start a module; any other is an error listing the directories that hold Terraform and the roots of
+  the canvases open;
 - the reference name, the tool's name in camel case;
 - the manifest's `languageModelTools` entries, generated from the tool sets' schemas (`canvasToolSchemas`,
   `moduleToolSchemas`, chat-core's data, read with no ports): `pnpm manifest:tools` writes them, and
