@@ -12,7 +12,7 @@ import type * as vscode from 'vscode';
 import { authoringCommands } from '../../commands/authoring-commands';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
@@ -411,7 +411,7 @@ describe('the stacks of the current root', () => {
     const rows = await t.children();
 
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
-      ['stack list', { source: '/work/repo/infra/prod' }],
+      ['stack list', { source: fsPath('/work/repo/infra/prod') }],
     ]);
     expect(t.view.description).toBe('infra/prod');
     expect(t.contexts).toEqual(['stacks']);
@@ -500,8 +500,8 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
-      { source: '/work/api/infra/prod' },
-      { source: '/work/api/infra/prod' },
+      { source: fsPath('/work/api/infra/prod') },
+      { source: fsPath('/work/api/infra/prod') },
     ]);
   });
 
@@ -512,7 +512,7 @@ describe('the stacks of the current root', () => {
     expect(t.redrawn).toEqual([undefined]);
     await t.children();
     expect(t.view.description).toBe('infra/staging');
-    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/staging' });
+    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
   });
 
   test("in a workspace of several folders, the view names its root as the root's canvas tab is titled", async () => {
@@ -556,10 +556,10 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
-      { source: '/work/api/infra/prod' },
-      { source: '/work/api/infra/prod' },
-      { source: '/work/web/infra/prod' },
-      { source: '/work/api/infra/prod' },
+      { source: fsPath('/work/api/infra/prod') },
+      { source: fsPath('/work/api/infra/prod') },
+      { source: fsPath('/work/web/infra/prod') },
+      { source: fsPath('/work/api/infra/prod') },
     ]);
   });
 
@@ -629,7 +629,7 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('repo');
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
-      ['stack list', { source: '/work/repo' }],
+      ['stack list', { source: fsPath('/work/repo') }],
     ]);
   });
 
@@ -693,7 +693,7 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.view.description).toBe('infra/new');
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
-      ['stack list', { source: '/work/repo/infra/new' }],
+      ['stack list', { source: fsPath('/work/repo/infra/new') }],
     ]);
   });
 
@@ -707,7 +707,7 @@ describe('the stacks of the current root', () => {
     await t.children();
     expect(t.messages).toEqual([]);
     expect(t.view.description).toBe('infra/new');
-    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: '/work/repo/infra/new' });
+    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/new') });
   });
 });
 
@@ -857,9 +857,9 @@ describe('Create Stack', () => {
 
     expect(t.commands.invoked.filter((c) => c.path === 'stack create')).toEqual([
       {
-        cwd: '/work/repo/infra/prod',
+        cwd: fsPath('/work/repo/infra/prod'),
         path: 'stack create',
-        args: { source: '/work/repo/infra/prod', slug: 'prod', connection: 'conn_1' },
+        args: { source: fsPath('/work/repo/infra/prod'), slug: 'prod', connection: 'conn_1' },
       },
     ]);
     // The view's own progress, drawn while the store marks a command running, has no title.
@@ -996,7 +996,7 @@ describe('a stack row', () => {
       buttons: ['Validate'],
     });
     expect(t.commands.invoked.find((c) => c.path === 'module validate')?.cwd).toBe(
-      '/work/repo/infra/prod',
+      fsPath('/work/repo/infra/prod'),
     );
   });
 
@@ -1033,7 +1033,7 @@ describe('a stack row', () => {
       ['run logs', { run: 'run_1', follow: true }],
       ['run cancel', { run: 'run_1' }],
     ]);
-    expect(ran.find((c) => c.path === 'stack preview')?.cwd).toBe('/work/repo/infra/prod');
+    expect(ran.find((c) => c.path === 'stack preview')?.cwd).toBe(fsPath('/work/repo/infra/prod'));
     expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
     expect(t.channels.get('Lace: prod')).toEqual(['── lace run logs run_1 ──', 'line one']);
     expect(t.shownChannels).toContain('Lace: prod');
@@ -1066,7 +1066,7 @@ describe('an apply', () => {
     expect(t.commands.invoked.find((c) => c.path === 'stack apply')?.args).toEqual({
       stack: 'stk_1',
     });
-    expect(t.ran.every((made) => made.ctx.root === '/work/repo/infra/prod')).toBe(true);
+    expect(t.ran.every((made) => made.ctx.root === fsPath('/work/repo/infra/prod'))).toBe(true);
     expect(t.channels.get('Lace: prod')).toEqual([
       '── lace stack apply ──',
       'Preview Advisory:',
@@ -1145,7 +1145,7 @@ describe('an apply', () => {
     await settled();
 
     expect(t.commands.invoked.filter((c) => c.path === 'module validate')).toEqual([
-      { cwd: '/work/repo/infra/staging', path: 'module validate', args: {} },
+      { cwd: fsPath('/work/repo/infra/staging'), path: 'module validate', args: {} },
     ]);
     expect(t.messages).toContainEqual({
       level: 'warn',
@@ -1154,7 +1154,7 @@ describe('an apply', () => {
     });
     expect(t.log.lines).toEqual([
       'Validated infra/staging: lossy, 1 diagnostic.',
-      '  /work/repo/infra/staging/main.tf:4:2: error: not set',
+      `  ${fsPath('/work/repo/infra/staging/main.tf')}:4:2: error: not set`,
     ]);
   });
 
