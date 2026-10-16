@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { type FakeEngine, fakeEngine } from '../../engine/__tests__/fake-engine';
 import { createRootSessions, type RootHold } from '../../engine/root-sessions';
-import { folder } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath } from '../../roots/__tests__/fake-uri';
 import { type AuthoringRoot, rootPath, type StartingSources } from '../../roots/authoring-roots';
 import {
   PLACEMENT_API_REFUSALS,
@@ -91,11 +91,13 @@ describe('placing a registry module', () => {
     const { place, events, sent, engine, rootSessions, placed } = setup();
     await place(VPC);
 
-    expect(events).toEqual(['ensure /work/repo/infra/prod true']);
+    expect(events).toEqual([`ensure ${fsPath('/work/repo/infra/prod')} true`]);
     expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
     expect(sent('SessionClose')).toEqual([]);
     expect(engine.open()).toHaveLength(1);
-    expect(rootSessions.held()).toMatchObject([{ root: '/work/repo/infra/prod', holders: 1 }]);
+    expect(rootSessions.held()).toMatchObject([
+      { root: fsPath('/work/repo/infra/prod'), holders: 1 },
+    ]);
     expect(placed).toHaveBeenCalledWith(VPC);
   });
 
@@ -112,7 +114,7 @@ describe('placing a registry module', () => {
   test('in a workspace that holds no Terraform, the module is placed on a new canvas of the workspace folder', async () => {
     const { place, events, sent, api, placed } = setup({ root: null });
     await place(VPC);
-    expect(events).toEqual(['ensure /work/repo true']);
+    expect(events).toEqual([`ensure ${fsPath('/work/repo')} true`]);
     expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
     expect(api.window.showInformationMessage).not.toHaveBeenCalled();
     expect(placed).toHaveBeenCalledWith(VPC);
@@ -124,7 +126,7 @@ describe('placing a registry module', () => {
       open: [{ folder: repo, relative: 'infra/new' }],
     });
     await place(VPC);
-    expect(events).toEqual(['ensure /work/repo/infra/new true']);
+    expect(events).toEqual([`ensure ${fsPath('/work/repo/infra/new')} true`]);
     expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
   });
 
