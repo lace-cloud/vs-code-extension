@@ -1,7 +1,7 @@
 // The engine and the root sessions against the real engine, the `lace` CLI
 // in bin/ or on PATH (`real-engine.ts`).
-import { execFileSync, spawn } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type Action, ConnectError, Reason } from '@lace-cloud/canvas/engine';
@@ -10,6 +10,7 @@ import { describe, expect, test } from 'vitest';
 import { createAutosaveKeeper } from '../../autosave/autosave-policy';
 import { EngineStartError } from '../engine';
 import type { RootHold } from '../root-sessions';
+import { childProcesses, nodeProgram } from './os-processes.mjs';
 import { afterTest, BINARY, moduleDirectory, realEngine, until } from './real-engine';
 
 const STAND_IN = join(__dirname, 'host-stand-in.mjs');
@@ -28,15 +29,9 @@ const alive = (pid: number): boolean => {
 
 // The engine processes this test process started.
 const engineProcesses = (): number[] =>
-  execFileSync('pgrep', ['-P', String(process.pid)], { encoding: 'utf8' })
-    .split('\n')
-    .filter((line) => line !== '')
-    .map(Number)
-    .filter((pid) =>
-      execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }).includes(
-        BINARY,
-      ),
-    );
+  childProcesses(process.pid)
+    .filter(({ command }) => command.includes(BINARY))
+    .map(({ pid }) => pid);
 
 // An edit of the root module through `hold`: its variables set, whole, to
 // none.
@@ -310,11 +305,10 @@ describe('an engine the extension cannot work with', () => {
   function engineSpeaking(protocol: number): string {
     const directory = mkdtempSync(join(tmpdir(), 'lace-engine-'));
     afterTest(() => rmSync(directory, { recursive: true, force: true }));
-    const wrapper = join(directory, 'lace');
-    writeFileSync(
-      wrapper,
-      `#!/usr/bin/env node
-const { spawn } = require('node:child_process');
+    return nodeProgram(
+      directory,
+      'lace',
+      `const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const engine = spawn(${JSON.stringify(BINARY)}, process.argv.slice(2), { stdio: ['inherit', 'pipe', 'inherit'] });
 readline.createInterface({ input: engine.stdout }).on('line', (line) => {
@@ -323,8 +317,6 @@ readline.createInterface({ input: engine.stdout }).on('line', (line) => {
 engine.on('exit', (code) => process.exit(code ?? 1));
 `,
     );
-    chmodSync(wrapper, 0o755);
-    return wrapper;
   }
 
   test('an engine below the protocol this extension speaks is reported as too old', async () => {

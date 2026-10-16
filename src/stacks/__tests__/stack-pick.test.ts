@@ -1,7 +1,7 @@
 import { CommandUnobservedError, type LaceReason } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
-import { folder } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
@@ -66,7 +66,7 @@ describe('the stack pick', () => {
 
     expect(await t.pickStack(prod, 'import into')).toEqual({ id: 'stk_2', slug: 'qa' });
     expect(t.commands.invoked).toEqual([
-      { cwd: '/home/dev', path: 'stack list', args: { source: '/work/repo/infra/prod' } },
+      { cwd: '/home/dev', path: 'stack list', args: { source: fsPath('/work/repo/infra/prod') } },
     ]);
     const [pick] = t.picks;
     expect(pick.items.map(({ label, description }) => ({ label, description }))).toEqual([

@@ -19,7 +19,7 @@ import {
   until,
 } from '../../engine/__tests__/real-engine';
 import type { CommandsMapping } from '../../engine/commands-mapping';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { file, folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import { createRootState } from '../../state/root-state';
 import { type LanguageModelApi, registerLaceTools, TOOL_SCHEMAS } from '../lm-tools';
 import { fakeCancellation } from './fake-session';
@@ -46,8 +46,8 @@ const GENERATED =
 // finds them.
 const terraformFiles = (directory: string): vscode.Uri[] =>
   readdirSync(directory, { recursive: true, encoding: 'utf8' })
-    .filter((file) => file.endsWith('.tf'))
-    .map((file) => uri(join(directory, file)));
+    .filter((name) => name.endsWith('.tf'))
+    .map((name) => file(join(directory, name)));
 
 // A stand-in for VS Code's webview panel: what the canvas panels call.
 function webviewPanel() {
@@ -316,7 +316,9 @@ describe('a module started in a repository that holds no Terraform', () => {
       'Change 1: not applied. Reason: the canvas offers no instance for this change.',
     );
     expect(window.opened).toEqual([{ title: basename(window.repository), preserveFocus: true }]);
-    expect(window.rootSessions.held()).toMatchObject([{ root: window.repository, holders: 1 }]);
+    expect(window.rootSessions.held()).toMatchObject([
+      { root: fsPath(window.repository), holders: 1 },
+    ]);
     expect(window.frame().sourceRefused).toBe(false);
 
     const described = await window.invoke(DESCRIBE, { root: '.' });
@@ -335,7 +337,7 @@ describe('the change tool on the real engine', () => {
 
     await window.invoke(CHANGE, { root: ROOT, ...RENAME_NET });
     expect(window.opened).toEqual([{ title: ROOT, preserveFocus: true }]);
-    expect(window.rootSessions.held()).toMatchObject([{ root: window.root, holders: 1 }]);
+    expect(window.rootSessions.held()).toMatchObject([{ root: fsPath(window.root), holders: 1 }]);
     expect(instanceNames(window.frame())).toEqual(['app', 'network']);
     expect(window.frame().unsaved).toBe(true);
 
@@ -481,7 +483,7 @@ describe('validate in the root', () => {
       terraform: { valid: true },
     });
     expect(window.invoked.map(({ cwd, path }) => [cwd, path])).toEqual([
-      [window.root, 'module validate'],
+      [fsPath(window.root), 'module validate'],
     ]);
     expect(window.rootSessions.held()).toEqual([]);
     expect(existsSync(join(window.root, '.lace', '.canvas'))).toBe(false);

@@ -11,7 +11,7 @@ import type { CanvasPanels } from '../../canvas/canvas-panels';
 import { canvasOperations } from '../../commands/canvas-operations';
 import { fakeCommands, HOME, type Scripts } from '../../engine/__tests__/fake-commands';
 import type { RootHold } from '../../engine/root-sessions';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
 import {
   createLaceTools,
@@ -209,7 +209,7 @@ describe('the tools', () => {
     expect(result.isError).toBe(false);
     expect(result.content).toContain('Canvas of module');
     expect(panels.ensure).not.toHaveBeenCalled();
-    expect(acquired).toEqual(['/work/repo/infra/prod']);
+    expect(acquired).toEqual([fsPath('/work/repo/infra/prod')]);
     expect(holders()).toBe(0);
   });
 
@@ -284,7 +284,7 @@ describe('the tools', () => {
     expect(searched.isError).toBe(false);
     await tool('lace_describe_registry_module').call(prod, { module: 'acme/vpc' });
     expect(lace.invoked.map(({ cwd, path }) => [cwd, path])).toEqual([
-      ['/work/repo/infra/prod', 'module validate'],
+      [fsPath('/work/repo/infra/prod'), 'module validate'],
       [HOME, 'registry list'],
       [HOME, 'registry describe'],
     ]);

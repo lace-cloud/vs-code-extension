@@ -7,7 +7,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { binding, createRunnerHost, type Form } from '../../engine/runner-host';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import { formAnswerer } from '../form-answerer';
 import { type OfferActions, offeringPresenter } from '../offers';
 import { type Button, clicked, titleOf } from './fake-messages';
@@ -221,7 +221,7 @@ describe('the answerer', () => {
         },
       },
     ]);
-    expect(form.submit).toHaveBeenCalledWith({ state: '/home/dev/pulled.tfstate' });
+    expect(form.submit).toHaveBeenCalledWith({ state: fsPath('/home/dev/pulled.tfstate') });
   });
 
   test.each([
@@ -354,8 +354,8 @@ describe("the answerer of the window's runner", () => {
 
     expect(t.asked.map(({ kind }) => kind)).toEqual(['file']);
     expect(t.commands.invoked.map(({ args }) => args)).toEqual([
-      { stack: 'stk_1', state: '/home/dev/pulled.tfstate' },
-      { stack: 'stk_1', allowPartial: true, state: '/home/dev/pulled.tfstate' },
+      { stack: 'stk_1', state: fsPath('/home/dev/pulled.tfstate') },
+      { stack: 'stk_1', allowPartial: true, state: fsPath('/home/dev/pulled.tfstate') },
     ]);
   });
 

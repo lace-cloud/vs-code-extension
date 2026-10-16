@@ -18,7 +18,7 @@ import {
   workspacePath,
   workspaceRootSources,
 } from '../authoring-roots';
-import { folder, uri } from './fake-uri';
+import { folder, fsPath, uri } from './fake-uri';
 
 const repo = folder('/work/repo');
 const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
@@ -39,7 +39,7 @@ describe('a root is a directory under a workspace folder', () => {
   test('a module in infra/prod has its root there, not at the workspace folder', () => {
     const root = rootAt([repo], uri('/work/repo/infra/prod'));
     expect(root).toEqual({ folder: repo, relative: 'infra/prod' });
-    expect(rootPath(root!)).toBe('/work/repo/infra/prod');
+    expect(rootPath(root!)).toBe(fsPath('/work/repo/infra/prod'));
     expect(rootLabel(root!, [repo])).toBe('infra/prod');
   });
 
@@ -59,9 +59,13 @@ describe('a root is a directory under a workspace folder', () => {
   test("a root whose folder has left the workspace is named by its directory's full path", () => {
     const api = folder('/work/api', 0);
     const web = folder('/work/web', 1);
-    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [api])).toBe('/work/web/infra/prod');
-    expect(rootLabel({ folder: web, relative: '' }, [api])).toBe('/work/web');
-    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [])).toBe('/work/web/infra/prod');
+    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [api])).toBe(
+      fsPath('/work/web/infra/prod'),
+    );
+    expect(rootLabel({ folder: web, relative: '' }, [api])).toBe(fsPath('/work/web'));
+    expect(rootLabel({ folder: web, relative: 'infra/prod' }, [])).toBe(
+      fsPath('/work/web/infra/prod'),
+    );
   });
 
   test('a directory outside every workspace folder is no root', () => {
@@ -429,7 +433,7 @@ describe('the root a command acts on', () => {
     [
       'a folder outside the workspace',
       uri('/elsewhere'),
-      'No module to open: /elsewhere is outside the folders of this workspace.',
+      `No module to open: ${fsPath('/elsewhere')} is outside the folders of this workspace.`,
     ],
   ])('%s is named for what it is', async (_case, pointedAt, text) => {
     const said = window();
@@ -601,7 +605,7 @@ describe('the root a directory path names', () => {
   test('is the directory under the innermost folder holding it, inverse to rootPath', () => {
     const root = rootOfPath([repo, nested], '/work/repo/infra/prod');
     expect(root).toEqual({ folder: nested, relative: 'prod' });
-    expect(root && rootPath(root)).toBe('/work/repo/infra/prod');
+    expect(root && rootPath(root)).toBe(fsPath('/work/repo/infra/prod'));
     expect(rootOfPath([repo], '/work/repo')).toEqual({ folder: repo, relative: '' });
   });
 
