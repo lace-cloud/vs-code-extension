@@ -58,7 +58,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | A CLI command's effect, as the CLI declares it: a `read` changes nothing, a `write` may change something before its stream ends, a `rewrite` writes the module's own Terraform files | the package's `COMMANDS` (`COMMANDS[path].effect`) | what a stream that ended under a command says (`failureSays`); the module commands, which save the root's dirty `.tf` editors before a rewrite |
 | A command's outcome: its document or its failure, and every failure of it as a `CommandFailedError`: its `message`, the package's reading of the failure, and its `failure` document when it wrote one | `engine/command-outcome.ts` (`commandOutcome`) | every command's caller |
 | What a failed command says: its failure document's message when it wrote one, the CLI's stderr when it wrote none, its exit code when it wrote nothing at all, and for a stream that ended under it, by the command's effect, that a read is to be run again or that a write or a rewrite ran and may have made changes | the package's `failureSays`, which `commandOutcome` reads into its `CommandFailedError`, and sign-in for `lace login`'s own stream; `failureText` says a failure | every notice of a failed command, the Stacks view's message and rows |
-| What is under way | the package's result store, the runner host's `store` | the Stacks view's progress, through `commandRunning` (`stacks/stacks-tree.ts`) |
+| What is under way | the package's result store, the runner host's `store`, asked through the package's `commandUnderWay` | the Stacks view's progress (`stacks/stacks-tree.ts`) |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
@@ -128,7 +128,8 @@ validate` when Terraform found errors), and that is a result.
 the stack palette commands, Create Stack and Import Existing Resources run the package's bindings through it with a
 `RunCtx` naming the root and the stack; the binding owns the arguments, the confirmation and the result folding, and the
 host draws the store. A binding that declares the root runs in it. What is under way is the store's to say, and the
-Stacks view's `commandRunning` is the one place that asks it whether any command is; the host keeps no count of its own.
+Stacks view is the one place that asks it whether any command is, through the package's `commandUnderWay`; the host
+keeps no count of its own.
 The host runs each binding inside an async context (`AsyncLocalStorage`) carrying its run, which attributes to the run
 what names none:
 
@@ -258,10 +259,10 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   that time arrives with no row, so only what may change the list reads it whole: a tick, a change of the account, the
   view shown again, a change of the workspace's folders, and Refresh Stacks. Each tick of the runner's store (a run
   started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root that run was about,
-  its `RunCtx.root`, whatever the tree ran since. The view draws its progress while `commandRunning` reads a command
-  under way in the store (the run slot's run, the preview slot's preview, or a command's running mark, by the target it
-  runs on) and ends it when it reads none; a follow of a run's logs is a subscription, not a command under way, and draws
-  none.
+  its `RunCtx.root`, whatever the tree ran since. The view draws its progress while the package's `commandUnderWay`
+  reads a command under way in the store (the run slot's run, the preview slot's preview, or a command's running
+  mark, by the target it runs on) and ends it when it reads none; a follow of a run's logs is a subscription, not a
+  command under way, and draws none.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
