@@ -401,7 +401,8 @@ a handler on chat-core's one tool contract.
 **The adapter** (`tools/lm-tools.ts`) adds what only VS Code knows:
 
 - the `root` input every tool requires: the module directory's path in the workspace (`.` for a folder itself, the
-  folder's name first in a multi-root workspace) or its absolute path, named as a directory pointed at is (`placeOf`):
+  folder's name first in a multi-root workspace) or its absolute path, `\` separating as `/` does, so a path spelled
+  as Windows spells it names the same directory; named as a directory pointed at is (`placeOf`):
   any directory there under a workspace folder that is not, and is not inside, `.terraform` or `.lace`, one with no
   Terraform yet included, where the canvas tools start a module; any other is an error listing the directories that
   hold Terraform and the roots of the canvases open;
