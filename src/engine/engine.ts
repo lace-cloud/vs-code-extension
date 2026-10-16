@@ -27,28 +27,31 @@ export type EngineState = ServerState;
 // whose handshake names another protocol is a Lace CLI of another release,
 // and which side to update follows from which side is behind. Every other
 // failure says where the engine is read from and what happened, and a spawn
-// that failed says how to get past it by its code (`spawnRemedy`).
-function startFailure(binaryPath: string, cause: unknown, platform: NodeJS.Platform): string {
+// that failed says how to get past it by its code and the binary it named
+// (`spawnRemedy`).
+function startFailure(binaryPath: string, cause: unknown): string {
   if (cause instanceof EngineProtocolMismatchError) {
     return cause.engineTooOld
       ? `The Lace CLI at ${binaryPath} is too old for this extension: it speaks engine protocol ${cause.engineProtocol} and this extension needs ${cause.requiredProtocol}. Update the Lace CLI, or point the setting lace.binaryPath at a newer one.`
       : `The Lace CLI at ${binaryPath} is newer than this extension: it speaks engine protocol ${cause.engineProtocol} and this extension speaks ${cause.requiredProtocol}. Update the Lace extension.`;
   }
   const happened = `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${failureText(cause)}.`;
-  const remedy = cause instanceof EngineSpawnError ? spawnRemedy(cause.code, platform) : undefined;
+  const remedy =
+    cause instanceof EngineSpawnError ? spawnRemedy(cause.code, binaryPath) : undefined;
   return remedy === undefined ? happened : `${happened} ${remedy}`;
 }
 
-// How to get past a spawn that failed with `code` on `platform`, where the
-// code says one. The setting's value is spawned as given, without a shell:
-// a binary that is not there (`ENOENT`) is pointed at a Lace CLI, a bare
-// `lace` being the one on PATH; Windows refuses to spawn a `.cmd` or `.bat`
-// without a shell (`EINVAL`), so the setting names the CLI's `lace.exe`.
-function spawnRemedy(code: string | undefined, platform: NodeJS.Platform): string | undefined {
+// How to get past a spawn of `binaryPath` that failed with `code`, where
+// the two say one. The setting's value is spawned as given, without a
+// shell: a binary that is not there (`ENOENT`) is pointed at a Lace CLI, a
+// bare `lace` being the one on PATH; a `.cmd` or `.bat` is refused without
+// a shell (`EINVAL`, which Node raises on Windows alone), so the setting
+// names the CLI's `lace.exe`.
+function spawnRemedy(code: string | undefined, binaryPath: string): string | undefined {
   if (code === 'ENOENT') {
     return 'Install the Lace CLI so lace is on PATH, or set lace.binaryPath to the full path of its executable.';
   }
-  if (code === 'EINVAL' && platform === 'win32') {
+  if (code === 'EINVAL' && /\.(cmd|bat)$/i.test(binaryPath)) {
     return 'Windows cannot start a .cmd or .bat file directly; point lace.binaryPath at lace.exe.';
   }
   return undefined;
@@ -61,9 +64,8 @@ export class EngineStartError extends Error {
   constructor(
     readonly binaryPath: string,
     override readonly cause: unknown,
-    platform: NodeJS.Platform,
   ) {
-    super(startFailure(binaryPath, cause, platform));
+    super(startFailure(binaryPath, cause));
   }
 }
 
@@ -152,13 +154,7 @@ function bridgePair(): { host: MessageBridge; caller: MessageBridge } {
   return { host: end(host, caller), caller: end(caller, host) };
 }
 
-// The window's engine over `manager`. `platform` is the OS the engine is
-// spawned on, which says what a spawn's failure code means.
-export function createEngine(
-  manager: EngineManager,
-  settings: EngineSettings,
-  platform: NodeJS.Platform = process.platform,
-): Engine {
+export function createEngine(manager: EngineManager, settings: EngineSettings): Engine {
   const listeners = new Set<(state: EngineState) => void>();
   manager.on('state', (state) => {
     for (const listener of [...listeners]) listener(state);
@@ -211,7 +207,7 @@ export function createEngine(
     starting ??= manager
       .start()
       .catch((cause) => {
-        throw new EngineStartError(settings.binaryPath(), cause, platform);
+        throw new EngineStartError(settings.binaryPath(), cause);
       })
       .finally(() => {
         starting = null;

@@ -120,15 +120,11 @@ describe('the engine starts on demand', () => {
   });
 
   // What a start that failed with `failure` says, the binary read from
-  // `binaryPath`, on `platform`.
-  const startSays = async (
-    failure: Error,
-    binaryPath = '/opt/lace',
-    platform: NodeJS.Platform = 'linux',
-  ) => {
+  // `binaryPath`.
+  const startSays = async (failure: Error, binaryPath = '/opt/lace') => {
     const manager = fakeManager();
     manager.failure = failure;
-    const asked = createEngine(manager, { ...settings, binaryPath: () => binaryPath }, platform)
+    const asked = createEngine(manager, { ...settings, binaryPath: () => binaryPath })
       .caller()
       .catch((error) => error.message);
     await tick();
@@ -142,14 +138,20 @@ describe('the engine starts on demand', () => {
     );
   });
 
-  test('a .cmd or .bat that Windows refuses to start names lace.exe for the setting', async () => {
-    const cmd = 'C:\\Users\\dev\\AppData\\Roaming\\npm\\lace.cmd';
-    expect(await startSays(spawnFailed('EINVAL', cmd), cmd, 'win32')).toBe(
-      `The Lace engine did not start from ${cmd} (the setting lace.binaryPath): Failed to spawn engine: spawn ${cmd} EINVAL. Windows cannot start a .cmd or .bat file directly; point lace.binaryPath at lace.exe.`,
-    );
-    // EINVAL names that refusal on Windows alone.
-    expect(await startSays(spawnFailed('EINVAL', '/opt/lace'), '/opt/lace', 'darwin')).toBe(
+  test('a .cmd or .bat the spawn refuses (EINVAL) names lace.exe for the setting', async () => {
+    for (const shim of ['C:\\Users\\dev\\AppData\\Roaming\\npm\\lace.cmd', 'C:\\tools\\LACE.BAT']) {
+      expect(await startSays(spawnFailed('EINVAL', shim), shim)).toBe(
+        `The Lace engine did not start from ${shim} (the setting lace.binaryPath): Failed to spawn engine: spawn ${shim} EINVAL. Windows cannot start a .cmd or .bat file directly; point lace.binaryPath at lace.exe.`,
+      );
+    }
+    // The remedy is the code and the binary's extension together.
+    expect(await startSays(spawnFailed('EINVAL', '/opt/lace'))).toBe(
       'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): Failed to spawn engine: spawn /opt/lace EINVAL.',
+    );
+    expect(
+      await startSays(spawnFailed('EACCES', 'C:\\tools\\lace.cmd'), 'C:\\tools\\lace.cmd'),
+    ).toBe(
+      'The Lace engine did not start from C:\\tools\\lace.cmd (the setting lace.binaryPath): Failed to spawn engine: spawn C:\\tools\\lace.cmd EACCES.',
     );
   });
 

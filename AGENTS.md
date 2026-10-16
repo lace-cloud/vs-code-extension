@@ -88,7 +88,7 @@ protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protoc
 engine of another protocol is refused with a message that names which side to update. A start the spawn refused (the
 `EngineSpawnError` `@lace-cloud/host` rejects with) says where the binary was read from, what happened, and, by its
 `code`, how to get past it: a binary that is not found (`ENOENT`), to install the Lace CLI so `lace` is on `PATH` or to
-set `lace.binaryPath` to its executable's full path; on Windows a `.cmd` or `.bat` (`EINVAL`), that Windows cannot
+set `lace.binaryPath` to its executable's full path; a `.cmd` or `.bat` binary the spawn refused (`EINVAL`), that Windows cannot
 start one directly and to point `lace.binaryPath` at `lace.exe`. Any other failed start says where the binary was read
 from and what happened. The extension host reaches the engine
 through an in-process bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same typed mapping a webview
