@@ -1,3 +1,4 @@
+import { win32 } from 'node:path';
 import type { GenerateEvent } from '@lace-cloud/canvas/engine';
 import {
   type CanvasToolPorts,
@@ -394,6 +395,17 @@ describe('the root a tool names', () => {
       folder: app,
       relative: 'infra/prod',
     });
+  });
+
+  test('spelled with Windows separators is the root it spells with `/`', async () => {
+    const sources = resolving([app, api], files('/work/api/infra/prod/main.tf'), [
+      '/work/api/infra/prod',
+    ]);
+    const prod: AuthoringRoot = { folder: api, relative: 'infra/prod' };
+    for (const given of ['api/infra/prod', './api/infra/prod/', '/work/api/infra/prod']) {
+      expect(await rootNamed(sources, given)).toEqual(prod);
+      expect(await rootNamed(sources, win32.normalize(given))).toEqual(prod);
+    }
   });
 
   test('names the folder first in a workspace of several folders', async () => {

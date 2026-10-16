@@ -1,5 +1,6 @@
-import type { CommandFailure } from '@lace-cloud/canvas/engine';
+import { COMMANDS, type CommandFailure } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
+import { saveBuffersBefore } from '../../commands/terraform-buffers';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
@@ -12,6 +13,13 @@ import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { importResourcesCommand, resourceImporter } from '../import-resources';
 import { stackPick } from '../stack-pick';
 import { memento, stack, stacks } from './stack-fixtures';
+
+// The buffers' save as it is, watched for the command path it is asked
+// about.
+vi.mock('../../commands/terraform-buffers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../commands/terraform-buffers')>();
+  return { ...actual, saveBuffersBefore: vi.fn(actual.saveBuffersBefore) };
+});
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -140,7 +148,7 @@ function setup(options: Options) {
 }
 
 describe('Import Existing Resources', () => {
-  test("saves the root's Terraform, then imports into the stack picked with the statefile the form asks for, under a progress notification until its run ends", async () => {
+  test("saves the root's Terraform, as the CLI declares `stack import` a rewrite, then imports into the stack picked with the statefile the form asks for, under a progress notification until its run ends", async () => {
     const edited = document('/work/repo/infra/prod/main.tf', true);
     const elsewhere = document('/work/repo/infra/staging/main.tf', true);
     const t = setup({
@@ -150,6 +158,8 @@ describe('Import Existing Resources', () => {
     const done = t.importResources(prod);
     await settled();
 
+    expect(COMMANDS['stack import'].effect).toBe('rewrite');
+    expect(saveBuffersBefore).toHaveBeenCalledWith(expect.anything(), prod, 'stack import');
     expect(edited.save).toHaveBeenCalledOnce();
     expect(elsewhere.save).not.toHaveBeenCalled();
     expect(t.imports()).toEqual([

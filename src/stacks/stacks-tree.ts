@@ -43,26 +43,27 @@
 // store (a run started or settled, a scan or a cancel done) reads the tree
 // again and tells the canvas of the root that run was about that its reads
 // are stale. The view draws its progress while the store says a command is
-// under way (`commandRunning`), and ends it when the store says none is.
+// under way (the package's `commandUnderWay`), and ends it when the store
+// says none is.
 //
 // With no root found, the view says why, by the reason finding one gave: no
 // folder is open; no directory holds a module yet, and Open Canvas starts
 // one; or several do, and Choose Module picks one. When the stacks cannot be
 // listed, the view says why by the failure's reason, with the one action
 // that gets past it.
-import type {
-  ActionContribution,
-  CommandFailure,
-  ResultSlots,
-  RunCtx,
-  StackRef,
+import {
+  type ActionContribution,
+  type CommandFailure,
+  commandUnderWay,
+  type ResultSlots,
+  type RunCtx,
+  type StackRef,
 } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import { LACE_COMMANDS } from '../engine/lace-commands';
 import { binding, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
@@ -119,14 +120,6 @@ export const STACK_COMMANDS = {
 // How many of a stack's runs its row lists.
 const RECENT_RUNS = 10;
 const SHOW_OUTPUT = 'Show Output';
-
-// Whether the runner's store says a command is under way: the run slot's
-// run, the preview slot's preview, or a command's running mark (`running`,
-// by the target it runs on). A follow is a subscription to a run's logs,
-// not a command under way.
-function commandRunning({ run, preview, running }: ResultSlots): boolean {
-  return run?.outcome.kind === 'running' || preview?.outcome.kind === 'running' || running.size > 0;
-}
 
 export type Row =
   | { kind: 'stack'; root: AuthoringRoot; stack: Stack }
@@ -222,7 +215,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   async function stackRows(of: AuthoringRoot): Promise<Row[]> {
     let stacks: Stack[];
     try {
-      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['stack list'], {
+      const listed = await commandDocument(await commands.anywhere(), 'stack list', {
         source: rootPath(of),
       });
       stacks = listed.items;
@@ -247,11 +240,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // none and the portal makes one.
   async function teamState(): Promise<StacksState> {
     try {
-      const teams = await commandDocument(
-        await commands.anywhere(),
-        LACE_COMMANDS['team list'],
-        {},
-      );
+      const teams = await commandDocument(await commands.anywhere(), 'team list', {});
       return teams.items.length === 0 ? 'teamlessOrganization' : 'noTeam';
     } catch (error) {
       report('listing the teams of the organization', error);
@@ -261,7 +250,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   async function runRows(row: Extract<Row, { kind: 'stack' }>): Promise<Row[]> {
     try {
-      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['run list'], {
+      const listed = await commandDocument(await commands.anywhere(), 'run list', {
         stack: row.stack.id,
         limit: RECENT_RUNS,
       });
@@ -444,7 +433,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // function that ends the one drawn, while one is.
   let endProgress: (() => void) | undefined;
   const drawProgress = (slots: ResultSlots) => {
-    const running = commandRunning(slots);
+    const running = commandUnderWay(slots);
     if (running && !endProgress) {
       const ended = new Promise<void>((resolve) => {
         endProgress = resolve;
