@@ -48,7 +48,7 @@ export type AccountApi = SignInApi &
   };
 
 // A command line that runs the `lace` CLI, named bare or by its path.
-const LACE_COMMAND = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
+const LACE_COMMAND_LINE = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
 
 // The account as the CLI reads it, as one value two reads are compared by.
 async function accountRead(commands: CommandsPort): Promise<string> {
@@ -102,7 +102,7 @@ export function createAccount(
     if (state.focused) void readAgain();
   });
   const terminal = api.window.onDidEndTerminalShellExecution(({ execution }) => {
-    if (LACE_COMMAND.test(execution.commandLine.value.trimStart())) void readAgain();
+    if (LACE_COMMAND_LINE.test(execution.commandLine.value.trimStart())) void readAgain();
   });
 
   return {
