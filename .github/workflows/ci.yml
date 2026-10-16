@@ -3,12 +3,15 @@ name: CI
 # Lint, typecheck, unit tests, build and the tests over the built bundles,
 # then the tests against a real engine: the engine tests, and the window e2e
 # (packages/host-e2e: the extension in a real VS Code under a virtual
-# display). They run on every PR to develop.
+# display). They run on every PR to develop, on Linux and on Windows; the
+# window e2e runs on Linux alone, under xvfb.
 #
 # The libraries are the `@lace-cloud/*` packages from npm at the versions
 # package.json pins. The engine is the released `lace` CLI at the version
-# LACE_CLI_VERSION names, installed by the CLI's published installer, which
-# verifies the release's signature. Nothing here signs in.
+# LACE_CLI_VERSION names, verified against the release's signature: on Linux
+# the CLI's published installer installs it; on Windows, which the installer
+# refuses, the job installs the release's `.exe` and runs the installer's
+# checks itself. Nothing here signs in.
 
 on:
   pull_request:
@@ -75,19 +78,118 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm --filter @lace-cloud/host-e2e test
 
+  checks-windows:
+    # The checks above on Windows, so the extension's Windows paths (the
+    # engine's spawn, file paths, line endings) run too: every one but the
+    # window e2e, which runs under the Linux job's virtual display.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      # pnpm, Node, and the dependencies from npm.
+      - uses: ./.github/actions/setup-workspace
+
+      # minisign's own Windows build, held to the digest of the zip that
+      # verifies against its author's release key
+      # (RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3, minisign's
+      # README, "Verification of Official Releases").
+      - name: Install minisign
+        shell: pwsh
+        env:
+          MINISIGN_ZIP: https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-win64.zip
+          MINISIGN_ZIP_SHA256: 37b600344e20c19314b2e82813db2bfdcc408b77b876f7727889dbd46d539479
+        run: |
+          $zip = "$env:RUNNER_TEMP\minisign.zip"
+          curl.exe -fsSL --retry 3 -o $zip $env:MINISIGN_ZIP
+          if ($LASTEXITCODE -ne 0) { throw "could not download $env:MINISIGN_ZIP" }
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+          if ($sha256 -ne $env:MINISIGN_ZIP_SHA256) {
+            throw "$env:MINISIGN_ZIP has digest $sha256, not the pinned $env:MINISIGN_ZIP_SHA256"
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath "$env:RUNNER_TEMP\minisign"
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value "$env:RUNNER_TEMP\minisign\minisign-win64\x86_64"
+
+      # The installer refuses Windows and Scoop's manifest names only the
+      # newest release, so this installs the release's own objects and runs
+      # the installer's checks on them: the published checksum, then the
+      # minisign signature by the key the installer carries, whose trusted
+      # comment must read "<object> <sha256>" exactly (a signed object of
+      # another release, served under this name, fails it).
+      - name: Install the lace CLI that LACE_CLI_VERSION names
+        shell: pwsh
+        run: |
+          $version = (Get-Content LACE_CLI_VERSION | Where-Object { -not $_.StartsWith('#') }) -join '' -replace '\s', ''
+          $object = "lace-cli-windows-amd64-$version.exe"
+          $download = "$env:RUNNER_TEMP\lace-cli-download"
+          New-Item -ItemType Directory -Force -Path $download | Out-Null
+          foreach ($name in 'install.sh', $object, "$object.sha256", "$object.minisig") {
+            curl.exe -fsSL --retry 3 -o "$download\$name" "https://releases.lace.cloud/$name"
+            if ($LASTEXITCODE -ne 0) { throw "could not download https://releases.lace.cloud/$name" }
+          }
+
+          $installer = Get-Content -Raw -LiteralPath "$download\install.sh"
+          $key = [regex]::Match($installer, '(?m)^MINISIGN_PUBKEY="(RW[A-Za-z0-9+/]{54})"$').Groups[1].Value
+          if ($key -eq '') { throw 'install.sh carries no release-signing public key' }
+
+          $binary = "$download\$object"
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $binary).Hash.ToLowerInvariant()
+          $published = (Get-Content -TotalCount 1 -LiteralPath "$binary.sha256").Split(' ')[0]
+          if ($sha256 -ne $published) { throw "checksum mismatch for ${object}: expected $published, got $sha256" }
+
+          $comment = (minisign -V -Q -m $binary -x "$binary.minisig" -P $key) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "minisign signature verification failed for $object" }
+          if ($comment -ne "$object $sha256") {
+            throw "the signature is valid but its trusted comment reads '$comment', not '$object $sha256'"
+          }
+          "Signature verified: $comment"
+
+          $install = "$env:RUNNER_TEMP\lace-cli"
+          New-Item -ItemType Directory -Force -Path $install | Out-Null
+          Copy-Item -LiteralPath $binary -Destination "$install\lace.exe"
+          $printed = (& "$install\lace.exe" version -o json) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "$install\lace.exe version failed" }
+          $installed = ($printed | ConvertFrom-Json).version
+          if ($installed -ne $version) { throw "$install\lace.exe says $installed, not the $version LACE_CLI_VERSION names" }
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $install
+          "Installed lace $installed to $install\lace.exe"
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        run: pnpm run test:unit
+
+      - name: Build
+        id: build
+        run: pnpm run build
+
+      - name: Bundle tests
+        run: pnpm run test:build
+
+      # The engine tests run whenever the build did, so they report on their
+      # own.
+      - name: Engine tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm run test:engine
+
   ci-summary:
     # The one status check develop's ruleset requires: it succeeds only when
     # every job above did, so the ruleset names no job that can be renamed.
-    needs: [checks]
+    needs: [checks, checks-windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Assert upstream jobs succeeded
         env:
           CHECKS: ${{ needs.checks.result }}
+          CHECKS_WINDOWS: ${{ needs.checks-windows.result }}
         run: |
-          if [ "$CHECKS" != "success" ]; then
-            echo "::error::CI failed (checks=$CHECKS)"
+          if [ "$CHECKS" != "success" ] || [ "$CHECKS_WINDOWS" != "success" ]; then
+            echo "::error::CI failed (checks=$CHECKS, checks-windows=$CHECKS_WINDOWS)"
             exit 1
           fi
           echo "All CI jobs passed."

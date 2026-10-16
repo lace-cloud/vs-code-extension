@@ -12,6 +12,13 @@
 // it served and serves a new one, and assigns new HTML: the page boots again
 // through its one path.
 //
+// A panel opened without focus (a chat tool, the registry's add) opens
+// beside the text editor the developer is in, so their place stays in view;
+// with no text editor in the active group it opens there, where a split
+// would leave an empty group. A panel opened with focus (Lace: Open Canvas)
+// takes the active group as any editor does. A panel already open is
+// revealed in its own column.
+//
 // The tab is titled by the root's name among the workspace's folders open
 // now (`rootLabel`), with ● while the session is unsaved; a change of the
 // workspace's folders titles it again. A tab whose folder left the
@@ -31,6 +38,7 @@
 // the panel's root.
 import type * as vscode from 'vscode';
 import { positionOf } from '../diagnostics/problems';
+import { failureText } from '../engine/command-outcome';
 import type { Engine } from '../engine/engine';
 import type { RootHold, RootSessions } from '../engine/root-sessions';
 import {
@@ -59,6 +67,7 @@ export const CANVAS_VIEW_TYPE = 'lace.canvas';
 type PanelsApi = {
   window: Pick<
     typeof vscode.window,
+    | 'activeTextEditor'
     | 'createWebviewPanel'
     | 'showInformationMessage'
     | 'showWarningMessage'
@@ -163,12 +172,14 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
         await hold.release();
       },
     );
+    const viewColumn =
+      preserveFocus && api.window.activeTextEditor ? api.ViewColumn.Beside : api.ViewColumn.Active;
     let panel: vscode.WebviewPanel;
     try {
       panel = api.window.createWebviewPanel(
         CANVAS_VIEW_TYPE,
         label(),
-        { viewColumn: api.ViewColumn.Active, preserveFocus: preserveFocus ?? false },
+        { viewColumn, preserveFocus: preserveFocus ?? false },
         { enableScripts: true, retainContextWhenHidden: true },
       );
     } catch (error) {
@@ -250,7 +261,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
           selection: new api.Range(at, character, at, character),
         });
       } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = failureText(error);
         throw new Error(`Lace could not open ${file} in ${label()}: ${reason}`);
       }
       return null;

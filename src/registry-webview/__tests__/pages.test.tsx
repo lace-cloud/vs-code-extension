@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { described, LOGO, record, row, vendor } from '../../protocol/__tests__/registry-fixtures';
@@ -113,8 +115,20 @@ describe('the registry sidebar page', () => {
   });
 
   test('the organization picker shows the CLI’s selection, or the public registry', () => {
-    expect(sidebar(loaded({ organization: 'acme-org' }))).toContain('>acme-org</button>');
-    expect(sidebar(loaded())).toContain('>Public Registry</button>');
+    expect(sidebar(loaded({ organization: 'acme-org' }))).toContain(
+      '<span class="org-picker-name">acme-org</span>',
+    );
+    expect(sidebar(loaded())).toContain('<span class="org-picker-name">Public Registry</span>');
+  });
+
+  test('the organization picker is a button labelled Organization, its name before a hidden chevron', () => {
+    const html = sidebar(loaded({ organization: 'acme-org' }));
+    const picker = html.match(/<button type="button" class="org-picker"[^>]*>(.*?)<\/button>/);
+    expect(picker?.[0]).toContain('title="Select Organization"');
+    expect(textOf(picker?.[1] ?? '')).toBe('Organization acme-org');
+    expect(picker?.[1]).toMatch(
+      /<span class="org-picker-name">acme-org<\/span><svg class="org-picker-chevron"[^>]* aria-hidden="true"/,
+    );
   });
 
   test('a list that filled its limit says so', () => {
@@ -122,9 +136,59 @@ describe('the registry sidebar page', () => {
   });
 });
 
-// The text an element of `html` holds, found by its id, with its tags
-// dropped.
-const textOf = (html: string, id: string | undefined): string | undefined => {
+// The sidebar's stylesheet, read no further than its rules' selectors and
+// the VS Code colours they declare: how they draw is the browser's.
+describe("the registry sidebar's stylesheet", () => {
+  const rules = readFileSync(join(__dirname, '..', 'sidebar.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('}')
+    .map((rule) => rule.split('{'))
+    .map(([selectors = '', declarations = '']) => ({ selectors, declarations }));
+  // The VS Code colours the rules naming `part` declare.
+  const coloursOf = (part: RegExp): Set<string> =>
+    new Set(
+      rules
+        .filter(({ selectors }) => part.test(selectors))
+        .flatMap(({ declarations }) => [...declarations.matchAll(/--vscode-[\w-]+/g)])
+        .map(([token]) => token),
+    );
+
+  test('draws the organization picker as a VS Code dropdown, in none of the search input’s colours', () => {
+    const picker = coloursOf(/\.org-picker/);
+    const input = coloursOf(/\.search-input/);
+    for (const token of [
+      '--vscode-dropdown-background',
+      '--vscode-dropdown-border',
+      '--vscode-dropdown-foreground',
+    ]) {
+      expect(picker.has(token), token).toBe(true);
+    }
+    expect([...picker].filter((token) => input.has(token))).toEqual([]);
+  });
+});
+
+// The entities React's static markup writes in text, and what each says.
+const ENTITIES: Readonly<Record<string, string>> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#x27;': "'",
+};
+
+// The text `markup` reads as: the markup split into its tags and the runs
+// of text between them, each run's entities decoded in one pass, the runs
+// joined.
+const textOf = (markup: string): string =>
+  [...markup.matchAll(/<[^>]*>|[^<]+/g)]
+    .map(([token]) => token)
+    .filter((token) => !token.startsWith('<'))
+    .map((text) => text.replace(/&(?:amp|lt|gt|quot|#x27);/g, (entity) => ENTITIES[entity]))
+    .join('')
+    .trim();
+
+// The text an element of `html` holds, found by its id.
+const elementText = (html: string, id: string | undefined): string | undefined => {
   if (id === undefined) return undefined;
   const at = html.indexOf(`id="${id}"`);
   if (at < 0) return undefined;
@@ -133,12 +197,7 @@ const textOf = (html: string, id: string | undefined): string | undefined => {
   let depth = 0;
   for (const match of html.slice(open).matchAll(new RegExp(`<(/?)${tag}\\b[^>]*>`, 'g'))) {
     depth += match[1] === '/' ? -1 : 1;
-    if (depth === 0) {
-      return html
-        .slice(open, open + (match.index ?? 0))
-        .replace(/<[^>]*>/g, '')
-        .trim();
-    }
+    if (depth === 0) return textOf(html.slice(open, open + (match.index ?? 0)));
   }
   return undefined;
 };
@@ -169,8 +228,8 @@ describe('what the registry sidebar says to a screen reader', () => {
   test("a module button is named by the module's name and version, and described by its categories", () => {
     const html = moduleRow();
     const open = attributesOf(html, 'module-open');
-    expect(textOf(html, open['aria-labelledby'])).toBe('ACME DB v2.0.0');
-    expect(textOf(html, open['aria-describedby'])).toBe('data');
+    expect(elementText(html, open['aria-labelledby'])).toBe('ACME DB v2.0.0');
+    expect(elementText(html, open['aria-describedby'])).toBe('data');
   });
 
   // A row action is named by its title alone, its glyph hidden: its tooltip

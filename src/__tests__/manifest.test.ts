@@ -1,13 +1,18 @@
 // The manifest and activation agree. Every command, view and Language Model
 // Tool the manifest contributes is one a feature registers, and the
 // features register nothing the manifest lacks. Every menu entry and
-// welcome link names a contributed command, every view a `when` clause
-// names is contributed, and the settings are the ones the extension reads.
+// welcome link names a contributed command or one of VS Code's own, every
+// view a `when` clause names is contributed, a view's welcome for a state
+// offers the one action that gets past it and holds no inline code, a run
+// row's actions are offered by its state, and the settings are the ones the
+// extension reads, with the defaults it reads.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { engineSettings } from '../engine/engine';
 import { FEATURES, type WindowBase, windowHost } from '../features';
+import { run } from '../stacks/__tests__/stack-fixtures';
+import { runLook } from '../stacks/stack-rows';
 
 const ROOT = resolve(__dirname, '..', '..');
 const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -48,6 +53,7 @@ function registered() {
           return disposable;
         },
         onDidChangeWindowState: () => disposable,
+        onDidEndTerminalShellExecution: () => disposable,
         onDidChangeActiveTextEditor: () => disposable,
         showErrorMessage: vi.fn(),
       },
@@ -98,6 +104,47 @@ const views = (): View[] => contributes.views.laceContainer;
 const menuEntries = (): MenuEntry[] => Object.values<MenuEntry[]>(contributes.menus).flat();
 const welcomes = (): { view: string; when?: string; contents: string }[] =>
   contributes.viewsWelcome;
+// The commands a welcome's links run, in order.
+const linkedCommands = (contents: string): string[] =>
+  [...contents.matchAll(/\(command:([\w.]+)\)/g)].map(([, command]) => command);
+// VS Code's own commands live in its own namespaces, which no extension
+// contributes to; the extension's are all `lace.`.
+const VS_CODE_OWN = /^(workbench|vscode)\./;
+
+// Whether a `when` clause holds for a row of `view` whose contextValue is
+// `viewItem`, read as VS Code reads the terms a row's menu uses: `&&` of
+// `view == <id>`, `viewItem == <value>` and `viewItem =~ /<regex>/<flags>`.
+function holds(when: string, row: { view: string; viewItem: string }): boolean {
+  return when.split('&&').every((part) => {
+    const term = part.trim();
+    const equals = /^(view|viewItem) == (\S+)$/.exec(term);
+    if (equals) return row[equals[1] as 'view' | 'viewItem'] === equals[2];
+    const matches = /^viewItem =~ \/(.*)\/([a-z]*)$/.exec(term);
+    if (matches) return new RegExp(matches[1], matches[2]).test(row.viewItem);
+    throw new Error(`a when term this test does not read: ${term}`);
+  });
+}
+
+// What a run row offers, by its run's state: Follow Logs on every run, Open
+// in Portal on a run with a page, Cancel Run on a run that has not ended.
+type RunState = { ended: boolean; portal: boolean };
+const RUN_ACTIONS: Record<string, (state: RunState) => boolean> = {
+  'lace.followRunLogs': () => true,
+  'lace.openRunInPortal': ({ portal }) => portal,
+  'lace.cancelRun': ({ ended }) => !ended,
+};
+// Every state a run row draws, with the contextValue `runLook` gives it.
+const RUN_ROWS = [false, true].flatMap((ended) =>
+  [false, true].map((portal) => ({
+    state: { ended, portal },
+    viewItem: runLook(
+      run('run_1', 'applying', {
+        ...(ended ? { completedAt: '2026-09-01T01:00:00Z' } : {}),
+        ...(portal ? { url: 'https://portal/o/t/stacks/stk_1/runs/run_1' } : {}),
+      }),
+    ).contextValue,
+  })),
+);
 
 describe('the manifest', () => {
   test('declares exactly the commands the features register', () => {
@@ -126,15 +173,29 @@ describe('the manifest', () => {
     expect(registered().tools).toEqual([...declared].sort());
   });
 
-  test('names only contributed commands in its menus and welcome links', () => {
+  test("names in its menus and welcome links only a contributed command or one of VS Code's own", () => {
     const commands = new Set(declaredCommands());
     const named = [
       ...menuEntries().map((entry) => entry.command),
-      ...welcomes().flatMap((welcome) =>
-        [...welcome.contents.matchAll(/\(command:([\w.]+)\)/g)].map(([, command]) => command),
-      ),
+      ...welcomes().flatMap((welcome) => linkedCommands(welcome.contents)),
     ];
-    expect(named.filter((command) => !commands.has(command))).toEqual([]);
+    const owned = (command: string) => commands.has(command) || VS_CODE_OWN.test(command);
+    expect(named.filter((command) => !owned(command))).toEqual([]);
+    expect(declaredCommands().filter((command) => VS_CODE_OWN.test(command))).toEqual([]);
+  });
+
+  // The welcome with no state is the one shown before the view's first read;
+  // every other is a state the view says why it is in.
+  test('offers in every welcome for a state the one action that gets past it', () => {
+    const offered = welcomes()
+      .filter((welcome) => (welcome.when ?? '').includes('=='))
+      .map((welcome) => [welcome.when, linkedCommands(welcome.contents).length]);
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered.filter(([, links]) => links !== 1)).toEqual([]);
+  });
+
+  test('holds no inline code in a welcome, where VS Code draws the backticks as typed', () => {
+    expect(welcomes().filter((welcome) => welcome.contents.includes('`'))).toEqual([]);
   });
 
   test('names only contributed views in its when clauses and welcomes', () => {
@@ -150,23 +211,47 @@ describe('the manifest', () => {
     expect(named.filter((id) => !ids.has(id))).toEqual([]);
   });
 
-  test('declares exactly the settings the extension reads', () => {
-    const read: string[] = [];
+  test("offers each action on a run row exactly where the run's state allows it", () => {
+    const onRuns = (contributes.menus['view/item/context'] as MenuEntry[]).filter((entry) =>
+      entry.when?.includes('laceRun'),
+    );
+    expect([...new Set(onRuns.map((entry) => entry.command))].sort()).toEqual(
+      Object.keys(RUN_ACTIONS).sort(),
+    );
+    const offered = onRuns.flatMap((entry) =>
+      RUN_ROWS.map(({ state, viewItem }) => ({
+        command: entry.command,
+        state,
+        offered: holds(entry.when ?? '', { view: 'laceStacks', viewItem }),
+      })),
+    );
+    expect(offered).toEqual(
+      offered.map((each) => ({ ...each, offered: RUN_ACTIONS[each.command](each.state) })),
+    );
+  });
+
+  // VS Code answers a setting no one set with the manifest's default, never
+  // with the fallback the code passes, so the two are one value.
+  test('declares exactly the settings the extension reads, each with the default it reads', () => {
+    const read = new Map<string, unknown>();
     const settings = engineSettings({
       getConfiguration: (section?: string) =>
         ({
           get: (key: string, fallback: unknown) => {
-            read.push(`${section}.${key}`);
+            read.set(`${section}.${key}`, fallback);
             return fallback;
           },
         }) as never,
     });
     settings.binaryPath();
     settings.autoRestart();
-    expect(Object.keys(contributes.configuration.properties)).toEqual(read);
-    expect(contributes.configuration.properties['lace.binaryPath'].scope).toBe(
-      'machine-overridable',
-    );
+    const properties: Record<string, { default: unknown; scope?: string }> =
+      contributes.configuration.properties;
+    expect(Object.keys(properties)).toEqual([...read.keys()]);
+    expect(
+      Object.fromEntries(Object.entries(properties).map(([id, p]) => [id, p.default])),
+    ).toEqual(Object.fromEntries(read));
+    expect(properties['lace.binaryPath'].scope).toBe('machine-overridable');
   });
 
   test('runs only in a trusted folder on disk', () => {

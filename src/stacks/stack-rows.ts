@@ -113,8 +113,10 @@ const STATUS_ICONS: Readonly<Record<string, string>> = {
   rejected: 'error',
 };
 
-// A run row: kind and id, status and plan counts. It opens in the portal
-// when the CLI gave it its page.
+// A run row: kind and id, status and plan counts. Its actions follow its
+// `contextValue`, a list of tokens: `ended` once its document says when it
+// completed (`completedAt`, set when a run of any kind reaches its end),
+// else `running`; `portal` when the CLI gave it its page.
 export function runLook(run: Run): RowLook {
   const count = (n: number | null) => n ?? 0;
   return {
@@ -129,7 +131,11 @@ export function runLook(run: Run): RowLook {
       ...(run.errorMessage ? [`Error: ${run.errorMessage}`] : []),
     ].join('\n'),
     icon: STATUS_ICONS[run.status] ?? 'circle-outline',
-    contextValue: run.url === undefined ? 'laceRun' : 'laceRun portal',
+    contextValue: [
+      'laceRun',
+      run.completedAt === null ? 'running' : 'ended',
+      ...(run.url === undefined ? [] : ['portal']),
+    ].join(' '),
   };
 }
 

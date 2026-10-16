@@ -1,6 +1,8 @@
 import type { LaceReason } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { outsideSignals, signedInAs } from '../../account/__tests__/fake-outside';
+import { createAccount } from '../../account/account';
 import { fakeCommands, HOME, refused, type Script } from '../../engine/__tests__/fake-commands';
 import { settled } from '../../engine/__tests__/fake-engine';
 import { described, GUIDE, list, record, row } from '../../protocol/__tests__/registry-fixtures';
@@ -63,7 +65,14 @@ function fakeWebviewView() {
 
 const extensionUri = uri('/ext');
 
-function setup(answers: Record<string, Script | (() => Promise<Script>)>, marks?: RegistryMarks) {
+// A registry view over scripted commands. Its account is a stand-in the
+// test changes, or, given what tells the window the account may have
+// changed outside it, the window's account over the same commands.
+function setup(
+  answers: Record<string, Script | (() => Script | Promise<Script>)>,
+  marks?: RegistryMarks,
+  outside?: ReturnType<typeof outsideSignals>,
+) {
   const { commands, invoked } = fakeCommands({
     'org current': { documents: [{ slug: 'acme-org', source: 'config' }] },
     ...answers,
@@ -92,7 +101,11 @@ function setup(answers: Record<string, Script | (() => Promise<Script>)>, marks?
     extensionUri,
     reads: registryReads(commands),
     marks: marks ?? registryMarks(memento()),
-    account,
+    account: outside
+      ? createAccount(commands, { window: outside.window } as never, (_what, error) =>
+          reports.push(error),
+        )
+      : account,
     place,
     showDetail,
     report: (_what, error) => reports.push(error),
@@ -280,6 +293,41 @@ describe('the registry sidebar', () => {
     account.change();
     await settled();
     expect(invoked.filter((run) => run.path === 'registry list')).toHaveLength(2);
+  });
+
+  test('reads again when a lace command in the terminal changed the account, and not when it left it as it was', async () => {
+    let signedIn = true;
+    const outside = outsideSignals();
+    const { page, invoked } = setup(
+      {
+        'registry list': () =>
+          signedIn
+            ? { documents: [list([VPC])] }
+            : refused({ reason: 'unauthenticated', message: 'no credentials found' }),
+        whoami: () =>
+          signedIn
+            ? { documents: [signedInAs('usr_1')] }
+            : refused({ reason: 'unauthenticated', message: 'no credentials found' }),
+        'team current': { documents: [{ slug: null, source: null }] },
+      },
+      undefined,
+      outside,
+    );
+    const lists = () => invoked.filter((run) => run.path === 'registry list').length;
+    await settled();
+    expect(page.last()).toMatchObject({ kind: 'loaded', rows: [VPC] });
+
+    outside.ended('lace org current');
+    outside.focus();
+    await settled();
+    expect(lists()).toBe(1);
+
+    signedIn = false;
+    outside.ended('lace logout');
+    await settled();
+    await settled();
+    expect(lists()).toBe(2);
+    expect(page.last()).toEqual({ kind: 'signedOut' });
   });
 
   test('serves its page under a CSP that loads https images and runs only its own script', () => {

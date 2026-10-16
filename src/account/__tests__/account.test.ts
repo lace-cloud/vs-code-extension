@@ -1,9 +1,16 @@
-import { CommandExitError } from '@lace-cloud/canvas/engine';
+import { CommandExitError, CommandUnobservedError } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
-import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
+import {
+  fakeCommands,
+  type Invoked,
+  refused,
+  type Script,
+} from '../../engine/__tests__/fake-commands';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
-import { accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
+import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
+import { type Account, accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
 import { selectionStatus } from '../scope';
+import { outsideSignals, signedInAs } from './fake-outside';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -36,10 +43,33 @@ type Current = { slug: string; source: 'config' | 'env' } | { slug: null; source
 const current = (slug: string | null, source: 'config' | 'env' = 'config'): Current =>
   slug === null ? { slug: null, source: null } : { slug, source };
 
-function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | undefined)[] = []) {
+const SIGNED_OUT = refused({ reason: 'unauthenticated', message: 'no credentials found' });
+
+// What a command of the account ran: the invocations it made, up to the
+// account's own read that follows a change, which begins with `whoami`.
+const ranBy = (invoked: readonly Invoked[]): Invoked[] => {
+  const read = invoked.findIndex((call) => call.path === 'whoami');
+  return read === -1 ? [...invoked] : invoked.slice(0, read);
+};
+
+// An account over scripted commands, once its first read of the account
+// has settled; `since()` is what was invoked after that.
+async function setup(
+  scripts: Parameters<typeof fakeCommands>[0],
+  picks: (string | undefined)[] = [],
+) {
   const commands = fakeCommands(scripts);
+  const outside = outsideSignals();
+  // Each pick answers with the item of the next slug in `picks`; none dismisses it.
+  const quickPicks = fakeQuickPicks<{ label: string; description?: string; slug: string }>(
+    (items) => {
+      const slug = picks.shift();
+      return items.find((item) => item.slug === slug);
+    },
+  );
   const api = {
     window: {
+      ...outside.window,
       withProgress: vi.fn(async (_options, task) =>
         task({ report: vi.fn() }, { onCancellationRequested: () => ({ dispose: () => {} }) }),
       ),
@@ -47,24 +77,25 @@ function setup(scripts: Parameters<typeof fakeCommands>[0], picks: (string | und
         async (_text: string, ..._actions: string[]): Promise<string | undefined> => undefined,
       ),
       showErrorMessage: vi.fn(async () => undefined),
-      showQuickPick: vi.fn(async (items: { slug: string }[]) => {
-        const slug = picks.shift();
-        return items.find((item) => item.slug === slug);
-      }),
+      createQuickPick: quickPicks.createQuickPick,
     },
     env: { openExternal: vi.fn(async () => true), clipboard: { writeText: vi.fn(async () => {}) } },
     Uri: { parse: (url: string) => ({ url }) },
     ProgressLocation: { Notification: 15 },
   };
-  const account = createAccount(commands.commands, api as never);
+  const report = vi.fn();
+  const account = createAccount(commands.commands, api as never, report);
   const changed = vi.fn();
   account.onDidChange(changed);
-  return { commands, api, account, changed };
+  await settled();
+  const from = commands.invoked.length;
+  const since = () => ranBy(commands.invoked.slice(from));
+  return { commands, api, account, changed, picks: quickPicks.picks, outside, report, since };
 }
 
 describe('selecting the organization', () => {
   test('picks from org list, marks the current one, runs org use and goes on to the team', async () => {
-    const { commands, api, account, changed } = setup(
+    const { account, changed, picks, since } = await setup(
       {
         'org list': { documents: [ORGS] },
         'org current': { documents: [current('acme')] },
@@ -77,46 +108,137 @@ describe('selecting the organization', () => {
     );
     await account.selectOrganization();
 
-    const [orgItems, orgOptions] = api.window.showQuickPick.mock.calls[0] as never as [
-      { label: string; description: string }[],
-      { placeHolder: string },
-    ];
-    expect(orgItems.map((item) => [item.label, item.description])).toEqual([
+    expect(picks[0].items.map((item) => [item.label, item.description])).toEqual([
       ['Acme', 'acme · current'],
       ['Globex', 'globex'],
     ]);
-    expect(orgOptions.placeHolder).toBe('Select a Lace organization');
+    expect(picks[0].placeholder).toBe('Select a Lace organization');
+    expect(picks[1].placeholder).toBe('Select a Lace team');
     expect(
-      commands.invoked.filter((c) => c.path.startsWith('team ')).map((c) => [c.path, c.args]),
+      since()
+        .filter((c) => c.path.startsWith('team '))
+        .map((c) => [c.path, c.args]),
     ).toEqual([
       ['team list', { org: 'globex' }],
       ['team current', { org: 'globex' }],
       ['team use', { team: 'data', org: 'globex' }],
     ]);
-    expect(commands.invoked.filter((c) => c.path.endsWith(' use')).map((c) => c.path)).toEqual([
+    expect(
+      since()
+        .filter((c) => c.path.endsWith(' use'))
+        .map((c) => c.path),
+    ).toEqual(['org use', 'team use']);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('the organization pick is on screen, busy, while the organizations are read', async () => {
+    const { commands, account, picks } = await setup({
+      'org list': { held: true },
+      'org current': { documents: [current('acme')] },
+    });
+    const selecting = account.selectOrganization();
+    await settled();
+    expect(picks).toHaveLength(1);
+    expect(picks[0]).toMatchObject({
+      visible: true,
+      shownBusy: true,
+      busy: true,
+      items: [],
+      placeholder: 'Select a Lace organization',
+    });
+
+    commands.held[0].finish([ORGS]);
+    await settled();
+    expect(picks[0].busy).toBe(false);
+    expect(picks[0].items.map((item) => item.label)).toEqual(['Acme', 'Globex']);
+    picks[0].dismiss();
+    await selecting;
+  });
+
+  test('the team pick is on screen, busy, while the organization is saved and its teams are read', async () => {
+    const { commands, account, changed, picks, since } = await setup(
+      {
+        'org list': { documents: [ORGS] },
+        'org current': { documents: [current('acme')] },
+        'org use': { held: true },
+        'team list': { documents: [teams('platform', 'data')] },
+        'team current': { documents: [current(null)] },
+        'team use': { documents: [{ organization: 'globex', team: 'data' }] },
+      },
+      ['globex', 'data'],
+    );
+    const selecting = account.selectOrganization();
+    await settled();
+    expect(picks).toHaveLength(2);
+    expect(picks[1]).toMatchObject({
+      visible: true,
+      shownBusy: true,
+      busy: true,
+      items: [],
+      placeholder: 'Select a Lace team',
+    });
+    expect(since().map((c) => c.path)).toEqual(['org list', 'org current', 'org use']);
+
+    commands.held[0].finish([{ organization: 'globex', team: null }]);
+    await selecting;
+    expect(picks[1].items.map((item) => item.label)).toEqual(['Platform', 'Data']);
+    expect(since().map((c) => c.path)).toEqual([
+      'org list',
+      'org current',
       'org use',
+      'team list',
+      'team current',
       'team use',
     ]);
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
+  test('an organization saved while its team pick was dismissed is still announced', async () => {
+    const { commands, account, changed, picks } = await setup(
+      {
+        'org list': { documents: [ORGS] },
+        'org current': { documents: [current('acme')] },
+        'org use': { held: true },
+      },
+      ['globex'],
+    );
+    const selecting = account.selectOrganization();
+    await settled();
+    picks[1].dismiss();
+    commands.held[0].finish([{ organization: 'globex', team: null }]);
+    await selecting;
+    expect(commands.paths()).not.toContain('team use');
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('an organization that cannot be saved closes the team pick and fails the command', async () => {
+    const { commands, account, changed, picks } = await setup(
+      {
+        'org list': { documents: [ORGS] },
+        'org current': { documents: [current('acme')] },
+        'org use': refused({ reason: 'unauthenticated', message: 'no credentials' }),
+      },
+      ['globex'],
+    );
+    await expect(account.selectOrganization()).rejects.toThrow('no credentials');
+    expect(picks[1]).toMatchObject({ visible: false, disposed: true });
+    expect(commands.paths()).not.toContain('team list');
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   test('with the organization set by the environment, the pick says so', async () => {
-    const { api, account } = setup({
+    const { account, picks } = await setup({
       'org list': { documents: [ORGS] },
       'org current': { documents: [current('acme', 'env')] },
     });
     await account.selectOrganization();
-    const [, options] = api.window.showQuickPick.mock.calls[0] as never as [
-      unknown,
-      { placeHolder: string },
-    ];
-    expect(options.placeHolder).toBe(
+    expect(picks[0].placeholder).toBe(
       "The Lace engine's environment sets the organization; the choice made here is saved and applies once that variable is unset",
     );
   });
 
   test('dismissing the pick saves nothing and announces nothing', async () => {
-    const { commands, account, changed } = setup({
+    const { commands, account, changed } = await setup({
       'org list': { documents: [ORGS] },
       'org current': { documents: [current('acme')] },
     });
@@ -124,11 +246,24 @@ describe('selecting the organization', () => {
     expect(commands.paths()).not.toContain('org use');
     expect(changed).not.toHaveBeenCalled();
   });
+
+  test('an account in no organization says so and leaves no pick open', async () => {
+    const { api, account, changed, picks } = await setup({
+      'org list': { documents: [{ items: [] }] },
+      'org current': { documents: [current(null)] },
+    });
+    await account.selectOrganization();
+    expect(picks[0]).toMatchObject({ visible: false, items: [] });
+    expect(api.window.showInformationMessage).toHaveBeenCalledWith(
+      'Your Lace account belongs to no organization yet. Organizations are created in the portal.',
+    );
+    expect(changed).not.toHaveBeenCalled();
+  });
 });
 
 describe('selecting the team', () => {
   test('lists and saves a team of the current organization, naming none', async () => {
-    const { commands, account } = setup(
+    const { account, since } = await setup(
       {
         'team list': { documents: [teams('platform', 'data')] },
         'team current': { documents: [current('platform')] },
@@ -137,20 +272,38 @@ describe('selecting the team', () => {
       ['data'],
     );
     await account.selectTeam();
-    expect(commands.invoked.map((c) => [c.path, c.args])).toEqual([
+    expect(since().map((c) => [c.path, c.args])).toEqual([
       ['team list', {}],
       ['team current', {}],
       ['team use', { team: 'data' }],
     ]);
   });
 
-  test('an organization with no team says teams are made in the portal, with no empty pick', async () => {
-    const { api, account, commands, changed } = setup({
+  test('the team pick is on screen, busy, while the teams are read', async () => {
+    const { commands, account, picks } = await setup({
+      'team list': { held: true },
+      'team current': { documents: [current('platform', 'env')] },
+    });
+    const selecting = account.selectTeam();
+    await settled();
+    expect(picks[0]).toMatchObject({ visible: true, shownBusy: true, busy: true, items: [] });
+
+    commands.held[0].finish([teams('platform', 'data')]);
+    await settled();
+    expect(picks[0].placeholder).toBe(
+      "The Lace engine's environment sets the team; the choice made here is saved and applies once that variable is unset",
+    );
+    picks[0].dismiss();
+    await selecting;
+  });
+
+  test('an organization with no team says teams are made in the portal, and leaves no pick open', async () => {
+    const { api, account, commands, changed, picks } = await setup({
       'team list': { documents: [teams()] },
       'team current': { documents: [current(null)] },
     });
     await account.selectTeam();
-    expect(api.window.showQuickPick).not.toHaveBeenCalled();
+    expect(picks[0]).toMatchObject({ visible: false, items: [] });
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
       'This organization has no team yet. Teams are created in the portal.',
       'Open Portal',
@@ -162,7 +315,7 @@ describe('selecting the team', () => {
   });
 
   test('Open Portal on an organization with no team opens the page team list names for making one', async () => {
-    const { api, account } = setup({
+    const { api, account } = await setup({
       'team list': { documents: [teams()] },
       'team current': { documents: [current(null)] },
     });
@@ -175,7 +328,7 @@ describe('selecting the team', () => {
 
 describe('signing in', () => {
   test('shows the code once, opens the page once, and announces the change', async () => {
-    const { api, account, changed, commands } = setup({
+    const { api, account, changed, since } = await setup({
       login: {
         documents: [
           { type: 'code', code: 'ABCD-2345' },
@@ -188,7 +341,7 @@ describe('signing in', () => {
     });
     await account.signIn();
 
-    expect(commands.invoked.map((c) => [c.path, c.args])).toEqual([['login', {}]]);
+    expect(since().map((c) => [c.path, c.args])).toEqual([['login', {}]]);
     const codes = (api.window.showInformationMessage.mock.calls as unknown[][]).filter(([text]) =>
       String(text).includes('ABCD-2345'),
     );
@@ -209,7 +362,7 @@ describe('signing in', () => {
   });
 
   test('the device flow opens the page its code carries', async () => {
-    const { api, account } = setup({
+    const { api, account } = await setup({
       login: {
         documents: [
           { type: 'code', code: 'WDJB-MJHT', verificationUrl: 'https://github.com/login/device' },
@@ -222,12 +375,16 @@ describe('signing in', () => {
   });
 
   test('a cancelled sign-in says nothing; a failed one says why; neither announces a change', async () => {
-    const cancelled = setup({ login: { fails: new CommandExitError(130, 'Error: cancelled') } });
+    const cancelled = await setup({
+      login: { fails: new CommandExitError(130, 'Error: cancelled') },
+    });
     await cancelled.account.signIn();
     expect(cancelled.api.window.showErrorMessage).not.toHaveBeenCalled();
     expect(cancelled.changed).not.toHaveBeenCalled();
 
-    const failed = setup({ login: { fails: new CommandExitError(1, 'Error: sign-in expired\n') } });
+    const failed = await setup({
+      login: { fails: new CommandExitError(1, 'Error: sign-in expired\n') },
+    });
     await failed.account.signIn();
     expect(failed.api.window.showErrorMessage).toHaveBeenCalledWith(
       'Lace sign-in failed: Error: sign-in expired',
@@ -236,7 +393,9 @@ describe('signing in', () => {
   });
 
   test('signing out runs logout and announces the change', async () => {
-    const { api, account, changed } = setup({ logout: { documents: [{ loggedOut: true }] } });
+    const { api, account, changed } = await setup({
+      logout: { documents: [{ loggedOut: true }] },
+    });
     await account.signOut();
     expect(api.window.showInformationMessage).toHaveBeenCalledWith('Signed out of Lace.');
     expect(changed).toHaveBeenCalledTimes(1);
@@ -258,15 +417,16 @@ describe('the status bar', () => {
     });
   });
 
-  test('reads the selection at start, after a change and when the window regains focus', async () => {
+  test('reads the selection at start, after a change, and when the account changed outside this window', async () => {
     const scripts: Record<string, Script> = {
+      whoami: { documents: [signedInAs('usr_1')] },
       'org list': { documents: [ORGS] },
       'org current': { documents: [current('acme')] },
       'org use': { documents: [{ organization: 'globex', team: null }] },
       'team list': { documents: [teams()] },
       'team current': { documents: [current(null)] },
     };
-    const { account, commands } = setup(scripts as never, ['globex']);
+    const { account, commands, outside } = await setup(scripts as never, ['globex']);
     const status = {
       text: '',
       tooltip: '',
@@ -275,7 +435,6 @@ describe('the status bar', () => {
       hide: vi.fn(),
       dispose: vi.fn(),
     };
-    const windowState = new Set<(s: { focused: boolean }) => void>();
     const registered: string[] = [];
     const controls = accountControls(
       {
@@ -287,10 +446,6 @@ describe('the status bar', () => {
         },
         window: {
           createStatusBarItem: () => status,
-          onDidChangeWindowState: (listener: (s: { focused: boolean }) => void) => {
-            windowState.add(listener);
-            return { dispose: () => windowState.delete(listener) };
-          },
           showErrorMessage: vi.fn(),
         },
       } as never,
@@ -309,7 +464,7 @@ describe('the status bar', () => {
     expect(status.text).toBe('$(organization) globex');
 
     scripts['org current'] = { documents: [current('initech', 'env')] };
-    for (const listener of windowState) listener({ focused: true });
+    outside.focus();
     await settled();
     expect(status.text).toBe('$(organization) initech');
     expect(registered).toEqual([
@@ -322,16 +477,116 @@ describe('the status bar', () => {
   });
 });
 
+describe('the account changed outside this window', () => {
+  // The account a developer signed in as `usr_1` with `acme` selected has:
+  // scripts the test changes as a terminal would.
+  const signedIn = (): Record<string, Script> => ({
+    whoami: { documents: [signedInAs('usr_1')] },
+    'org current': { documents: [current('acme')] },
+    'team current': { documents: [current('platform')] },
+  });
+  const reads = (invoked: readonly Invoked[]) =>
+    invoked.filter((call) => call.path === 'whoami').length;
+
+  test('the window regaining focus reads the account, and announces nothing while it is as it was', async () => {
+    const { commands, changed, outside } = await setup(signedIn() as never);
+    expect(reads(commands.invoked)).toBe(1);
+
+    outside.focus();
+    await settled();
+    outside.focus(false);
+    await settled();
+
+    expect(reads(commands.invoked)).toBe(2);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  test('a focus that reads another selection announces it once', async () => {
+    const scripts = signedIn();
+    const { changed, outside } = await setup(scripts as never);
+
+    scripts['org current'] = { documents: [current('globex')] };
+    outside.focus();
+    await settled();
+    outside.focus();
+    await settled();
+
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a lace command ending in the integrated terminal reads the account: lace logout announces the sign-out', async () => {
+    const scripts = signedIn();
+    const { commands, changed, outside } = await setup(scripts as never);
+
+    outside.ended('git status');
+    outside.ended('echo lace logout');
+    await settled();
+    expect(reads(commands.invoked)).toBe(1);
+
+    scripts.whoami = SIGNED_OUT;
+    outside.ended('lace logout');
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    outside.ended('lace whoami');
+    await settled();
+    expect(reads(commands.invoked)).toBe(3);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('another developer signed in is another account', async () => {
+    const scripts = signedIn();
+    const { changed, outside } = await setup(scripts as never);
+    scripts.whoami = { documents: [signedInAs('usr_2')] };
+    outside.ended('lace login');
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a change this window makes is announced once, and the focus after it finds the account as it is now', async () => {
+    let signedOut = false;
+    const { account, changed, outside } = await setup({
+      ...signedIn(),
+      whoami: () => (signedOut ? SIGNED_OUT : { documents: [signedInAs('usr_1')] }),
+      logout: () => {
+        signedOut = true;
+        return { documents: [{ loggedOut: true }] };
+      },
+    } as never);
+    await account.signOut();
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    outside.focus();
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a read that fails is reported and announces nothing; once disposed, the window is not listened to', async () => {
+    const { account, changed, outside, report, commands } = await setup({
+      ...signedIn(),
+      whoami: { fails: new Error('the engine stopped') },
+    } as never);
+    outside.focus();
+    await settled();
+    expect(changed).not.toHaveBeenCalled();
+    expect(report).toHaveBeenCalledWith('reading the Lace account', expect.any(Error));
+
+    account.dispose();
+    outside.focus();
+    outside.ended('lace logout');
+    await settled();
+    expect(reads(commands.invoked)).toBe(2);
+  });
+});
+
 describe('an account command that fails', () => {
-  test('says why with the ways out its reason names', async () => {
-    const { account, commands } = setup({
-      'org list': refused({ reason: 'unauthenticated', message: 'no credentials' }),
-      'org current': { documents: [current(null)] },
-    });
+  // The account's palette commands over `account`, with a window whose error
+  // notices answer Sign In.
+  function controls(account: Account, commands: ReturnType<typeof fakeCommands>) {
     const handlers = new Map<string, () => Promise<void>>();
     const window = {
       createStatusBarItem: () => ({ show: vi.fn(), hide: vi.fn(), dispose: vi.fn() }),
-      onDidChangeWindowState: () => ({ dispose: () => {} }),
       showErrorMessage: vi.fn(async (_text: string, ...buttons: Button[]) =>
         clicked(buttons, 'Sign In'),
       ),
@@ -362,8 +617,54 @@ describe('an account command that fails', () => {
       offers,
       vi.fn(),
     );
-    await handlers.get(SELECT_ORGANIZATION)?.();
+    return { window, offers, run: async (id: string) => handlers.get(id)?.() };
+  }
+
+  test('says why with the ways out its reason names', async () => {
+    const { account, commands } = await setup({
+      'org list': refused({ reason: 'unauthenticated', message: 'no credentials' }),
+      'org current': { documents: [current(null)] },
+    });
+    const { window, offers, run } = controls(account, commands);
+    await run(SELECT_ORGANIZATION);
     expect(shownBy(window.showErrorMessage)).toEqual([['no credentials', 'Sign In']]);
     expect(offers.signIn).toHaveBeenCalledTimes(1);
+  });
+
+  test('a read whose stream ended says to run that read again', async () => {
+    const { account, commands } = await setup({
+      'org list': { fails: new CommandUnobservedError() },
+      'org current': { documents: [current('acme')] },
+    });
+    const { window, run } = controls(account, commands);
+    await run(SELECT_ORGANIZATION);
+    expect(shownBy(window.showErrorMessage)).toEqual([
+      ['the stream ended before `lace org list` finished; run it again'],
+    ]);
+  });
+
+  test('a save of the organization that wrote no document says what the CLI wrote, or its exit code when it wrote nothing; one whose stream ended, that it may have made changes', async () => {
+    // What Select Organization says when its `org use` fails with `fails`.
+    const saying = async (fails: Error) => {
+      const { account, commands } = await setup(
+        {
+          'org list': { documents: [ORGS] },
+          'org current': { documents: [current('acme')] },
+          'org use': { fails },
+        },
+        ['globex'],
+      );
+      const { window, run } = controls(account, commands);
+      await run(SELECT_ORGANIZATION);
+      return shownBy(window.showErrorMessage);
+    };
+    expect(await saying(new CommandExitError(1, 'Error: the config file is read-only\n'))).toEqual([
+      ['Error: the config file is read-only'],
+    ]);
+    expect(await saying(new CommandExitError(2, ''))).toEqual([
+      ['the command exited with code 2 and wrote nothing'],
+    ]);
+    const unobserved = new CommandUnobservedError();
+    expect(await saying(unobserved)).toEqual([[unobserved.message]]);
   });
 });

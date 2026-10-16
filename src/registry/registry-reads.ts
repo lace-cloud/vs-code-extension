@@ -3,8 +3,9 @@
 // reads a directory. The module axis only, and up to the most rows one
 // `registry list` returns.
 import type { BoundPath, JsonOf } from '@lace-cloud/canvas/engine';
-import { type CommandOutcome, commandOutcome } from '../engine/command-outcome';
+import { type CommandOutcome, commandOutcome, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 import type { Read } from '../protocol/registry-protocol';
 
 export const LIST_LIMIT = 500;
@@ -23,18 +24,21 @@ export type RegistryReads = {
 export function registryReads(commands: Pick<CommandsMapping, 'anywhere'>): RegistryReads {
   return {
     list: async () =>
-      commandOutcome(await commands.anywhere(), 'registry list', {
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['registry list'], {
         axis: 'module',
         limit: LIST_LIMIT,
       }),
     get: async (key) =>
-      commandOutcome(await commands.anywhere(), 'registry get', { artifact: artifact(key) }),
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['registry get'], {
+        artifact: artifact(key),
+      }),
     describe: async (key, version) =>
-      commandOutcome(await commands.anywhere(), 'registry describe', {
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['registry describe'], {
         artifact: artifact(key),
         version,
       }),
-    organization: async () => commandOutcome(await commands.anywhere(), 'org current', {}),
+    organization: async () =>
+      commandOutcome(await commands.anywhere(), LACE_COMMANDS['org current'], {}),
   };
 }
 
@@ -51,6 +55,6 @@ export async function asRead<P extends BoundPath>(
       : { kind: 'failed', message: outcome.failure.message };
   } catch (error) {
     report(error);
-    return { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
+    return { kind: 'failed', message: failureText(error) };
   }
 }

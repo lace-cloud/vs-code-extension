@@ -15,8 +15,12 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 
 - VS Code 1.96 or later, with the folder trusted. Lace runs the Lace CLI and executes Terraform over the folder's content,
   so it does not run in Restricted Mode or in a virtual workspace.
-- The Lace CLI. The extension starts it as `lace engine`, from `/usr/local/bin/lace` or from the path in the setting
-  `lace.binaryPath`. When the CLI and the extension speak different engine protocols, the extension says which of the two
+- The Lace CLI. The extension starts it as `lace engine`: the `lace` on your `PATH`, where the CLI's install puts it, or
+  the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
+  `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
+  (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 6, which Lace CLI
+  v2.51.0 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
   to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
@@ -34,6 +38,12 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 4. Save the canvas (the canvas's Save button, `Cmd+S` / `Ctrl+S` while the canvas has focus, or **Lace: Save**).
 5. Run **Generate** (the canvas's button or **Lace: Generate**). Lace writes the `.tf` files; **Show Changes** opens
    Source Control, where git shows the diff.
+
+Under the module's `.lace/` directory, a stack's **Apply** reads `verdict.json`, `bundle.pb` and `tree-manifest.json`
+from the working tree, never from git, and the pre-commit hook that `lace hooks install` writes stages them;
+`.lace/.canvas/state.lace` is the module's canvas state, derived from the `.tf` files when it is absent, or when its
+base differs from them and it holds no edits the files lack; `.lace/.canvas/state.lace.lock` is the running engine's
+lock.
 
 Each entry of the canvas's Diagnostics list has **Open source**, which opens the file the diagnostic names at its line
 and column, beside the canvas. For one located on the canvas alone, such as a required input not set, it says the
@@ -119,16 +129,17 @@ change.
 
 The **Registry** view in the Lace activity bar lists the modules of the Lace registry: search, category filters,
 favourites (the star), recently used, your organization's modules and the public ones, each grouped by system. Expand a
-row for its versions. The organization shown is the one the Lace CLI has selected; its picker runs
-**Lace: Select Organization**.
+row for its versions. The **Organization** dropdown under the search shows the organization the Lace CLI has selected;
+it runs **Lace: Select Organization** to switch it.
 
-- **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens or comes
-  forward without taking focus, so you see the edit land.
+- **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens beside the
+  file you are editing, or comes forward, without taking focus, so you see the edit land.
 - Clicking a row opens **module detail**: **Details** renders the module's README, **Interface** lists its inputs and
   outputs as Lace certified them (describing a version downloads and certifies it, so it loads after the rest),
   **Versions** and **Examples**, with **Add to Canvas** in the header.
 - Signed out, the view offers **Sign In**; with no organization selected, **Select Organization**; with no module
-  published, it says so and links to the guide on publishing one.
+  published, it says so and links to the guide on publishing one. A sign-in, sign-out or organization picked in a
+  terminal reaches the view as described under [Sign-in, organization and team](#sign-in-organization-and-team).
 - A placement the registry refuses says why, naming the module; **Show Details** opens the full message in the "Lace"
   Output channel.
 
@@ -138,8 +149,8 @@ The **Stacks** view lists the stacks deployed from the current module directory 
 its ten most recent runs. The view's description names the module; it follows the canvas or `.tf` file you turn to, and
 **Lace: Show Stacks of a Module**, in its title bar while the workspace holds more than one module, picks another.
 
-- On a stack: **Preview**, **Apply** and **Scan for Drift**. On a run: **Follow Logs**, **Cancel Run** and
-  **Open in Portal**.
+- On a stack: **Preview**, **Apply** and **Scan for Drift**. On a run: **Follow Logs**, **Cancel Run** while the run
+  has not ended, and **Open in Portal** when the run has a page there.
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
   the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. An apply held for approval
@@ -152,8 +163,8 @@ its ten most recent runs. The view's description names the module; it follows th
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal.
-- With no module to list the stacks of, the view says why: no folder is open; no directory holds a module yet, with
-  **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
+- With no module to list the stacks of, the view says why: no folder is open, with **Open Folder**; no directory holds a
+  module yet, with **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
   portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.
@@ -183,6 +194,10 @@ to its team; **Lace: Select Team** picks a team of the current organization, and
 offers **Open Portal** on the page that makes one. The status bar shows the selection, and clicking it selects an
 organization. When `LACE_ORGANIZATION` or `LACE_TEAM` is set in the engine's environment, that variable decides, and the
 pick says so.
+
+A `lace login`, `lace logout`, `lace org use` or `lace team use` run in VS Code's integrated terminal reaches the status
+bar, the Registry view and the Stacks view when the command ends (the terminal's shell integration, on by default,
+tells VS Code it ended); one run in a terminal outside VS Code, when the window regains focus.
 
 ## Lace in VS Code's chat
 
@@ -244,8 +259,8 @@ what was applied.
   other; pairs that tie come back for you to choose between.
 - A registry module named with a version (`author/name@version`) is placed at that version.
 
-- The change tool opens or brings forward the module's canvas tab without taking focus, so every edit lands where you can
-  see it, one undo step each.
+- The change tool opens the module's canvas tab beside the file you are editing, or brings it forward, without taking
+  focus, so every edit lands where you can see it, one undo step each.
 - Every result carries the current canvas. Values an input marks `sensitive` are withheld.
 - No tool asks for confirmation. The save and generate tools tell your assistant to call them only when you ask.
   Describe and Generate open no tab; Save acts only on a canvas that is open, since unsaved edits exist only there.
@@ -264,6 +279,10 @@ per-environment values go to the stack commands, and a conflict or a locked canv
 The extension runs one Lace engine per window, started when something first needs it. The status bar shows its state
 (**Lace Engine: running**); clicking it opens the "Lace" Output channel. The engine exits with the window, and with
 `lace.autoRestart` on it is restarted when it exits unexpectedly.
+
+An engine that does not start says where the CLI was read from (`lace.binaryPath`) and what happened. When no executable
+is found there, it also says to install the Lace CLI so `lace` is on your `PATH`, or to set `lace.binaryPath` to the
+full path of its executable.
 
 ## Commands
 
@@ -308,10 +327,10 @@ Lace binds no keys of its own.
 
 ## Settings
 
-| Setting            | Default               | What it does                                                                  |
-| ------------------ | --------------------- | ----------------------------------------------------------------------------- |
-| `lace.binaryPath`  | `/usr/local/bin/lace` | The Lace CLI the engine runs from. Machine-overridable.                       |
-| `lace.autoRestart` | `true`                | Restart the Lace engine when it exits unexpectedly.                           |
+| Setting            | Default          | What it does                                                                                                 |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `lace.binaryPath`  | `lace` on `PATH` | The Lace CLI the engine runs: `lace` on your `PATH`, or the full path of an executable (`lace.exe` on Windows). Machine-overridable: in a remote window, set it under the **Remote** tab. |
+| `lace.autoRestart` | `true`           | Restart the Lace engine when it exits unexpectedly.                                                          |
 
 Lace also reads VS Code's `files.autoSave` and `files.autoSaveDelay` (see above).
 

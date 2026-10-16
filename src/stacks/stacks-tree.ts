@@ -15,7 +15,9 @@
 // restates no argument and no confirmation. The tree opens no session: the
 // commands run on the Terraform on disk. Open in portal opens the page the
 // CLI gave the run. From the palette, Preview, Apply and Scan act on a stack
-// of the root `rootToAct` names, picked by the one stack pick (`pickStack`).
+// of the root `rootToAct` names, picked by the one stack pick (`pickStack`);
+// a run's actions act only on a run row, and invoked with none they say so.
+// A run row offers Cancel only while its run is running (`runLook`).
 //
 // With no stack deployed from the root, the view's action is Create Stack:
 // the package's `create` binding run through the runner over the view's
@@ -25,14 +27,23 @@
 // reads the tree again, which lists it.
 //
 // Selecting a stack picks it for the root, and the root's canvas draws its
-// badges. An apply runs under a progress notification and says how it
-// settled (`outcomeNotice`), with the ways out its failure names (Validate
-// is the palette's, on the root the apply ran in), or, held for approval,
-// the change request it waits on, offering the page of each record that has
+// badges; the tree redraws the row picked before and the row picked now.
+// VS Code redraws an element it was given, by identity, and keeps every
+// other row and what a context menu holds of it; a read of the whole tree
+// drops them until it settles, so only what may change the list reads it
+// all: a tick of the runner's store, a change of the account (made in this
+// window or found outside it), the view shown again, a change of the
+// workspace's folders, and Refresh.
+//
+// An apply runs under a progress notification and says how it settled
+// (`outcomeNotice`), with the ways out its failure names (Validate is the
+// palette's, on the root the apply ran in), or, held for approval, the
+// change request it waits on, offering the page of each record that has
 // one; a preview opens as a read-only document; each tick of the runner's
 // store (a run started or settled, a scan or a cancel done) reads the tree
 // again and tells the canvas of the root that run was about that its reads
-// are stale.
+// are stale. The view draws its progress while the store says a command is
+// under way (`commandRunning`), and ends it when the store says none is.
 //
 // With no root found, the view says why, by the reason finding one gave: no
 // folder is open; no directory holds a module yet, and Open Canvas starts
@@ -42,6 +53,7 @@
 import type {
   ActionContribution,
   CommandFailure,
+  ResultSlots,
   RunCtx,
   StackRef,
 } from '@lace-cloud/canvas/engine';
@@ -50,6 +62,7 @@ import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 import { binding, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
@@ -106,6 +119,14 @@ export const STACK_COMMANDS = {
 // How many of a stack's runs its row lists.
 const RECENT_RUNS = 10;
 const SHOW_OUTPUT = 'Show Output';
+
+// Whether the runner's store says a command is under way: the run slot's
+// run, the preview slot's preview, or a command's running mark (`running`,
+// by the target it runs on). A follow is a subscription to a run's logs,
+// not a command under way.
+function commandRunning({ run, preview, running }: ResultSlots): boolean {
+  return run?.outcome.kind === 'running' || preview?.outcome.kind === 'running' || running.size > 0;
+}
 
 export type Row =
   | { kind: 'stack'; root: AuthoringRoot; stack: Stack }
@@ -168,13 +189,21 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   };
 
   let root: AuthoringRoot | undefined;
-  // The stack rows shown, by stack id: the row an apply's progress redraws.
+  // The stack rows shown, by stack id: the objects `getChildren` gave, which
+  // a pick and an apply's progress redraw.
   let shown = new Map<string, Row>();
   // The refusal the view shows, kept for the welcome's action.
   let refusal: CommandFailure | undefined;
 
-  const changed = new api.EventEmitter<Row | undefined>();
+  const changed = new api.EventEmitter<Row | Row[] | undefined>();
   const refresh = () => changed.fire(undefined);
+  // Redraws the shown rows of the stacks `ids` names.
+  const redraw = (ids: readonly (string | undefined)[]) => {
+    const rows = [...new Set(ids)]
+      .map((id) => (id === undefined ? undefined : shown.get(id)))
+      .filter((row): row is Row => row !== undefined);
+    if (rows.length > 0) changed.fire(rows);
+  };
 
   const rootKey = (of: AuthoringRoot) => rootUri(of).toString();
 
@@ -193,7 +222,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   async function stackRows(of: AuthoringRoot): Promise<Row[]> {
     let stacks: Stack[];
     try {
-      const listed = await commandDocument(await commands.anywhere(), 'stack list', {
+      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['stack list'], {
         source: rootPath(of),
       });
       stacks = listed.items;
@@ -218,7 +247,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // none and the portal makes one.
   async function teamState(): Promise<StacksState> {
     try {
-      const teams = await commandDocument(await commands.anywhere(), 'team list', {});
+      const teams = await commandDocument(
+        await commands.anywhere(),
+        LACE_COMMANDS['team list'],
+        {},
+      );
       return teams.items.length === 0 ? 'teamlessOrganization' : 'noTeam';
     } catch (error) {
       report('listing the teams of the organization', error);
@@ -228,7 +261,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   async function runRows(row: Extract<Row, { kind: 'stack' }>): Promise<Row[]> {
     try {
-      const listed = await commandDocument(await commands.anywhere(), 'run list', {
+      const listed = await commandDocument(await commands.anywhere(), LACE_COMMANDS['run list'], {
         stack: row.stack.id,
         limit: RECENT_RUNS,
       });
@@ -386,10 +419,18 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       if (chosen) await act(chosen.of, chosen.stack);
     };
 
+  // A run row's action. Invoked with no row (from a keybinding, or a menu
+  // whose row the tree no longer holds), it says where it acts and stops.
   const onRun =
     (act: (row: Extract<Row, { kind: 'run' }>) => Promise<unknown>) =>
-    async (row: Extract<Row, { kind: 'run' }>) => {
-      await act(row);
+    async (row?: Extract<Row, { kind: 'run' }>) => {
+      if (row) {
+        await act(row);
+        return;
+      }
+      void api.window.showInformationMessage(
+        "This command acts on a run listed in the Stacks view; choose it from that run's menu.",
+      );
     };
 
   // Previews open as read-only documents, one per preview.
@@ -399,19 +440,38 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     provideTextDocumentContent: (uri) => previews.get(uri.path) ?? '',
   });
 
-  // What the runner's store says, as it says it: a new preview opens; a run
-  // redraws its stack's row; each tick reads the tree again and tells the
-  // canvas of the root the ticking run was about.
+  // The view's progress while the store says a command is under way: the
+  // function that ends the one drawn, while one is.
+  let endProgress: (() => void) | undefined;
+  const drawProgress = (slots: ResultSlots) => {
+    const running = commandRunning(slots);
+    if (running && !endProgress) {
+      const ended = new Promise<void>((resolve) => {
+        endProgress = resolve;
+      });
+      void api.window.withProgress({ location: { viewId: STACKS_VIEW } }, () => ended);
+    } else if (!running && endProgress) {
+      endProgress();
+      endProgress = undefined;
+    }
+  };
+
+  // What the runner's store says, as it says it: a preview opens once its
+  // plan lands; a run redraws its stack's row; the view's progress follows
+  // what is under way; each tick reads the tree again and tells the canvas
+  // of the root the ticking run was about.
   let shownPreview: object | undefined;
   const offStore = runner.store.subscribe(() => {
-    const { preview, run } = runner.store.getSnapshot();
-    const running = shown.get(run?.readOver.stack ?? '');
-    if (running) changed.fire(running);
-    if (preview && preview.token !== shownPreview) {
+    const slots = runner.store.getSnapshot();
+    const { preview, run } = slots;
+    drawProgress(slots);
+    redraw([run?.readOver.stack]);
+    if (preview?.outcome.kind === 'succeeded' && preview.token !== shownPreview) {
+      const { data } = preview.outcome;
       shownPreview = preview.token;
       previewCount += 1;
-      const path = `/${preview.data.stack.slug}-${previewCount}.plan`;
-      previews.set(path, previewText(preview.data));
+      const path = `/${data.stack.slug}-${previewCount}.plan`;
+      previews.set(path, previewText(data));
       void api.workspace
         .openTextDocument(api.Uri.from({ scheme: PREVIEW_SCHEME, path }))
         .then((document) => api.window.showTextDocument(document, { preview: false }))
@@ -424,30 +484,17 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (ran) panels.tick(ran);
   });
 
-  const offBusy = runner.onDidChangeBusy((busy) => {
-    if (!busy) return;
-    void api.window.withProgress(
-      { location: { viewId: STACKS_VIEW } },
-      () =>
-        new Promise<void>((resolve) => {
-          const off = runner.onDidChangeBusy((still) => {
-            if (still) return;
-            off();
-            resolve();
-          });
-        }),
-    );
-  });
-
   const subscriptions: vscode.Disposable[] = [
     view,
     changed,
     previewProvider,
     view.onDidChangeSelection(({ selection: [row] }) => {
       if (row?.kind !== 'stack') return;
-      rootState
-        .pickStack(row.root, stackRef(row.stack))
-        .then(refresh, (error) => report('picking a stack', error));
+      const before = rootState.stack(row.root)?.id;
+      rootState.pickStack(row.root, stackRef(row.stack)).then(
+        () => redraw([before, row.stack.id]),
+        (error) => report('picking a stack', error),
+      );
     }),
     view.onDidChangeVisibility(({ visible }) => {
       if (visible) refresh();
@@ -503,7 +550,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       offAccount();
       offStore();
       offTick();
-      offBusy();
+      endProgress?.();
       for (const subscription of subscriptions) subscription.dispose();
     },
   };

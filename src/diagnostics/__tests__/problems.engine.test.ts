@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { moduleDirectory, realEngine, until } from '../../engine/__tests__/real-engine';
 import { commandOutcome } from '../../engine/command-outcome';
-import { folder } from '../../roots/__tests__/fake-uri';
+import { file, folder } from '../../roots/__tests__/fake-uri';
 import { problemsObserver } from '../problems';
 import { fakeProblemsApi } from './fake-problems-api';
 
@@ -21,12 +21,16 @@ describe('Problems on the real engine', () => {
     const { rootSessions, commands, reports } = realEngine();
     await rootSessions.acquire(root);
 
-    const outcome = await commandOutcome(await commands.at(root), 'module validate', {});
+    const outcome = await commandOutcome(
+      await commands.at(root),
+      { kind: 'write', path: 'module validate' },
+      {},
+    );
     expect(outcome.kind).toBe('result');
 
     const fake = fakeProblemsApi([folder(repository)]);
     rootSessions.observe(problemsObserver(fake.api, (_what, error) => reports.push(error)));
-    const main = `file://${root}/main.tf`;
+    const main = file(join(root, 'main.tf')).toString();
     await until('the report in Problems', () => fake.shown()[main] !== undefined);
     expect(fake.shown()[main]).toEqual([expect.stringContaining('no function named "nofunc"')]);
     const [[problem]] = [...fake.collections[0].entries.values()];

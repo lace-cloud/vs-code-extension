@@ -12,7 +12,7 @@ import {
   type Script,
   type Scripts,
 } from '../../engine/__tests__/fake-commands';
-import { folder, uri } from '../../roots/__tests__/fake-uri';
+import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { VALIDATED } from '../../tools/__tests__/fake-session';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
@@ -213,7 +213,7 @@ describe('the module commands', () => {
   ] as const)('%s runs %s in the authoring root, through the commands mapping', async (id, path, script) => {
     const { table, invoked } = setup({ [path]: script });
     await table[id]();
-    expect(invoked).toEqual([{ cwd: PROD, path, args: {} }]);
+    expect(invoked).toEqual([{ cwd: fsPath(PROD), path, args: {} }]);
   });
 
   test.each([
@@ -238,7 +238,7 @@ describe('the module commands', () => {
     expect(nested.save).toHaveBeenCalled();
     expect(json.save).toHaveBeenCalled();
     for (const unsaved of [clean, other, notes]) expect(unsaved.save).not.toHaveBeenCalled();
-    expect(invoked).toEqual([{ cwd: PROD, path, args: {} }]);
+    expect(invoked).toEqual([{ cwd: fsPath(PROD), path, args: {} }]);
   });
 
   // One rule per operation, whatever triggers it: a command that writes the
@@ -258,7 +258,7 @@ describe('the module commands', () => {
 
     await table[id]();
     expect(dirty.save.mock.calls.length > 0).toBe(saves);
-    expect(invoked).toEqual([{ cwd: PROD, path, args: {} }]);
+    expect(invoked).toEqual([{ cwd: fsPath(PROD), path, args: {} }]);
   });
 
   test('with a dirty buffer, Generate saves it first', async () => {
@@ -372,7 +372,7 @@ describe('Validate and Scan', () => {
     );
     expect(log.appendLine.mock.calls.map(([line]) => line)).toEqual([
       'Validated infra/prod: lossy, 1 diagnostic.',
-      `  ${PROD}/main.tf:4:2: error: not set`,
+      `  ${fsPath(`${PROD}/main.tf`)}:4:2: error: not set`,
     ]);
     expect(log.show).toHaveBeenCalled();
     expect(api.window.setStatusBarMessage).not.toHaveBeenCalled();
@@ -404,7 +404,7 @@ describe('Validate and Scan', () => {
     );
     expect(log.appendLine.mock.calls.map(([line]) => line)).toEqual([
       'Validated infra/prod, 1 diagnostic.',
-      `  ${PROD}/main.tf:4:2: error: not set`,
+      `  ${fsPath(`${PROD}/main.tf`)}:4:2: error: not set`,
     ]);
     expect(api.window.showErrorMessage).not.toHaveBeenCalled();
   });
@@ -495,7 +495,7 @@ describe('Convert', () => {
     await table[CONVERT_MODULE]();
 
     expect(buffer.save).toHaveBeenCalled();
-    expect(invoked).toEqual([{ cwd: PROD, path: 'module convert', args: {} }]);
+    expect(invoked).toEqual([{ cwd: fsPath(PROD), path: 'module convert', args: {} }]);
     const text =
       'Converted infra/prod: wrote web/main.tf, main.tf; removed flat.tf; already-lace-style, 0 diagnostics.';
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(text, 'Show Report');
@@ -592,7 +592,7 @@ describe('Convert', () => {
     const failure: CommandFailure = {
       reason: 'source_refused',
       message:
-        '1 Terraform construct(s) could not be auto-converted; the residual report names each',
+        '1 Terraform construct(s) Lace cannot carry; the report names each with what to change',
     };
     const { table, api, invoked } = setup(
       { 'module convert': refused(failure, 2), 'module validate': validated([FINDING]) },
@@ -601,8 +601,8 @@ describe('Convert', () => {
     await table[CONVERT_MODULE]();
     expect(shownBy(api.window.showErrorMessage)).toEqual([[failure.message, 'Validate']]);
     expect(invoked).toEqual([
-      { cwd: PROD, path: 'module convert', args: {} },
-      { cwd: PROD, path: 'module validate', args: {} },
+      { cwd: fsPath(PROD), path: 'module convert', args: {} },
+      { cwd: fsPath(PROD), path: 'module validate', args: {} },
     ]);
     expect(api.window.showWarningMessage).toHaveBeenCalledWith(
       'Validated infra/prod: lossy, 1 diagnostic.',
@@ -651,7 +651,7 @@ describe('Save', () => {
     const { table, api, sessions } = setup({}, { open: true, editor });
     await table[SAVE_CANVAS]();
     expect(editor.save).toHaveBeenCalledOnce();
-    expect(sessions.acquire).toHaveBeenCalledWith(PROD);
+    expect(sessions.acquire).toHaveBeenCalledWith(fsPath(PROD));
     expect(sessions.holders()).toBe(0);
     expect(api.window.setStatusBarMessage).toHaveBeenCalledWith(
       'Lace: saved the canvas of infra/prod',
@@ -675,7 +675,7 @@ describe('Save', () => {
       { root: undefined, canvases: [fresh], open: true, spelled: '/work/repo/infra/new', editor },
     );
     await table[SAVE_CANVAS]();
-    expect(sessions.acquire).toHaveBeenCalledWith('/work/repo/infra/new');
+    expect(sessions.acquire).toHaveBeenCalledWith(fsPath('/work/repo/infra/new'));
     expect(editor.save).toHaveBeenCalledOnce();
     expect(api.window.setStatusBarMessage).toHaveBeenCalledWith(
       'Lace: saved the canvas of infra/new',

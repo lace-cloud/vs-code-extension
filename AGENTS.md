@@ -53,8 +53,12 @@ each other: every contributed command, view and tool is one a feature registers,
 | A command's working directory | `engine/commands-mapping.ts` | every command the host runs |
 | Running a package binding (Stacks rows, stack palette commands, Create Stack, Import Existing Resources, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, Import Existing Resources, the offers |
 | How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
+| A quick pick whose items come from a read: on screen at once, busy, and filled when the read settles; a read that finds none closes it and runs the caller's own empty path, and one that fails closes it and rejects for the caller's notice | `vscode/pick.ts` (`pickFrom`) | the organization and team picks, the stack pick, the connection prompt, Add Module to Canvas |
 | A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a failure's package answer, the answerer |
-| A command's outcome: its document or its failure | `engine/command-outcome.ts` | every command's caller |
+| Whether a CLI command the host runs is a read or a write (`LaceCommand`): a fact about the command, whether it can change something before its stream ends | `engine/lace-commands.ts` (`LACE_COMMANDS`) | every command's caller |
+| A command's outcome: its document or its failure, and every failure of it as a `CommandFailedError`: its `message`, said for the command it was, and its `failure` document when it wrote one | `engine/command-outcome.ts` (`commandOutcome`) | every command's caller |
+| What a failed command says: its failure document's message when it wrote one, the CLI's stderr when it wrote none, its exit code when it wrote nothing at all, and for a stream that ended under it that a read is to be run again or that a write may have made changes | the package's `failureSays`, which `commandOutcome` reads for the command it runs into its `CommandFailedError`, and sign-in for `lace login`'s own stream; `failureText` says a failure | every notice of a failed command, the Stacks view's message and rows |
+| What is under way | the package's result store, the runner host's `store` | the Stacks view's progress, through `commandRunning` (`stacks/stacks-tree.ts`) |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
 | A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
@@ -64,6 +68,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
+| When the account changed: a change this window makes, or a read that differs from the last one | `account/account.ts` (`createAccount`, `onDidChange`) | the status bar, the registry view, the Stacks tree |
 | The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
 | What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
 | Which stack of a root a stack command no row names acts on | `stacks/stack-pick.ts` (`pickStack`) | the palette's Preview, Apply and Scan; Import Existing Resources |
@@ -73,12 +78,19 @@ each other: every contributed command, view and tool is one a feature registers,
 ## Engine and sessions
 
 **One engine per window.** `engine.ts` runs one `lace engine` through `@lace-cloud/host`'s `ServerManager`, started on
-demand by the first caller. The engine is spawned with a stdin pipe the manager holds and exits when it closes, so an
-extension host that dies takes its engine, sessions and locks with it. The handshake's protocol version decides
-compatibility: an engine of another protocol is refused with a message that names which side to update. The extension
-host reaches the engine through an in-process bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same
-typed mapping a webview holds over its bridge. `whenRunning` waits for a restart that `lace.autoRestart` or the developer
-starts.
+demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's own install puts it, unless
+`lace.binaryPath` names another executable; the manager spawns the value as given, so on Windows the setting names a
+`lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
+default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
+with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
+and locks with it. The extension speaks engine protocol 6 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version decides compatibility: an
+engine of another protocol is refused with a message that names which side to update. A binary that is not found (the
+`EngineSpawnError` `@lace-cloud/host` rejects with, whose `code` is `ENOENT`) says where it was read from, what
+happened, and to install the Lace CLI so `lace` is on `PATH` or to set `lace.binaryPath` to its executable's full path;
+any other failed start says where the binary was read from and what happened. The extension host reaches the engine
+through an in-process bridge of its own (`bridgeCaller` over `serveEngineBridge`), the same typed mapping a webview
+holds over its bridge. `whenRunning` waits for a restart that `lace.autoRestart` or the developer starts.
 
 **One session per authoring root, `root-sessions.ts` its only owner.**
 
@@ -115,17 +127,19 @@ validate` when Terraform found errors), and that is a result.
 **The runner host** is the window's one `createActionRunner` over the home port and one result store. The Stacks tree,
 the stack palette commands, Create Stack and Import Existing Resources run the package's bindings through it with a
 `RunCtx` naming the root and the stack; the binding owns the arguments, the confirmation and the result folding, and the
-host draws the store. A binding that declares the root runs in it. The host runs each binding inside an async context
-(`AsyncLocalStorage`) carrying its run, which attributes to the run what names none:
+host draws the store. A binding that declares the root runs in it. What is under way is the store's to say, and the
+Stacks view's `commandRunning` is the one place that asks it whether any command is; the host keeps no count of its own.
+The host runs each binding inside an async context (`AsyncLocalStorage`) carrying its run, which attributes to the run
+what names none:
 
 - `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked it.
 - The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
   object was answered before is reused by argument name; the answerer (`vscode/form-answerer.ts`) asks the rest, one
   prompt per argument name: `slug` an input box that refuses an empty value, `connection` a pick from `lace connection
-  list` (a list that cannot be read, or an empty one, cancels the form and says why), `state` an open dialog for one
-  file; any other name cancels the form with a notice. A dismissed prompt cancels the form. The host keeps the form the
-  runner handed it last: a form superseded by a newer one submits and cancels nothing when its prompts settle. A submit
-  runs in the run's context again.
+  list`, on screen while the list is read (a list that cannot be read, or an empty one, closes it, cancels the form and
+  says why), `state` an open dialog for one file; any other name cancels the form with a notice. A dismissed prompt
+  cancels the form. The host keeps the form the runner handed it last: a form superseded by a newer one submits and
+  cancels nothing when its prompts settle. A submit runs in the run's context again.
 - A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
   each invocation it started. `run` resolves when the runner's call does, with `ended`. A run a trigger starts (Create
@@ -141,7 +155,11 @@ host draws the store. A binding that declares the root runs in it. The host runs
 ## The canvas tab
 
 - `canvas-panels.ts`: one webview panel per root, created only by `ensure(root, {preserveFocus?})`; two `ensure` calls in
-  flight make one panel. The title is the root's name (`rootLabel`: its path in the workspace, the folder's name first
+  flight make one panel. A panel opened without focus (a chat tool, a registry add) is created beside the text
+  editor the active group holds (`window.activeTextEditor`), so the developer's place stays in view, and in the active
+  group when it holds none, where a split would leave an empty group; one opened with focus (**Lace: Open Canvas**) is
+  created in the active group, as any editor opens. A panel already open is revealed in its own column.
+  The title is the root's name (`rootLabel`: its path in the workspace, the folder's name first
   in a workspace of several folders), with ● while the session is unsaved, and a change of the workspace's folders
   titles it again; a tab whose folder left the workspace stays open on its session, titled by its directory's full
   path. `roots` lists every open panel's root, focused or not: each is a candidate when a surface names its root.
@@ -199,7 +217,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 
 - `registry-reads.ts`: `registry list --axis module --limit 500`, `registry get`, `registry describe`, `org current`, each
   in the home. The sidebar reads once, unfiltered, and the page filters as the developer searches and picks categories; a
-  row's versions are read on expand. The view reads again when it becomes visible and after each account change.
+  row's versions are read on expand. The view reads again when it becomes visible and at each change of the account,
+  made in this window or found outside it (see Account).
 - The sidebar's states come from a failed list's `reason`: `unauthenticated` → Sign In, `no_organization` → Select
   Organization, anything else its message with Retry. An empty registry shows "No modules are published yet" with the
   publishing guide link the list itself carries.
@@ -212,6 +231,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   `forbidden` are named with the module (any other reason as "the engine refused it"), and **Show Details** writes the
   engine's full message to the "Lace" Output channel.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
+- Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
+  that cannot be read closes it and says why with the ways out its reason names, and an empty registry closes it and
+  offers the publishing guide the list carries. The module picked is placed as the sidebar's "+" places it.
 
 ## Stacks tree
 
@@ -222,13 +244,24 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   change of the workspace's folders reads the tree again, and a root whose folder left the workspace is dropped and
   found again.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
-  `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. The tree opens no session:
-  the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
-  root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the root its run was over,
-  so `no_certification` and `stale_certification` offer Validate on it.
-- Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges. Each tick of the
-  runner's store (a run started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root
-  that run was about, its `RunCtx.root`, whatever the tree ran since.
+  `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. A run row's `contextValue`
+  is a list of tokens: `laceRun`, then `ended` when its `run list` document carries a `completedAt` and `running` when
+  it carries none, then `portal` when the CLI gave the run its page. Each run menu entry's `when` matches a token:
+  Cancel Run `running`, Open in Portal `portal` (`__tests__/manifest.test.ts` reads every one against each state a run
+  row draws). A run action invoked with no run row says it acts on a run of the Stacks view and runs nothing. The tree
+  opens no session: the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick
+  a stack of the named root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the
+  root its run was over, so `no_certification` and `stale_certification` offer Validate on it.
+- Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges; the tree redraws
+  the row picked before and the row picked now, the objects `getChildren` gave (VS Code redraws an element by
+  identity). A read of the whole tree drops every row VS Code holds until it settles, and a row's menu command run in
+  that time arrives with no row, so only what may change the list reads it whole: a tick, a change of the account, the
+  view shown again, a change of the workspace's folders, and Refresh Stacks. Each tick of the runner's store (a run
+  started or settled, a scan or a cancel done) re-reads the tree and ticks the canvas of the root that run was about,
+  its `RunCtx.root`, whatever the tree ran since. The view draws its progress while `commandRunning` reads a command
+  under way in the store (the run slot's run, the preview slot's preview, or a command's running mark, by the target it
+  runs on) and ends it when it reads none; a follow of a run's logs is a subscription, not a command under way, and draws
+  none.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
@@ -237,21 +270,23 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   with its state and its decider as the gate event names it (Lace, or a change-management system), and each record a
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
   its page, or that it is not opened yet; each record with a page is offered as **Open <kind> <reference>**, which
-  opens that page. A preview opens as a read-only `lace-preview:` document: the plan, the policy verdict with each
-  policy's own answer when several answer, and the Advisories.
+  opens that page. A preview opens as a read-only `lace-preview:` document once its plan lands: the plan, the policy
+  verdict with each policy's own answer when several answer, and the Advisories.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
-  gives (`rootlessState`): `noFolder` (open the folder, no action), `noModule` (Open Canvas starts one), `severalModules`
-  (Choose Module). When the stacks cannot be listed, it selects the welcome view by the failure's reason: `signedOut`,
-  `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no
-  portal URL), `noStack`, `failed`. The tree does not offer `lace stack destroy`; it is a terminal command.
+  gives (`rootlessState`): `noFolder` (Open Folder, VS Code's own `workbench.action.files.openFolder`), `noModule` (Open
+  Canvas starts one), `severalModules` (Choose Module). When the stacks cannot be listed, it selects the welcome view by
+  the failure's reason: `signedOut`, `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the
+  failure carries; the host builds no portal URL), `noStack`, `failed`. Every welcome but the one shown before the first
+  read offers exactly one action, a contributed command or one of VS Code's own; welcome text holds no inline code,
+  which VS Code draws with its backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
 - `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
   run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
   ends. The runner's form asks for the slug and the connection; the package's notice says "Created stack <slug>", and
   its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason, through the offers
   (`not_git_repository` and `no_origin_remote` say the CLI's message).
-- The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>`; a list that cannot be read is shown
-  with the ways out its reason names, and a root with no stack says "No stack is deployed from <root> yet. Create one in
-  the Stacks view." and shows no empty pick.
+- The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>` and is on screen while the list is
+  read; a list that cannot be read closes it and is shown with the ways out its reason names, and a root with no stack
+  closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.
 - **Import Existing Resources** (`stacks/import-resources.ts`) is a stack command the host draws: the canvas's
   source-refused banner offers it beside Convert on the panel's root, and **Lace: Import Existing Resources**
   (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the
@@ -326,12 +361,21 @@ before the session closes. A change to the setting re-arms every attachment. The
 
 `account/`: Sign In runs `lace login` (the confirmation code shown once with Copy Code, the page opened once, under a
 cancellable progress notification); Sign Out runs `lace logout`. Organization and team are the CLI's: `org list`,
-`org use`, `team list`, `team use`, `org current`, `team current`, all in the home. Selecting an organization goes on to
-its team, listed and saved with `--org` naming the organization just picked, so the saved team is that organization's
-even while `LACE_ORGANIZATION` sets another; an organization with no team says teams are created in the portal, with Open
-Portal on the page `team list` names (`createUrl`). The status bar item shows the selection and runs Select
-Organization; it is read again after each change and when the window regains focus. Nothing is cached.
-A failed account command offers the way out its reason names (`vscode/offers.ts`).
+`org use`, `team list`, `team use`, `org current`, `team current`, all in the home. Each pick is on screen at once and
+fills when its read settles (`vscode/pick.ts`). Selecting an organization goes on to its team: the team pick opens as
+the organization is saved, its read `org use` then the teams, listed and saved with `--org` naming the organization just
+picked, so the saved team is that organization's even while `LACE_ORGANIZATION` sets another; an organization with no
+team closes the pick and says teams are created in the portal, with Open Portal on the page `team list` names
+(`createUrl`). A team pick dismissed while the organization is saved still announces the saved organization. The status
+bar item shows the selection and runs Select Organization. The account's one change event (`onDidChange`) fires after
+each sign-in, sign-out or saved selection this window makes, and when a read of the account differs from the last one. A
+read is who is signed in (`whoami`'s user, or the reason its failure gives) and the selection (`org current`,
+`team current`); `lace logout` clears only the credentials, so the selection alone cannot see it. The account is read
+when the window starts, after each change made here, when the window regains focus (a terminal or another window outside
+it) and when a command line running `lace` ends in an integrated terminal with shell integration
+(`window.onDidEndTerminalShellExecution`), which changes no focus. The status bar, the registry view and the Stacks tree
+read again on the event. Nothing is cached but the last read. A failed account command offers the way out its reason
+names (`vscode/offers.ts`).
 
 ## The chat tools
 
@@ -406,12 +450,16 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
 | `build` | `src/**/*.build.test.ts` | the bundles in `out/` (`pnpm build`) |
 | `engine` | `src/**/*.engine.test.ts` | the `lace` CLI that `LACE_CLI_VERSION` names, in `bin/` or on `PATH` |
 
-- **Fakes for unit tests**: `engine/__tests__/fake-commands.ts` (one commands mapping and home port whose commands a test
-  scripts per path, recording each invocation's directory), `engine/__tests__/fake-engine.ts` (an engine at the bridge,
-  so the real caller, mapping and codecs run), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root
-  sessions with the real rule for holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
+- **Fakes for unit tests**: `engine/__tests__/fake-commands.ts` (one commands mapping and home port whose commands a
+  test scripts per path, recording each invocation's directory), `engine/__tests__/fake-engine.ts` (an engine at the
+  bridge, so the real caller, mapping and codecs run; its Invoke says `started`, then its exit, as the engine protocol
+  orders them), `tools/__tests__/fake-session.ts` (a session over a small Bundle, root sessions with the real rule for
+  holders, VS Code's cancellation of a tool call), `roots/__tests__/fake-uri.ts`,
   `diagnostics/__tests__/fake-problems-api.ts`, `vscode/__tests__/fake-messages.ts` (VS Code's message boxes, which hand
-  back the button clicked, string or item).
+  back the button clicked, string or item), `vscode/__tests__/fake-quick-pick.ts` (VS Code's `createQuickPick`: on
+  screen from `show()` until hidden, each hiding firing `onDidHide` once, with whether it was busy when it came on
+  screen; a test's developer answers each pick once its items are in), `account/__tests__/fake-outside.ts` (what tells
+  the window the account may have changed outside it: focus, and a command line ending in an integrated terminal).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
   mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is
@@ -429,14 +477,20 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   manifest command registered, an engine of the extension's protocol), the palette's module commands (Validate,
   Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit, a hand
   edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that
-  holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder. CI runs it under
-  `xvfb-run`.
+  holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder.
+- **CI** (`.github/workflows/ci.yml`, every PR to `develop`) runs lint, typecheck, the `unit` tests, the build, the
+  `build` tests and the `engine` tests on Linux and on Windows, and the window e2e on Linux alone, under `xvfb-run`.
+  Both run the release `LACE_CLI_VERSION` names. On Linux the CLI's published installer installs it; on Windows, which
+  the installer refuses, the job downloads the release's `lace-cli-windows-amd64-<version>.exe` with its `.sha256` and
+  `.minisig` and checks them as the installer does (the checksum, then the signature by the installer's key, whose
+  trusted comment names that object and its digest) before it puts the binary on `PATH` as `lace.exe`. `.gitattributes`
+  checks every text file out with LF, the line ending biome checks, on Windows too.
 - **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
   organization and team) is unit-tested over scripted commands.
-- **Repository tests** in `src/__tests__/`: the manifest against the features, the tracked pins (published versions
-  only, and a lockfile that locks exactly what the manifests name), the configuration
-  (every tsconfig include holds tracked files, every workflow runs on `develop` or `main`), the host bundle's
-  imports (only `vscode`, `node:*`, `@lace-cloud/host`, `@lace-cloud/canvas/engine`, `@lace-cloud/proto`,
+- **Repository tests** in `src/__tests__/`: the manifest against the features (and each run row's menu against the
+  run's state), the tracked pins (published versions only, and a lockfile that locks exactly what the manifests name),
+  the configuration (every tsconfig include holds tracked files, every workflow runs on `develop` or `main`), the host
+  bundle's imports (only `vscode`, `node:*`, `@lace-cloud/host`, `@lace-cloud/canvas/engine`, `@lace-cloud/proto`,
   `@lace-cloud/chat-core`), the bundles (one React per page, no canvas or engine in the registry pages, the host bundle
   loading in Node with `vscode` stubbed), the text-level instructions, and the README naming every command, setting and
   tool.

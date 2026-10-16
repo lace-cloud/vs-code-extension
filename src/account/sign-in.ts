@@ -8,9 +8,15 @@
 // shown once, beside a way to copy it, and each page is opened once. The
 // sign-in waits on the person in the browser, under a progress notification
 // whose Cancel withdraws it.
-import { CommandExitError, type CommandsPort, type JsonOf } from '@lace-cloud/canvas/engine';
+import {
+  CommandExitError,
+  type CommandsPort,
+  failureSays,
+  type JsonOf,
+} from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
-import { commandDocument, failureText } from '../engine/command-outcome';
+import { commandDocument } from '../engine/command-outcome';
+import { LACE_COMMANDS } from '../engine/lace-commands';
 
 export type SignInApi = {
   window: Pick<
@@ -64,7 +70,11 @@ export async function signIn(
       cancellable: true,
     },
     async (progress, token) => {
-      const invocation = commands.invoke('login', {}, new AbortController().signal);
+      const invocation = commands.invoke(
+        LACE_COMMANDS.login.path,
+        {},
+        new AbortController().signal,
+      );
       const cancelling = token.onCancellationRequested(() => void invocation.cancel());
       try {
         let user: SignedIn | undefined;
@@ -89,7 +99,9 @@ export async function signIn(
         return user;
       } catch (error) {
         if (!(error instanceof CommandExitError && error.code === CANCELLED)) {
-          void api.window.showErrorMessage(`Lace sign-in failed: ${failureText(error)}`);
+          void api.window.showErrorMessage(
+            `Lace sign-in failed: ${failureSays(error, LACE_COMMANDS.login).message}`,
+          );
         }
         return undefined;
       } finally {
@@ -104,7 +116,7 @@ export async function signOut(
   commands: CommandsPort,
   window: Pick<typeof vscode.window, 'showInformationMessage'>,
 ): Promise<void> {
-  const { loggedOut } = await commandDocument(commands, 'logout', {});
+  const { loggedOut } = await commandDocument(commands, LACE_COMMANDS.logout, {});
   void window.showInformationMessage(
     loggedOut ? 'Signed out of Lace.' : 'You were not signed in to Lace.',
   );
