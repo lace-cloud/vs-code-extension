@@ -186,9 +186,9 @@ over a restarted engine tells its ticks the same way. The host runs each binding
 - A notice from the page is the shared notice of `vscode/offers.ts`: a failure the canvas's own commands hit (its toolbar's
   Convert stopped at Terraform it cannot represent) offers the ways out its reason names, and Validate validates the
   panel's root with the palette's Validate.
-- The page's `editor` is the mapping's, its Generate telling the host what a Generate that succeeded reports of the
-  tree it wrote, the files it wrote, changed and removed (`generated`); the host shows the notice Lace: Generate ends
-  with, **Show Changes** opening Source Control.
+- The page's `editor` is the mapping's, its Generate telling the host what the package reads of the tree a Generate
+  that succeeded wrote (`generatedTree`: the files it changed and removed, how many it left unchanged, whether the tree
+  changed) as `generated`; the host shows the notice Lace: Generate ends with, **Show Changes** opening Source Control.
 - A pick of the root's stack reaches the page as an event and replaces only `context.stack`, so the canvas keeps its
   runner; a `tick` (the Stacks tree read again for what may have changed the root's stacks, or a run about the root
   ticked) re-reads what the canvas reads through its result store (the badges).
@@ -217,8 +217,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   each protocol a port of its own over the one pair. The engine frames are `@lace-cloud/proto`'s bridge frames.
 - **The host protocol** (`host-protocol.ts`): calls from the page `boot`, `confirm`, `openSource` and
   `importResources`; notices from the page `arrangement`, `notify` (with the failure document of the command it is
-  about, when there is one), `unsaved`, `focus`, `generated` (the files the canvas's own Generate wrote, changed and
-  removed); events from the host `stack` and `tick`.
+  about, when there is one), `unsaved`, `focus`, `generated` (what the package reads of the tree the canvas's own
+  Generate wrote, `generatedTree`); events from the host `stack` and `tick`.
 - **The registry protocol** (`registry-protocol.ts`): the host sends the page its whole state (`{op: 'state', state}`);
   the page says what the developer did. The registry pages reach no engine.
 
@@ -333,11 +333,11 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
 
 - **Save** and **Generate** run `canvas-operations.ts`, the same functions the chat tools run. Generate first saves the
   root's dirty `.tf` editors, holds the session for the call with no tab, shows its progress by the stage the engine
-  reports (the package's `GenerateStage`), and ends with what the engine reports it did to the tree (`generated`: the
-  files it changed, the source tf it removed, and how many of the files it wrote it left unchanged, with **Show
-  Changes**, which opens Source Control, the notice the canvas's own Generate ends with too; a Generate that changed
-  and removed nothing says nothing changed and offers nothing) or the engine's refusal (an unsaved canvas offers
-  **Save**).
+  reports (the package's `GenerateStage`), and ends with what it did to the tree as the package reads its success
+  (`generatedTree`; `generated`: the files it changed, the source tf it removed, and how many of the files it wrote it
+  left unchanged, with **Show Changes**, which opens Source Control, the notice the canvas's own Generate ends with too;
+  a Generate that left the tree unchanged says nothing changed and offers nothing) or the engine's refusal (an unsaved
+  canvas offers **Save**).
 - **Validate**, **Format**, **Scan** and **Generate Docs** run `module validate`, `module fmt`, `module scan`, `module
   docs` through `commands.at(root)`, with no session. **Convert Module** (`lace.convertModule`) runs `module convert`
   the same way and reports as Validate does, with no confirmation (the canvas action has none); an open canvas picks the
