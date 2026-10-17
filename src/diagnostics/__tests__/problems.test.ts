@@ -109,6 +109,12 @@ describe('Problems', () => {
     observer(session(PROD, source.source));
     source.result('module scan', {
       treeHash: 'tree-1',
+      tool: {
+        name: 'tfsec',
+        version: 'v1.28.13',
+        path: '/home/dev/.lace/bin/tfsec',
+        source: 'cache',
+      },
       diagnostics: [{ severity: 'warning', code: 'AVD-AWS-0086', message: 'public', file: 'a.tf' }],
     });
     source.frame([]);
