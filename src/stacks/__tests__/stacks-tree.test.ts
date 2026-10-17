@@ -9,6 +9,7 @@ import {
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { outsideSignals } from '../../account/__tests__/fake-outside';
 import { authoringCommands } from '../../commands/authoring-commands';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
@@ -135,6 +136,8 @@ type Options = {
   folders?: vscode.WorkspaceFolder[];
 };
 
+type Setup = ReturnType<typeof setup>;
+
 function setup(options: Options) {
   const commands = fakeCommands(options.scripts);
   const mapping = commands.commands;
@@ -175,6 +178,8 @@ function setup(options: Options) {
     ended: boolean;
   }[] = [];
   const activeEditor = new Emitter<unknown>();
+  // A command line ending in one of the window's integrated terminals.
+  const outside = outsideSignals();
   // A change of the workspace's folders, told once `folders` holds them.
   const workspaceFolders = new Emitter<vscode.WorkspaceFoldersChangeEvent>();
   const quickPicks = fakeQuickPicks<{ label: string; stack?: { slug: string }; id?: string }>(
@@ -222,6 +227,7 @@ function setup(options: Options) {
       showErrorMessage: answer('error'),
       setStatusBarMessage: vi.fn(),
       onDidChangeActiveTextEditor: activeEditor.event,
+      onDidEndTerminalShellExecution: outside.window.onDidEndTerminalShellExecution,
       showTextDocument: vi.fn(async (document: unknown, options: unknown) => {
         shown.push({ document, options });
       }),
@@ -404,6 +410,7 @@ function setup(options: Options) {
     log,
     terraformFiles,
     workspaceFolders,
+    terminal: outside,
   };
 }
 
@@ -524,11 +531,12 @@ describe('the stacks of the current root', () => {
     ]);
   });
 
-  test('follows the canvas the developer turns to', async () => {
+  test('follows the canvas the developer turns to, which changes no stack and tells no canvas', async () => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.children();
     t.active.fire(staging);
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.panels.tick).not.toHaveBeenCalled();
     await t.children();
     expect(t.view.description).toBe('infra/staging');
     expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
@@ -968,11 +976,36 @@ describe('a stack row', () => {
     expect(t.item(qaRow).description).toBe('qa · on the canvas');
   });
 
-  test('Refresh Stacks reads the whole tree again', async () => {
+  // What may have changed the stacks of the view's root: the tree reads them
+  // again, and the root's canvas, whose badges read the same facts, is told
+  // its reads are stale, once.
+  test.each([
+    ['Refresh Stacks', (t: Setup) => t.command(STACK_COMMANDS.refresh)],
+    ['the view shown again', (t: Setup) => t.view.visibility.fire({ visible: true })],
+    ['a change of the account', (t: Setup) => t.account.fire()],
+    [
+      'a lace command that may change a stack, ended in an integrated terminal',
+      (t: Setup) => t.terminal.ended('lace stack destroy prod --yes'),
+    ],
+  ])("%s reads the whole tree again and tells the root's canvas once", async (_, change) => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();
-    await t.command(STACK_COMMANDS.refresh);
+    await change(t);
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+  });
+
+  test('the view hidden, and a command line that changes no stack, read nothing and tell no canvas', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    t.view.visibility.fire({ visible: false });
+    t.terminal.ended('lace stack list --source infra/prod');
+    t.terminal.ended('lace -o json run get run_1');
+    t.terminal.ended('echo lace stack destroy prod');
+    t.terminal.ended('lace engine');
+    await settled();
+    expect(t.redrawn).toEqual([]);
+    expect(t.panels.tick).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -1301,6 +1334,28 @@ describe('an apply', () => {
     await settled();
 
     expect(t.panels.tick.mock.calls).toEqual([[prod], [prod]]);
+  });
+
+  test("settled while the view names another root, reads the tree again and tells the view's canvas and its own once each", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': { held: true },
+      },
+    });
+    const [row] = await t.children();
+    const applying = t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+
+    t.active.fire(staging);
+    await t.children();
+    t.commands.held.find((c) => c.path === 'stack apply')?.finish([applyResult()]);
+    await applying;
+    await settled();
+
+    expect(t.panels.tick.mock.calls).toEqual([[prod], [staging], [prod]]);
   });
 
   test('held for approval, says what it waits on and offers the page of each record, which the window opens', async () => {
