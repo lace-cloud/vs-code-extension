@@ -270,24 +270,33 @@ function bindingAnswer(binding: PreviewBinding): string {
   return `${DECISION_WORDS[binding.decision] ?? binding.decision}${observed}${reason === '' ? '' : ` — ${reason}`}`;
 }
 
-// The Run-level verdict: decided at apply with why and the policy that
-// decides it, else the mode and the rules that fired in which policy, or
-// that none did, and a block's reason.
+// Why the Run-level verdict is what it is: the rule that decided it and the
+// conditions that fired, or that no rule decided.
+function decidedBy({ ruleId, rulesFired }: PreviewPolicy): string {
+  const why = [
+    ...(ruleId === '' ? [] : [`rule ${ruleId} decided`]),
+    ...(rulesFired.length === 0
+      ? []
+      : [`${rulesFired.length === 1 ? 'condition' : 'conditions'} ${rulesFired.join(', ')} fired`]),
+  ];
+  return why.length === 0 ? 'no rule decided' : why.join(', ');
+}
+
+// The Run-level verdict: decided at apply, with why and the policy that
+// decides it; else its mode, the rule that decided it and the conditions
+// that fired, the deciding policy when the result names one, and a block's
+// reason.
 function verdictText(policy: PreviewPolicy): string {
   const reason = policy.reason.trim();
   if (policy.mode === DECIDED_AT_APPLY)
     return `${DECISION_WORDS[DECIDED_AT_APPLY]} — ${reason} (policy ${policy.policyId})`;
-  const fired =
-    policy.rulesFired.length === 0
-      ? 'no rule fired'
-      : `rule(s) ${policy.rulesFired.join(', ')} fired${policy.policyId === '' ? '' : ` (policy ${policy.policyId})`}`;
+  const deciding = policy.policyId === '' ? '' : ` (policy ${policy.policyId})`;
   const blocked = policy.mode === 'policy_blocked' && reason !== '' ? `: ${reason}` : '';
-  return `${policy.mode} — ${fired}${blocked}`;
+  return `${policy.mode} — ${decidedBy(policy)}${deciding}${blocked}`;
 }
 
-// A preview's policy verdict as `lace stack preview` prints it: the
-// Run-level verdict, then, when several policies answer, one line per
-// policy with its own answer.
+// A preview's policy verdict: the Run-level verdict, then, when several
+// policies answer, one line per policy with its own answer.
 function policyText(policy: PreviewPolicy): string {
   return [
     `Policy: ${verdictText(policy)}`,
