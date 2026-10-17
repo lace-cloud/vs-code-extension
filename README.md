@@ -19,8 +19,8 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 6, which Lace CLI
-  v2.51.0 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 7, which Lace CLI
+  v2.53.0 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
   to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
@@ -36,8 +36,8 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 2. Run **Lace: Open Canvas** from the Command Palette, or right-click a folder in the Explorer and choose it there.
 3. Work on the canvas. Place modules from the **Registry** view in the Lace activity bar.
 4. Save the canvas (the canvas's Save button, `Cmd+S` / `Ctrl+S` while the canvas has focus, or **Lace: Save**).
-5. Run **Generate** (the canvas's button or **Lace: Generate**). Lace writes the `.tf` files; **Show Changes** opens
-   Source Control, where git shows the diff.
+5. Run **Generate** (the canvas's button or **Lace: Generate**). Lace writes the `.tf` files and names the ones it
+   changed; **Show Changes** opens Source Control, where git shows the diff.
 
 Under the module's `.lace/` directory, a stack's **Apply** reads `verdict.json`, `bundle.pb` and `tree-manifest.json`
 from the working tree, never from git, and the pre-commit hook that `lace hooks install` writes stages them;
@@ -157,23 +157,25 @@ its ten most recent runs. The view's description names the module; it follows th
   names the change request the run waits on: each requirement with its state and whether Lace or a change-management
   system decides it, and each record that system keeps, with its state and **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
-  document.
+  Lace Plan document, whose lines wrap.
 - A stack command refused because the module has no current certification offers **Validate**, which validates that
   module.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
-  Tearing a stack down is `lace stack destroy` in a terminal.
+  Tearing a stack down is `lace stack destroy` in a terminal. A `lace` command that may change a stack, run in
+  VS Code's integrated terminal, lists the stacks again when it ends, and the module's canvas reads its badges again;
+  for one run elsewhere, **Lace: Refresh Stacks** does the same.
 - With no module to list the stacks of, the view says why: no folder is open, with **Open Folder**; no directory holds a
   module yet, with **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
   portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.
 - **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it asks
-  for the new stack's slug, then for the cloud connection it deploys through, picked from your team's connections as
-  `lace connection list` lists them, and creates it under a progress notification. The stack is bound to the module's
-  place in its git repository, and the view lists it. A team with no cloud connection yet is told so, with
-  **Open Portal**, where connections are added. **Preview**, **Apply** and **Scan for Drift** from the Command Palette
-  on a module with no stack say to create one in the Stacks view.
+  for the new stack's slug, proposing the module directory's name, then for the cloud connection it deploys through,
+  picked from your team's connections as `lace connection list` lists them, and creates it under a progress
+  notification. The stack is bound to the module's place in its git repository, and the view lists it. A team
+  with no cloud connection yet is told so, with **Open Portal**, where connections are added. **Preview**, **Apply** and
+  **Scan for Drift** from the Command Palette on a module with no stack say to create one in the Stacks view.
 - **Lace: Import Existing Resources** (`lace.importResources`), also on the canvas's banner for a module not in Lace
   style, adopts resources that already exist into a stack of the module (`lace stack import`): you pick the stack,
   then the statefile that records them, any file you name. It saves the module's open `.tf` editors, then restructures
@@ -186,7 +188,9 @@ its ten most recent runs. The view's description names the module; it follows th
 ## Sign-in, organization and team
 
 **Lace: Sign In** runs `lace login`: it shows the confirmation code once, with **Copy Code**, and opens the sign-in page.
-**Lace: Sign Out** runs `lace logout`. The extension keeps no credentials; the CLI reads them for every command.
+**Lace: Sign Out** runs `lace logout` and says what became of this machine's API key: revoked, or not revoked and why.
+While the key may still be live, the notice is a warning, and **Open Portal** opens the page where you revoke it. The
+extension keeps no credentials; the CLI reads them for every command.
 
 The organization and team every scoped command runs in are the CLI's own selection, saved by `lace org use` and
 `lace team use`, so a terminal and VS Code always agree. **Lace: Select Organization** picks an organization and goes on
@@ -238,7 +242,7 @@ engine on your machine.
 | `lace_change_module_canvas`      | `#laceChangeModuleCanvas`      | Changes the canvas, one change per entry: place a registry module, connect, disconnect, set or clear an input, bind it to a variable, rename, delete, ungroup. |
 | `lace_describe_module_canvas`    | `#laceDescribeModuleCanvas`    | Describes the canvas: instances with their inputs and outputs, wires, groups, diagnostics, and whether it holds unsaved or ungenerated edits.                             |
 | `lace_save_module_canvas`        | `#laceSaveModuleCanvas`        | Saves the canvas, when you ask.                                                                                                                                          |
-| `lace_generate_module_terraform` | `#laceGenerateModuleTerraform` | Generates the saved canvas to Terraform, when you ask, and reports the files written or why Lace did not generate.                                                      |
+| `lace_generate_module_terraform` | `#laceGenerateModuleTerraform` | Generates the saved canvas to Terraform, when you ask, and reports the files it changed and removed or why Lace did not generate.                                     |
 | `lace_validate_module_terraform` | `#laceValidateModuleTerraform` | Runs `lace module validate` on the Terraform on disk and returns the verdict and the diagnostics.                                                                        |
 | `lace_search_module_registry`    | `#laceSearchModuleRegistry`    | Searches the Lace registry by words, system and category.                                                                                                                |
 | `lace_describe_registry_module`  | `#laceDescribeRegistryModule`  | Describes a registry module before it is placed: inputs, outputs, version and certification verdict.                                                                    |
@@ -303,7 +307,7 @@ full path of its executable.
 | Lace: Sign Out                       | `lace.signOut`                 | Signs out of Lace.                                                                                               |
 | Lace: Select Organization            | `lace.selectOrganization`      | Selects the organization, then its team.                                                                         |
 | Lace: Select Team                    | `lace.selectTeam`              | Selects a team of the current organization.                                                                      |
-| Lace: Refresh Stacks                 | `lace.refreshStacks`           | Lists the stacks again.                                                                                          |
+| Lace: Refresh Stacks                 | `lace.refreshStacks`           | Lists the stacks again, and the module's canvas reads its stack badges again.                                    |
 | Lace: Show Stacks of a Module        | `lace.stacks.chooseModule`     | Picks the module whose stacks the Stacks view lists.                                                             |
 | Lace: Preview Stack                  | `lace.previewStack`            | Previews a stack of the module: its row's, or one you pick.                                                      |
 | Lace: Apply Stack                    | `lace.applyStack`              | Applies a stack of the module: its row's, or one you pick.                                                       |

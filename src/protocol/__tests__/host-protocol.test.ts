@@ -228,12 +228,15 @@ describe('the host protocol', () => {
     expect(
       noticeOf({ op: 'notify', level: 'error', text: 'x', failure: { reason: 'no_team' } }),
     ).toBeNull();
-    expect(noticeOf({ op: 'generated', written: ['main.tf'] })).toEqual({
-      op: 'generated',
-      written: ['main.tf'],
-    });
-    expect(noticeOf({ op: 'generated', written: 'main.tf' })).toBeNull();
-    expect(noticeOf({ op: 'generated', written: [1] })).toBeNull();
+    const tree = { changed: ['main.tf'], removed: ['old.tf'], unchanged: 1, treeChanged: true };
+    expect(noticeOf({ op: 'generated', tree })).toEqual({ op: 'generated', tree });
+    expect(noticeOf({ op: 'generated', tree: { ...tree, changed: [1] } })).toBeNull();
+    expect(noticeOf({ op: 'generated', tree: { ...tree, removed: 'old.tf' } })).toBeNull();
+    expect(noticeOf({ op: 'generated', tree: { ...tree, unchanged: '1' } })).toBeNull();
+    expect(noticeOf({ op: 'generated', tree: { ...tree, treeChanged: undefined } })).toBeNull();
+    expect(
+      noticeOf({ op: 'generated', files: { written: ['main.tf'], changed: [], removed: [] } }),
+    ).toBeNull();
     expect(noticeOf({ op: 'arrangement', value: 3 })).toBeNull();
     expect(noticeOf(undefined)).toBeNull();
   });

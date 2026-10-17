@@ -11,26 +11,36 @@ const STACK = { id: 'stk_1', slug: 'prod' };
 describe("a run's title", () => {
   test.each([
     [
+      'the run its target names',
+      { root: '/work/repo/infra/prod', stack: STACK },
+      { runId: 'run_1' },
+      'run-cancel',
+      'Cancel: run_1',
+    ],
+    [
       'the stack it acts on',
       { root: '/work/repo/infra/prod', stack: STACK },
+      {},
       'import',
       'Import existing resources: prod',
     ],
     [
       'the root by its name in the workspace',
       { root: '/work/repo/infra/prod' },
+      {},
       'create',
       'Create stack: infra/prod',
     ],
     [
       'a root under no workspace folder by its path',
       { root: '/elsewhere/infra' },
+      {},
       'create',
       'Create stack: /elsewhere/infra',
     ],
-    ['nothing else when the run names neither', {}, 'create', 'Create stack'],
-  ])('names its action and %s', (_what, ctx, id, title) => {
-    expect(runTitle(binding(id), ctx, rootOfRun([repo], ctx), [repo])).toBe(title);
+    ['nothing else when the run names none of them', {}, {}, 'create', 'Create stack'],
+  ])('names its action and %s', (_what, ctx, target, id, title) => {
+    expect(runTitle(binding(id), ctx, target, rootOfRun([repo], ctx), [repo])).toBe(title);
   });
 });
 

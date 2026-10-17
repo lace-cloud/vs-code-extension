@@ -37,6 +37,11 @@ const imported = (residuals: CommandFailure['importResiduals'] = []) => ({
   changed: true,
   written: ['main.tf'],
   removed: [],
+  lock: {
+    path: '/work/repo/infra/prod',
+    lockfile: '/work/repo/infra/prod/.terraform.lock.hcl',
+    providers: [],
+  },
   diagnostics: [],
   importBlocks: 2,
   importResiduals: residuals,
