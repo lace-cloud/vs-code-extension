@@ -7,15 +7,16 @@
 // A terminal or another window can change the account too: `lace login`,
 // `lace logout`, `lace org use`. So the account is read again each time the
 // window regains focus (a terminal outside it) and each time a `lace`
-// command line ends in one of its integrated terminals (which changes no
-// focus), and a read that differs from the last one is announced: who is
-// signed in (`whoami`'s user, or the reason it gives for none), the
-// organization and the team.
+// command line ends in one of its integrated terminals, which changes no
+// focus (`onDidEndLaceCommand`), and a read that differs from the last one
+// is announced: who is signed in (`whoami`'s user, or the reason it gives
+// for none), the organization and the team.
 import type { CommandsPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandOutcome, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
 import { registerCommands } from '../vscode/commands';
+import { onDidEndLaceCommand } from '../vscode/lace-command-lines';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import {
   currentSelection,
@@ -46,9 +47,6 @@ export type AccountApi = SignInApi &
   ScopeApi & {
     window: Pick<typeof vscode.window, 'onDidChangeWindowState' | 'onDidEndTerminalShellExecution'>;
   };
-
-// A command line that runs the `lace` CLI, named bare or by its path.
-const LACE_COMMAND_LINE = /^(?:\S*[/\\])?lace(?:\.exe)?(?:\s|$)/;
 
 // The account as the CLI reads it, as one value two reads are compared by.
 async function accountRead(commands: CommandsPort): Promise<string> {
@@ -101,9 +99,7 @@ export function createAccount(
   const focus = api.window.onDidChangeWindowState((state) => {
     if (state.focused) void readAgain();
   });
-  const terminal = api.window.onDidEndTerminalShellExecution(({ execution }) => {
-    if (LACE_COMMAND_LINE.test(execution.commandLine.value.trimStart())) void readAgain();
-  });
+  const terminal = onDidEndLaceCommand(api.window, () => void readAgain());
 
   return {
     async signIn() {
