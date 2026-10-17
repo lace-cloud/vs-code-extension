@@ -375,6 +375,19 @@
         }
       }
     },
+    "languages": [
+      {
+        "id": "lace-plan",
+        "aliases": [
+          "Lace Plan"
+        ]
+      }
+    ],
+    "configurationDefaults": {
+      "[lace-plan]": {
+        "editor.wordWrap": "on"
+      }
+    },
     "chatInstructions": [
       {
         "path": "./resources/instructions/lace-modules.instructions.md"

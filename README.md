@@ -157,7 +157,7 @@ its ten most recent runs. The view's description names the module; it follows th
   names the change request the run waits on: each requirement with its state and whether Lace or a change-management
   system decides it, and each record that system keeps, with its state and **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
-  document.
+  Lace Plan document, whose lines wrap.
 - A stack command refused because the module has no current certification offers **Validate**, which validates that
   module.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.

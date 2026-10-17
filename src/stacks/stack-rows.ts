@@ -249,41 +249,53 @@ type PreviewPolicy = NonNullable<Preview['policy']>;
 type PreviewBinding = PreviewPolicy['bindings'][number];
 type PreviewEntry = Preview['advisories']['queue']['entries'][number];
 
+// What a policy answers that reads what only a run carries.
+const DECIDED_AT_APPLY = 'decided_at_apply';
+
 // The decisions a policy answers that read as words rather than as a
 // resolution kind.
 const DECISION_WORDS: Readonly<Record<string, string>> = {
-  decided_at_apply: 'decided at apply',
+  [DECIDED_AT_APPLY]: 'decided at apply',
   abstain: 'no opinion',
 };
 
 // One policy's own answer: its decision, that an observing policy's block
-// never blocks the run, and the reason it gives.
+// never blocks the Run, and the reason it gives.
 function bindingAnswer(binding: PreviewBinding): string {
   const reason = binding.reason.trim();
   const observed =
     binding.mode === 'observing' && binding.decision === 'policy_blocked'
-      ? ' (observing: an observing policy never blocks the run)'
+      ? ' (observing: an observing policy never blocks the Run)'
       : '';
   return `${DECISION_WORDS[binding.decision] ?? binding.decision}${observed}${reason === '' ? '' : ` — ${reason}`}`;
 }
 
-// A preview's policy verdict: its mode, policy and rule, then the reason it
-// gives when it gives one, the rules fired and the approval it asks for;
-// when several policies answer, each one's own answer.
-function policyText(policy: PreviewPolicy): string {
+// The Run-level verdict: decided at apply with why and the policy that
+// decides it, else the mode and the rules that fired in which policy, or
+// that none did, and a block's reason.
+function verdictText(policy: PreviewPolicy): string {
   const reason = policy.reason.trim();
+  if (policy.mode === DECIDED_AT_APPLY)
+    return `${DECISION_WORDS[DECIDED_AT_APPLY]} — ${reason} (policy ${policy.policyId})`;
+  const fired =
+    policy.rulesFired.length === 0
+      ? 'no rule fired'
+      : `rule(s) ${policy.rulesFired.join(', ')} fired${policy.policyId === '' ? '' : ` (policy ${policy.policyId})`}`;
+  const blocked = policy.mode === 'policy_blocked' && reason !== '' ? `: ${reason}` : '';
+  return `${policy.mode} — ${fired}${blocked}`;
+}
+
+// A preview's policy verdict as `lace stack preview` prints it: the
+// Run-level verdict, then, when several policies answer, one line per
+// policy with its own answer.
+function policyText(policy: PreviewPolicy): string {
   return [
-    `Policy: ${policy.mode} (${policy.policyId}, rule ${policy.ruleId})${reason === '' ? '' : `: ${reason}`}`,
-    ...(policy.rulesFired.length > 0 ? [`Rules fired: ${policy.rulesFired.join(', ')}`] : []),
-    ...(policy.approvalMode === null ? [] : [`Approval: ${policy.approvalMode}`]),
+    `Policy: ${verdictText(policy)}`,
     ...(policy.bindings.length > 1
-      ? [
-          'Policies:',
-          ...policy.bindings.map(
-            (binding) =>
-              `  ${binding.policyId}  ${binding.name} (${binding.handler}, ${binding.mode}): ${bindingAnswer(binding)}`,
-          ),
-        ]
+      ? policy.bindings.map(
+          (binding) =>
+            `  ${binding.policyId}  ${binding.name} (${binding.handler}, ${binding.mode}): ${bindingAnswer(binding)}`,
+        )
       : []),
   ].join('\n');
 }
@@ -329,16 +341,15 @@ function advisoriesText({ queue, pending, bound }: Preview['advisories']): strin
   ].join('\n');
 }
 
-// A preview as a read-only document: the plan, the policy verdict and the
+// A preview as a read-only document: the plan as terraform shows it, which
+// ends with terraform's own summary of it, the policy verdict and the
 // Advisories.
 export function previewText(preview: Preview): string {
-  const { summary, human } = preview.plan;
   const { policy } = preview;
   return [
     `Preview of ${preview.stack.slug} (tree ${preview.treeHash})`,
-    `Plan: +${summary.resourceAdd} ~${summary.resourceChange} -${summary.resourceDestroy}`,
     '',
-    human,
+    preview.plan.human,
     '',
     policy === null ? 'Policy: none applies' : policyText(policy),
     '',

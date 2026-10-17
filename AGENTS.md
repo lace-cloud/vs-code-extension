@@ -272,8 +272,10 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   with its state and its decider as the gate event names it (Lace, or a change-management system), and each record a
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
   its page, or that it is not opened yet; each record with a page is offered as **Open <kind> <reference>**, which
-  opens that page. A preview opens as a read-only `lace-preview:` document once its plan lands: the plan, the policy
-  verdict with each policy's own answer when several answer, and the Advisories.
+  opens that page. A preview opens as a read-only `lace-preview:` document once its plan lands: the plan as terraform
+  shows it, ending with terraform's own summary, the policy verdict as `lace stack preview` prints it, with one line per
+  policy when several answer, and the Advisories. The document is set to the language `lace-plan` as it opens; the
+  manifest contributes that language with no file of its own and with `editor.wordWrap` on, so its lines wrap.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
   gives (`rootlessState`): `noFolder` (Open Folder, VS Code's own `workbench.action.files.openFolder`), `noModule` (Open
   Canvas starts one), `severalModules` (Choose Module). When the stacks cannot be listed, it selects the welcome view by

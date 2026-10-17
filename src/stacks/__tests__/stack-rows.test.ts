@@ -20,10 +20,29 @@ const NO_ADVISORIES = {
   bound: 1,
 };
 
+// The plan of a preview as terraform shows it, which ends with terraform's
+// own summary of it.
+const HUMAN = [
+  'Terraform will perform the following actions:',
+  '',
+  '  # aws_s3_bucket.b will be created',
+  '  + resource "aws_s3_bucket" "b" {',
+  '      + bucket = "b"',
+  '    }',
+  '',
+  'Plan: 1 to add, 0 to change, 0 to destroy.',
+].join('\n');
+
 // A preview whose policy verdict gives `reason`.
 const preview = (
   reason: string,
-  more: { rulesFired?: string[]; approvalMode?: string | null; bindings?: Binding[] } = {},
+  more: {
+    mode?: string;
+    policyId?: string;
+    rulesFired?: string[];
+    approvalMode?: string | null;
+    bindings?: Binding[];
+  } = {},
   advisories: object = NO_ADVISORIES,
 ) =>
   parseBound('stack preview', {
@@ -31,7 +50,7 @@ const preview = (
     treeHash: 'h1',
     plan: {
       summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
-      human: '+ aws_s3_bucket.b',
+      human: HUMAN,
     },
     policy: {
       mode: 'require_approval',
@@ -64,32 +83,73 @@ const part = (text: string, heading: string): string[] => {
   return lines.slice(from, to);
 };
 
+describe("a preview's document", () => {
+  test("holds the plan as terraform shows it, whose summary is the document's one Plan line, then the verdict", () => {
+    const text = previewText(preview(''));
+    const lines = text.split('\n');
+    expect(lines.filter((line) => line.startsWith('Plan:'))).toEqual([
+      'Plan: 1 to add, 0 to change, 0 to destroy.',
+    ]);
+    expect(lines.slice(0, 11)).toEqual(['Preview of prod (tree h1)', '', ...HUMAN.split('\n'), '']);
+    expect(policyLine(text)).toBe('Policy: require_approval — no rule fired');
+  });
+});
+
+// The verdict reads as `lace stack preview` prints it.
 describe("a preview's policy verdict", () => {
-  test('names its mode, policy and rule, then the reason it gives', () => {
+  test('names its mode and that no rule fired', () => {
+    expect(policyLine(previewText(preview('')))).toBe('Policy: require_approval — no rule fired');
+  });
+
+  test('names the rules that fired and the policy they fired in, when it names one', () => {
+    expect(policyLine(previewText(preview('', { rulesFired: ['r1', 'r2'] })))).toBe(
+      'Policy: require_approval — rule(s) r1, r2 fired (policy pol_1)',
+    );
+    expect(policyLine(previewText(preview('', { rulesFired: ['r1'], policyId: '' })))).toBe(
+      'Policy: require_approval — rule(s) r1 fired',
+    );
+  });
+
+  test('gives the reason of a block, with no dangling colon when it gives none', () => {
+    const blocked = (reason: string) =>
+      policyLine(
+        previewText(preview(reason, { mode: 'policy_blocked', rulesFired: ['block-adds'] })),
+      );
+    expect(blocked('Freeze: adds are blocked')).toBe(
+      'Policy: policy_blocked — rule(s) block-adds fired (policy pol_1): Freeze: adds are blocked',
+    );
+    expect(blocked('')).toBe('Policy: policy_blocked — rule(s) block-adds fired (policy pol_1)');
+    expect(blocked('  ')).toBe('Policy: policy_blocked — rule(s) block-adds fired (policy pol_1)');
+  });
+
+  test('gives no reason for an answer that is not a block', () => {
     expect(policyLine(previewText(preview('a change to prod needs approval')))).toBe(
-      'Policy: require_approval (pol_1, rule rule_1): a change to prod needs approval',
+      'Policy: require_approval — no rule fired',
     );
   });
 
-  test('with no reason ends at its rule, with no dangling colon', () => {
-    expect(policyLine(previewText(preview('')))).toBe(
-      'Policy: require_approval (pol_1, rule rule_1)',
-    );
-    expect(policyLine(previewText(preview('  ')))).toBe(
-      'Policy: require_approval (pol_1, rule rule_1)',
+  test('decided at apply, says why and names the policy that decides it', () => {
+    expect(
+      policyLine(
+        previewText(
+          preview('it reads the stack’s drift when the run reaches the gate', {
+            mode: 'decided_at_apply',
+          }),
+        ),
+      ),
+    ).toBe(
+      'Policy: decided at apply — it reads the stack’s drift when the run reaches the gate (policy pol_1)',
     );
   });
 
-  test('is followed by the rules fired and the approval it asks for', () => {
+  test('is one line, whatever rules fired and whatever approval it asks for', () => {
     const text = previewText(preview('', { rulesFired: ['r1', 'r2'], approvalMode: 'any_one' }));
     expect(part(text, 'Policy:')).toEqual([
-      'Policy: require_approval (pol_1, rule rule_1)',
-      'Rules fired: r1, r2',
-      'Approval: any_one',
+      'Policy: require_approval — rule(s) r1, r2 fired (policy pol_1)',
     ]);
   });
 
-  test('when several policies answer, lists each one with its own answer', () => {
+  test('when several policies answer, is followed by one line per policy with its own answer', () => {
     const text = previewText(
       preview('', {
         bindings: [
@@ -129,10 +189,9 @@ describe("a preview's policy verdict", () => {
       }),
     );
     expect(part(text, 'Policy:')).toEqual([
-      'Policy: require_approval (pol_1, rule rule_1)',
-      'Policies:',
+      'Policy: require_approval — no rule fired',
       '  pol_1  prod-gate (opa, gating): require_approval — a change to prod needs approval',
-      '  pol_2  cost (builtin, observing): policy_blocked (observing: an observing policy never blocks the run) — over budget',
+      '  pol_2  cost (builtin, observing): policy_blocked (observing: an observing policy never blocks the Run) — over budget',
       '  pol_3  tags (builtin, gating): no opinion',
       '  pol_4  actor (external, gating): decided at apply — reads the submitting actor',
     ]);
@@ -153,7 +212,7 @@ describe("a preview's policy verdict", () => {
         ],
       }),
     );
-    expect(part(text, 'Policy:')).toEqual(['Policy: require_approval (pol_1, rule rule_1)']);
+    expect(part(text, 'Policy:')).toEqual(['Policy: require_approval — no rule fired']);
   });
 });
 
