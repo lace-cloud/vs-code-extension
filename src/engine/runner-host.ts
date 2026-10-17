@@ -15,13 +15,16 @@
 // of its own: the Stacks view asks it whether any command is under way
 // through the package's `commandUnderWay`, the one place that does.
 //
+// Each tick of the store (a run started or settled, a scan or a cancel done)
+// is told with the command run the runner's own tick names
+// (`ActionRunner.onDidTick`): its `RunCtx` says which root and stack the
+// reads it made stale are about, so a surface refreshes that root. The
+// runner built again over a restarted engine tells its ticks the same way.
+//
 // Each run is carried through everything the runner does for it in an
 // async context (`AsyncLocalStorage`), which attributes to the run what
 // names no run of its own:
 //
-// - A tick of the store (a run started or settled, a scan or a cancel done)
-//   is told with the `RunCtx` of the run whose binding ticked it, so a
-//   surface refreshes the root that run was about.
 // - A form, the arguments a binding leaves to the host: what the run's
 //   `RunCtx` object was answered before is reused by argument name, and the
 //   answerer asks the rest. The host keeps the one form the runner handed it
@@ -43,11 +46,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   type ActionContribution,
+  type ActionRunner,
   type ActionRunnerOptions,
   type ActionTarget,
   answering,
   CORE_COMMAND_ACTIONS,
   type CommandFailure,
+  type CommandRun,
   type CommandsPort,
   createActionRunner,
   createResultStore,
@@ -96,9 +101,9 @@ export type RunnerHost = {
     ctx: RunCtx,
     target?: ActionTarget,
   ) => Promise<{ ended: Promise<void> }>;
-  // `listener` is called with the `RunCtx` of the run whose binding ticked
-  // the store, at each tick.
-  onDidTick: (listener: (ctx: RunCtx) => void) => () => void;
+  // `listener` is called with the command run the runner's tick names, at
+  // each tick of the store a binding made.
+  onDidTick: (listener: (run: CommandRun) => void) => () => void;
   // The explicit user cancel of the `kind` slot's invocation.
   cancel: (kind: ResultKind) => Promise<void>;
   dispose: () => void;
@@ -111,7 +116,7 @@ export type RunnerHostOptions = {
   onRunLog: NonNullable<ActionRunnerOptions['onRunLog']>;
 };
 
-type Built = { port: CommandsPort; runner: ReturnType<typeof createActionRunner> };
+type Built = { port: CommandsPort; runner: ActionRunner };
 
 // The package's binding `id`.
 export function binding(id: string): ActionContribution {
@@ -160,7 +165,7 @@ function startSettled(run: Run): void {
 
 export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
   const store = createResultStore();
-  const tickListeners = new Set<(ctx: RunCtx) => void>();
+  const tickListeners = new Set<(run: CommandRun) => void>();
   // The run whose binding is executing.
   const runContext = new AsyncLocalStorage<Run>();
   // What each `RunCtx` object was answered, by argument name.
@@ -168,14 +173,9 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
   // The form the runner handed the host last, while its prompts may still
   // settle it, and the run it is for.
   let open: { form: Form; run: Run } | undefined;
-  let seenTick = store.getTick();
-  const offStore = store.subscribe(() => {
-    const tick = store.getTick();
-    if (tick === seenTick) return;
-    seenTick = tick;
-    const run = runContext.getStore();
-    if (run) for (const listener of [...tickListeners]) listener(run.ctx);
-  });
+  const ticked = (run: CommandRun) => {
+    for (const listener of [...tickListeners]) listener(run);
+  };
   let built: Built | undefined;
 
   // `port` with each invocation held by the run that started it, from its
@@ -282,17 +282,18 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
         }),
   };
 
-  async function runner(): Promise<Built['runner']> {
+  // The runner over the engine's port now, built again when the engine was
+  // restarted; disposing the one it replaces stops that one's ticks.
+  async function runner(): Promise<ActionRunner> {
     const port = await options.commands();
     if (built?.port !== port) {
       built?.runner.dispose();
-      built = {
-        port,
-        runner: createActionRunner({ commands: heldByRun(port), presenter }, store, {
-          onRunLog: options.onRunLog,
-          onPendingFormChange: formChanged,
-        }),
-      };
+      const made = createActionRunner({ commands: heldByRun(port), presenter }, store, {
+        onRunLog: options.onRunLog,
+        onPendingFormChange: formChanged,
+      });
+      made.onDidTick(ticked);
+      built = { port, runner: made };
     }
     return built.runner;
   }
@@ -302,10 +303,10 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
     ctx: RunCtx,
     target: ActionTarget = {},
   ): Promise<{ ended: Promise<void> }> {
-    const built = await runner();
+    const current = await runner();
     const started = begun(action, ctx, target);
     try {
-      await runContext.run(started, () => built.run(action, ctx, target));
+      await runContext.run(started, () => current.run(action, ctx, target));
     } finally {
       release(started);
     }
@@ -323,7 +324,6 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
       await built?.runner.cancel(kind);
     },
     dispose() {
-      offStore();
       built?.runner.dispose();
     },
   };
