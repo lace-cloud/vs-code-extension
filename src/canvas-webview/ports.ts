@@ -2,9 +2,9 @@
 // mapping's `source`, `editor`, `commands` and `context` over the bridge,
 // `viewState` from what the host kept, and a `presenter` whose notices and
 // confirmations are the host's dialogs; a notice keeps the failure document
-// it carries. The editor's Generate tells the host the files a Generate
-// that succeeded wrote, which the host offers to show as Lace: Generate
-// does. The object is built once per boot.
+// it carries. The editor's Generate tells the host what a Generate that
+// succeeded reports of the tree it wrote, which the host says and offers to
+// show as Lace: Generate does. The object is built once per boot.
 import {
   type BridgeEngineCaller,
   type CanvasPorts,
@@ -35,13 +35,16 @@ export async function canvasPorts(
 }
 
 // A Generate's events as they come, the host told the files one that
-// succeeded wrote.
+// succeeded wrote, changed and removed.
 async function* announced(
   events: AsyncIterable<GenerateEvent>,
   host: HostCaller,
 ): AsyncGenerator<GenerateEvent> {
   for await (const event of events) {
-    if (event.type === 'success') host.notify({ op: 'generated', written: event.written });
+    if (event.type === 'success') {
+      const { written, changed, removed } = event;
+      host.notify({ op: 'generated', files: { written, changed, removed } });
+    }
     yield event;
   }
 }
