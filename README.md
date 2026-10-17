@@ -162,7 +162,9 @@ its ten most recent runs. The view's description names the module; it follows th
   module.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
-  Tearing a stack down is `lace stack destroy` in a terminal.
+  Tearing a stack down is `lace stack destroy` in a terminal. A `lace` command that may change a stack, run in
+  VS Code's integrated terminal, lists the stacks again when it ends, and the module's canvas reads its badges again;
+  for one run elsewhere, **Lace: Refresh Stacks** does the same.
 - With no module to list the stacks of, the view says why: no folder is open, with **Open Folder**; no directory holds a
   module yet, with **Open Canvas** to start one; or several do, with **Choose Module** to pick one.
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
@@ -186,7 +188,9 @@ its ten most recent runs. The view's description names the module; it follows th
 ## Sign-in, organization and team
 
 **Lace: Sign In** runs `lace login`: it shows the confirmation code once, with **Copy Code**, and opens the sign-in page.
-**Lace: Sign Out** runs `lace logout`. The extension keeps no credentials; the CLI reads them for every command.
+**Lace: Sign Out** runs `lace logout` and says what became of this machine's API key: revoked, or not revoked and why.
+While the key may still be live, the notice is a warning, and **Open Portal** opens the page where you revoke it. The
+extension keeps no credentials; the CLI reads them for every command.
 
 The organization and team every scoped command runs in are the CLI's own selection, saved by `lace org use` and
 `lace team use`, so a terminal and VS Code always agree. **Lace: Select Organization** picks an organization and goes on
@@ -303,7 +307,7 @@ full path of its executable.
 | Lace: Sign Out                       | `lace.signOut`                 | Signs out of Lace.                                                                                               |
 | Lace: Select Organization            | `lace.selectOrganization`      | Selects the organization, then its team.                                                                         |
 | Lace: Select Team                    | `lace.selectTeam`              | Selects a team of the current organization.                                                                      |
-| Lace: Refresh Stacks                 | `lace.refreshStacks`           | Lists the stacks again.                                                                                          |
+| Lace: Refresh Stacks                 | `lace.refreshStacks`           | Lists the stacks again, and the module's canvas reads its stack badges again.                                    |
 | Lace: Show Stacks of a Module        | `lace.stacks.chooseModule`     | Picks the module whose stacks the Stacks view lists.                                                             |
 | Lace: Preview Stack                  | `lace.previewStack`            | Previews a stack of the module: its row's, or one you pick.                                                      |
 | Lace: Apply Stack                    | `lace.applyStack`              | Applies a stack of the module: its row's, or one you pick.                                                       |
