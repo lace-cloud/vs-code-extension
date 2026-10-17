@@ -76,6 +76,9 @@ async function setup(
       showInformationMessage: vi.fn(
         async (_text: string, ..._actions: string[]): Promise<string | undefined> => undefined,
       ),
+      showWarningMessage: vi.fn(
+        async (_text: string, ..._actions: string[]): Promise<string | undefined> => undefined,
+      ),
       showErrorMessage: vi.fn(async () => undefined),
       createQuickPick: quickPicks.createQuickPick,
     },
@@ -400,13 +403,63 @@ describe('signing in', () => {
     expect(failed.changed).not.toHaveBeenCalled();
   });
 
-  test('signing out runs logout and announces the change', async () => {
+  test.each([
+    [
+      'the key Lace revoked',
+      'revoked',
+      "Signed out of Lace. This machine's API key is revoked and its credentials removed.",
+    ],
+    [
+      'no key saved',
+      'none',
+      'You were not signed in to Lace: no credentials were saved on this machine.',
+    ],
+  ] as const)('signing out, with %s, runs logout, says so, offers nothing and announces the change', async (_, revocation, said) => {
     const { api, account, changed } = await setup({
-      logout: { documents: [{ loggedOut: true, revocation: 'revoked' }] },
+      logout: { documents: [{ loggedOut: true, revocation }] },
     });
     await account.signOut();
-    expect(api.window.showInformationMessage).toHaveBeenCalledWith('Signed out of Lace.');
+    expect(shownBy(api.window.showInformationMessage)).toEqual([[said]]);
+    expect(api.window.showWarningMessage).not.toHaveBeenCalled();
+    expect(api.env.openExternal).not.toHaveBeenCalled();
     expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  const PORTAL = 'https://lace.example.com/account';
+  const LIVE = 'The key may still be live. Revoke it in the portal under Account, CLI keys.';
+  test.each([
+    [
+      'refused',
+      'the Lace server that issued this key does not accept it',
+      'Signed out of Lace. The credentials are removed from this machine, but Lace did not revoke the API key: the Lace server that issued this key does not accept it.',
+    ],
+    [
+      'unreachable',
+      'dial tcp: connection refused',
+      'Signed out of Lace. The credentials are removed from this machine, but Lace could not be reached to revoke the API key: dial tcp: connection refused.',
+    ],
+    [
+      'unreadable',
+      'open credentials.json: permission denied',
+      'Signed out of Lace. The credentials are removed from this machine; they could not be read, so their API key was not revoked: open credentials.json: permission denied.',
+    ],
+  ] as const)('signing out with the key %s announces the change, warns that the key may still be live, and Open Portal opens the page the result names', async (revocation, detail, said) => {
+    const { api, account, changed } = await setup({
+      logout: { documents: [{ loggedOut: true, revocation, detail, portalUrl: PORTAL }] },
+    });
+    let answer: (title: string) => void = () => {};
+    api.window.showWarningMessage.mockImplementationOnce(
+      () => new Promise<string | undefined>((resolve) => (answer = resolve)),
+    );
+    await account.signOut();
+    expect(shownBy(api.window.showWarningMessage)).toEqual([[`${said} ${LIVE}`, 'Open Portal']]);
+    expect(api.window.showInformationMessage).not.toHaveBeenCalled();
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(api.env.openExternal).not.toHaveBeenCalled();
+
+    answer('Open Portal');
+    await settled();
+    expect(api.env.openExternal).toHaveBeenCalledWith({ url: PORTAL });
   });
 });
 
