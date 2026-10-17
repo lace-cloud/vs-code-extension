@@ -4,6 +4,7 @@ import {
   type Action,
   type ApplyResult,
   type CanvasSource,
+  GENERATE_STAGES,
   type GenerateEvent,
   InputMode,
   parseBound,
@@ -115,8 +116,9 @@ function reduce(bundle: Bundle, action: Action): Bundle {
 
 // A session of the fixture's canvas, whose commands run on `commands`. The
 // editor's apply, save and generate resolve once their frame is delivered,
-// as the engine mapping's do, and a Generate holds the session's one
-// Generate (`generating`) from its first frame to its last.
+// as the engine mapping's do. A Generate holds the session's one Generate
+// (`generating`, at the stage it reached) from its first frame to its
+// last, reporting each stage, and writes `main.tf`, which it changed.
 export function fakeSession(sessionId = 'session-1', commands = fakeCommands({}).port) {
   let state: CanvasSource = {
     bundle: fixtureBundle(),
@@ -161,11 +163,16 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
     }),
     generate: vi.fn(() =>
       (async function* (): AsyncGenerator<GenerateEvent> {
-        publish({ ...state, generating: true });
+        for (const stage of GENERATE_STAGES) {
+          publish({ ...state, generating: stage });
+          yield { type: 'progress', stage };
+        }
         publish({ ...state, generating: false, ungenerated: false });
         yield {
           type: 'success',
           written: ['main.tf'],
+          changed: ['main.tf'],
+          removed: [],
           validate: parseBound('module validate', VALIDATED),
         };
       })(),
