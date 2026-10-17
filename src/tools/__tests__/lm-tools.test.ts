@@ -225,7 +225,7 @@ describe('the tools', () => {
     const result = await tool('lace_generate_module_terraform').call(prod, {});
     expect(buffer.save).toHaveBeenCalledOnce();
     expect(fake.editor.generate).toHaveBeenCalledOnce();
-    expect(result.content).toContain('Files written: main.tf');
+    expect(result.content).toContain('Generated the Terraform. Changed main.tf.');
   });
 
   test('generate with a buffer that did not save generates nothing and says so', async () => {
