@@ -286,9 +286,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
   its page, or that it is not opened yet; each record with a page is offered as **Open <kind> <reference>**, which
   opens that page. A preview opens as a read-only `lace-preview:` document once its plan lands: the plan as terraform
-  shows it, ending with terraform's own summary; the policy verdict, which says every fact of the preview's policy
-  result (its mode, the rule that decided it, the conditions that fired, the deciding policy, a block's reason or why it
-  is decided at apply), with one line per policy and its own answer when several answer; and the Advisories. The
+  shows it, ending with terraform's own summary; the policy verdict, which states the result's mode, the rule that
+  decided it, the conditions that fired, the deciding policy, and a block's reason or why it is decided at apply, then
+  one line per policy with its own answer when several answer; and the Advisories. The
   document is set to the language `lace-plan` as it opens; the manifest contributes that language with no file of its
   own and with `editor.wordWrap` on, so its lines wrap.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
