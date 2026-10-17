@@ -11,6 +11,7 @@
 import {
   type CommandFailure,
   type ConfirmSpec,
+  type GenerateEvent,
   parseCommandFailure,
   type StackRef,
 } from '@lace-cloud/canvas/engine';
@@ -72,17 +73,26 @@ export type HostCalls = {
   importResources: { request: Record<string, never>; response: null };
 };
 
+// What a Generate that succeeded reports of the tree it wrote, as the
+// engine reports it: every file it wrote (the whole render), the ones whose
+// bytes it changed, and the source tf it removed.
+export type Generated = Pick<
+  Extract<GenerateEvent, { type: 'success' }>,
+  'written' | 'changed' | 'removed'
+>;
+
 // Webview → host, one way. `focus` is the page's own window gaining or
 // losing focus, which fires wherever focus goes next. `notify` carries the
 // failure document of the command it is about, when that command wrote
-// one, so the host offers the ways out its reason names. `generated` names
-// the files the canvas's own Generate wrote.
+// one, so the host offers the ways out its reason names. `generated` is
+// what the canvas's own Generate that succeeded reports of the tree it
+// wrote.
 export type HostNotice =
   | { op: 'arrangement'; value: CanvasArrangement }
   | { op: 'notify'; level: 'info' | 'warn' | 'error'; text: string; failure?: CommandFailure }
   | { op: 'unsaved'; value: boolean }
   | { op: 'focus'; value: boolean }
-  | { op: 'generated'; written: string[] };
+  | { op: 'generated'; files: Generated };
 
 // Host → webview, one way: the root's picked stack changed, or a run the
 // host started settled and the canvas's reads are stale.
@@ -110,6 +120,17 @@ const LEVELS = ['info', 'warn', 'error'];
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+
+const strings = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((each) => typeof each === 'string');
+
+function generatedOf(value: unknown): Generated | null {
+  if (!record(value)) return null;
+  const { written, changed, removed } = value;
+  return strings(written) && strings(changed) && strings(removed)
+    ? { written, changed, removed }
+    : null;
+}
 
 function inbound(frame: unknown): CallFrame | NoticeFrame | null {
   if (!record(frame)) return null;
@@ -146,10 +167,8 @@ export function noticeOf(value: unknown): HostNotice | null {
     return typeof value.value === 'boolean' ? { op: value.op, value: value.value } : null;
   }
   if (value.op === 'generated') {
-    const { written } = value;
-    return Array.isArray(written) && written.every((file) => typeof file === 'string')
-      ? { op: 'generated', written }
-      : null;
+    const files = generatedOf(value.files);
+    return files ? { op: 'generated', files } : null;
   }
   if (value.op === 'notify') {
     const { level, text } = value;
