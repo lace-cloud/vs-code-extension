@@ -141,12 +141,13 @@ over a restarted engine tells its ticks the same way. The host runs each binding
 
 - The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
   object was answered before is reused by argument name; the answerer (`vscode/form-answerer.ts`) asks the rest, one
-  prompt per argument name: `slug` an input box that opens on the slug the root's directory name makes, selected (empty
-  when the name makes none), and refuses an empty value, `connection` a pick from `lace connection list`, on screen
-  while the list is read (a list that cannot be read, or an empty one, closes it, cancels the form and says why),
-  `state` an open dialog for one file; any other name cancels the form with a notice. A dismissed prompt cancels the
-  form. The host keeps the form the runner handed it last: a form superseded by a newer one submits and cancels nothing
-  when its prompts settle. A submit runs in the run's context again.
+  prompt per argument name: `slug` an input box that opens on the root's directory name as it is, selected, and refuses
+  an empty value (which names are slugs is the API's rule, and the CLI refuses one that is none with the API's message),
+  `connection` a pick from `lace connection list`, on screen while the list is read (a list that cannot be read, or an
+  empty one, closes it, cancels the form and says why), `state` an open dialog for one file; any other name cancels the
+  form with a notice. A dismissed prompt cancels the form. The host keeps the form the runner handed it last: a form
+  superseded by a newer one submits and cancels nothing when its prompts settle. A submit runs in the run's context
+  again.
 - A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
   each invocation it started. `run` resolves when the runner's call does, with `ended`. A run a trigger starts (Create
@@ -285,9 +286,11 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
   its page, or that it is not opened yet; each record with a page is offered as **Open <kind> <reference>**, which
   opens that page. A preview opens as a read-only `lace-preview:` document once its plan lands: the plan as terraform
-  shows it, ending with terraform's own summary, the policy verdict as `lace stack preview` prints it, with one line per
-  policy when several answer, and the Advisories. The document is set to the language `lace-plan` as it opens; the
-  manifest contributes that language with no file of its own and with `editor.wordWrap` on, so its lines wrap.
+  shows it, ending with terraform's own summary; the policy verdict, which says every fact of the preview's policy
+  result (its mode, the rule that decided it, the conditions that fired, the deciding policy, a block's reason or why it
+  is decided at apply), with one line per policy and its own answer when several answer; and the Advisories. The
+  document is set to the language `lace-plan` as it opens; the manifest contributes that language with no file of its
+  own and with `editor.wordWrap` on, so its lines wrap.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
   gives (`rootlessState`): `noFolder` (Open Folder, VS Code's own `workbench.action.files.openFolder`), `noModule` (Open
   Canvas starts one), `severalModules` (Choose Module). When the stacks cannot be listed, it selects the welcome view by
@@ -378,9 +381,9 @@ before the session closes. A change to the setting re-arms every attachment. The
 ## Account
 
 `account/`: Sign In runs `lace login` (the confirmation code shown once with Copy Code, the page opened once, under a
-cancellable progress notification); Sign Out runs `lace logout` and says what became of the machine's API key as the
-result's `revocation` and `detail` say it, as the CLI's table does; while the key may still be live (the result names
-the portal page, `portalUrl`, where it is revoked) the notice is a warning whose Open Portal opens that page.
+cancellable progress notification); Sign Out runs `lace logout`, whose notice is the machine's API key's fate from the
+result: its `revocation`, and `detail`, why it was not revoked; while the key may still be live (the result names the
+portal page, `portalUrl`, where it is revoked) the notice is a warning whose Open Portal opens that page.
 Organization and team are the CLI's: `org list`, `org use`, `team list`, `team use`, `org current`, `team current`, all
 in the home. Each pick is on screen at once and fills when its read settles (`vscode/pick.ts`). Selecting an
 organization goes on to its team: the team pick opens as the organization is saved, its read `org use` then the teams,
