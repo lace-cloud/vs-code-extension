@@ -121,6 +121,7 @@ const IMPORTED = {
   changed: true,
   written: ['main.tf'],
   removed: [],
+  lock: { path: '/repo/infra', lockfile: '/repo/infra/.terraform.lock.hcl', providers: [] },
   diagnostics: [],
   importBlocks: 2,
   importResiduals: [],
@@ -175,10 +176,10 @@ describe('the runner host', () => {
     expect(runners.store.getSnapshot().run?.outcome).toEqual({ kind: 'succeeded' });
   });
 
-  test('each tick is told with the RunCtx of the run whose binding ticked it, however runs interleave', async () => {
+  test("each tick is told with the run the runner's tick names: its command and the RunCtx it was started with, however runs interleave", async () => {
     const { window, runners } = host({ 'stack scan': { held: true } });
-    const ticked: (string | undefined)[] = [];
-    runners.onDidTick((ctx) => ticked.push(ctx.root));
+    const ticked: CommandRun[] = [];
+    runners.onDidTick((run) => ticked.push(run));
     const prod = { root: '/repo/prod', stack: STACK };
     const staging = { root: '/repo/staging', stack: { id: 'stk_2', slug: 'staging' } };
 
@@ -190,7 +191,12 @@ describe('the runner host', () => {
     prodScan.finish([{ triggered: true, reason: null, settled: null }]);
     await settled();
 
-    expect(ticked).toEqual(['/repo/staging', '/repo/prod']);
+    expect(ticked.map((run) => [run.path, run.ctx.root])).toEqual([
+      ['stack scan', '/repo/staging'],
+      ['stack scan', '/repo/prod'],
+    ]);
+    expect(ticked[0].ctx).toBe(staging);
+    expect(ticked[1].ctx).toBe(prod);
   });
 
   test('one store for the window: an apply of one root is refused while one runs anywhere', async () => {
@@ -201,19 +207,23 @@ describe('the runner host', () => {
     expect(presenter.notify).toHaveBeenCalledWith('warn', 'A run is in progress');
   });
 
-  test('a restarted engine is a new port: the runner is built again and the store kept', async () => {
+  test('a restarted engine is a new port: the runner is built again, the store kept, and its ticks told', async () => {
     const { window, runners } = host({ 'stack apply': { documents: [RESULT] } });
+    const ticked: (string | undefined)[] = [];
+    runners.onDidTick((run) => ticked.push(run.ctx.root));
     await runners.run(action('apply'), { root: '/repo/infra', stack: STACK });
     await settled();
     const store = runners.store;
     const before = window.commands;
 
     window.commands = fakeCommands({ 'stack apply': { documents: [RESULT] } });
-    await runners.run(action('apply'), { root: '/repo/infra', stack: STACK });
+    await runners.run(action('apply'), { root: '/repo/next', stack: STACK });
     await settled();
     expect(before.invoked).toHaveLength(1);
     expect(window.commands.invoked).toHaveLength(1);
     expect(runners.store).toBe(store);
+    // An apply ticks at its start and at its settle.
+    expect(ticked).toEqual(['/repo/infra', '/repo/infra', '/repo/next', '/repo/next']);
   });
 
   test('the store it hands out marks a command running from its start to its end, however it ends', async () => {
@@ -280,7 +290,7 @@ describe("a run's form", () => {
       'stack create': { documents: [CREATED] },
     });
     const ticked: RunCtx[] = [];
-    runners.onDidTick((ctx) => ticked.push(ctx));
+    runners.onDidTick((run) => ticked.push(run.ctx));
     const ctx = { root: '/repo/infra' };
 
     await runners.run(action('create'), ctx);
