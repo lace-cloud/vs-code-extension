@@ -64,8 +64,12 @@ describe('one runner for the window', () => {
     const home = signedOutHome();
     const { a, b } = twoRoots();
     const { commands, runner } = window(home);
-    // `a` is certified; `b` is not.
+    // `a` is certified and locked, as a developer readies a module to apply
+    // (an apply refuses a root with no `.terraform.lock.hcl` before it reads
+    // any credential); `b` is neither. The module calls no provider, so its
+    // lock pins none and reaches no network.
     await commandDocument(await commands.at(a), 'module validate', {});
+    await commandDocument(await commands.at(a), 'module lock', {});
 
     await runner.run(binding('apply'), { root: a, stack: { id: 'stk_a', slug: 'a' } });
     // Past `a`'s certification, the apply needs credentials, which are
