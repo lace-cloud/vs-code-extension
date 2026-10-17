@@ -9,11 +9,11 @@
 // sign-in waits on the person in the browser, under a progress notification
 // whose Cancel withdraws it.
 //
-// Signing out says what `lace logout` reports became of the API key the
-// machine held, as its table says it: revoked, not revoked and why, or that
-// none was saved. When the key may still be live (the result names the
-// portal page where it is revoked), the notice is a warning and Open Portal
-// opens that page.
+// Signing out's notice is the fate of the API key the machine held, from
+// `lace logout`'s result: revoked, not revoked and why, or that none was
+// saved. When the key may still be live (the result names the portal page
+// where it is revoked), the notice is a warning and Open Portal opens that
+// page.
 import {
   CommandExitError,
   type CommandsPort,
@@ -113,8 +113,7 @@ export async function signIn(
 
 type SignedOut = JsonOf<'logout'>;
 
-// What became of the key `lace logout` ended, by its `revocation`, as the
-// CLI's table says it.
+// What became of the key `lace logout` ended, by the result's `revocation`.
 const KEY_FATE: Readonly<Record<SignedOut['revocation'], string>> = {
   revoked: "Signed out of Lace. This machine's API key is revoked and its credentials removed",
   refused:
