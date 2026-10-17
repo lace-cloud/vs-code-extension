@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.14.1",
+  "version": "0.16.0",
   "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
@@ -516,7 +516,7 @@
         "displayName": "Generate module Terraform",
         "toolReferenceName": "laceGenerateModuleTerraform",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Writes the Terraform for a Lace module canvas: the saved canvas rendered to the module's .tf files. Returns the files written, or why Lace did not generate. Call it only when the developer asks to generate.",
+        "modelDescription": "Writes the Terraform for a Lace module canvas: the saved canvas rendered to the module's .tf files. Returns the files it changed and removed, or why Lace did not generate. Call it only when the developer asks to generate.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -649,11 +649,11 @@
     ]
   },
   "dependencies": {
-    "@lace-cloud/canvas": "0.28.0",
-    "@lace-cloud/chat-core": "0.28.0",
-    "@lace-cloud/design-tokens": "0.28.0",
-    "@lace-cloud/host": "0.28.0",
-    "@lace-cloud/proto": "0.28.0",
+    "@lace-cloud/canvas": "0.30.0",
+    "@lace-cloud/chat-core": "0.30.0",
+    "@lace-cloud/design-tokens": "0.30.0",
+    "@lace-cloud/host": "0.30.0",
+    "@lace-cloud/proto": "0.30.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
