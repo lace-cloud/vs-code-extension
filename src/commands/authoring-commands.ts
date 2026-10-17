@@ -3,10 +3,11 @@
 //
 // Save and Generate run the canvas operations' one rule each, as the chat
 // tools do. Generate shows its progress, by the stage the engine reports,
-// then what the engine reports it did to the tree, the files it changed and
-// removed, with Show Changes, which opens Source Control, or the engine's
-// refusal by its reason. A Generate the canvas's own button ran ends with
-// the same notice (`generated`).
+// then what it did to the tree as the package reads its success
+// (`generatedTree`), the files it changed and removed, with Show Changes,
+// which opens Source Control, or the engine's refusal by its reason. A
+// Generate the canvas's own button ran ends with the same notice
+// (`generated`).
 //
 // Validate, Convert, Format, Scan and Generate Docs take no session and
 // run through the commands mapping in that root, as the same command typed
@@ -43,8 +44,10 @@ import {
   type BoundPath,
   type CommandFailure,
   diagnosticsOfDocument,
+  type GeneratedTree,
   type GenerateEvent,
   type GenerateStage,
+  generatedTree,
   type JsonOf,
   Reason,
 } from '@lace-cloud/canvas/engine';
@@ -53,7 +56,6 @@ import type * as vscode from 'vscode';
 import { saveFailureText } from '../autosave/autosave-policy';
 import { commandOutcome } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import type { Generated } from '../protocol/host-protocol';
 import {
   type AuthoringRoot,
   fileUri,
@@ -152,19 +154,15 @@ export function convertedText(
   return `Converted ${label}: ${wrote}${deleted}${verdict}`;
 }
 
-// Whether a Generate changed the tree: a file whose bytes it changed, or a
-// source tf it removed.
-const changedTree = ({ changed, removed }: Generated): boolean =>
-  changed.length > 0 || removed.length > 0;
-
-// What a Generate of the root `label` did to the tree, as the engine
-// reports it: the files whose bytes it changed, the source tf it removed,
-// and how many of the files it wrote, the whole render, it left as they
-// were; or that it changed nothing.
-function generatedText(label: string, files: Generated): string {
-  if (!changedTree(files)) return `Generated the Terraform of ${label}: nothing changed.`;
-  const { written, changed, removed } = files;
-  const unchanged = written.length - changed.length;
+// What a Generate of the root `label` did to the tree, as the package reads
+// it (`generatedTree`): the files whose bytes it changed, the source tf it
+// removed, and how many of the files it wrote it left as they were; or that
+// it changed nothing.
+function generatedText(
+  label: string,
+  { changed, removed, unchanged, treeChanged }: GeneratedTree,
+): string {
+  if (!treeChanged) return `Generated the Terraform of ${label}: nothing changed.`;
   const said = [
     ...(changed.length > 0 ? [`changed ${changed.join(', ')}`] : []),
     ...(removed.length > 0 ? [`removed ${removed.join(', ')}`] : []),
@@ -180,8 +178,8 @@ export type ModuleCommands = {
   // Lace: Validate Module on `root`.
   validate: (root: AuthoringRoot) => Promise<void>;
   // What a Generate of `root` that succeeded shows, wherever it ran, from
-  // what it reports of the tree it wrote.
-  generated: (root: AuthoringRoot, files: Generated) => Promise<void>;
+  // what the package reads of the tree it wrote.
+  generated: (root: AuthoringRoot, tree: GeneratedTree) => Promise<void>;
 };
 
 export function authoringCommands(options: AuthoringCommandsOptions): ModuleCommands {
@@ -212,9 +210,9 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
   // A Generate of `root` succeeded: it says what it did to the tree, and
   // Show Changes opens Source Control, where git shows the diff. A Generate
   // that changed and removed no file has no change to show.
-  async function generated(root: AuthoringRoot, files: Generated): Promise<void> {
-    const said = generatedText(labelOf(root), files);
-    if (!changedTree(files)) {
+  async function generated(root: AuthoringRoot, tree: GeneratedTree): Promise<void> {
+    const said = generatedText(labelOf(root), tree);
+    if (!tree.treeChanged) {
       void api.window.showInformationMessage(said);
       return;
     }
@@ -243,7 +241,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
       return;
     }
     const closing = outcome.value;
-    if (closing?.type === 'success') return generated(root, closing);
+    if (closing?.type === 'success') return generated(root, generatedTree(closing));
     if (closing?.reason === Reason.REASON_UNSAVED) {
       const answer = await api.window.showErrorMessage(
         `${label} has unsaved canvas edits: Lace generates the saved canvas.`,
