@@ -40,7 +40,9 @@ pick, and Import Existing Resources on a root) and hands the same `Host` to ever
 | tools | the chat tools, where the Language Model Tools API exists |
 
 `activate` returns `{engine, rootSessions}`. `deactivate` flushes every held session's autosave, then stops the engine,
-which closes every session and frees every lock. `src/__tests__/manifest.test.ts` holds the manifest and the features to
+which closes every session and frees every lock, and disposes the "Lace" Output channel last, once every owner that logs
+to it has stopped; VS Code disposes the context's subscriptions without waiting for `deactivate`, so the channel is not
+one of them (`src/__tests__/extension.test.ts`). `src/__tests__/manifest.test.ts` holds the manifest and the features to
 each other: every contributed command, view and tool is one a feature registers, and nothing else is registered.
 
 ## Who owns what
