@@ -25,7 +25,11 @@ const commandsYielding = (documents: unknown[], fails?: Error) =>
     'module fmt': { documents, fails },
   }).port;
 
-const SCAN = { treeHash: 'h', diagnostics: [] };
+const SCAN = {
+  treeHash: 'h',
+  tool: { name: 'tfsec', version: 'v1.28.13', path: '/home/dev/.lace/bin/tfsec', source: 'cache' },
+  diagnostics: [],
+};
 const NO_TOOL: CommandFailure = {
   reason: 'tool_missing',
   message: 'tfsec is not installed',
