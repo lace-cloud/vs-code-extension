@@ -19,8 +19,8 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 6, which Lace CLI
-  v2.51.0 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 7, which Lace CLI
+  v2.53.0 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
   to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
@@ -36,8 +36,8 @@ diagnostics in the Problems panel, and adds palette commands for everything that
 2. Run **Lace: Open Canvas** from the Command Palette, or right-click a folder in the Explorer and choose it there.
 3. Work on the canvas. Place modules from the **Registry** view in the Lace activity bar.
 4. Save the canvas (the canvas's Save button, `Cmd+S` / `Ctrl+S` while the canvas has focus, or **Lace: Save**).
-5. Run **Generate** (the canvas's button or **Lace: Generate**). Lace writes the `.tf` files; **Show Changes** opens
-   Source Control, where git shows the diff.
+5. Run **Generate** (the canvas's button or **Lace: Generate**). Lace writes the `.tf` files and names the ones it
+   changed; **Show Changes** opens Source Control, where git shows the diff.
 
 Under the module's `.lace/` directory, a stack's **Apply** reads `verdict.json`, `bundle.pb` and `tree-manifest.json`
 from the working tree, never from git, and the pre-commit hook that `lace hooks install` writes stages them;
@@ -238,7 +238,7 @@ engine on your machine.
 | `lace_change_module_canvas`      | `#laceChangeModuleCanvas`      | Changes the canvas, one change per entry: place a registry module, connect, disconnect, set or clear an input, bind it to a variable, rename, delete, ungroup. |
 | `lace_describe_module_canvas`    | `#laceDescribeModuleCanvas`    | Describes the canvas: instances with their inputs and outputs, wires, groups, diagnostics, and whether it holds unsaved or ungenerated edits.                             |
 | `lace_save_module_canvas`        | `#laceSaveModuleCanvas`        | Saves the canvas, when you ask.                                                                                                                                          |
-| `lace_generate_module_terraform` | `#laceGenerateModuleTerraform` | Generates the saved canvas to Terraform, when you ask, and reports the files written or why Lace did not generate.                                                      |
+| `lace_generate_module_terraform` | `#laceGenerateModuleTerraform` | Generates the saved canvas to Terraform, when you ask, and reports the files it changed and removed or why Lace did not generate.                                     |
 | `lace_validate_module_terraform` | `#laceValidateModuleTerraform` | Runs `lace module validate` on the Terraform on disk and returns the verdict and the diagnostics.                                                                        |
 | `lace_search_module_registry`    | `#laceSearchModuleRegistry`    | Searches the Lace registry by words, system and category.                                                                                                                |
 | `lace_describe_registry_module`  | `#laceDescribeRegistryModule`  | Describes a registry module before it is placed: inputs, outputs, version and certification verdict.                                                                    |
