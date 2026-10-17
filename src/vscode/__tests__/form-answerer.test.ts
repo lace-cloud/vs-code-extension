@@ -153,17 +153,14 @@ describe('the answerer', () => {
     expect(form.submit).toHaveBeenCalledWith({ slug: 'prod-eu' });
   });
 
+  // The slug's rule is the API's, which the CLI's refusal states: the box
+  // proposes the folder's name as it is, and the owner refuses a name that
+  // is no slug.
   test.each([
-    ['its name', 'qa-1651', 'qa-1651'],
-    ['its name lowercased, each run of other characters one hyphen', 'My Stack', 'my-stack'],
-    ['its name with each letter freed of its accent', 'Café Infra', 'cafe-infra'],
-    [
-      'at most 63 characters of its name, with no hyphen at either end',
-      `_${'a'.repeat(62)} b`,
-      'a'.repeat(62),
-    ],
-    ['nothing for a name that does not start with a letter', '1foo', ''],
-  ])('the slug box of a workspace folder opens proposing %s, and submits the proposal accepted', async (_what, name, proposed) => {
+    'qa-1651',
+    '1foo',
+    'My Stack',
+  ])('the slug box of the workspace folder %s opens on its name exactly as it is, selected, and submits it accepted', async (name) => {
     const path = `/work/${name}`;
     const t = setup({ folders: [folder(path)], inputs: [accept] });
     const form = t.answer('create', ['slug'], { root: fsPath(path) });
@@ -174,12 +171,12 @@ describe('the answerer', () => {
         kind: 'input',
         options: {
           title: `Create stack: ${name}`,
-          value: proposed,
-          valueSelection: [0, proposed.length],
+          value: name,
+          valueSelection: [0, name.length],
         },
       },
     ]);
-    expect(form.submit).toHaveBeenCalledWith({ slug: proposed });
+    expect(form.submit).toHaveBeenCalledWith({ slug: name });
   });
 
   test('asks for the connection by a pick of what the CLI lists, nothing filtered, and submits the id picked', async () => {
