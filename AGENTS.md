@@ -378,22 +378,24 @@ before the session closes. A change to the setting re-arms every attachment. The
 ## Account
 
 `account/`: Sign In runs `lace login` (the confirmation code shown once with Copy Code, the page opened once, under a
-cancellable progress notification); Sign Out runs `lace logout`. Organization and team are the CLI's: `org list`,
-`org use`, `team list`, `team use`, `org current`, `team current`, all in the home. Each pick is on screen at once and
-fills when its read settles (`vscode/pick.ts`). Selecting an organization goes on to its team: the team pick opens as
-the organization is saved, its read `org use` then the teams, listed and saved with `--org` naming the organization just
-picked, so the saved team is that organization's even while `LACE_ORGANIZATION` sets another; an organization with no
-team closes the pick and says teams are created in the portal, with Open Portal on the page `team list` names
-(`createUrl`). A team pick dismissed while the organization is saved still announces the saved organization. The status
-bar item shows the selection and runs Select Organization. The account's one change event (`onDidChange`) fires after
-each sign-in, sign-out or saved selection this window makes, and when a read of the account differs from the last one. A
-read is who is signed in (`whoami`'s user, or the reason its failure gives) and the selection (`org current`,
-`team current`); `lace logout` clears only the credentials, so the selection alone cannot see it. The account is read
-when the window starts, after each change made here, when the window regains focus (a terminal or another window outside
-it) and when a command line running `lace` ends in an integrated terminal with shell integration
-(`window.onDidEndTerminalShellExecution`, read by `vscode/lace-command-lines.ts`), which changes no focus. The status
-bar, the registry view and the Stacks tree read again on the event. Nothing is cached but the last read. A failed
-account command offers the way out its reason names (`vscode/offers.ts`).
+cancellable progress notification); Sign Out runs `lace logout` and says what became of the machine's API key as the
+result's `revocation` and `detail` say it, as the CLI's table does; while the key may still be live (the result names
+the portal page, `portalUrl`, where it is revoked) the notice is a warning whose Open Portal opens that page.
+Organization and team are the CLI's: `org list`, `org use`, `team list`, `team use`, `org current`, `team current`, all
+in the home. Each pick is on screen at once and fills when its read settles (`vscode/pick.ts`). Selecting an
+organization goes on to its team: the team pick opens as the organization is saved, its read `org use` then the teams,
+listed and saved with `--org` naming the organization just picked, so the saved team is that organization's even while
+`LACE_ORGANIZATION` sets another; an organization with no team closes the pick and says teams are created in the portal,
+with Open Portal on the page `team list` names (`createUrl`). A team pick dismissed while the organization is saved
+still announces the saved organization. The status bar item shows the selection and runs Select Organization. The
+account's one change event (`onDidChange`) fires after each sign-in, sign-out or saved selection this window makes, and
+when a read of the account differs from the last one. A read is who is signed in (`whoami`'s user, or the reason its
+failure gives) and the selection (`org current`, `team current`); `lace logout` clears only the credentials, so the
+selection alone cannot see it. The account is read when the window starts, after each change made here, when the window
+regains focus (a terminal or another window outside it) and when a command line running `lace` ends in an integrated
+terminal with shell integration (`window.onDidEndTerminalShellExecution`, read by `vscode/lace-command-lines.ts`), which
+changes no focus. The status bar, the registry view and the Stacks tree read again on the event. Nothing is cached but
+the last read. A failed account command offers the way out its reason names (`vscode/offers.ts`).
 
 ## The chat tools
 
