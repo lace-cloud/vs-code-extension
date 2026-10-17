@@ -179,6 +179,20 @@ describe('the answerer', () => {
     expect(form.submit).toHaveBeenCalledWith({ slug: name });
   });
 
+  test.each([
+    ['a run whose root is under no workspace folder', [], { root: PROD }],
+    ['a run that names no root', undefined, {}],
+  ] as const)('the slug box of %s opens empty, proposing nothing', async (_, folders, ctx) => {
+    const t = setup({ ...(folders ? { folders: [...folders] } : {}), inputs: ['prod'] });
+    const form = t.answer('create', ['slug'], ctx);
+    await settled();
+
+    expect(t.asked).toMatchObject([
+      { kind: 'input', options: { prompt: 'The slug', value: '', valueSelection: [0, 0] } },
+    ]);
+    expect(form.submit).toHaveBeenCalledWith({ slug: 'prod' });
+  });
+
   test('asks for the connection by a pick of what the CLI lists, nothing filtered, and submits the id picked', async () => {
     const t = setup({
       scripts: {
