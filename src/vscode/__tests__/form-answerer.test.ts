@@ -32,10 +32,22 @@ const connection = (id: string, name: string, status = 'ready') => ({
 });
 const connections = (...items: ReturnType<typeof connection>[]) => ({ items, createUrl: PORTAL });
 
+// The developer presses Enter on what an input box was opened with: VS Code
+// hands back the box's value.
+const accept = (opened: vscode.InputBoxOptions) => opened.value;
+
 type Options = {
+  // The workspace's folders.
+  folders?: vscode.WorkspaceFolder[];
   scripts?: Parameters<typeof fakeCommands>[0];
-  // What each input box answers, in order: a value, or a promise of one.
-  inputs?: (string | undefined | Promise<string | undefined>)[];
+  // What each input box answers, in order: a value, a promise of one, or
+  // what the developer makes of the box as it was opened.
+  inputs?: (
+    | string
+    | undefined
+    | Promise<string | undefined>
+    | ((opened: vscode.InputBoxOptions) => string | undefined)
+  )[];
   // The id of the item each quick pick picks, in order.
   picks?: (string | undefined)[];
   // The files each open dialog answers, in order.
@@ -66,7 +78,8 @@ function setup(options: Options = {}) {
   const window = {
     showInputBox: vi.fn(async (opened: vscode.InputBoxOptions) => {
       asked.push({ kind: 'input', options: opened });
-      return options.inputs?.shift();
+      const input = options.inputs?.shift();
+      return typeof input === 'function' ? input(opened) : input;
     }),
     createQuickPick: quickPicks.createQuickPick,
     withProgress: vi.fn(async (_opened: unknown, task: () => Promise<unknown>) => task()),
@@ -91,7 +104,7 @@ function setup(options: Options = {}) {
     api: { window: window as never },
     commands: commands.commands,
     offers,
-    sources: { folders: () => [repo] },
+    sources: { folders: () => options.folders ?? [repo] },
     report,
   });
   // Answers a form of the package's action `id` over `ctx`.
@@ -117,8 +130,8 @@ function setup(options: Options = {}) {
 }
 
 describe('the answerer', () => {
-  test('asks for the slug in an input box titled by the action and the root, which refuses an empty value', async () => {
-    const t = setup({ inputs: ['prod'] });
+  test("asks for the slug in an input box titled by the action and the root, proposing the root's directory name selected, which refuses an empty value", async () => {
+    const t = setup({ inputs: ['prod-eu'] });
     const form = t.answer('create', ['slug'], { root: PROD });
     await settled();
 
@@ -128,6 +141,8 @@ describe('the answerer', () => {
         options: {
           title: 'Create stack: infra/prod',
           prompt: 'The slug',
+          value: 'prod',
+          valueSelection: [0, 4],
           validateInput: expect.any(Function),
         },
       },
@@ -135,7 +150,36 @@ describe('the answerer', () => {
     const { validateInput } = t.window.showInputBox.mock.calls[0][0];
     expect(validateInput?.('')).toBe('Type the slug');
     expect(validateInput?.('prod')).toBeUndefined();
-    expect(form.submit).toHaveBeenCalledWith({ slug: 'prod' });
+    expect(form.submit).toHaveBeenCalledWith({ slug: 'prod-eu' });
+  });
+
+  test.each([
+    ['its name', 'qa-1651', 'qa-1651'],
+    ['its name lowercased, each run of other characters one hyphen', 'My Stack', 'my-stack'],
+    ['its name with each letter freed of its accent', 'Café Infra', 'cafe-infra'],
+    [
+      'at most 63 characters of its name, with no hyphen at either end',
+      `_${'a'.repeat(62)} b`,
+      'a'.repeat(62),
+    ],
+    ['nothing for a name that does not start with a letter', '1foo', ''],
+  ])('the slug box of a workspace folder opens proposing %s, and submits the proposal accepted', async (_what, name, proposed) => {
+    const path = `/work/${name}`;
+    const t = setup({ folders: [folder(path)], inputs: [accept] });
+    const form = t.answer('create', ['slug'], { root: fsPath(path) });
+    await settled();
+
+    expect(t.asked).toMatchObject([
+      {
+        kind: 'input',
+        options: {
+          title: `Create stack: ${name}`,
+          value: proposed,
+          valueSelection: [0, proposed.length],
+        },
+      },
+    ]);
+    expect(form.submit).toHaveBeenCalledWith({ slug: proposed });
   });
 
   test('asks for the connection by a pick of what the CLI lists, nothing filtered, and submits the id picked', async () => {

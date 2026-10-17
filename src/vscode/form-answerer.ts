@@ -6,8 +6,10 @@
 // the form. The runner host reuses what a run's context was answered
 // before, so a form asks only what that context never answered.
 //
-//   slug        an input box that refuses an empty value; the slug's own
-//               rule is the CLI's and the API's
+//   slug        an input box that opens on the slug the root's directory
+//               name makes (`proposedSlug`), selected for the developer to
+//               accept or type over, and refuses an empty value; the slug's
+//               own rule is the CLI's and the API's
 //   connection  a pick of the team's cloud connections (`lace connection
 //               list`, in the home), each as the CLI reports it, on screen
 //               while the list is read (`pick.ts`). A list that cannot be
@@ -21,6 +23,7 @@
 //
 // An argument with no prompt here cancels the form, and the notice says
 // this window cannot ask for it.
+import { posix } from 'node:path';
 import type { ActionContribution, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
@@ -59,6 +62,28 @@ type Prompt = (asking: Asking) => Promise<string | undefined>;
 
 const NO_CONNECTION = 'The team has no cloud connection yet. Add one in the portal.';
 
+// The slug a form proposes for a run over `root`: its directory's name as
+// the workspace calls it (the folder's name for a workspace folder itself),
+// each letter freed of its accent and lowercased, each run of anything but
+// a letter or a digit one hyphen, at most 63 characters, no hyphen at
+// either end. A proposal is only ever a slug the CLI's rule takes (a letter
+// first, then letters, digits and hyphens, 63 at most), so Enter on it never
+// submits one the CLI refuses; a name that makes none, or a run over no root
+// under a workspace folder, proposes nothing.
+function proposedSlug(root: AuthoringRoot | undefined): string {
+  if (root === undefined) return '';
+  const name = root.relative === '' ? root.folder.name : posix.basename(root.relative);
+  const slug = name
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, 63)
+    .replace(/-+$/, '');
+  return /^[a-z]/.test(slug) ? slug : '';
+}
+
 export function formAnswerer(options: FormAnswererOptions): Answerer {
   const { api, commands, offers, sources, report } = options;
 
@@ -66,12 +91,16 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     said.catch((error) => report('acting on a Lace notice', error));
 
   const PROMPTS: Readonly<Record<string, Prompt>> = {
-    slug: async ({ title }) =>
-      api.window.showInputBox({
+    slug: async ({ title, root }) => {
+      const value = proposedSlug(root);
+      return api.window.showInputBox({
         title,
         prompt: 'The slug',
-        validateInput: (value) => (value === '' ? 'Type the slug' : undefined),
-      }),
+        value,
+        valueSelection: [0, value.length],
+        validateInput: (typed) => (typed === '' ? 'Type the slug' : undefined),
+      });
+    },
     connection: async ({ title }) => {
       const listed = commands
         .anywhere()
