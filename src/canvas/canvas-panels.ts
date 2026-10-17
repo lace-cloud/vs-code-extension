@@ -43,6 +43,7 @@ import type { Engine } from '../engine/engine';
 import type { RootHold, RootSessions } from '../engine/root-sessions';
 import {
   type Boot,
+  type Generated,
   type HostNotice,
   postEvent,
   type RawPort,
@@ -96,8 +97,9 @@ export type CanvasPanelsOptions = {
   validate: (root: AuthoringRoot) => Promise<void>;
   // Import Existing Resources on a root.
   importResources: (root: AuthoringRoot) => Promise<void>;
-  // What the page's own Generate that wrote `written` shows.
-  generated: (root: AuthoringRoot, written: readonly string[]) => Promise<void>;
+  // What the page's own Generate that succeeded shows, from what it reports
+  // of the tree it wrote.
+  generated: (root: AuthoringRoot, files: Generated) => Promise<void>;
   report: (what: string, error: unknown) => void;
 };
 
@@ -245,7 +247,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
           retitle();
         } else if (n.op === 'focus') pageFocus(hold.sessionId, n.value);
         else if (n.op === 'arrangement') return rootState.arrange(root, n.value);
-        else if (n.op === 'generated') return generated(root, n.written);
+        else if (n.op === 'generated') return generated(root, n.files);
         else {
           const actions = { ...offers, validate: () => validate(root) };
           return showNotice(api, actions, n.level, n.text, offersFor(n.failure)).then(() => {});
