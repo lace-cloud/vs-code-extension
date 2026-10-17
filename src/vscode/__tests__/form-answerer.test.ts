@@ -100,7 +100,7 @@ function setup(options: Options = {}) {
       submit: ReturnType<typeof vi.fn>;
       cancel: ReturnType<typeof vi.fn>;
     };
-    answerer(form, { action: binding(id), ctx });
+    answerer(form, { action: binding(id), ctx, target: {} });
     return form;
   };
   return {

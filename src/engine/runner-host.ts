@@ -62,9 +62,12 @@ import {
 export type Form = NonNullable<PendingForm>;
 
 // What answers a form: it asks for each argument `form.missing` names, in
-// order, and submits the values, or cancels the form. `run` is the action
-// and the `RunCtx` of the run the form is for.
-export type Answerer = (form: Form, run: { action: ActionContribution; ctx: RunCtx }) => void;
+// order, and submits the values, or cancels the form. `run` is the action,
+// the `RunCtx` and the target of the run the form is for.
+export type Answerer = (
+  form: Form,
+  run: { action: ActionContribution; ctx: RunCtx; target: ActionTarget },
+) => void;
 
 // A package action that answers a failure, to run over the failed run's
 // `RunCtx` with the failure as its target.
@@ -117,24 +120,25 @@ export function binding(id: string): ActionContribution {
   return found;
 }
 
-// One run the host started: its action and context, how much of it is
-// pending (`starting` among it while set), and its end.
+// One run the host started: its action, context and target, how much of it
+// is pending (`starting` among it while set), and its end.
 type Run = {
   readonly action: ActionContribution;
   readonly ctx: RunCtx;
+  readonly target: ActionTarget;
   pending: number;
   starting: boolean;
   readonly end: () => void;
   readonly ended: Promise<void>;
 };
 
-function begun(action: ActionContribution, ctx: RunCtx): Run {
+function begun(action: ActionContribution, ctx: RunCtx, target: ActionTarget): Run {
   let end = () => {};
   const ended = new Promise<void>((resolve) => {
     end = resolve;
   });
   // The runner's call is pending from the start.
-  return { action, ctx, pending: 1, starting: false, end, ended };
+  return { action, ctx, target, pending: 1, starting: false, end, ended };
 }
 
 function hold(run: Run): void {
@@ -235,7 +239,7 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
     else
       options.answerer(
         { path: form.path, missing, submit, cancel },
-        { action: run.action, ctx: run.ctx },
+        { action: run.action, ctx: run.ctx, target: run.target },
       );
   }
 
@@ -299,7 +303,7 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
     target: ActionTarget = {},
   ): Promise<{ ended: Promise<void> }> {
     const built = await runner();
-    const started = begun(action, ctx);
+    const started = begun(action, ctx, target);
     try {
       await runContext.run(started, () => built.run(action, ctx, target));
     } finally {

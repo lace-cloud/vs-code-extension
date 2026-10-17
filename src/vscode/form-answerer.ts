@@ -21,7 +21,7 @@
 //
 // An argument with no prompt here cancels the form, and the notice says
 // this window cannot ask for it.
-import type { ActionContribution, RunCtx } from '@lace-cloud/canvas/engine';
+import type { ActionContribution, ActionTarget, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
@@ -113,14 +113,19 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     },
   };
 
-  // What the prompts of a run of `action` over `ctx` ask with.
-  function asking(action: ActionContribution, ctx: RunCtx): Asking {
+  // What the prompts of a run of `action` over `ctx` and `target` ask with.
+  function asking(action: ActionContribution, ctx: RunCtx, target: ActionTarget): Asking {
     const folders = sources.folders();
     const root = rootOfRun(folders, ctx);
-    return { title: runTitle(action, ctx, root, folders), root };
+    return { title: runTitle(action, ctx, target, root, folders), root };
   }
 
-  async function answer(form: Form, action: ActionContribution, ctx: RunCtx): Promise<void> {
+  async function answer(
+    form: Form,
+    action: ActionContribution,
+    ctx: RunCtx,
+    target: ActionTarget,
+  ): Promise<void> {
     const unasked = form.missing.filter((name) => !Object.hasOwn(PROMPTS, name));
     if (unasked.length > 0) {
       form.cancel();
@@ -129,7 +134,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
       );
       return;
     }
-    const ask = asking(action, ctx);
+    const ask = asking(action, ctx, target);
     const values: Record<string, string> = {};
     for (const name of form.missing) {
       const value = await PROMPTS[name](ask);
@@ -142,8 +147,8 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     form.submit(values);
   }
 
-  return (form, { action, ctx }) => {
-    answer(form, action, ctx).catch((error) => {
+  return (form, { action, ctx, target }) => {
+    answer(form, action, ctx, target).catch((error) => {
       form.cancel();
       report(`asking for what ${action.label} needs`, error);
     });

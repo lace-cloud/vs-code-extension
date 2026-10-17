@@ -1040,6 +1040,54 @@ describe('a stack row', () => {
   });
 });
 
+describe('Cancel on a run row', () => {
+  const listed = {
+    'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+    'run list': { documents: [runs(run('run_1', 'applying'))] },
+  };
+  // The titled progress notifications the window showed: the view's own
+  // progress has no title.
+  const notifications = (t: ReturnType<typeof setup>) =>
+    t.progress.filter((p) => p.title !== undefined).map(({ title, ended }) => ({ title, ended }));
+
+  test("runs the package's run cancel under a progress notification titled by the run until its run ends, and ends with the package's notice", async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'run cancel': { held: true } } });
+    const [row] = await t.children();
+    const [runRow] = await t.children(row);
+    let done = false;
+    const cancelling = t.command(STACK_COMMANDS.cancel, runRow)?.then(() => {
+      done = true;
+    });
+    await settled();
+
+    expect(t.commands.invoked.filter((c) => c.path === 'run cancel').map((c) => c.args)).toEqual([
+      { run: 'run_1' },
+    ]);
+    expect(notifications(t)).toEqual([{ title: 'Cancel: run_1', ended: false }]);
+    expect(done).toBe(false);
+
+    t.commands.held[0].finish([run('run_1', 'cancelled', { completedAt: COMPLETED })]);
+    await cancelling;
+    expect(notifications(t)).toEqual([{ title: 'Cancel: run_1', ended: true }]);
+    expect(t.messages).toEqual([{ level: 'info', text: 'Run run_1 cancelled', buttons: [] }]);
+  });
+
+  test("a cancel the CLI refuses ends its progress with the failure document's message", async () => {
+    const said = 'run run_1 cannot be cancelled in its current state';
+    const t = setup({
+      root: prod,
+      scripts: { ...listed, 'run cancel': refused({ reason: 'unspecified', message: said }) },
+    });
+    const [row] = await t.children();
+    const [runRow] = await t.children(row);
+    await t.command(STACK_COMMANDS.cancel, runRow);
+    await settled();
+
+    expect(notifications(t)).toEqual([{ title: 'Cancel: run_1', ended: true }]);
+    expect(t.messages).toEqual([{ level: 'error', text: said, buttons: [] }]);
+  });
+});
+
 describe('an apply', () => {
   const lines = [
     { type: 'log', text: 'Preview Advisory:' },

@@ -56,7 +56,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | Running a package binding (Stacks rows, stack palette commands, Create Stack, Import Existing Resources, a failure's package answer); a run's form, what its context was answered, and its end | `engine/runner-host.ts` | the Stacks tree, Import Existing Resources, the offers |
 | How a run's form is answered: one VS Code prompt per argument name | `vscode/form-answerer.ts` (`formAnswerer`) | the window's runner |
 | A quick pick whose items come from a read: on screen at once, busy, and filled when the read settles; a read that finds none closes it and runs the caller's own empty path, and one that fails closes it and rejects for the caller's notice | `vscode/pick.ts` (`pickFrom`) | the organization and team picks, the stack pick, the connection prompt, Add Module to Canvas |
-| A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a failure's package answer, the answerer |
+| A run a trigger starts, under a progress notification until it ends; the title of a run's progress and prompts | `vscode/run-progress.ts` (`runUnderProgress`, `runTitle`) | Create Stack, Import Existing Resources, a run row's Cancel, a failure's package answer, the answerer |
 | A CLI command's effect, as the CLI declares it: a `read` changes nothing, a `write` may change something before its stream ends, a `rewrite` writes the module's own Terraform files | the package's `COMMANDS` (`COMMANDS[path].effect`) | what a stream that ended under a command says (`failureSays`); `saveBuffersBefore` (`commands/terraform-buffers.ts`), which saves the root's dirty `.tf` editors before a rewrite, for the module commands and Import Existing Resources |
 | A command's outcome: its document or its failure, and every failure of it as a `CommandFailedError`: its `message`, the package's reading of the failure, and its `failure` document when it wrote one | `engine/command-outcome.ts` (`commandOutcome`) | every command's caller |
 | What a failed command says: its failure document's message when it wrote one, the CLI's stderr when it wrote none, its exit code when it wrote nothing at all, and for a stream that ended under it, by the command's effect, that a read is to be run again or that a write or a rewrite ran and may have made changes | the package's `failureSays`, which `commandOutcome` reads into its `CommandFailedError`, and sign-in for `lace login`'s own stream; `failureText` says a failure | every notice of a failed command, the Stacks view's message and rows |
@@ -147,9 +147,9 @@ which attributes to the run what names none:
 - A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
   each invocation it started. `run` resolves when the runner's call does, with `ended`. A run a trigger starts (Create
-  Stack, Import Existing Resources, a failure's package answer) runs under a progress notification until it ends
-  (`vscode/run-progress.ts`), titled by its action and what it acts on, the stack, else the root (`runTitle`), the
-  title its prompts carry too.
+  Stack, Import Existing Resources, a run row's Cancel, a failure's package answer) runs under a progress notification
+  until it ends (`vscode/run-progress.ts`), titled by its action and what it acts on, the run its target names, else the
+  stack, else the root (`runTitle`), the title its prompts carry too.
 - The window's presenter is told the `RunCtx` of the run a notice is about. A failure's notice offers the ways out its
   reason names, Validate on the run's root among them when that root is under a workspace folder, and after them each
   package action that answers the reason, as the package's `answering` lists them (`import-partial`, Import the rest,
@@ -248,14 +248,16 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   change of the workspace's folders reads the tree again, and a root whose folder left the workspace is dropped and
   found again.
 - Row actions are the canvas package's bindings run through the runner: `preview`, `apply`, `scan` on a stack,
-  `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. A run row's `contextValue`
-  is a list of tokens: `laceRun`, then `ended` when its `run list` document carries a `completedAt` and `running` when
-  it carries none, then `portal` when the CLI gave the run its page. Each run menu entry's `when` matches a token:
-  Cancel Run `running`, Open in Portal `portal` (`__tests__/manifest.test.ts` reads every one against each state a run
-  row draws). A run action invoked with no run row says it acts on a run of the Stacks view and runs nothing. The tree
-  opens no session: the stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick
-  a stack of the named root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the
-  root its run was over, so `no_certification` and `stale_certification` offer Validate on it.
+  `follow-logs`, `run-cancel` on a run; Open in Portal opens the URL the CLI gave the run. Cancel runs under a progress
+  notification titled by the run ("Cancel: <run id>") until its run ends, and ends with the package's notice: the run's
+  status as `run cancel` reports it, or the failure's message. A run row's `contextValue` is a list of tokens:
+  `laceRun`, then `ended` when its `run list` document carries a `completedAt` and `running` when it carries none, then
+  `portal` when the CLI gave the run its page. Each run menu entry's `when` matches a token: Cancel Run `running`, Open
+  in Portal `portal` (`__tests__/manifest.test.ts` reads every one against each state a run row draws). A run action
+  invoked with no run row says it acts on a run of the Stacks view and runs nothing. The tree opens no session: the
+  stack commands run the Terraform on disk. From the palette, Preview, Apply and Scan Stack pick a stack of the named
+  root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the root its run was over,
+  so `no_certification` and `stale_certification` offer Validate on it.
 - Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges; the tree redraws
   the row picked before and the row picked now, the objects `getChildren` gave (VS Code redraws an element by
   identity). A read of the whole tree drops every row VS Code holds until it settles, and a row's menu command run in
@@ -293,13 +295,13 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.
 - **Import Existing Resources** (`stacks/import-resources.ts`) is a stack command the host draws: the canvas's
   source-refused banner offers it beside Convert on the panel's root, and **Lace: Import Existing Resources**
-  (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar. It picks the stack with the one
-  stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert does, the CLI declaring
-  `stack import` a rewrite (`saveBuffersBefore`), then runs the package's `import` binding over `{root, stack}` under a
-  progress notification ("Import existing resources: <stack>") until its run ends; the form asks for the statefile. The
-  package's notice says what the import did, and an import that stopped at `import_residual` offers Import the rest over
-  the same run's context. Nothing detects a statefile and nothing filters the stacks by their state: the CLI refuses a
-  stack that holds state (`stack_has_state`).
+  (`lace.importResources`) on the root `rootToAct` names; never on the canvas's toolbar or a stack row. It picks the
+  stack with the one stack pick (a root with no stack stops there), saves the root's dirty `.tf` editors as Convert
+  does, the CLI declaring `stack import` a rewrite (`saveBuffersBefore`), then runs the package's `import` binding over
+  `{root, stack}` under a progress notification ("Import existing resources: <stack>") until its run ends; the form asks
+  for the statefile. The package's notice says what the import did, and an import that stopped at `import_residual`
+  offers Import the rest over the same run's context. Nothing detects a statefile and nothing filters the stacks by
+  their state: the CLI refuses a stack that holds state (`stack_has_state`).
 
 ## Module commands
 

@@ -17,7 +17,10 @@
 // CLI gave the run. From the palette, Preview, Apply and Scan act on a stack
 // of the root `rootToAct` names, picked by the one stack pick (`pickStack`);
 // a run's actions act only on a run row, and invoked with none they say so.
-// A run row offers Cancel only while its run is running (`runLook`).
+// A run row offers Cancel only while its run is running (`runLook`); Cancel
+// runs under a progress notification titled by the run until its run ends
+// (`runUnderProgress`), and the package's notice says how it ended: the
+// run's status, or the failure's message.
 //
 // With no stack deployed from the root, the view's action is Create Stack:
 // the package's `create` binding run through the runner over the view's
@@ -515,7 +518,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       }),
       [STACK_COMMANDS.cancel]: onRun(async (row) => {
         const ctx: RunCtx = { root: rootPath(row.root), stack: row.stack };
-        await runner.run(BINDINGS.cancel, ctx, { runId: row.run.id });
+        await runUnderProgress(api, runner, BINDINGS.cancel, ctx, { runId: row.run.id });
       }),
       [STACK_COMMANDS.openInPortal]: onRun(async (row) => {
         if (row.run.url !== undefined) await api.env.openExternal(api.Uri.parse(row.run.url));
