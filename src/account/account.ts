@@ -106,7 +106,7 @@ export function createAccount(
       if (await signIn(await commands.anywhere(), api)) madeHere();
     },
     async signOut() {
-      await signOut(await commands.anywhere(), api.window);
+      await signOut(await commands.anywhere(), api);
       madeHere();
     },
     async selectOrganization() {
