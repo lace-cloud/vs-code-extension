@@ -35,20 +35,29 @@
 // other row and what a context menu holds of it; a read of the whole tree
 // drops them until it settles, so only what may change the list reads it
 // all: a tick of the runner's store, a change of the account (made in this
-// window or found outside it), the view shown again, a change of the
-// workspace's folders, and Refresh.
+// window or found outside it), the view shown again, a `lace` command
+// that may change something (any the CLI declares more than a read) ended
+// in an integrated terminal, a change of the workspace's folders, a change
+// of the root it names, and Refresh.
+//
+// The tree and the root's canvas, whose badges are the picked stack's, read
+// the same facts, so one invalidation serves both: each read of the tree
+// for what may have changed the stacks (all of the above but a change of
+// the folders or of the root, which change no stack) tells the canvas of
+// the view's root that its reads are stale, and a tick tells the canvas of
+// the root its run was about, whatever root the tree names since; a canvas
+// both name is told once.
 //
 // An apply runs under a progress notification and says how it settled
 // (`outcomeNotice`), with the ways out its failure names (Validate is the
 // palette's, on the root the apply ran in), or, held for approval, the
 // change request it waits on, offering the page of each record that has
 // one; a preview opens as a read-only document in the Lace plan language
-// (`PREVIEW_LANGUAGE`), whose lines wrap; each tick of the runner's
-// store (a run started or settled, a scan or a cancel done) reads the tree
-// again and tells the canvas of the root that run was about that its reads
-// are stale. The view draws its progress while the store says a command is
-// under way (the package's `commandUnderWay`), and ends it when the store
-// says none is.
+// (`PREVIEW_LANGUAGE`), whose lines wrap. Each tick of the runner's store
+// (a run started or settled, a scan or a cancel done) names its run, whose
+// `RunCtx` names the root it was about. The view draws its progress while
+// the store says a command is under way (the package's `commandUnderWay`),
+// and ends it when the store says none is.
 //
 // With no root found, the view says why, by the reason finding one gave: no
 // folder is open; no directory holds a module yet, and Open Canvas starts
@@ -57,6 +66,7 @@
 // that gets past it.
 import {
   type ActionContribution,
+  COMMANDS,
   type CommandFailure,
   commandUnderWay,
   type ResultSlots,
@@ -85,6 +95,7 @@ import {
 } from '../roots/authoring-roots';
 import type { RootState } from '../state/root-state';
 import { registerCommands } from '../vscode/commands';
+import { onDidEndLaceCommand } from '../vscode/lace-command-lines';
 import { notice, type OfferActions } from '../vscode/offers';
 import { runUnderProgress } from '../vscode/run-progress';
 import type { RunOutput } from './run-output';
@@ -143,6 +154,7 @@ export type StacksTreeApi = {
     | 'showWarningMessage'
     | 'showErrorMessage'
     | 'onDidChangeActiveTextEditor'
+    | 'onDidEndTerminalShellExecution'
     | 'showTextDocument'
   >;
   workspace: Pick<
@@ -198,7 +210,15 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   let refusal: CommandFailure | undefined;
 
   const changed = new api.EventEmitter<Row | Row[] | undefined>();
-  const refresh = () => changed.fire(undefined);
+  const readTree = () => changed.fire(undefined);
+  // What may have changed the stacks: the tree is read again, and the canvas
+  // of the view's root and the canvas of the root `ran` names, a ticking
+  // run's, are each told their reads are stale, once.
+  const refresh = (ran?: AuthoringRoot) => {
+    readTree();
+    if (root) panels.tick(root);
+    if (ran && !(root && sameRoot(root, ran))) panels.tick(ran);
+  };
   // Redraws the shown rows of the stacks `ids` names.
   const redraw = (ids: readonly (string | undefined)[]) => {
     const rows = [...new Set(ids)]
@@ -343,7 +363,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   function show(next: AuthoringRoot): void {
     if (root && sameRoot(root, next)) return;
     root = next;
-    refresh();
+    readTree();
   }
 
   // Runs a stack row's binding over the root and the stack.
@@ -457,8 +477,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   // What the runner's store says, as it says it: a preview opens once its
   // plan lands; a run redraws its stack's row; the view's progress follows
-  // what is under way; each tick reads the tree again and tells the canvas
-  // of the root the ticking run was about.
+  // what is under way; each tick is what may have changed the stacks of the
+  // root its run was about.
   let shownPreview: object | undefined;
   const offStore = runner.store.subscribe(() => {
     const slots = runner.store.getSnapshot();
@@ -478,11 +498,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
         .then(undefined, (error) => report('opening a stack preview', error));
     }
   });
-  const offTick = runner.onDidTick((ctx) => {
-    refresh();
-    const ran = rootOfRun(sources.folders(), ctx);
-    if (ran) panels.tick(ran);
-  });
+  const offTick = runner.onDidTick(({ ctx }) => refresh(rootOfRun(sources.folders(), ctx)));
 
   const subscriptions: vscode.Disposable[] = [
     view,
@@ -499,6 +515,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     view.onDidChangeVisibility(({ visible }) => {
       if (visible) refresh();
     }),
+    onDidEndLaceCommand(api.window, ({ path }) => {
+      if (path !== undefined && COMMANDS[path].effect !== 'read') refresh();
+    }),
     api.window.onDidChangeActiveTextEditor(() => {
       const directory = sources.activeTerraformDirectory();
       const of = directory && rootAt(sources.folders(), directory);
@@ -506,7 +525,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }),
     api.workspace.onDidChangeWorkspaceFolders(() => {
       if (root && !folderOpen(root, sources.folders())) root = undefined;
-      refresh();
+      readTree();
     }),
     ...registerCommands(api, {
       [STACK_COMMANDS.refresh]: async () => refresh(),
@@ -542,7 +561,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   const offActive = panels.onDidChangeActive((of) => {
     if (folderOpen(of, sources.folders())) show(of);
   });
-  const offAccount = options.account.onDidChange(refresh);
+  const offAccount = options.account.onDidChange(() => refresh());
 
   return {
     dispose() {
