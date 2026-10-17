@@ -335,7 +335,11 @@ describe('signing in', () => {
           { type: 'url', url: 'https://lace.example.com/auth/cli?pollKey=pk_1' },
           { type: 'code', code: 'ABCD-2345' },
           { type: 'url', url: 'https://lace.example.com/auth/cli?pollKey=pk_1' },
-          { type: 'result', user: { id: 'usr_1', email: 'dev@example.com', name: 'Dev' } },
+          {
+            type: 'result',
+            user: { id: 'usr_1', email: 'dev@example.com', name: 'Dev' },
+            replacedKey: { revocation: 'none' },
+          },
         ],
       },
     });
@@ -366,7 +370,11 @@ describe('signing in', () => {
       login: {
         documents: [
           { type: 'code', code: 'WDJB-MJHT', verificationUrl: 'https://github.com/login/device' },
-          { type: 'result', user: { id: 'usr_1', email: 'dev@example.com', name: 'Dev' } },
+          {
+            type: 'result',
+            user: { id: 'usr_1', email: 'dev@example.com', name: 'Dev' },
+            replacedKey: { revocation: 'none' },
+          },
         ],
       },
     });
@@ -394,7 +402,7 @@ describe('signing in', () => {
 
   test('signing out runs logout and announces the change', async () => {
     const { api, account, changed } = await setup({
-      logout: { documents: [{ loggedOut: true }] },
+      logout: { documents: [{ loggedOut: true, revocation: 'revoked' }] },
     });
     await account.signOut();
     expect(api.window.showInformationMessage).toHaveBeenCalledWith('Signed out of Lace.');
@@ -550,7 +558,7 @@ describe('the account changed outside this window', () => {
       whoami: () => (signedOut ? SIGNED_OUT : { documents: [signedInAs('usr_1')] }),
       logout: () => {
         signedOut = true;
-        return { documents: [{ loggedOut: true }] };
+        return { documents: [{ loggedOut: true, revocation: 'revoked' }] };
       },
     } as never);
     await account.signOut();
