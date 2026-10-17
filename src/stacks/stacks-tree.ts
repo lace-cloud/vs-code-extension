@@ -42,7 +42,8 @@
 // (`outcomeNotice`), with the ways out its failure names (Validate is the
 // palette's, on the root the apply ran in), or, held for approval, the
 // change request it waits on, offering the page of each record that has
-// one; a preview opens as a read-only document; each tick of the runner's
+// one; a preview opens as a read-only document in the Lace plan language
+// (`PREVIEW_LANGUAGE`), whose lines wrap; each tick of the runner's
 // store (a run started or settled, a scan or a cancel done) reads the tree
 // again and tells the canvas of the root that run was about that its reads
 // are stale. The view draws its progress while the store says a command is
@@ -106,6 +107,10 @@ export const STACKS_VIEW = 'laceStacks';
 export const STACKS_STATE = 'lace.stacks.state';
 export const STACKS_CHOICE = 'lace.stacks.choice';
 export const PREVIEW_SCHEME = 'lace-preview';
+// The language of a preview's document, which the manifest contributes with
+// its word wrap on. It claims no file: the document is set to it when it
+// opens.
+export const PREVIEW_LANGUAGE = 'lace-plan';
 
 export const STACK_COMMANDS = {
   refresh: 'lace.refreshStacks',
@@ -147,6 +152,7 @@ export type StacksTreeApi = {
     | 'onDidChangeWorkspaceFolders'
     | 'workspaceFolders'
   >;
+  languages: Pick<typeof vscode.languages, 'setTextDocumentLanguage'>;
   commands: Pick<typeof vscode.commands, 'registerCommand' | 'executeCommand'>;
   env: { openExternal: (uri: vscode.Uri) => Thenable<boolean> };
   Uri: Pick<typeof vscode.Uri, 'parse' | 'from'>;
@@ -425,7 +431,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       );
     };
 
-  // Previews open as read-only documents, one per preview.
+  // Previews open as read-only documents, one per preview, each in the
+  // preview's language.
   const previews = new Map<string, string>();
   let previewCount = 0;
   const previewProvider = api.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, {
@@ -466,6 +473,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       previews.set(path, previewText(data));
       void api.workspace
         .openTextDocument(api.Uri.from({ scheme: PREVIEW_SCHEME, path }))
+        .then((document) => api.languages.setTextDocumentLanguage(document, PREVIEW_LANGUAGE))
         .then((document) => api.window.showTextDocument(document, { preview: false }))
         .then(undefined, (error) => report('opening a stack preview', error));
     }

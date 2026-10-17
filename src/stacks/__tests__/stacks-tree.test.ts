@@ -21,7 +21,14 @@ import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
 import { stackPick } from '../stack-pick';
-import { type Row, STACK_COMMANDS, STACKS_CHOICE, STACKS_STATE, stacksTree } from '../stacks-tree';
+import {
+  PREVIEW_SCHEME,
+  type Row,
+  STACK_COMMANDS,
+  STACKS_CHOICE,
+  STACKS_STATE,
+  stacksTree,
+} from '../stacks-tree';
 import { memento, run, runs, stack, stacks } from './stack-fixtures';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -83,7 +90,7 @@ const PROD_PREVIEW = {
   advisories: NO_AGENT,
 };
 const PROD_PREVIEW_TEXT =
-  'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n';
+  'Preview of prod (tree h1)\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n';
 const COMPLETED = '2026-09-01T01:00:00Z';
 const applyResult = (error: string | null = null) => ({
   type: 'result',
@@ -155,6 +162,9 @@ function setup(options: Options) {
   const shownChannels: string[] = [];
   let content: vscode.TextDocumentContentProvider | undefined;
   const opened: string[] = [];
+  // Each document the window shows: its URI and language, with the options
+  // it is shown with.
+  const shown: { document: unknown; options: unknown }[] = [];
   // Each progress the window shows: a notification's title, or the view it
   // is drawn over, and whether its task has ended.
   const progress: {
@@ -212,7 +222,9 @@ function setup(options: Options) {
       showErrorMessage: answer('error'),
       setStatusBarMessage: vi.fn(),
       onDidChangeActiveTextEditor: activeEditor.event,
-      showTextDocument: vi.fn(async () => {}),
+      showTextDocument: vi.fn(async (document: unknown, options: unknown) => {
+        shown.push({ document, options });
+      }),
       createOutputChannel: (name: string) => {
         const lines: string[] = [];
         channels.set(name, lines);
@@ -235,9 +247,15 @@ function setup(options: Options) {
       },
       openTextDocument: vi.fn(async (u: { path: string }) => {
         opened.push(String(content?.provideTextDocumentContent(u as never, {} as never)));
-        return {};
+        return { uri: u, languageId: 'plaintext' };
       }),
       onDidChangeWorkspaceFolders: workspaceFolders.event,
+    },
+    languages: {
+      setTextDocumentLanguage: vi.fn(async (document: object, languageId: string) => ({
+        ...document,
+        languageId,
+      })),
     },
     commands: {
       registerCommand: (id: string, run: (...args: unknown[]) => Promise<unknown>) => {
@@ -372,6 +390,7 @@ function setup(options: Options) {
     channels,
     shownChannels,
     opened,
+    shown,
     progress,
     offers,
     runner,
@@ -1037,6 +1056,27 @@ describe('a stack row', () => {
     expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
     expect(t.channels.get('Lace: prod')).toEqual(['── lace run logs run_1 ──', 'line one']);
     expect(t.shownChannels).toContain('Lace: prod');
+  });
+
+  test('its Preview opens as a document of its own in the Lace plan language, which wraps its lines', async () => {
+    const t = setup({
+      root: prod,
+      scripts: { ...listed, 'stack preview': { documents: [PROD_PREVIEW] } },
+    });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.preview, row);
+    await settled();
+
+    expect(t.shown).toEqual([
+      {
+        document: {
+          uri: { scheme: PREVIEW_SCHEME, path: '/prod-1.plan' },
+          languageId: 'lace-plan',
+        },
+        options: { preview: false },
+      },
+    ]);
   });
 });
 

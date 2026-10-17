@@ -4,8 +4,9 @@
 // welcome link names a contributed command or one of VS Code's own, every
 // view a `when` clause names is contributed, a view's welcome for a state
 // offers the one action that gets past it and holds no inline code, a run
-// row's actions are offered by its state, and the settings are the ones the
-// extension reads, with the defaults it reads.
+// row's actions are offered by its state, the settings are the ones the
+// extension reads, with the defaults it reads, and the one language is the
+// one a preview opens in.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
@@ -13,6 +14,7 @@ import { engineSettings } from '../engine/engine';
 import { FEATURES, type WindowBase, windowHost } from '../features';
 import { run } from '../stacks/__tests__/stack-fixtures';
 import { runLook } from '../stacks/stack-rows';
+import { PREVIEW_LANGUAGE } from '../stacks/stacks-tree';
 
 const ROOT = resolve(__dirname, '..', '..');
 const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -252,6 +254,16 @@ describe('the manifest', () => {
       Object.fromEntries(Object.entries(properties).map(([id, p]) => [id, p.default])),
     ).toEqual(Object.fromEntries(read));
     expect(properties['lace.binaryPath'].scope).toBe('machine-overridable');
+  });
+
+  // A preview's document is set to its language when it opens, so the
+  // language claims no file, and its lines wrap whatever the developer's
+  // own word wrap is.
+  test('contributes the language a preview opens in, which claims no file and wraps its lines', () => {
+    expect(contributes.languages).toEqual([{ id: PREVIEW_LANGUAGE, aliases: ['Lace Plan'] }]);
+    expect(contributes.configurationDefaults).toEqual({
+      [`[${PREVIEW_LANGUAGE}]`]: { 'editor.wordWrap': 'on' },
+    });
   });
 
   test('runs only in a trusted folder on disk', () => {
