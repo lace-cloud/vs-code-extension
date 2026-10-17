@@ -228,12 +228,12 @@ describe('the host protocol', () => {
     expect(
       noticeOf({ op: 'notify', level: 'error', text: 'x', failure: { reason: 'no_team' } }),
     ).toBeNull();
-    expect(noticeOf({ op: 'generated', written: ['main.tf'] })).toEqual({
-      op: 'generated',
-      written: ['main.tf'],
-    });
-    expect(noticeOf({ op: 'generated', written: 'main.tf' })).toBeNull();
-    expect(noticeOf({ op: 'generated', written: [1] })).toBeNull();
+    const files = { written: ['main.tf', 'outputs.tf'], changed: ['main.tf'], removed: ['old.tf'] };
+    expect(noticeOf({ op: 'generated', files })).toEqual({ op: 'generated', files });
+    expect(noticeOf({ op: 'generated', files: { ...files, written: 'main.tf' } })).toBeNull();
+    expect(noticeOf({ op: 'generated', files: { ...files, changed: [1] } })).toBeNull();
+    expect(noticeOf({ op: 'generated', files: { written: files.written } })).toBeNull();
+    expect(noticeOf({ op: 'generated', written: ['main.tf'] })).toBeNull();
     expect(noticeOf({ op: 'arrangement', value: 3 })).toBeNull();
     expect(noticeOf(undefined)).toBeNull();
   });
