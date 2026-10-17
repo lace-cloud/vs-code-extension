@@ -96,9 +96,10 @@ describe("a preview's document", () => {
   });
 });
 
-// The verdict says every fact the preview's policy result carries: its
-// mode, the rule that decided it, the conditions that fired, the deciding
-// policy, a block's reason, and each policy's own answer.
+// The verdict states the policy result's mode, the rule that decided it,
+// the conditions that fired, the deciding policy, and a block's reason or
+// why it is decided at apply, then, when several policies answer, one
+// answer per policy.
 describe("a preview's policy verdict", () => {
   test('names its mode, the rule that decided it and the deciding policy', () => {
     expect(policyLine(previewText(preview('')))).toBe(
