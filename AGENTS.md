@@ -139,11 +139,12 @@ which attributes to the run what names none:
 - `onDidTick` tells each tick of the store with the `RunCtx` of the run whose binding ticked it.
 - The arguments a binding leaves to its host come as the runner's form (`onPendingFormChange`). What the run's `RunCtx`
   object was answered before is reused by argument name; the answerer (`vscode/form-answerer.ts`) asks the rest, one
-  prompt per argument name: `slug` an input box that refuses an empty value, `connection` a pick from `lace connection
-  list`, on screen while the list is read (a list that cannot be read, or an empty one, closes it, cancels the form and
-  says why), `state` an open dialog for one file; any other name cancels the form with a notice. A dismissed prompt
-  cancels the form. The host keeps the form the runner handed it last: a form superseded by a newer one submits and
-  cancels nothing when its prompts settle. A submit runs in the run's context again.
+  prompt per argument name: `slug` an input box that opens on the slug the root's directory name makes, selected (empty
+  when the name makes none), and refuses an empty value, `connection` a pick from `lace connection list`, on screen
+  while the list is read (a list that cannot be read, or an empty one, closes it, cancels the form and says why),
+  `state` an open dialog for one file; any other name cancels the form with a notice. A dismissed prompt cancels the
+  form. The host keeps the form the runner handed it last: a form superseded by a newer one submits and cancels nothing
+  when its prompts settle. A submit runs in the run's context again.
 - A run ends once nothing of it is pending: the runner's call, its form, its start after a submit (until the command
   starts, or the runner declines it: a confirmation answered no, or a refusal, which it states through `notify`), and
   each invocation it started. `run` resolves when the runner's call does, with `ended`. A run a trigger starts (Create
@@ -287,9 +288,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   which VS Code draws with its backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
 - `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
   run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
-  ends. The runner's form asks for the slug and the connection; the package's notice says "Created stack <slug>", and
-  its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason, through the offers
-  (`not_git_repository` and `no_origin_remote` say the CLI's message).
+  ends. The runner's form asks for the slug, proposing the root's directory name, and the connection; the package's
+  notice says "Created stack <slug>", and its tick reads the tree again, which lists the stack. A refusal is the CLI's,
+  by its reason, through the offers (`not_git_repository` and `no_origin_remote` say the CLI's message).
 - The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>` and is on screen while the list is
   read; a list that cannot be read closes it and is shown with the ways out its reason names, and a root with no stack
   closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.

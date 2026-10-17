@@ -169,11 +169,11 @@ its ten most recent runs. The view's description names the module; it follows th
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
   portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.
 - **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it asks
-  for the new stack's slug, then for the cloud connection it deploys through, picked from your team's connections as
-  `lace connection list` lists them, and creates it under a progress notification. The stack is bound to the module's
-  place in its git repository, and the view lists it. A team with no cloud connection yet is told so, with
-  **Open Portal**, where connections are added. **Preview**, **Apply** and **Scan for Drift** from the Command Palette
-  on a module with no stack say to create one in the Stacks view.
+  for the new stack's slug, proposing one made from the module directory's name, then for the cloud connection it
+  deploys through, picked from your team's connections as `lace connection list` lists them, and creates it under a
+  progress notification. The stack is bound to the module's place in its git repository, and the view lists it. A team
+  with no cloud connection yet is told so, with **Open Portal**, where connections are added. **Preview**, **Apply** and
+  **Scan for Drift** from the Command Palette on a module with no stack say to create one in the Stacks view.
 - **Lace: Import Existing Resources** (`lace.importResources`), also on the canvas's banner for a module not in Lace
   style, adopts resources that already exist into a stack of the module (`lace stack import`): you pick the stack,
   then the statefile that records them, any file you name. It saves the module's open `.tf` editors, then restructures
