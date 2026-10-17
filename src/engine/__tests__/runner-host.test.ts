@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import {
   type ActionContribution,
   CORE_COMMAND_ACTIONS,
@@ -19,6 +20,8 @@ const action = (id: string) => {
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const STACK = { id: 'stk_1', slug: 'prod' };
+// What `stack scan` renders for a scan it triggered and did not wait on.
+const SCAN_TRIGGERED = { stack: STACK, triggered: true, reason: null, settled: null };
 const RESULT = {
   type: 'result',
   run: {
@@ -186,9 +189,9 @@ describe('the runner host', () => {
     await runners.run(action('scan'), prod);
     await runners.run(action('scan'), staging);
     const [prodScan, stagingScan] = window.commands.held;
-    stagingScan.finish([{ triggered: true, reason: null, settled: null }]);
+    stagingScan.finish([SCAN_TRIGGERED]);
     await settled();
-    prodScan.finish([{ triggered: true, reason: null, settled: null }]);
+    prodScan.finish([SCAN_TRIGGERED]);
     await settled();
 
     expect(ticked.map((run) => [run.path, run.ctx.root])).toEqual([
@@ -197,6 +200,41 @@ describe('the runner host', () => {
     ]);
     expect(ticked[0].ctx).toBe(staging);
     expect(ticked[1].ctx).toBe(prod);
+  });
+
+  test("a tick is told with the run the runner's tick names, though it fires outside the run's async context", async () => {
+    // An emitter made outside every run: its listener runs in the context of
+    // whoever emits, as a frame arriving over a bridge does.
+    const outside = new EventEmitter();
+    const scanSettledOutside: ActionContribution = {
+      id: 'scan-settled-outside',
+      label: 'Scan',
+      placement: 'toolbar',
+      requiredPorts: ['commands'],
+      binding: defineCommand<'stack scan'>({
+        kind: 'command',
+        path: 'stack scan',
+        args: (ctx) => ({ stack: ctx.stack?.id }),
+        result: {
+          kind: 'notify',
+          consume: (rt) => {
+            outside.once('settled', () => rt.tick());
+          },
+        },
+      }),
+    };
+    const { runners } = host({ 'stack scan': { documents: [SCAN_TRIGGERED] } });
+    const ticked: CommandRun[] = [];
+    runners.onDidTick((run) => ticked.push(run));
+    const prod = { root: '/repo/prod', stack: STACK };
+
+    await runners.run(scanSettledOutside, prod);
+    await settled();
+    expect(ticked).toEqual([]);
+    outside.emit('settled');
+
+    expect(ticked.map((run) => [run.path, run.ctx])).toEqual([['stack scan', prod]]);
+    expect(ticked[0].ctx).toBe(prod);
   });
 
   test('one store for the window: an apply of one root is refused while one runs anywhere', async () => {
@@ -238,7 +276,7 @@ describe('the runner host', () => {
       ['stack:stk_2', 'stack scan'],
     ]);
 
-    window.commands.held[0].finish([{ triggered: true, reason: null, settled: null }]);
+    window.commands.held[0].finish([SCAN_TRIGGERED]);
     window.commands.held[1].finish([], new CommandExitError(1, 'Error: no\n'));
     await settled();
     expect(running()).toEqual([]);
@@ -342,7 +380,7 @@ describe("a run's end", () => {
     const { ended } = await runners.run(action('scan'), { stack: STACK });
     expect(await hasEnded(ended)).toBe(false);
 
-    window.commands.held[0].finish([{ triggered: true, reason: null, settled: null }]);
+    window.commands.held[0].finish([SCAN_TRIGGERED]);
     expect(await hasEnded(ended)).toBe(true);
   });
 
