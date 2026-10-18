@@ -53,6 +53,7 @@ src/
 resources/instructions/   the text-level instructions contributed to the developer's coding assistant
 packages/host-e2e/        the window e2e (a real VS Code against a real engine)
 LACE_CLI_VERSION          the released `lace` CLI the engine tests and the window e2e run
+LACE_CLI_TOOLS            the tools that release pins (terraform, tfsec), at its versions: CI puts them on PATH
 ```
 
 Rspack builds four bundles into `out/`: `extension.js` (Node, from `src/extension.ts`; it imports the React-free
@@ -63,10 +64,11 @@ Rspack builds four bundles into `out/`: `extension.js` (Node, from `src/extensio
 
 The extension depends on Lace's `@lace-cloud/*` packages from npm, at the versions `package.json` pins (all at one
 version: the packages are released together), and on the `lace` CLI as its engine. The engine the tests run is the
-released CLI at the version `LACE_CLI_VERSION` names, found in `bin/` (ignored) or on `PATH`; a binary that says
-another version, any other build of the CLI included, is refused. `src/__tests__/tracked-pins.test.ts` holds what git
-tracks to published versions: no local path, link or override in a manifest, the workspace file or the lockfile, and a
-lockfile that locks exactly what the manifests name.
+released CLI at the version `LACE_CLI_VERSION` names, found in `bin/` (ignored) or on `PATH`; a binary that says another
+version, any other build of the CLI included, is refused. `LACE_CLI_TOOLS` names the versions of the tools that release
+pins, terraform and tfsec. `src/__tests__/tracked-pins.test.ts` holds what git tracks to published versions: no local
+path, link or override in a manifest, the workspace file or the lockfile, and a lockfile that locks exactly what the
+manifests name.
 
 ## Build and test
 
@@ -87,8 +89,10 @@ out, with no saved selection and no tool of their own, in a home of the test's o
 tests holds. The engine is `bin/lace` when one is there, else the `lace` on `PATH`, at the version `LACE_CLI_VERSION`
 names; the developer's environment unsets each variable the CLI reads a developer's state from but the home's. Both are
 `src/engine/__tests__/engine-binary.mjs`'s (`releasedEngine`, `signedOutEnvironment`), which the window e2e reads too.
-To run the extension, press F5 (**Run Extension**); the engine is the `lace` on `PATH` unless `lace.binaryPath` names
-another executable.
+The engine runs the terraform and tfsec on `PATH` when each reports the CLI's pin (the versions `LACE_CLI_TOOLS` names;
+CI puts both there), else it downloads the pinned build into the home's `.lace/bin`, which for an engine test is the
+test's own: once per test. To run the extension, press F5 (**Run Extension**); the engine is the `lace` on `PATH` unless
+`lace.binaryPath` names another executable.
 
 ### End-to-end tests
 
@@ -103,11 +107,12 @@ opens a VS Code window for a few seconds each; CI runs it under a virtual displa
 
 ## Branch flow and shipping
 
-- **Feature branches** branch off `develop` and open a PR to `develop`. `ci.yml` installs the dependencies from npm and
-  the `lace` CLI that `LACE_CLI_VERSION` names, verified against the release's signature, then runs lint, typecheck,
-  the unit tests, the build and the bundle tests, then the engine tests, on Linux and on Windows; the window e2e runs on
-  Linux alone, under a virtual display (`AGENTS.md`, "Tests"). `ci-summary` is `develop`'s one required status check;
-  direct pushes to `develop` are blocked.
+- **Feature branches** branch off `develop` and open a PR to `develop`. `ci.yml` installs the dependencies from npm, the
+  `lace` CLI that `LACE_CLI_VERSION` names, verified against the release's signature, and the tools it pins at the
+  versions `LACE_CLI_TOOLS` names, each held to its vendor's published digest, then runs lint, typecheck, the unit
+  tests, the build and the bundle tests, then the engine tests, on Linux and on Windows; the window e2e runs on Linux
+  alone, under a virtual display (`AGENTS.md`, "Tests"). `ci-summary` is `develop`'s one required status check; direct
+  pushes to `develop` are blocked.
 - **Every push to `develop` that touches extension source publishes a Marketplace pre-release** (`pre-release.yml`).
   Nothing is pushed to `develop` without the owner's word.
 - **`main`** accepts PRs only from `develop`. `release-guard.yml` requires the `package.json` version to have moved
@@ -117,7 +122,8 @@ opens a VS Code window for a few seconds each; CI runs it under a virtual displa
   `pnpm version <MAJOR>.<MINOR+2>.0 --no-git-tag-version`, a patch with `pnpm version patch`), and a pre-release is
   `<major>.<stable minor + 1>.<github.run_number>`, stamped by the workflow and never committed.
 - **A new release of the libraries**: the `@lace-cloud/*` pins and `pnpm-lock.yaml` move to it, all at once (the
-  packages are released together). **A new release of the CLI**: `LACE_CLI_VERSION` moves to it.
+  packages are released together). **A new release of the CLI**: `LACE_CLI_VERSION` moves to it, and `LACE_CLI_TOOLS` to
+  the tool versions it pins (CI fails when the CLI downloads a tool `LACE_CLI_TOOLS` should have put on `PATH`).
 
 ## How to work on this codebase
 
