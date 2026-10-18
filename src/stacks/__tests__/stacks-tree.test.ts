@@ -548,6 +548,42 @@ describe('the stacks of the current root', () => {
     expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
   });
 
+  test('of two reads under way at once, the one started later is what the view holds and draws, whichever answers last', async () => {
+    type Listed = ReturnType<typeof stacks>;
+    const answers: ((listed: Listed) => void)[] = [];
+    let lists = 0;
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': () =>
+          lists++ === 0
+            ? { documents: [stacks(stack('stk_1', 'prod'))] }
+            : new Promise<Script>((resolve) => {
+                answers.push((listed) => resolve({ documents: [listed] }));
+              }),
+      },
+    });
+    const tree = t.shownTree();
+    await tree.show();
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+
+    const [older, later] = answers;
+    later(stacks(stack('stk_3', 'later')));
+    await settled();
+    await tree.answered();
+    older(stacks(stack('stk_2', 'older')));
+    await settled();
+    await tree.answered();
+
+    const slugOf = (row: unknown) => (row as Extract<Row, { kind: 'stack' }>).stack.slug;
+    expect((await t.children()).map(slugOf)).toEqual(['later']);
+    expect(tree.drawn().map((handle) => slugOf(tree.argument(handle)))).toEqual(['later']);
+    expect(t.redrawn).toEqual([undefined]);
+  });
+
   test("in a workspace of several folders, the view names its root as the root's canvas tab is titled", async () => {
     const api = folder('/work/api', 0);
     const web = folder('/work/web', 1);
@@ -835,6 +871,24 @@ describe('when the stacks cannot be listed', () => {
     expect(t.contexts).toEqual(['teamlessOrganization']);
     await t.command(STACK_COMMANDS.openPortal);
     expect(t.api.env.openExternal).toHaveBeenCalledWith({ url: TEAM_CREATE_URL });
+  });
+
+  test('a read that fails before the stacks are listed, for a root the view turned to, holds no stack of the root it left and says why', async () => {
+    const t = setup({
+      root: prod,
+      scripts: { 'stack list': { documents: [stacks(stack('stk_1', 'prod'))] } },
+    });
+    expect(await t.children()).toHaveLength(1);
+
+    t.terraformFiles.mockRejectedValueOnce(new Error('the workspace could not be searched'));
+    t.active.fire(staging);
+    await settled();
+
+    expect(t.redrawn).toEqual([undefined]);
+    expect(await t.children()).toEqual([]);
+    expect(t.view.description).toBe('infra/staging');
+    expect(t.contexts.at(-1)).toBe('failed');
+    expect(t.view.message).toBe('the workspace could not be searched');
   });
 
   test('any other failure says its message, and is read again after a change of account', async () => {

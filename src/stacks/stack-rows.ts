@@ -67,6 +67,11 @@ export type RowLook = {
   contextValue: string;
 };
 
+// Whether two looks draw the same row: every field the same.
+export function sameLook(a: RowLook, b: RowLook | undefined): boolean {
+  return b !== undefined && (Object.keys(a) as (keyof RowLook)[]).every((key) => a[key] === b[key]);
+}
+
 // A stack row: its name and slug, whether its badges are on the canvas, its
 // last drift scan, and an apply of it under way.
 export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook {

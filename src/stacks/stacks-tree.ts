@@ -118,6 +118,7 @@ import {
   runLook,
   type Stack,
   type StacksState,
+  sameLook,
   stackLook,
   stackRef,
 } from './stack-rows';
@@ -219,7 +220,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // runs VS Code asked for, and the look each stack row was last drawn with.
   let shown = new Map<string, StackRow>();
   let runsOf = new Map<string, Promise<Row[]>>();
-  const drawn = new Map<string, string>();
+  const drawn = new Map<string, RowLook>();
   // The refusal the view shows, kept for the welcome's action.
   let refusal: CommandFailure | undefined;
 
@@ -232,25 +233,30 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // holds the answer, which VS Code's ask then reads with nothing run in
   // between. A read started later supersedes one still under way.
   let reads = 0;
-  let latest: Promise<void> | undefined;
-  function read(tell: boolean): Promise<void> {
+  let latest: Promise<boolean> | undefined;
+  // Reads the tree and holds what it found, unless a read started later
+  // meanwhile; resolves with whether this read's answer is held.
+  function readAndHold(): Promise<boolean> {
     const at = ++reads;
-    const done = readTree().then(
-      (tree) => {
-        if (at !== reads) return;
-        hold(tree);
-        if (tell) changed.fire(undefined);
-      },
-      (error) => report('reading the Stacks view', error),
-    );
+    const done = readTree().then((tree) => {
+      if (at !== reads) return false;
+      hold(tree);
+      return true;
+    });
     latest = done;
     return done;
+  }
+  // The tree read again, and redrawn whole once its answer is held.
+  function reread(): void {
+    void readAndHold().then((held) => {
+      if (held) changed.fire(undefined);
+    });
   }
   // What may have changed the stacks: the tree is read again and redrawn
   // whole, and the canvas of the view's root and the canvas of the root
   // `ran` names, a ticking run's, are each told their reads are stale, once.
   const refresh = (ran?: AuthoringRoot) => {
-    void read(true);
+    reread();
     if (root) panels.tick(root);
     if (ran && !(root && sameRoot(root, ran))) panels.tick(ran);
   };
@@ -261,7 +267,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     const rows = [...new Set(ids)]
       .map((id) => (id === undefined ? undefined : shown.get(id)))
       .filter((row): row is StackRow => row !== undefined);
-    for (const row of rows) drawn.set(row.stack.id, lookOf(row));
+    for (const row of rows) drawn.set(row.stack.id, look(row));
     if (rows.length > 0) changed.fire(rows);
   };
 
@@ -283,7 +289,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // candidate (`lace.stacks.choice`), the root it names, the view's state
   // and message, and the root's stacks with the runs of each stack whose runs
   // are held, read again with it; or why there are none, a refusal kept for
-  // the welcome's action.
+  // the welcome's action. A read that failed, whatever step failed, holds no
+  // stack and says why by the failure's reason, else its message (`failed`,
+  // whose welcome offers Retry).
   type TreeRead = {
     choice: boolean;
     root: AuthoringRoot | undefined;
@@ -295,26 +303,27 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   };
 
   async function readTree(): Promise<TreeRead> {
-    // One read of the candidates per read of the tree: the choice, and the
-    // root found when the view has none.
-    const known = await candidates(sources);
-    const choice = known.length > 1;
+    let choice = false;
     let of = root;
-    if (!of) {
-      const found = await findRoot(sources, async () => known);
-      if (found.kind !== 'root') {
-        return {
-          choice,
-          root: undefined,
-          state: rootlessState(found),
-          stacks: [],
-          runs: new Map(),
-        };
-      }
-      of = found.root;
-    }
-    const at = of;
     try {
+      // One read of the candidates per read of the tree: the choice, and the
+      // root found when the view has none.
+      const known = await candidates(sources);
+      choice = known.length > 1;
+      if (!of) {
+        const found = await findRoot(sources, async () => known);
+        if (found.kind !== 'root') {
+          return {
+            choice,
+            root: undefined,
+            state: rootlessState(found),
+            stacks: [],
+            runs: new Map(),
+          };
+        }
+        of = found.root;
+      }
+      const at = of;
       const listed = await commandDocument(await commands.anywhere(), 'stack list', {
         source: rootPath(at),
       });
@@ -331,7 +340,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       const state = refusedState(failure);
       return {
         choice,
-        root: at,
+        root: of,
         state: state === 'noTeam' ? await teamState() : state,
         message: state === 'failed' ? failureText(error) : undefined,
         refusal: failure,
@@ -351,7 +360,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     shown = new Map(tree.stacks.map((row) => [row.stack.id, row]));
     runsOf = tree.runs;
     drawn.clear();
-    for (const row of tree.stacks) drawn.set(row.stack.id, lookOf(row));
+    for (const row of tree.stacks) drawn.set(row.stack.id, look(row));
   }
 
   // No team is selected: there is one to select, or the organization has
@@ -402,7 +411,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   const restacking = new Set<string>();
   async function restack(id: string | undefined): Promise<void> {
     const row = id === undefined ? undefined : shown.get(id);
-    if (!row || restacking.has(row.stack.id) || lookOf(row) === drawn.get(row.stack.id)) return;
+    if (!row || restacking.has(row.stack.id) || sameLook(look(row), drawn.get(row.stack.id))) {
+      return;
+    }
     restacking.add(row.stack.id);
     try {
       const held = runsOf;
@@ -433,7 +444,6 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       contextValue: '',
     };
   };
-  const lookOf = (row: StackRow): string => JSON.stringify(look(row));
 
   // A row's identity across reads, so an expanded stack stays expanded and
   // a menu opened on a row before a redraw names the same row after it.
@@ -465,9 +475,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       if (row?.kind === 'stack') return runsOfRow(row);
       if (row) return [];
       // The tree as the latest read holds it, read first when nothing is.
-      let answered: Promise<void>;
+      let answered: Promise<boolean>;
       do {
-        answered = latest ?? read(false);
+        answered = latest ?? readAndHold();
         await answered;
       } while (answered !== latest);
       return [...shown.values()];
@@ -479,7 +489,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   function show(next: AuthoringRoot): void {
     if (root && sameRoot(root, next)) return;
     root = next;
-    void read(true);
+    reread();
   }
 
   // Runs a stack row's binding over the root and the stack.
@@ -648,7 +658,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }),
     api.workspace.onDidChangeWorkspaceFolders(() => {
       if (root && !folderOpen(root, sources.folders())) root = undefined;
-      void read(true);
+      reread();
     }),
     ...registerCommands(api, {
       [STACK_COMMANDS.refresh]: async () => refresh(),
