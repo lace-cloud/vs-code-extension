@@ -304,11 +304,13 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   own and with `editor.wordWrap` on, so its lines wrap.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
   gives (`rootlessState`): `noFolder` (Open Folder, VS Code's own `workbench.action.files.openFolder`), `noModule` (Open
-  Canvas starts one), `severalModules` (Choose Module). When the stacks cannot be listed, it selects the welcome view by
-  the failure's reason: `signedOut`, `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the
-  failure carries; the host builds no portal URL), `noStack`, `failed`. Every welcome but the one shown before the first
-  read offers exactly one action, a contributed command or one of VS Code's own; welcome text holds no inline code,
-  which VS Code draws with its backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
+  Canvas starts one), `severalModules` (Choose Module). When the stacks cannot be listed, or a read of the tree fails at
+  any step before that (the workspace's search for Terraform, finding the root), it holds no stack for the root the read
+  was for and selects the welcome view by the failure's reason: `signedOut`, `noOrganization`, `noTeam`,
+  `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no portal URL), `noStack`,
+  `failed` (the error's text, with Retry). Every welcome but the one shown before the first read offers exactly one
+  action, a contributed command or one of VS Code's own; welcome text holds no inline code, which VS Code draws with its
+  backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
 - `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
   run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
   ends. The runner's form asks for the slug, proposing the root's directory name, and the connection; the package's
