@@ -384,9 +384,11 @@ before the session closes. A change to the setting re-arms every attachment. The
 ## Account
 
 `account/`: Sign In runs `lace login` (the confirmation code shown once with Copy Code, the page opened once, under a
-cancellable progress notification); Sign Out runs `lace logout`, whose notice is the machine's API key's fate from the
-result: its `revocation`, and `detail`, why it was not revoked; while the key may still be live (the result names the
-portal page, `portalUrl`, where it is revoked) the notice is a warning whose Open Portal opens that page.
+cancellable progress notification); Sign Out runs `lace logout`. Each ends credentials the machine held, and its notice
+says, after a frame of its own (who signed in and that the credentials held before are replaced; that the credentials
+are removed), what became of their API key, one reading of the result's key revocation for both (`keyFate`: its
+`revocation`, and `detail`, why it was not revoked); while the key may still be live (the result names the portal page,
+`portalUrl`, where it is revoked) the notice is a warning whose Open Portal opens that page.
 Organization and team are the CLI's: `org list`, `org use`, `team list`, `team use`, `org current`, `team current`, all
 in the home. Each pick is on screen at once and fills when its read settles (`vscode/pick.ts`). Selecting an
 organization goes on to its team: the team pick opens as the organization is saved, its read `org use` then the teams,

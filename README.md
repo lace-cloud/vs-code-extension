@@ -189,8 +189,9 @@ its ten most recent runs. The view's description names the module; it follows th
 ## Sign-in, organization and team
 
 **Lace: Sign In** runs `lace login`: it shows the confirmation code once, with **Copy Code**, and opens the sign-in page.
-**Lace: Sign Out** runs `lace logout` and says what became of this machine's API key: revoked, or not revoked and why.
-While the key may still be live, the notice is a warning, and **Open Portal** opens the page where you revoke it. The
+Signed in over credentials this machine held, it says what became of their API key: revoked, or not revoked and why.
+**Lace: Sign Out** runs `lace logout` and says the same of the API key of the credentials it removes. While the key may
+still be live, the notice is a warning, and **Open Portal** opens the page where you revoke it. The
 extension keeps no credentials; the CLI reads them for every command.
 
 The organization and team every scoped command runs in are the CLI's own selection, saved by `lace org use` and

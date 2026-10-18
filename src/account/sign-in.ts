@@ -9,11 +9,13 @@
 // sign-in waits on the person in the browser, under a progress notification
 // whose Cancel withdraws it.
 //
-// Signing out's notice is the fate of the API key the machine held, from
-// `lace logout`'s result: revoked, not revoked and why, or that none was
-// saved. When the key may still be live (the result names the portal page
-// where it is revoked), the notice is a warning and Open Portal opens that
-// page.
+// Both end credentials the machine held: a sign-in replaces them, a sign-out
+// removes them. Each says, from its result, what became of their API key
+// (`keyFate`, one reading of a key's revocation: revoked, or not revoked and
+// why), after a frame of its own: who signed in and that the credentials
+// held before are replaced, or that the credentials are removed. When the
+// key may still be live (the result names the portal page where it is
+// revoked), the notice is a warning and Open Portal opens that page.
 import {
   CommandExitError,
   type CommandsPort,
@@ -79,7 +81,7 @@ export async function signIn(
       const invocation = commands.invoke('login', {}, new AbortController().signal);
       const cancelling = token.onCancellationRequested(() => void invocation.cancel());
       try {
-        let user: SignedIn | undefined;
+        let user: { signedIn: SignedIn; replacedKey: KeyRevocation } | undefined;
         for await (const event of invocation.events) {
           if (event.type === 'code') {
             showCode(event.code);
@@ -90,15 +92,21 @@ export async function signIn(
           } else if (event.type === 'email_sent') {
             progress.report({ message: `open the link sent to ${event.email}` });
           } else {
-            user = event.user;
+            user = { signedIn: event.user, replacedKey: event.replacedKey };
           }
         }
         if (user) {
-          void api.window.showInformationMessage(
-            `Signed in to Lace as ${user.name} (${user.email}).`,
+          const signedIn = `Signed in to Lace as ${user.signedIn.name} (${user.signedIn.email}).`;
+          const { revocation } = user.replacedKey;
+          sayFate(
+            api,
+            revocation === 'none'
+              ? signedIn
+              : `${signedIn} The credentials this machine held before are replaced. ${keyFate(revocation, user.replacedKey)}`,
+            user.replacedKey,
           );
         }
-        return user;
+        return user?.signedIn;
       } catch (error) {
         if (!(error instanceof CommandExitError && error.code === CANCELLED)) {
           void api.window.showErrorMessage(`Lace sign-in failed: ${failureSays(error).message}`);
@@ -111,45 +119,45 @@ export async function signIn(
   );
 }
 
-type SignedOut = JsonOf<'logout'>;
+// What a command that ended the machine's credentials says became of their
+// API key: the CLI's reading of it, `revocation`, with `detail`, why it was
+// not revoked, and `portalUrl`, the page it is revoked on, exactly while it
+// may still be live.
+type KeyRevocation = Extract<JsonOf<'login'>, { type: 'result' }>['replacedKey'];
 
-// What became of the key `lace logout` ended, by the result's `revocation`.
-const KEY_FATE: Readonly<Record<SignedOut['revocation'], string>> = {
-  revoked: "Signed out of Lace. This machine's API key is revoked and its credentials removed",
-  refused:
-    'Signed out of Lace. The credentials are removed from this machine, but Lace did not revoke the API key',
-  unreachable:
-    'Signed out of Lace. The credentials are removed from this machine, but Lace could not be reached to revoke the API key',
-  unreadable:
-    'Signed out of Lace. The credentials are removed from this machine; they could not be read, so their API key was not revoked',
-  none: 'You were not signed in to Lace: no credentials were saved on this machine',
+// A revocation of credentials the machine held: `none` is no credentials,
+// which each frame says its own way.
+type Ended = Exclude<KeyRevocation['revocation'], 'none'>;
+
+// The fate of the API key of the credentials a notice's frame names, by
+// `revocation`.
+const KEY_FATE: Readonly<Record<Ended, string>> = {
+  revoked: 'Their API key is revoked',
+  refused: 'Lace did not revoke their API key',
+  unreachable: 'Lace could not be reached to revoke their API key',
+  unreadable: 'They could not be read, so their API key was not revoked',
 };
 
-const sentence = (text: string): string => (text.endsWith('.') ? text : `${text}.`);
-
-// What a sign-out says: the key's fate, with why it was not revoked when the
-// result says, and, when the key may still be live, where it is revoked.
-function signedOutText({ revocation, detail, portalUrl }: SignedOut): string {
-  const fate = sentence(
-    detail === undefined ? KEY_FATE[revocation] : `${KEY_FATE[revocation]}: ${detail}`,
-  );
+// What became of the API key of credentials a command ended: its fate, with
+// why it was not revoked when the result says, and, while the key may still
+// be live, where it is revoked.
+function keyFate(revocation: Ended, { detail, portalUrl }: KeyRevocation): string {
+  const fate = `${detail === undefined ? KEY_FATE[revocation] : `${KEY_FATE[revocation]}: ${detail}`}.`;
   return portalUrl === undefined
     ? fate
     : `${fate} The key may still be live. Revoke it in the portal under Account, CLI keys.`;
 }
 
-// Runs `lace logout` and says what became of the machine's key. It resolves
-// with the notice on screen, not waiting on the developer's answer, so the
-// sign-out is announced at once.
-export async function signOut(
-  commands: CommandsPort,
+// Shows `said`, a notice that ends with a key's fate: a warning whose Open
+// Portal opens the page the key is revoked on while it may still be live,
+// else a notice. It does not wait on the developer's answer.
+function sayFate(
   api: Pick<SignInApi, 'env' | 'Uri'> & {
     window: Pick<typeof vscode.window, 'showInformationMessage' | 'showWarningMessage'>;
   },
-): Promise<void> {
-  const result = await commandDocument(commands, 'logout', {});
-  const said = signedOutText(result);
-  const { portalUrl } = result;
+  said: string,
+  { portalUrl }: KeyRevocation,
+): void {
   if (portalUrl === undefined) {
     void api.window.showInformationMessage(said);
     return;
@@ -157,4 +165,24 @@ export async function signOut(
   void api.window.showWarningMessage(said, OFFER_LABELS.openPortal).then((answer) => {
     if (answer === OFFER_LABELS.openPortal) void api.env.openExternal(api.Uri.parse(portalUrl));
   });
+}
+
+// Runs `lace logout` and says what became of the machine's credentials and
+// their key. It resolves with the notice on screen, not waiting on the
+// developer's answer, so the sign-out is announced at once.
+export async function signOut(
+  commands: CommandsPort,
+  api: Pick<SignInApi, 'env' | 'Uri'> & {
+    window: Pick<typeof vscode.window, 'showInformationMessage' | 'showWarningMessage'>;
+  },
+): Promise<void> {
+  const result = await commandDocument(commands, 'logout', {});
+  const { revocation } = result;
+  sayFate(
+    api,
+    revocation === 'none'
+      ? 'You were not signed in to Lace: no credentials were saved on this machine.'
+      : `Signed out of Lace: the credentials are removed from this machine. ${keyFate(revocation, result)}`,
+    result,
+  );
 }
