@@ -8,15 +8,16 @@
 // The engine is the binary LACE_E2E_ENGINE names, else the `lace` CLI the
 // engine tests run (`src/engine/__tests__/engine-binary.mjs`: `bin/lace`,
 // else the `lace` on PATH), and either way the release LACE_CLI_VERSION
-// names. It reads a Lace config directory of the run's own, so it holds no
-// credential: every case here runs signed out.
+// names. The windows run for a developer of the run's own, in a home of the
+// run's own, as the engine tests do (`signedOutEnvironment`): every case
+// here runs signed out, whatever the shell that runs the e2e holds.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@vscode/test-cli';
-import { releasedEngine } from '../../src/engine/__tests__/engine-binary.mjs';
+import { releasedEngine, signedOutEnvironment } from '../../src/engine/__tests__/engine-binary.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const extension = resolve(here, '..', '..');
@@ -29,6 +30,8 @@ if (!existsSync(join(extension, 'out', 'extension.js'))) {
 
 const run = realpathSync(mkdtempSync(join(tmpdir(), 'lace-host-e2e-')));
 process.on('exit', () => rmSync(run, { recursive: true, force: true }));
+const home = join(run, 'home');
+mkdirSync(home);
 
 // A fresh git repository `name` under the run's directory, whose settings
 // name the engine.
@@ -68,13 +71,7 @@ function window(label, suite, workspace) {
       '--disable-workspace-trust',
       `--user-data-dir=${join(run, suite)}`,
     ],
-    env: {
-      LACE_E2E_ENGINE: engine,
-      LACE_CONFIG_DIR: join(run, 'lace-config'),
-      LACE_API_KEY: undefined,
-      LACE_ORGANIZATION: undefined,
-      LACE_TEAM: undefined,
-    },
+    env: { ...signedOutEnvironment(home), LACE_E2E_ENGINE: engine },
     mocha: { ui: 'bdd', timeout: 120_000, reporter: 'spec' },
   };
 }
