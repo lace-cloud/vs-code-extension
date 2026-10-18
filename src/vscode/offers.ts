@@ -2,13 +2,15 @@
 // action per way out the failure's reason names, read from the failure
 // document and never from the message; a reason with no way out the host
 // can take offers nothing, and the message says what happened. A notice of
-// the window's runner offers, after those, each package action that answers
-// the failure (`FailureAnswer`, which the runner host binds to the failed
-// run); the one chosen runs as every run a trigger starts does, under a
-// progress notification until it ends (`runUnderProgress`). Beside an apply
-// held for approval: the held Run's page in the portal, and the page of each
-// record a change-management system keeps of its change request, where the
-// record carries one.
+// a run offers, after those, each package action that answers the failure
+// (`FailureAnswer`, which the runner host binds to the failed run); the one
+// chosen runs as every run a trigger starts does, under a progress
+// notification until it ends (`runUnderProgress`). `runNotice` draws both
+// notices of a run that offer them: each notice of the window's runner
+// (`offeringPresenter`), and the notice the Stacks tree's apply settles
+// with. Beside an apply held for approval: the held Run's page in the
+// portal, and the page of each record a change-management system keeps of
+// its change request, where the record carries one.
 //
 // Validate acts on a root: a notice that names the root the failure is
 // about offers Validate on that root, the palette's Validate. A notice of
