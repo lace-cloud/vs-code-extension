@@ -640,6 +640,46 @@ describe('the stacks of the current root', () => {
     expect(t.item(qaRun).contextValue).toBe('laceRun ended');
   });
 
+  test('a stack expanded while a read of the whole tree is under way keeps its runs, and a later read that changes them redraws its row with them', async () => {
+    let releasePrimary: () => void = () => {};
+    const primaryLater = new Promise<Script>((resolve) => {
+      releasePrimary = () => resolve({ documents: [runs(run('run_1', 'applying'))] });
+    });
+    const calls = { stk_1: 0, stk_2: 0 };
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+        'run list': (args) => {
+          if (args.stack === 'stk_1') {
+            return calls.stk_1++ === 0
+              ? { documents: [runs(run('run_1', 'applying'))] }
+              : primaryLater;
+          }
+          return calls.stk_2++ === 0
+            ? { documents: [runs(run('run_2', 'applying'))] }
+            : { documents: [runs(run('run_2', 'apply_succeeded', { completedAt: COMPLETED }))] };
+        },
+      },
+    });
+    const [prodRow, qaRow] = await t.children();
+    await t.children(prodRow);
+
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    const [qaRun] = await t.children(qaRow);
+    expect(t.item(qaRun).contextValue).toBe('laceRun running');
+    releasePrimary();
+    await settled();
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(calls.stk_2).toBe(2);
+    expect(t.redrawn.at(-1)).toEqual([qaRow]);
+    const [qaRunNow] = await t.children(qaRow);
+    expect(t.item(qaRunNow).contextValue).toBe('laceRun ended');
+  });
+
   test('a read of the whole tree that changes nothing redraws nothing, and tells the canvas its reads are stale', async () => {
     const t = rereadTo([stack('stk_1', 'prod')], () => [stack('stk_1', 'prod')]);
     const [row] = await t.children();

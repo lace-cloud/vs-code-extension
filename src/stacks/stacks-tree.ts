@@ -218,18 +218,55 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   type StackRow = Extract<Row, { kind: 'stack' }>;
 
   let root: AuthoringRoot | undefined;
-  // The tree as last read, what VS Code's asks are answered from: the stack
-  // rows of the view's root, by stack id (the objects VS Code holds, which a
-  // pick, an apply's progress and a read that changed a row redraw), the run
-  // rows of each stack whose runs VS Code asked for, and once read, those
-  // rows, and the look each stack row was last drawn with.
   // The root the tree as last read is of, which `root`, the root the next
   // read is of, leaves until that read is held.
   let heldRoot: AuthoringRoot | undefined;
+  // The tree as last read, what VS Code's asks are answered from: the stack
+  // rows of the view's root, by stack id (the objects VS Code holds, which a
+  // pick, an apply's progress and a read that changed a row redraw), the runs
+  // of each stack VS Code has asked runs of (`heldRuns`, their one owner),
+  // and the look each stack row was last drawn with.
   let shown = new Map<string, StackRow>();
-  let runsOf = new Map<string, Promise<Row[]>>();
-  let runsRead = new Map<string, readonly Row[]>();
   const drawn = new Map<string, RowLook>();
+
+  // The runs the tree holds of each stack VS Code has asked runs of, by stack
+  // id: the read of them started last (`at`, in the order reads of runs
+  // start), the answer VS Code's ask reads, and its rows once it is read. A
+  // read of the whole tree reads them again for each stack held when it
+  // starts and holds what it read when it lands, keeping a stack asked for
+  // meanwhile; a read started earlier never replaces one started later.
+  type HeldRuns = { at: number; asked: Promise<Row[]>; read?: Row[] };
+  const heldRuns = new Map<string, HeldRuns>();
+  let runReadsStarted = 0;
+  // A read of a stack's runs: when it started among them, and its rows.
+  type RunsRead = { at: number; rows: Row[] };
+
+  // Holds `rows`, the runs of the stack `id` a read started at `at` read,
+  // unless a read started later is held; answers whether it held them.
+  function holdRuns(id: string, { at, rows }: RunsRead): boolean {
+    const held = heldRuns.get(id);
+    if (held !== undefined && held.at > at) return false;
+    heldRuns.set(id, { at, asked: Promise.resolve(rows), read: rows });
+    return true;
+  }
+
+  // Reads the runs of a stack row's stack.
+  async function readRuns(row: StackRow): Promise<RunsRead> {
+    const at = ++runReadsStarted;
+    return { at, rows: await runRows(row) };
+  }
+
+  // A stack row's runs as the tree holds them, read when VS Code first asks
+  // for them.
+  function askRuns(row: StackRow): Promise<Row[]> {
+    const held = heldRuns.get(row.stack.id);
+    if (held) return held.asked;
+    const asking: HeldRuns = { at: ++runReadsStarted, asked: runRows(row) };
+    heldRuns.set(row.stack.id, asking);
+    void asking.asked.then((rows) => holdRuns(row.stack.id, { at: asking.at, rows }));
+    return asking.asked;
+  }
+
   // The refusal the view shows, kept for the welcome's action.
   let refusal: CommandFailure | undefined;
 
@@ -241,22 +278,22 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // the tree reads what may have changed first, and tells VS Code once it
   // holds the answer, which VS Code's ask then reads with nothing run in
   // between. A read started later supersedes one still under way.
-  let reads = 0;
+  let readsStarted = 0;
   let latest: Promise<Redraw | undefined> | undefined;
   // Reads of the whole tree under way.
-  let reading = 0;
+  let readsUnderWay = 0;
   // Reads the tree and holds what it found, unless a read started later
   // meanwhile; resolves with what VS Code is to redraw of it (`hold`), or
   // undefined when it was superseded. The view draws its progress while it
   // reads.
   function readAndHold(): Promise<Redraw | undefined> {
-    const at = ++reads;
-    reading += 1;
+    const at = ++readsStarted;
+    readsUnderWay += 1;
     drawProgress();
     const done = readTree()
-      .then((tree) => (at === reads ? hold(tree) : undefined))
+      .then((tree) => (at === readsStarted ? hold(tree) : undefined))
       .finally(() => {
-        reading -= 1;
+        readsUnderWay -= 1;
         drawProgress();
       });
     latest = done;
@@ -269,7 +306,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // one drawn, while one is.
   let endProgress: (() => void) | undefined;
   function drawProgress(): void {
-    const busy = reading > 0 || commandUnderWay(runner.store.getSnapshot());
+    const busy = readsUnderWay > 0 || commandUnderWay(runner.store.getSnapshot());
     if (busy && !endProgress) {
       const ended = new Promise<void>((resolve) => {
         endProgress = resolve;
@@ -285,14 +322,15 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // only a change of the root or of its stacks does; a read that changed some
   // rows redraws those, and one that changed nothing redraws nothing.
   function reread(): void {
-    void readAndHold().then((redraw) => {
-      if (redraw === 'tree') changed.fire(undefined);
-      else if (redraw !== undefined && redraw.length > 0) changed.fire([...redraw]);
+    void readAndHold().then((toRedraw) => {
+      if (toRedraw === 'tree') changed.fire(undefined);
+      else if (toRedraw !== undefined && toRedraw.length > 0) changed.fire([...toRedraw]);
     });
   }
-  // What may have changed the stacks: the tree is read again and redrawn
-  // whole, and the canvas of the view's root and the canvas of the root
-  // `ran` names, a ticking run's, are each told their reads are stale, once.
+  // What may have changed the stacks: the tree is read again and redrawn as
+  // far as its answer changed it (`reread`), and the canvas of the view's
+  // root and the canvas of the root `ran` names, a ticking run's, are each
+  // told their reads are stale, once.
   const refresh = (ran?: AuthoringRoot) => {
     reread();
     if (root) panels.tick(root);
@@ -337,7 +375,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     message?: string;
     refusal?: CommandFailure;
     stacks: readonly StackRow[];
-    runs: ReadonlyMap<string, readonly Row[]>;
+    runs: ReadonlyMap<string, RunsRead>;
   };
 
   // What VS Code is to redraw of a read: the whole tree, or these rows.
@@ -372,8 +410,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       const runs = new Map(
         await Promise.all(
           stacks
-            .filter((row) => runsOf.has(row.stack.id))
-            .map(async (row) => [row.stack.id, await runRows(row)] as const),
+            .filter((row) => heldRuns.has(row.stack.id))
+            .map(async (row) => [row.stack.id, await readRuns(row)] as const),
         ),
       );
       return { choice, root: at, state: stacks.length === 0 ? 'noStack' : 'stacks', stacks, runs };
@@ -413,11 +451,10 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     view.description = tree.root && rootLabel(tree.root, sources.folders());
     setState(tree.state, tree.message);
     refusal = tree.refusal;
-    const before = runsRead;
-    runsOf = new Map([...tree.runs].map(([id, rows]) => [id, Promise.resolve([...rows])]));
-    runsRead = new Map(tree.runs);
     if (!sameStacks) {
       shown = new Map(tree.stacks.map((row) => [row.stack.id, row]));
+      for (const id of [...heldRuns.keys()]) if (!shown.has(id)) heldRuns.delete(id);
+      for (const [id, read] of tree.runs) holdRuns(id, read);
       drawn.clear();
       for (const row of tree.stacks) drawn.set(row.stack.id, look(row));
       return 'tree';
@@ -427,8 +464,10 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       const row = shown.get(stack.id);
       if (row === undefined) continue;
       row.stack = stack;
-      const runs = tree.runs.get(stack.id);
-      const runsChanged = runs !== undefined && !sameRuns(before.get(stack.id), runs);
+      const read = tree.runs.get(stack.id);
+      const before = heldRuns.get(stack.id)?.read;
+      const runsChanged =
+        read !== undefined && holdRuns(stack.id, read) && !sameRuns(before, read.rows);
       if (runsChanged || !sameLook(look(row), drawn.get(stack.id))) redrawn.push(row);
     }
     for (const row of redrawn) drawn.set(row.stack.id, look(row));
@@ -475,20 +514,6 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }
   }
 
-  // A stack row's runs as the tree holds them, read when VS Code first asks
-  // for them.
-  function runsOfRow(row: StackRow): Promise<Row[]> {
-    const held = runsOf.get(row.stack.id);
-    if (held) return held;
-    const asked = runRows(row);
-    const askedIn = runsOf;
-    askedIn.set(row.stack.id, asked);
-    void asked.then((rows) => {
-      if (runsOf === askedIn) runsRead.set(row.stack.id, rows);
-    });
-    return asked;
-  }
-
   // A stack row whose look changed with the store (an apply of it started,
   // reached a stage or settled): its run may have changed with it, so its
   // runs, when held, are read again, and the row is redrawn once they are.
@@ -502,15 +527,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }
     restacking.add(row.stack.id);
     try {
-      const held = runsOf;
-      if (held.has(row.stack.id)) {
-        const again = runRows(row);
-        const rows = await again;
-        if (runsOf === held) {
-          held.set(row.stack.id, again);
-          runsRead.set(row.stack.id, rows);
-        }
-      }
+      if (heldRuns.has(row.stack.id)) holdRuns(row.stack.id, await readRuns(row));
     } finally {
       restacking.delete(row.stack.id);
     }
@@ -561,7 +578,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       };
     },
     async getChildren(row) {
-      if (row?.kind === 'stack') return runsOfRow(row);
+      if (row?.kind === 'stack') return askRuns(row);
       if (row) return [];
       // The tree as the latest read holds it, read first when nothing is.
       let answered: Promise<Redraw | undefined>;

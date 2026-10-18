@@ -269,24 +269,25 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   redraw names the same row after it). VS Code drops what it holds under a row it redraws, and every row when it redraws
   the whole tree, until the provider answers its ask again, and a row's menu command chosen in that time arrives with no
   row: so the tree reads first and tells VS Code to redraw once it holds the answer, and answers VS Code's asks from
-  what it read (the stacks, and the runs of each stack VS Code asked for, read again with them); a read started later
-  supersedes one under way. A read's answer redraws the whole tree only when it names another root or other stacks
-  (which, in which order); else it redraws the rows VS Code holds whose look or runs it changed, each kept as the object
-  VS Code holds with its stack as the read found it, and a read that changed nothing redraws nothing, so no row loses
-  its element. Only what may change the list reads it whole: a tick, a change of the account, the view shown again, a
-  `lace` command that ended in an integrated terminal and that the CLI declares more than a read
-  (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a change of the root
-  the view names, and Refresh Stacks. A stack row whose look changes with the runner's store (an apply of it started,
-  reached a stage or settled) has its runs read again, then is redrawn; any other change of the store redraws nothing.
-  The tree and the root's canvas badges read the same facts, so one invalidation serves both: each read for what may
-  have changed the stacks (all of these but a change of the folders or of the root, which change no stack) ticks the
-  canvas of the view's root once, and each tick of the runner's store (a run started or settled, a scan or a cancel
-  done) ticks the canvas of the root that run was about too, its `RunCtx.root` as the runner's tick event names it,
-  whatever the tree ran since; a canvas both name ticks once. The view draws its progress while a read of the whole tree
-  is under way (the view shows the tree it holds until the read's answer is held; a read reads the runs of every stack
-  it holds runs of at once) and while the package's `commandUnderWay` reads a command under way in the store (the run
-  slot's run, the preview slot's preview, or a command's running mark, by the target it runs on), and ends it when
-  neither is; a follow of a run's logs is a subscription, not a command under way, and draws none.
+  what it read (the stacks, and the runs of each stack VS Code has asked runs of, read again with them, a stack asked
+  for while a read was under way among them); a read started later supersedes one under way. A read's answer redraws the
+  whole tree only when it names another root or other stacks (which, in which order); else it redraws the rows VS Code
+  holds whose look or runs it changed, each kept as the object VS Code holds with its stack as the read found it, and a
+  read that changed nothing redraws nothing, so no row loses its element. Only what may change the list reads it whole:
+  a tick, a change of the account, the view shown again, a `lace` command that ended in an integrated terminal and that
+  the CLI declares more than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the
+  workspace's folders, a change of the root the view names, and Refresh Stacks. A stack row whose look changes with the
+  runner's store (an apply of it started, reached a stage or settled) has its runs read again, then is redrawn; any
+  other change of the store redraws nothing. The tree and the root's canvas badges read the same facts, so one
+  invalidation serves both: each read for what may have changed the stacks (all of these but a change of the folders or
+  of the root, which change no stack) ticks the canvas of the view's root once, and each tick of the runner's store (a
+  run started or settled, a scan or a cancel done) ticks the canvas of the root that run was about too, its
+  `RunCtx.root` as the runner's tick event names it, whatever the tree ran since; a canvas both name ticks once. The
+  view draws its progress while a read of the whole tree is under way (the view shows the tree it holds until the read's
+  answer is held; a read reads the runs of every stack it holds runs of at once) and while the package's
+  `commandUnderWay` reads a command under way in the store (the run slot's run, the preview slot's preview, or a
+  command's running mark, by the target it runs on), and ends it when neither is; a follow of a run's logs is a
+  subscription, not a command under way, and draws none.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. When it settles, each
   provider version its Run ran under an organization's admission (the result's `run.providers` with an `admission`)
