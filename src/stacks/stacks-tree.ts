@@ -232,9 +232,10 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // The runs the tree holds of each stack VS Code has asked runs of, by stack
   // id: the read of them started last (`at`, in the order reads of runs
   // start), the answer VS Code's ask reads, and its rows once it is read. A
-  // read of the whole tree reads them again for each stack held when it
-  // starts and holds what it read when it lands, keeping a stack asked for
-  // meanwhile; a read started earlier never replaces one started later.
+  // read of the whole tree reads them again for each stack held once its
+  // stacks are listed and holds what it read when it lands, keeping a stack
+  // asked for meanwhile; a read started earlier never replaces one started
+  // later, and no read holds the runs of a stack the tree no longer holds.
   type HeldRuns = { at: number; asked: Promise<Row[]>; read?: Row[] };
   const heldRuns = new Map<string, HeldRuns>();
   let runReadsStarted = 0;
@@ -242,10 +243,13 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   type RunsRead = { at: number; rows: Row[] };
 
   // Holds `rows`, the runs of the stack `id` a read started at `at` read,
-  // unless a read started later is held; answers whether it held them.
+  // while the tree holds runs of that stack and no read of them started
+  // later is held; answers whether it held them. A stack the tree dropped
+  // (a read of the whole tree no longer listed it) takes no read that was
+  // under way, so one that comes back has its runs read again.
   function holdRuns(id: string, { at, rows }: RunsRead): boolean {
     const held = heldRuns.get(id);
-    if (held !== undefined && held.at > at) return false;
+    if (held === undefined || held.at > at) return false;
     heldRuns.set(id, { at, asked: Promise.resolve(rows), read: rows });
     return true;
   }
@@ -463,11 +467,16 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     for (const { stack } of tree.stacks) {
       const row = shown.get(stack.id);
       if (row === undefined) continue;
+      // The row stays the object VS Code holds and redraws, with its stack as
+      // the read found it.
       row.stack = stack;
       const read = tree.runs.get(stack.id);
-      const before = heldRuns.get(stack.id)?.read;
-      const runsChanged =
-        read !== undefined && holdRuns(stack.id, read) && !sameRuns(before, read.rows);
+      let runsChanged = false;
+      if (read !== undefined) {
+        const before = heldRuns.get(stack.id)?.read;
+        const held = holdRuns(stack.id, read);
+        runsChanged = held && !sameRuns(before, read.rows);
+      }
       if (runsChanged || !sameLook(look(row), drawn.get(stack.id))) redrawn.push(row);
     }
     for (const row of redrawn) drawn.set(row.stack.id, look(row));

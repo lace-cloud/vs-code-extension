@@ -680,6 +680,55 @@ describe('the stacks of the current root', () => {
     expect(t.item(qaRunNow).contextValue).toBe('laceRun ended');
   });
 
+  test("a stack that leaves the list while its runs' first read is under way, and comes back, has its runs read again, not that read's", async () => {
+    const release: Record<string, () => void> = {};
+    const held = (key: string, documents: object[]) =>
+      new Promise<Script>((resolve) => {
+        release[key] = () => resolve({ documents });
+      });
+    const listsOf = [['stk_1', 'stk_2'], ['stk_1'], ['stk_1', 'stk_2']];
+    let lists = 0;
+    const calls = { stk_1: 0, stk_2: 0 };
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': () => ({
+          documents: [stacks(...listsOf[Math.min(lists++, 2)].map((id) => stack(id, id)))],
+        }),
+        'run list': (args) => {
+          if (args.stack === 'stk_1') {
+            return calls.stk_1++ < 2
+              ? { documents: [runs(run('run_1', 'applying'))] }
+              : held('stk_1', [runs(run('run_1', 'applying'))]);
+          }
+          return calls.stk_2++ === 0
+            ? held('stk_2', [runs(run('run_old', 'applying'))])
+            : { documents: [runs(run('run_new', 'apply_succeeded', { completedAt: COMPLETED }))] };
+        },
+      },
+    });
+    const [first, second] = await t.children();
+    await t.children(first);
+    void t.children(second);
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    release.stk_2();
+    await settled();
+    release.stk_1();
+    await settled();
+
+    const [, back] = await t.children();
+    const [backRun] = await t.children(back);
+    expect(calls.stk_2).toBe(2);
+    expect(t.item(backRun)).toMatchObject({
+      label: 'apply · run_new',
+      contextValue: 'laceRun ended',
+    });
+  });
+
   test('a read of the whole tree that changes nothing redraws nothing, and tells the canvas its reads are stale', async () => {
     const t = rereadTo([stack('stk_1', 'prod')], () => [stack('stk_1', 'prod')]);
     const [row] = await t.children();
