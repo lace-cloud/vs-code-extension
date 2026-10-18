@@ -401,15 +401,16 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
               resolve(slot);
               return;
             }
-            const phase = slot.phases.at(-1)?.name;
-            if (phase !== undefined) progress.report({ message: phase });
+            const stage = slot.stages.at(-1)?.name;
+            if (stage !== undefined) progress.report({ message: stage });
           };
           const unsubscribe = runner.store.subscribe(check);
           check();
         }),
     );
-    if (settled.outcome.kind === 'running') return;
-    const said = outcomeNotice(stack.slug, settled.outcome);
+    const { outcome } = settled;
+    if (outcome.kind === 'running') return;
+    const said = outcomeNotice(stack.slug, { outcome, run: settled.run });
     const offers = { ...options.offers, validate: () => options.validate(of) };
     const showOutput = { title: SHOW_OUTPUT };
     const chosen = await notice(api, offers, said.level, said.text, said.offers, [showOutput]);

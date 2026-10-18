@@ -71,7 +71,7 @@ export type RowLook = {
 // last drift scan, and an apply of it under way.
 export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook {
   const applying =
-    run !== null && run.outcome.kind === 'running' ? run.phases.at(-1)?.name : undefined;
+    run !== null && run.outcome.kind === 'running' ? run.stages.at(-1)?.name : undefined;
   const drift =
     stack.lastDriftStatus === null
       ? []
@@ -194,10 +194,10 @@ function recordSaid(record: ChangeRecord): { line: string; offers: Offer[] } {
 function awaitingNotice(
   slug: string,
   { id, state, requirements, records }: ChangeRequest,
-  runUrl: string | null,
+  runUrl: string | undefined,
 ): Notice {
   const said = records.map(recordSaid);
-  const runPage: Offer[] = runUrl === null ? [] : [{ kind: 'openPortal', url: runUrl }];
+  const runPage: Offer[] = runUrl === undefined ? [] : [{ kind: 'openPortal', url: runUrl }];
   return {
     level: 'info',
     text: [
@@ -212,17 +212,20 @@ function awaitingNotice(
   };
 }
 
+// A run slot that settled: its outcome, and the Run its result named.
+export type SettledRun = Pick<NonNullable<RunSlot>, 'run'> & {
+  outcome: Exclude<RunOutcome, { kind: 'running' }>;
+};
+
 // What an apply that settled says, and what it offers: the ways out a
-// failure's reason names, and the records of a change request it waits on.
-export function outcomeNotice(
-  slug: string,
-  outcome: Exclude<RunOutcome, { kind: 'running' }>,
-): Notice {
+// failure's reason names, and, for a Run held for approval, the Run's page
+// and the records of the change request it waits on.
+export function outcomeNotice(slug: string, { outcome, run }: SettledRun): Notice {
   switch (outcome.kind) {
     case 'succeeded':
       return { level: 'info', text: `Applied ${slug}.`, offers: [] };
     case 'awaiting-approval':
-      return awaitingNotice(slug, outcome.changeRequest, outcome.runUrl);
+      return awaitingNotice(slug, outcome.changeRequest, run?.url);
     case 'blocked':
       return { level: 'warn', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'failed':

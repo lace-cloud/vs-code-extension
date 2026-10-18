@@ -368,28 +368,37 @@ describe('the state of a view that names no root', () => {
 describe('what a settled apply says', () => {
   test('each outcome has its notice; a failure offers the ways out its reason names', () => {
     const failure: CommandFailure = { reason: 'stale_certification', message: 'stale' };
-    expect(outcomeNotice('prod', { kind: 'succeeded' })).toEqual({
+    expect(outcomeNotice('prod', { outcome: { kind: 'succeeded' }, run: null })).toEqual({
       level: 'info',
       text: 'Applied prod.',
       offers: [],
     });
-    expect(outcomeNotice('prod', { kind: 'blocked', message: 'Error: stale\n', failure })).toEqual({
+    expect(
+      outcomeNotice('prod', {
+        outcome: { kind: 'blocked', message: 'Error: stale\n', failure },
+        run: null,
+      }),
+    ).toEqual({
       level: 'warn',
       text: 'Error: stale',
       offers: [{ kind: 'validate' }],
     });
-    expect(outcomeNotice('prod', { kind: 'failed', message: 'Error: boom' })).toEqual({
+    expect(
+      outcomeNotice('prod', { outcome: { kind: 'failed', message: 'Error: boom' }, run: null }),
+    ).toEqual({
       level: 'error',
       text: 'Error: boom',
       offers: [],
     });
-    expect(outcomeNotice('prod', { kind: 'cancelled' }).text).toBe('Cancelled the apply of prod.');
-    expect(outcomeNotice('prod', { kind: 'detached', submitted: true }).text).toBe(
-      'Stopped following the apply of prod; the run goes on.',
+    expect(outcomeNotice('prod', { outcome: { kind: 'cancelled' }, run: null }).text).toBe(
+      'Cancelled the apply of prod.',
     );
-    expect(outcomeNotice('prod', { kind: 'detached', submitted: false }).text).toBe(
-      'The apply of prod stopped before it was sent; nothing ran.',
-    );
+    expect(
+      outcomeNotice('prod', { outcome: { kind: 'detached', submitted: true }, run: null }).text,
+    ).toBe('Stopped following the apply of prod; the run goes on.');
+    expect(
+      outcomeNotice('prod', { outcome: { kind: 'detached', submitted: false }, run: null }).text,
+    ).toBe('The apply of prod stopped before it was sent; nothing ran.');
   });
 });
 
@@ -409,11 +418,13 @@ describe('what an apply held for approval says', () => {
     state: string | null;
     decision: 'approved' | 'rejected' | null;
   };
-  const awaiting = (requirements: Requirement[], records: Record[], runUrl: string | null = null) =>
+  const awaiting = (requirements: Requirement[], records: Record[], url?: string) =>
     outcomeNotice('prod', {
-      kind: 'awaiting-approval',
-      changeRequest: { id: 'chg_1', state: 'submitted', requirements, records },
-      runUrl,
+      outcome: {
+        kind: 'awaiting-approval',
+        changeRequest: { id: 'chg_1', state: 'submitted', requirements, records },
+      },
+      run: url === undefined ? null : run('run_1', 'awaiting_approval', { url }),
     });
   const jsm = (fields: Partial<Record>): Record => ({
     id: 'crec_jsm',

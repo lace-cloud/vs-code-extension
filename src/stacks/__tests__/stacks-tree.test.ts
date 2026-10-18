@@ -97,7 +97,6 @@ const applyResult = (error: string | null = null) => ({
   type: 'result',
   run: run('run_9', error ? 'apply_failed' : 'apply_succeeded', { completedAt: COMPLETED }),
   summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
-  workspaceDir: '/cache',
   error,
 });
 // A failure document whose message is its reason.
@@ -1166,7 +1165,7 @@ describe('an apply', () => {
     { type: 'log', text: 'Preview Advisory:' },
     { type: 'log', text: '  + aws_s3_bucket.b' },
     { type: 'log', text: '' },
-    { type: 'phase', name: 'plan' },
+    { type: 'stage', name: 'plan' },
     { type: 'log', text: 'Still creating...' },
     { type: 'log', text: 'Still creating...' },
   ];
@@ -1368,8 +1367,8 @@ describe('an apply', () => {
         'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
         'stack apply': {
           documents: [
-            { type: 'phase', name: 'submit' },
-            { type: 'phase', name: 'awaiting_approval' },
+            { type: 'stage', name: 'submit' },
+            { type: 'stage', name: 'awaiting_approval' },
             {
               type: 'gate',
               resolution: { mode: 'awaiting_approval' },

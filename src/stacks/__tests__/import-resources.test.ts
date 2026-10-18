@@ -40,7 +40,13 @@ const imported = (residuals: CommandFailure['importResiduals'] = []) => ({
   lock: {
     path: '/work/repo/infra/prod',
     lockfile: '/work/repo/infra/prod/.terraform.lock.hcl',
-    providers: [],
+    providers: [
+      {
+        address: 'registry.terraform.io/hashicorp/aws',
+        version: '5.0.0',
+        platforms: ['linux_amd64'],
+      },
+    ],
   },
   diagnostics: [],
   importBlocks: 2,
@@ -182,7 +188,7 @@ describe('Import Existing Resources', () => {
     expect(t.messages).toEqual([
       {
         level: 'info',
-        text: 'Imported 2 resource(s) into prod, rewriting main.tf in place. Review the change in git, commit it, then apply prod to adopt them.',
+        text: 'Imported 2 resource(s) into prod, rewriting main.tf in place and locking 1 provider in .terraform.lock.hcl. Review the change in git, commit it, then apply prod to adopt them.',
         buttons: [],
       },
     ]);
