@@ -10,3 +10,11 @@ export function releasedEngine(
   named?: string,
   platform?: NodeJS.Platform,
 ): { binary: string } | { refusal: string };
+
+// `engine-binary.mjs`: the variables the CLI reads a developer's own state
+// from.
+export const DEVELOPER_STATE_ENV: readonly string[];
+
+// `engine-binary.mjs`: the environment of a developer signed out, whose home
+// is `home`; an unset name is undefined.
+export function signedOutEnvironment(home: string): Record<string, string | undefined>;
