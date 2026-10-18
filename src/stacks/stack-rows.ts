@@ -1,8 +1,8 @@
 // What the Stacks tree draws, as pure functions of the CLI's documents and
 // of naming a root: the state a view that names no root shows and the state
 // a list of stacks leaves the view in, each row's label, icon and actions,
-// an apply's outcome as a notice with what it offers, and a preview as a
-// document.
+// an apply's outcome as a notice with what it offers, the provider versions
+// its Run ran under an admission, and a preview as a document.
 import type {
   CommandFailure,
   JsonOf,
@@ -254,6 +254,19 @@ export function outcomeNotice(slug: string, { outcome, run }: SettledRun): Notic
             offers: [],
           };
   }
+}
+
+// The provider versions a settled apply's Run ran under an organization's
+// admission, one line each as `lace run get` prints them: the admitter by
+// name, else by id. A Run its result never named ran none.
+export function admittedLines({ run }: Pick<SettledRun, 'run'>): string[] {
+  return (run?.providers ?? []).flatMap(({ address, version, admission }) =>
+    admission === undefined
+      ? []
+      : [
+          `Admitted:   ${address} ${version} (admitted by ${admission.admittedByName || admission.admittedBy}, ${admission.admittedAt})`,
+        ],
+  );
 }
 
 type Preview = JsonOf<'stack preview'>;

@@ -101,6 +101,7 @@ import { runUnderProgress } from '../vscode/run-progress';
 import type { RunOutput } from './run-output';
 import type { PickStack } from './stack-pick';
 import {
+  admittedLines,
   outcomeNotice,
   previewText,
   type RowLook,
@@ -376,9 +377,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   }
 
   // An apply: under a progress notification until the run slot settles,
-  // then what it settled as, with the ways out its failure names, the
-  // package's actions that answer it over the apply's own `RunCtx`, and
-  // Show Output. Cancel is the run's explicit cancel.
+  // then the provider versions its Run ran under an admission, written to
+  // the stack's Output channel, and what it settled as, with the ways out
+  // its failure names, the package's actions that answer it over the
+  // apply's own `RunCtx`, and Show Output. Cancel is the run's explicit
+  // cancel.
   async function apply(of: AuthoringRoot, stack: StackRef): Promise<void> {
     const before = runner.store.getSnapshot().run?.token;
     const ctx: RunCtx = { root: rootPath(of), stack };
@@ -412,6 +415,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     );
     const { outcome } = settled;
     if (outcome.kind === 'running') return;
+    runOutput.write(stack.slug, admittedLines(settled));
     const said = outcomeNotice(stack.slug, { outcome, run: settled.run });
     const offers = { ...options.offers, validate: () => options.validate(of) };
     const answers = said.failure === undefined ? [] : failureAnswers(ctx, said.failure);

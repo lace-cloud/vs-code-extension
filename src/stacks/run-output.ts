@@ -1,13 +1,17 @@
 // The Output channel of a stack's runs: every log line of an apply, the
-// Preview Advisory included, and every line Follow logs reads, so a run's
-// output stays readable after its notification is gone. An apply names its
-// run only when it ends, so its lines and the lines of every run of the
-// stack share the stack's channel, each run under a heading.
+// Preview Advisory included, every line Follow logs reads, and what a
+// settled apply's Run says beside its log, so a run's output stays readable
+// after its notification is gone. An apply names its run only when it ends,
+// so its lines and the lines of every run of the stack share the stack's
+// channel, each run under a heading.
 import type { CommandRun } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 
 export type RunOutput = {
   append: (line: string, run: CommandRun) => void;
+  // `lines` after the latest run's in the channel of the stack `slug`: what
+  // an apply's Run says once it settled, which no log line of it carries.
+  write: (slug: string, lines: readonly string[]) => void;
   // The channel of the stack `slug`, shown.
   show: (slug: string) => void;
   dispose: () => void;
@@ -36,6 +40,11 @@ export function createRunOutput(
         out.appendLine(heading(run));
       }
       out.appendLine(line);
+    },
+    write(slug, lines) {
+      if (lines.length === 0) return;
+      const out = channel(slug);
+      for (const line of lines) out.appendLine(line);
     },
     show: (slug) => channel(slug).show(true),
     dispose() {

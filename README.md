@@ -153,7 +153,8 @@ its ten most recent runs. The view's description names the module; it follows th
   has not ended, and **Open in Portal** when the run has a page there.
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
-  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. An apply held for approval
+  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. When it ends, each provider
+  version its run ran under your organization's admission is written there too, as `lace run get` prints it. An apply held for approval
   names the change request the run waits on: each requirement with its state and whether Lace or a change-management
   system decides it, and each record that system keeps, with its state and **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only

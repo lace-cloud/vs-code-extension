@@ -1207,6 +1207,53 @@ describe('an apply', () => {
     expect(t.redrawn).toContain(undefined);
   });
 
+  test('settled, writes to the stack’s Output channel each provider version its Run ran under an admission, as lace run get prints them', async () => {
+    const admitted = {
+      ...applyResult(),
+      run: {
+        ...applyResult().run,
+        providers: [
+          { address: 'registry.terraform.io/hashicorp/aws', version: '5.0.0' },
+          {
+            address: 'registry.terraform.io/hashicorp/random',
+            version: '3.7.1',
+            admission: {
+              id: 'adm_1',
+              admittedBy: 'usr_1',
+              admittedByName: 'Dev Lead',
+              admittedAt: '2026-10-16T09:00:00Z',
+            },
+          },
+          {
+            address: 'registry.terraform.io/hashicorp/null',
+            version: '3.2.4',
+            admission: {
+              id: 'adm_2',
+              admittedBy: 'usr_2',
+              admittedByName: null,
+              admittedAt: '2026-10-17T10:00:00Z',
+            },
+          },
+        ],
+      },
+    };
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': { documents: [...lines, admitted] },
+      },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+
+    expect(t.channels.get('Lace: prod')?.slice(-2)).toEqual([
+      'Admitted:   registry.terraform.io/hashicorp/random 3.7.1 (admitted by Dev Lead, 2026-10-16T09:00:00Z)',
+      'Admitted:   registry.terraform.io/hashicorp/null 3.2.4 (admitted by usr_2, 2026-10-17T10:00:00Z)',
+    ]);
+  });
+
   test('refused for no certification on one root offers Validate, which runs the palette’s Validate on that root, whatever ran since, and shows its diagnostics', async () => {
     let click: (label: string) => void = () => {};
     const clicked = new Promise<string>((resolve) => {

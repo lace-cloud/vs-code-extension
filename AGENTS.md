@@ -278,7 +278,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   preview, or a command's running mark, by the target it runs on) and ends it when it reads none; a follow of a run's
   logs is a subscription, not a command under way, and draws none.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
-  stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
+  stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. When it settles, each
+  provider version its Run ran under an organization's admission (the result's `run.providers` with an `admission`)
+  is written there after its lines, as `lace run get` prints it (`admittedLines`). Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
   on the root that apply ran in, whose report lands where the palette's does. After them it offers each package action
   that answers the failure's reason (`failureAnswers`, as a notice of the window's runner does), run over the apply's
