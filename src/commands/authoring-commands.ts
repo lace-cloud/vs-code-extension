@@ -9,9 +9,9 @@
 // Generate the canvas's own button ran ends with the same notice
 // (`generated`).
 //
-// Validate, Convert, Format, Scan and Generate Docs take no session and
-// run through the commands mapping in that root, as the same command typed
-// in a terminal there would: the engine runs it on the root's session's
+// Validate, Convert, Format, Scan, Lock Providers and Generate Docs take no
+// session and run through the commands mapping in that root, as the same
+// command typed in a terminal there would: the engine runs it on the root's session's
 // Workspace when the root has one and on the directory otherwise, and
 // creates no canvas state. Validate and Convert do not go through the
 // window's runner: the package's bindings for them hand the presenter a
@@ -22,15 +22,20 @@
 // Format and Convert write the root's Terraform, so each first saves the
 // root's Terraform files that have unsaved changes in an editor, as
 // Generate does: the command writes over what the developer sees, and no
-// unsaved typing is left behind the rewrite. Validate, Scan and Generate
-// Docs rewrite none of it and read the files as they are on disk, as the
-// same command in a terminal does, the chat's validate tool and the
-// canvas's Validate too: one operation reads the same files by every
+// unsaved typing is left behind the rewrite. Validate, Scan, Lock Providers
+// and Generate Docs rewrite none of it and read the files as they are on
+// disk, as the same command in a terminal does, the chat's validate tool and
+// the canvas's Validate too: one operation reads the same files by every
 // trigger, and reading them saves nothing into the tree. Convert rewrites the
 // root's Terraform in place into Lace style and asks nothing first, as the
 // canvas's Convert does: the root is a git repository, and git shows the
 // rewrite as any other change. An open canvas of the root picks the
-// rewritten Terraform up live.
+// rewritten Terraform up live. A Convert names the lockfile its lock of the
+// tree wrote; a tree it changed whose providers did not lock is no change to
+// commit yet (a stack's apply refuses a tree with no lockfile), so it says so
+// and offers Lock Providers. Lock Providers (`module lock`) names the
+// lockfile it wrote and how many providers it pinned; Scan names the tool
+// that ran, at the version the CLI reports.
 //
 // Where a report lands follows its one signal. With the root's session held
 // in this window, the engine publishes the result to the session and the
@@ -39,6 +44,8 @@
 // channel on Show Report. Generate Docs writes nothing into the tree: its
 // markdown opens in an untitled editor, and the developer's save is the
 // write.
+
+import { relative } from 'node:path';
 import {
   type ArgsOf,
   type BoundPath,
@@ -76,6 +83,7 @@ export const CONVERT_MODULE = 'lace.convertModule';
 export const FORMAT_MODULE = 'lace.formatModule';
 export const SCAN_MODULE = 'lace.scanModule';
 export const GENERATE_DOCS = 'lace.generateDocs';
+export const LOCK_MODULE = 'lace.lockModule';
 
 export type AuthoringApi = {
   window: Pick<
@@ -105,6 +113,7 @@ export type AuthoringCommandsOptions = {
 const SHOW_REPORT = 'Show Report';
 const SHOW_CHANGES = 'Show Changes';
 const SAVE = 'Save';
+const LOCK_PROVIDERS = 'Lock Providers';
 
 // The progress of a Generate, by the stage the engine reports it at.
 const STAGES: Readonly<Record<GenerateStage, string>> = {
@@ -140,18 +149,34 @@ function validatedText(label: string, { verdict }: JsonOf<'module validate'>): s
   return verdict === undefined ? `Validated ${label}` : `Validated ${label}: ${verdict}`;
 }
 
+type Lock = JsonOf<'module lock'>;
+
+// The lockfile a lock wrote, named from the root it locked as the files a
+// command wrote are: the CLI writes it beside the tree.
+const lockfileOf = ({ path, lockfile }: Lock): string => relative(path, lockfile);
+
 // What a Convert of the root `label` changed: the files it wrote and the
-// files it removed, then the verdict of the validate it ended with, when
-// that validate reached one.
+// files it removed, the lockfile its lock of the tree wrote, then the
+// verdict of the validate it ended with, when that validate reached one.
 export function convertedText(
   label: string,
-  { changed, written, removed, validate }: JsonOf<'module convert'>,
+  { changed, written, removed, lock, validate }: JsonOf<'module convert'>,
 ): string {
   if (!changed) return `${label} is in Lace style already, so Convert wrote nothing`;
   const wrote = `wrote ${written.join(', ')}`;
   const deleted = removed.length === 0 ? '' : `; removed ${removed.join(', ')}`;
+  const locked =
+    lock === null
+      ? ''
+      : `; locked ${count(lock.providers.length, 'provider')} in ${lockfileOf(lock)}`;
   const verdict = validate.verdict === undefined ? '' : `; ${validate.verdict}`;
-  return `Converted ${label}: ${wrote}${deleted}${verdict}`;
+  return `Converted ${label}: ${wrote}${deleted}${locked}${verdict}`;
+}
+
+// What a scan of the root `label` ran: the tool, at the version the CLI
+// reports for it, when it reports one.
+function scannedText(label: string, { tool }: JsonOf<'module scan'>): string {
+  return `Scanned ${label} with ${tool.name}${tool.version === null ? '' : ` ${tool.version}`}`;
 }
 
 // What a Generate of the root `label` did to the tree, as the package reads
@@ -299,20 +324,32 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
   }
 
   // A report of the root: in Problems through the root's session when this
-  // window holds it, else a notification with Show Report.
+  // window holds it, else a notification with Show Report. `undone`, what
+  // the command left to do before the tree is committed, is said after the
+  // report at warn, with the button that does it, wherever the report lands.
   async function showReport(
     root: AuthoringRoot,
     summary: string,
     diagnostics: readonly Diagnostic[],
+    undone?: { said: string; button: string; run: () => Promise<void> },
   ): Promise<void> {
-    if (operations.held(root)) {
+    const held = operations.held(root);
+    if (held && undone === undefined) {
       api.window.setStatusBarMessage(`Lace: ${summary}; the report is in Problems`, 5000);
       return;
     }
-    const text = `${summary}, ${count(diagnostics.length, 'diagnostic')}.`;
-    const answer = await (diagnostics.length === 0
-      ? api.window.showInformationMessage(text, SHOW_REPORT)
-      : api.window.showWarningMessage(text, SHOW_REPORT));
+    const report = held
+      ? `${summary}; the report is in Problems.`
+      : `${summary}, ${count(diagnostics.length, 'diagnostic')}.`;
+    const text = undone === undefined ? report : `${report} ${undone.said}`;
+    const buttons = [...(undone ? [undone.button] : []), ...(held ? [] : [SHOW_REPORT])];
+    const answer = await (diagnostics.length === 0 && undone === undefined
+      ? api.window.showInformationMessage(text, ...buttons)
+      : api.window.showWarningMessage(text, ...buttons));
+    if (undone && answer === undone.button) {
+      await undone.run();
+      return;
+    }
     if (answer !== SHOW_REPORT) return;
     for (const line of reportLines(root, text, diagnostics)) log.appendLine(line);
     log.show(true);
@@ -329,12 +366,36 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     [CONVERT_MODULE]: inRoot(
       { verb: 'convert', doing: 'converting', path: 'module convert', args: {} },
       (root, label, document) =>
-        showReport(root, convertedText(label, document), diagnosticsOfDocument(document)),
+        showReport(
+          root,
+          convertedText(label, document),
+          diagnosticsOfDocument(document),
+          document.changed && document.lock === null
+            ? {
+                said: "The tree's providers did not lock: lock them before you commit it.",
+                button: LOCK_PROVIDERS,
+                run: () => lock(root),
+              }
+            : undefined,
+        ),
     ),
     [SCAN_MODULE]: inRoot(
       { verb: 'scan', doing: 'scanning', path: 'module scan', args: {} },
       (root, label, document) =>
-        showReport(root, `Scanned ${label}`, diagnosticsOfDocument(document)),
+        showReport(root, scannedText(label, document), diagnosticsOfDocument(document)),
+    ),
+    [LOCK_MODULE]: inRoot(
+      {
+        verb: 'lock the providers of',
+        doing: 'locking the providers of',
+        path: 'module lock',
+        args: {},
+      },
+      (_root, label, document) => {
+        void api.window.showInformationMessage(
+          `Locked ${count(document.providers.length, 'provider')} of ${label} in ${lockfileOf(document)}.`,
+        );
+      },
     ),
     [FORMAT_MODULE]: inRoot(
       { verb: 'format', doing: 'formatting', path: 'module fmt', args: {} },
@@ -358,5 +419,6 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
     ),
   };
   const validate = (root: AuthoringRoot) => table[VALIDATE_MODULE](rootUri(root));
+  const lock = (root: AuthoringRoot) => table[LOCK_MODULE](rootUri(root));
   return { table, validate, generated };
 }

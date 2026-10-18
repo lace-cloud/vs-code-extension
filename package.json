@@ -211,6 +211,10 @@
         "title": "Lace: Format Module"
       },
       {
+        "command": "lace.lockModule",
+        "title": "Lace: Lock Providers"
+      },
+      {
         "command": "lace.scanModule",
         "title": "Lace: Scan Module"
       },
@@ -284,6 +288,10 @@
         },
         {
           "command": "lace.formatModule",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "lace.lockModule",
           "when": "workspaceFolderCount > 0"
         },
         {

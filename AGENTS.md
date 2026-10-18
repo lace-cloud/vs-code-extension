@@ -33,7 +33,7 @@ pick, and Import Existing Resources on a root) and hands the same `Host` to ever
 | engine controls | Start, Stop, Restart Engine, Open Logs; the engine's status bar item |
 | canvas | Open Canvas; the canvas panels' lifetime |
 | problems | the Problems observer on every held session |
-| module commands | Save, Generate, Validate, Convert, Format, Scan, Generate Docs |
+| module commands | Save, Generate, Validate, Convert, Format, Scan, Lock Providers, Generate Docs |
 | registry | the `laceRegistry` webview view, module detail, Refresh Registry, Add Module to Canvas |
 | account | Sign In, Sign Out, Select Organization, Select Team; the selection's status bar item |
 | stacks | the `laceStacks` tree and its commands, Import Existing Resources; the runner's and the run channels' lifetime |
@@ -341,12 +341,17 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
   left unchanged, with **Show Changes**, which opens Source Control, the notice the canvas's own Generate ends with too;
   a Generate that left the tree unchanged says nothing changed and offers nothing) or the engine's refusal (an unsaved
   canvas offers **Save**).
-- **Validate**, **Format**, **Scan** and **Generate Docs** run `module validate`, `module fmt`, `module scan`, `module
-  docs` through `commands.at(root)`, with no session. **Convert Module** (`lace.convertModule`) runs `module convert`
-  the same way and reports as Validate does, with no confirmation (the canvas action has none); an open canvas picks the
-  rewritten Terraform up live. Format and Convert are the commands the CLI declares rewrites (`COMMANDS[path].effect`):
-  they write the root's Terraform, so they first save its dirty `.tf` editors (`saveBuffersBefore`), as Generate does;
-  Validate, Scan and Generate Docs read the files as they are on disk, as in a terminal. One operation behaves the same
+- **Validate**, **Format**, **Scan**, **Lock Providers** (`lace.lockModule`) and **Generate Docs** run `module
+  validate`, `module fmt`, `module scan`, `module lock`, `module docs` through `commands.at(root)`, with no session.
+  Scan says the tool that ran at the version the CLI reports (its result's `tool`); Lock Providers names the lockfile it
+  wrote and how many providers it pinned. **Convert Module** (`lace.convertModule`) runs `module convert` the same way
+  and reports as Validate does, naming the lockfile its lock of the tree wrote, with no confirmation (the canvas action
+  has none); an open canvas picks the rewritten Terraform up live. A tree it changed whose providers did not lock (its
+  result's `changed` with a `lock` of null) is no change to commit yet: the report says so at warn, wherever it lands,
+  and offers **Lock Providers** on the root. Format and Convert are the commands the CLI declares rewrites
+  (`COMMANDS[path].effect`): they write the root's Terraform, so they first save its dirty `.tf` editors
+  (`saveBuffersBefore`), as Generate does; Validate, Scan, Lock Providers (a write: it writes the lockfile beside the
+  tree) and Generate Docs read the files as they are on disk, as in a terminal. One operation behaves the same
   by every trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read writes nothing into
   the tree (a save before it would, and with saved but ungenerated canvas edits it would raise the conflict unasked).
 - A report reaches Problems when this window holds the root's session (`operations.held`, which reads each held session's
