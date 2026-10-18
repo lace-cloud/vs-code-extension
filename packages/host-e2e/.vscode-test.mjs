@@ -58,7 +58,12 @@ function repository(name) {
 // The suites bundled under `out/<suite>/`, in a window on `workspace`.
 // VS Code's own state for the window is in the run's directory, under the
 // suite's name: a short path, since a socket is made in it, and nothing
-// kept from one run to the next.
+// kept from one run to the next. On macOS the run's home holds no keychain,
+// and the window's own use of one would raise a dialog that blocks it, so
+// the window uses Chromium's mock keychain (`--use-mock-keychain`). VS
+// Code's argument parser reads an option it does not know as taking the
+// next word as its value, so the switch comes before another option, never
+// before the workspace folder `@vscode/test-cli` appends.
 function window(label, suite, workspace) {
   return {
     label,
@@ -67,6 +72,7 @@ function window(label, suite, workspace) {
     extensionDevelopmentPath: extension,
     workspaceFolder: workspace,
     launchArgs: [
+      ...(process.platform === 'darwin' ? ['--use-mock-keychain'] : []),
       '--disable-extensions',
       '--disable-workspace-trust',
       `--user-data-dir=${join(run, suite)}`,

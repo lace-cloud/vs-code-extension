@@ -519,15 +519,16 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
 - **The chat tools end to end**: `tools/__tests__/lm-tools.engine.test.ts` invokes every tool `registerLaceTools`
   registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel) and
   commands mapping, signed out; a delete makes no request of the extension's own beyond the engine.
-- **The window e2e** (`packages/host-e2e/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha
-  suites, bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the
-  engine tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens two windows, each on
-  a fresh git repository of its own whose settings name the engine, for the engine tests' developer in a home of the
-  run's own, so every case is signed out. `window/` runs in a repository whose tests make their module directories:
-  activation (every manifest command registered, an engine of the extension's protocol), the palette's module commands
-  (Validate, Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit, a
-  hand edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one
-  that holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder.
+- **The window e2e** (`packages/host-e2e/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha suites,
+  bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the engine
+  tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens two windows, each on a
+  fresh git repository of its own whose settings name the engine, for the engine tests' developer in a home of the run's
+  own, so every case is signed out; on macOS, where that home holds no keychain, each window uses Chromium's mock
+  keychain. `window/` runs in a repository whose tests make their module directories: activation (every manifest command
+  registered, an engine of the extension's protocol), the palette's module commands (Validate, Generate with no tab,
+  Convert in place), the canvas tab over one session per root (another client's edit, a hand edit, the lock,
+  `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that holds no
+  Terraform: Open Canvas from the palette starts the module in the workspace's folder.
 - **CI** (`.github/workflows/ci.yml`, every PR to `develop`) runs lint, typecheck, the `unit` tests, the build, the
   `build` tests and the `engine` tests on Linux and on Windows, and the window e2e on Linux alone, under `xvfb-run`.
   Both run the release `LACE_CLI_VERSION` names. On Linux the CLI's published installer installs it; on Windows, which
