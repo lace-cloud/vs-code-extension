@@ -27,17 +27,23 @@ runs:
         mkdir -p "$bin" "$download"
 
         # One line per tool the CLI pins: its name, its version, and the
-        # archive of this OS and architecture with the digest the CLI pins.
+        # archive of this OS and architecture with the digest the CLI pins,
+        # or `-` for each when it pins none for them.
         lace version -o json | jq -r --arg arch "$arch" '
           .tools[] | .name as $name | .version as $version
-          | .archives[] | select(.os == "linux" and .arch == $arch)
-          | "\($name) \($version) \(.url) \(.sha256)"' > "$download/tools"
+          | ([.archives[] | select(.os == "linux" and .arch == $arch)] | first) as $archive
+          | if $archive == null then "\($name) \($version) - -"
+            else "\($name) \($version) \($archive.url) \($archive.sha256)" end' > "$download/tools"
         if [ ! -s "$download/tools" ]; then
-          echo "$(lace version) reports no tool it pins for linux/$arch" >&2
+          echo "$(lace version) reports no tool it pins" >&2
           exit 1
         fi
 
         while read -r name version url pinned; do
+          if [ "$url" = "-" ]; then
+            echo "$(lace version) pins no $name archive for linux/$arch" >&2
+            exit 1
+          fi
           archive="$download/${url##*/}"
           curl -fsSL --retry 3 -o "$archive" "$url"
           actual="$(sha256sum "$archive" | cut -d ' ' -f 1)"
@@ -84,7 +90,7 @@ runs:
         if ($LASTEXITCODE -ne 0) { throw 'lace version -o json failed' }
         if (-not $report.tools) { throw "lace $($report.version) reports no tool it pins" }
         foreach ($tool in $report.tools) {
-          $archive = $tool.archives | Where-Object { $_.os -eq 'windows' -and $_.arch -eq $arch }
+          $archive = $tool.archives | Where-Object { $_.os -eq 'windows' -and $_.arch -eq $arch } | Select-Object -First 1
           if (-not $archive) { throw "lace $($report.version) pins no $($tool.name) archive for windows/$arch" }
           $file = Join-Path $download ([IO.Path]::GetFileName($archive.url))
           curl.exe -fsSL --retry 3 -o $file $archive.url
