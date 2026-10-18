@@ -1,26 +1,17 @@
 // The module commands against the real engine, with no canvas open.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, test, vi } from 'vitest';
-import {
-  moduleDirectory,
-  moduleIn,
-  realEngine,
-  scratchDirectory,
-} from '../../engine/__tests__/real-engine';
-import { folder } from '../../roots/__tests__/fake-uri';
-import type { RootSources } from '../../roots/authoring-roots';
+import { describe, expect, test } from 'vitest';
+import { moduleDirectory, moduleIn, scratchDirectory } from '../../engine/__tests__/real-engine';
 import { shownBy } from '../../vscode/__tests__/fake-messages';
 import {
-  type AuthoringApi,
-  authoringCommands,
   CONVERT_MODULE,
   FORMAT_MODULE,
   GENERATE_DOCS,
   SCAN_MODULE,
   VALIDATE_MODULE,
 } from '../authoring-commands';
-import { canvasOperations } from '../canvas-operations';
+import { window } from './engine-window';
 
 const UNFORMATTED = 'variable "name" {\ntype = string\n}\n';
 // A module in Lace style that Terraform refuses: its output calls a function
@@ -52,51 +43,6 @@ const HAND_WRITTEN = [
 // A module whose `check` block Lace style cannot carry.
 const CHECKED =
   'check "always" {\n  assert {\n    condition     = true\n    error_message = "never"\n  }\n}\n';
-
-function window(repository: string) {
-  const api = {
-    window: {
-      showInformationMessage: vi.fn(async () => undefined),
-      showWarningMessage: vi.fn(async () => undefined),
-      showErrorMessage: vi.fn(async () => undefined),
-      showTextDocument: vi.fn(async () => ({})),
-      withProgress: (_options: unknown, task: () => Promise<unknown>) => task(),
-      setStatusBarMessage: vi.fn(),
-    },
-    workspace: {
-      workspaceFolders: [folder(repository)],
-      textDocuments: [],
-      openTextDocument: vi.fn(async (options: unknown) => options),
-    },
-    ProgressLocation: { Notification: 15 },
-  };
-  const [repo] = api.workspace.workspaceFolders;
-  const sources: RootSources = {
-    folders: () => [repo],
-    activeCanvas: () => ({ folder: repo, relative: 'infra' }),
-    openCanvases: () => [{ folder: repo, relative: 'infra' }],
-    activeTerraformDirectory: () => undefined,
-    terraformFiles: async () => [],
-    pick: async () => undefined,
-  };
-  const { rootSessions, commands } = realEngine();
-  const { table } = authoringCommands({
-    api: api as unknown as AuthoringApi,
-    sources,
-    operations: canvasOperations({ workspace: api.workspace, rootSessions }),
-    commands,
-    log: { appendLine: () => {}, show: () => {} },
-    offers: {
-      signIn: vi.fn(),
-      selectOrganization: vi.fn(),
-      selectTeam: vi.fn(),
-      openPortal: vi.fn(),
-      install: vi.fn(),
-      openRecord: vi.fn(),
-    },
-  });
-  return { api, table };
-}
 
 const filesIn = (root: string): string[] =>
   readdirSync(root, { recursive: true, encoding: 'utf8' }).sort();
@@ -156,7 +102,7 @@ describe('the module commands on the real engine, with no canvas open', () => {
     await table[CONVERT_MODULE]();
     expect(api.window.showErrorMessage).not.toHaveBeenCalled();
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'Converted infra: wrote main.tf, outputs.tf, terraform_data_label/main.tf, terraform_data_label/outputs.tf, terraform_data_label/variables.tf, variables.tf; already-lace-style, 0 diagnostics.',
+      'Converted infra: wrote main.tf, outputs.tf, terraform_data_label/main.tf, terraform_data_label/outputs.tf, terraform_data_label/variables.tf, variables.tf; locked 0 providers in .terraform.lock.hcl; already-lace-style, 0 diagnostics.',
       'Show Report',
     );
     expect(readFileSync(join(root, 'main.tf'), 'utf8')).toContain(

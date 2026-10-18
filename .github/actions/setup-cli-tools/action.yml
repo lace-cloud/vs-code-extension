@@ -1,0 +1,129 @@
+name: Setup CLI tools
+description: >-
+  Put the tools the lace CLI on PATH pins on PATH, at the versions it reports, each held to the
+  digest it pins for it, and check that the CLI runs them.
+
+# The CLI owns its pins: `lace version -o json` reports each tool it pins
+# (`tools`), with its version and, per OS and architecture, the archive the
+# CLI downloads it from and that archive's digest. The CLI runs a tool's
+# binary on PATH when it reports the CLI's pin, and otherwise downloads its
+# pinned build into ~/.lace/bin. Each engine test runs in a home of its own,
+# so with these on PATH no test downloads one. The check runs the CLI in a
+# home that holds nothing, a format (terraform) and a scan (tfsec): it
+# downloads nothing exactly when the binaries on PATH are its pins. The CLI
+# that LACE_CLI_VERSION names is on PATH before this runs.
+
+runs:
+  using: composite
+  steps:
+    - name: Install the tools the lace CLI pins
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$RUNNER_ARCH" in X64) arch=amd64 ;; ARM64) arch=arm64 ;; esac
+        bin="$RUNNER_TEMP/lace-cli-tools"
+        download="$RUNNER_TEMP/lace-cli-tools-download"
+        mkdir -p "$bin" "$download"
+
+        # One line per tool the CLI pins: its name, its version, and the
+        # archive of this OS and architecture with the digest the CLI pins,
+        # or `-` for each when it pins none for them.
+        lace version -o json | jq -r --arg arch "$arch" '
+          .tools[] | .name as $name | .version as $version
+          | ([.archives[] | select(.os == "linux" and .arch == $arch)] | first) as $archive
+          | if $archive == null then "\($name) \($version) - -"
+            else "\($name) \($version) \($archive.url) \($archive.sha256)" end' > "$download/tools"
+        if [ ! -s "$download/tools" ]; then
+          echo "$(lace version) reports no tool it pins" >&2
+          exit 1
+        fi
+
+        while read -r name version url pinned; do
+          if [ "$url" = "-" ]; then
+            echo "$(lace version) pins no $name archive for linux/$arch" >&2
+            exit 1
+          fi
+          archive="$download/${url##*/}"
+          curl -fsSL --retry 3 -o "$archive" "$url"
+          actual="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          if [ "$actual" != "$pinned" ]; then
+            echo "$url has digest $actual, not the $pinned the CLI pins for it" >&2
+            exit 1
+          fi
+          case "$archive" in
+            *.zip) unzip -q -o "$archive" "$name" -d "$bin" ;;
+            *.tar.gz) tar -xzf "$archive" -C "$bin" "$name" ;;
+            *) echo "$url is an archive of no kind this step opens" >&2; exit 1 ;;
+          esac
+          chmod 0755 "$bin/$name"
+          echo "$name $version is on PATH, at $bin"
+        done < "$download/tools"
+
+        empty="$RUNNER_TEMP/lace-cli-tools-home"
+        module="$RUNNER_TEMP/lace-cli-tools-module"
+        mkdir -p "$empty" "$module"
+        git init --quiet "$module"
+        printf 'variable "name" {\n  type = string\n}\n' > "$module/main.tf"
+        (
+          cd "$module"
+          export PATH="$bin:$PATH" HOME="$empty"
+          lace module fmt
+          lace module scan
+        )
+        if [ -e "$empty/.lace/bin" ]; then
+          echo "$(lace version) downloaded $(cd "$empty/.lace/bin" && echo *): the binaries on PATH are not the versions it pins" >&2
+          exit 1
+        fi
+        echo "$bin" >> "$GITHUB_PATH"
+
+    - name: Install the tools the lace CLI pins
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $arch = @{ X64 = 'amd64'; ARM64 = 'arm64' }[$env:RUNNER_ARCH]
+        $bin = Join-Path $env:RUNNER_TEMP 'lace-cli-tools'
+        $download = Join-Path $env:RUNNER_TEMP 'lace-cli-tools-download'
+        New-Item -ItemType Directory -Force -Path $bin, $download | Out-Null
+
+        $report = (lace version -o json) -join "`n" | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0) { throw 'lace version -o json failed' }
+        if (-not $report.tools) { throw "lace $($report.version) reports no tool it pins" }
+        foreach ($tool in $report.tools) {
+          $archive = $tool.archives | Where-Object { $_.os -eq 'windows' -and $_.arch -eq $arch } | Select-Object -First 1
+          if (-not $archive) { throw "lace $($report.version) pins no $($tool.name) archive for windows/$arch" }
+          $file = Join-Path $download ([IO.Path]::GetFileName($archive.url))
+          curl.exe -fsSL --retry 3 -o $file $archive.url
+          if ($LASTEXITCODE -ne 0) { throw "could not download $($archive.url)" }
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+          if ($sha256 -ne $archive.sha256) {
+            throw "$($archive.url) has digest $sha256, not the $($archive.sha256) the CLI pins for it"
+          }
+          # Windows' tar (bsdtar) opens a .zip and a .tar.gz alike.
+          $exe = "$($tool.name).exe"
+          tar.exe -xf $file -C $bin $exe
+          if ($LASTEXITCODE -ne 0) { throw "could not take $exe from $file" }
+          "$($tool.name) $($tool.version) is on PATH, at $bin"
+        }
+
+        $empty = Join-Path $env:RUNNER_TEMP 'lace-cli-tools-home'
+        $module = Join-Path $env:RUNNER_TEMP 'lace-cli-tools-module'
+        New-Item -ItemType Directory -Force -Path $empty, $module | Out-Null
+        git init --quiet $module
+        if ($LASTEXITCODE -ne 0) { throw "git init $module failed" }
+        Set-Content -LiteralPath (Join-Path $module 'main.tf') -Value "variable `"name`" {`n  type = string`n}"
+        $env:PATH = "$bin$([IO.Path]::PathSeparator)$env:PATH"
+        $env:USERPROFILE = $empty
+        $env:HOME = $empty
+        Push-Location $module
+        lace module fmt
+        if ($LASTEXITCODE -ne 0) { throw 'lace module fmt failed' }
+        lace module scan
+        if ($LASTEXITCODE -ne 0) { throw 'lace module scan failed' }
+        Pop-Location
+        $downloaded = Join-Path $empty '.lace' 'bin'
+        if (Test-Path -LiteralPath $downloaded) {
+          $names = (Get-ChildItem -LiteralPath $downloaded).Name -join ' '
+          throw "lace $($report.version) downloaded ${names}: the binaries on PATH are not the versions it pins"
+        }
+        Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin

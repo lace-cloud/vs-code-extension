@@ -33,7 +33,7 @@ pick, and Import Existing Resources on a root) and hands the same `Host` to ever
 | engine controls | Start, Stop, Restart Engine, Open Logs; the engine's status bar item |
 | canvas | Open Canvas; the canvas panels' lifetime |
 | problems | the Problems observer on every held session |
-| module commands | Save, Generate, Validate, Convert, Format, Scan, Generate Docs |
+| module commands | Save, Generate, Validate, Convert, Format, Scan, Lock Providers, Generate Docs |
 | registry | the `laceRegistry` webview view, module detail, Refresh Registry, Add Module to Canvas |
 | account | Sign In, Sign Out, Select Organization, Select Team; the selection's status bar item |
 | stacks | the `laceStacks` tree and its commands, Import Existing Resources; the runner's and the run channels' lifetime |
@@ -86,7 +86,7 @@ demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's 
 `lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
 default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
 with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
-and locks with it. The extension speaks engine protocol 7 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+and locks with it. The extension speaks engine protocol 8 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
 protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version decides compatibility: an
 engine of another protocol is refused with a message that names which side to update. A start the spawn refused (the
 `EngineSpawnError` `@lace-cloud/host` rejects with) says where the binary was read from, what happened, and, by its
@@ -264,12 +264,18 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the root its run was over,
   so `no_certification` and `stale_certification` offer Validate on it.
 - Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges; the tree redraws
-  the row picked before and the row picked now, the objects `getChildren` gave (VS Code redraws an element by identity).
-  A read of the whole tree drops every row VS Code holds until it settles, and a row's menu command run in that time
-  arrives with no row, so only what may change the list reads it whole: a tick, a change of the account, the view shown
-  again, a `lace` command that ended in an integrated terminal and that the CLI declares more than a read
-  (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a change of the root
-  the view names, and Refresh Stacks. The tree and the root's canvas badges read the same facts, so one invalidation
+  the row picked before and the row picked now, the objects `getChildren` gave (VS Code redraws an element by identity,
+  and names each by its id: a stack by its root and id, a run by its stack and id, so a menu opened on a row before a
+  redraw names the same row after it). VS Code drops what it holds under a row it redraws, and every row when it
+  redraws the whole tree, until the provider answers its ask again, and a row's menu command chosen in that time
+  arrives with no row: so the tree reads first and tells VS Code to redraw once it holds the answer, and answers VS
+  Code's asks from what it read (the stacks, and the runs of each stack VS Code asked for, read again with them); a
+  read started later supersedes one under way. Only what may change the list reads it whole: a tick, a change of the
+  account, the view shown again, a `lace` command that ended in an integrated terminal and that the CLI declares more
+  than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a change
+  of the root the view names, and Refresh Stacks. A stack row whose look changes with the runner's store (an apply of
+  it started, reached a stage or settled) has its runs read again, then is redrawn; any other change of the store
+  redraws nothing. The tree and the root's canvas badges read the same facts, so one invalidation
   serves both: each read for what may have changed the stacks (all of these but a change of the folders or of the root,
   which change no stack) ticks the canvas of the view's root once, and each tick of the runner's store (a run started or
   settled, a scan or a cancel done) ticks the canvas of the root that run was about too, its `RunCtx.root` as the
@@ -278,9 +284,14 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   preview, or a command's running mark, by the target it runs on) and ends it when it reads none; a follow of a run's
   logs is a subscription, not a command under way, and draws none.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
-  stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
+  stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. When it settles, each
+  provider version its Run ran under an organization's admission (the result's `run.providers` with an `admission`)
+  is written there after its lines, as `lace run get` prints it (`admittedLines`). Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
-  on the root that apply ran in, whose report lands where the palette's does. An apply held for approval says what the
+  on the root that apply ran in, whose report lands where the palette's does. After them it offers each package action
+  that answers the failure's reason (`failureAnswers`, as a notice of the window's runner does), run over the apply's
+  own `RunCtx` under a progress notification: `no_lockfile` offers **Lock providers**, `module lock` in the apply's
+  root, whose notice names the lockfile it wrote. An apply held for approval says what the
   Run waits on, from the change request its gate event carries: the change request and its state, each requirement
   with its state and its decider as the gate event names it (Lace, or a change-management system), and each record a
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
@@ -293,11 +304,13 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   own and with `editor.wordWrap` on, so its lines wrap.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`
   gives (`rootlessState`): `noFolder` (Open Folder, VS Code's own `workbench.action.files.openFolder`), `noModule` (Open
-  Canvas starts one), `severalModules` (Choose Module). When the stacks cannot be listed, it selects the welcome view by
-  the failure's reason: `signedOut`, `noOrganization`, `noTeam`, `teamlessOrganization` (Open Portal opens the URL the
-  failure carries; the host builds no portal URL), `noStack`, `failed`. Every welcome but the one shown before the first
-  read offers exactly one action, a contributed command or one of VS Code's own; welcome text holds no inline code,
-  which VS Code draws with its backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
+  Canvas starts one), `severalModules` (Choose Module). When the stacks cannot be listed, or a read of the tree fails at
+  any step before that (the workspace's search for Terraform, finding the root), it holds no stack for the root the read
+  was for and selects the welcome view by the failure's reason: `signedOut`, `noOrganization`, `noTeam`,
+  `teamlessOrganization` (Open Portal opens the URL the failure carries; the host builds no portal URL), `noStack`,
+  `failed` (the error's text, with Retry). Every welcome but the one shown before the first read offers exactly one
+  action, a contributed command or one of VS Code's own; welcome text holds no inline code, which VS Code draws with its
+  backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
 - `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
   run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
   ends. The runner's form asks for the slug, proposing the root's directory name, and the connection; the package's
@@ -338,14 +351,20 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
   left unchanged, with **Show Changes**, which opens Source Control, the notice the canvas's own Generate ends with too;
   a Generate that left the tree unchanged says nothing changed and offers nothing) or the engine's refusal (an unsaved
   canvas offers **Save**).
-- **Validate**, **Format**, **Scan** and **Generate Docs** run `module validate`, `module fmt`, `module scan`, `module
-  docs` through `commands.at(root)`, with no session. **Convert Module** (`lace.convertModule`) runs `module convert`
-  the same way and reports as Validate does, with no confirmation (the canvas action has none); an open canvas picks the
-  rewritten Terraform up live. Format and Convert are the commands the CLI declares rewrites (`COMMANDS[path].effect`):
-  they write the root's Terraform, so they first save its dirty `.tf` editors (`saveBuffersBefore`), as Generate does;
-  Validate, Scan and Generate Docs read the files as they are on disk, as in a terminal. One operation behaves the same
-  by every trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read writes nothing into
-  the tree (a save before it would, and with saved but ungenerated canvas edits it would raise the conflict unasked).
+- **Validate**, **Format**, **Scan**, **Lock Providers** (`lace.lockModule`) and **Generate Docs** run `module
+  validate`, `module fmt`, `module scan`, `module lock`, `module docs` through `commands.at(root)`, with no session.
+  Scan says the tool that ran at the version the CLI reports (its result's `tool`); Lock Providers says what the package
+  says of a lock (`lockNotice`: how many providers it pinned, in which lockfile, to commit beside the tree) for the root
+  it names. **Convert Module** (`lace.convertModule`) runs `module convert` the same way and reports as Validate does,
+  naming the lockfile its lock of the tree wrote (the package's `lockedIn`), with no confirmation (the canvas action has
+  none); an open canvas picks the rewritten Terraform up live. When the package reads the tree's providers as not locked
+  (`lockFailed`), the report says so in the package's words (`DID_NOT_LOCK`) at warn, wherever it lands, and offers the
+  package's **Lock providers** (`LOCK_LABEL`) on the root. Format and Convert are the commands the CLI declares rewrites
+  (`COMMANDS[path].effect`): they write the root's Terraform, so they first save its dirty `.tf` editors
+  (`saveBuffersBefore`), as Generate does; Validate, Scan, Lock Providers (a write: it writes the lockfile beside the
+  tree) and Generate Docs read the files as they are on disk, as in a terminal. One operation behaves the same by every
+  trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read writes nothing into the tree
+  (a save before it would, and with saved but ungenerated canvas edits it would raise the conflict unasked).
 - A report reaches Problems when this window holds the root's session (`operations.held`, which reads each held session's
   path back as the root it names and compares roots; the engine publishes the result to the session);
   otherwise it is the command's result: a notification with the verdict, when the run reached one (a tree Lace's rules or
@@ -381,9 +400,11 @@ before the session closes. A change to the setting re-arms every attachment. The
 ## Account
 
 `account/`: Sign In runs `lace login` (the confirmation code shown once with Copy Code, the page opened once, under a
-cancellable progress notification); Sign Out runs `lace logout`, whose notice is the machine's API key's fate from the
-result: its `revocation`, and `detail`, why it was not revoked; while the key may still be live (the result names the
-portal page, `portalUrl`, where it is revoked) the notice is a warning whose Open Portal opens that page.
+cancellable progress notification); Sign Out runs `lace logout`. Each ends credentials the machine held, and its notice
+says, after a frame of its own (who signed in and that the credentials held before are replaced; that the credentials
+are removed), what became of their API key, one reading of the result's key revocation for both (`keyFate`: its
+`revocation`, and `detail`, why it was not revoked); while the key may still be live (the result names the portal page,
+`portalUrl`, where it is revoked) the notice is a warning whose Open Portal opens that page.
 Organization and team are the CLI's: `org list`, `org use`, `team list`, `team use`, `org current`, `team current`, all
 in the home. Each pick is on screen at once and fills when its read settles (`vscode/pick.ts`). Selecting an
 organization goes on to its team: the team pick opens as the organization is saved, its read `org use` then the teams,
@@ -487,30 +508,38 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   the window that what the CLI reports may have changed outside it: focus, and a command line ending in an integrated
   terminal).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
-  with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
-  mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is
-  there, else the `lace` on `PATH` (`engine/__tests__/engine-binary.mjs`, which the window e2e reads too), and it is the
-  release `LACE_CLI_VERSION` names: a binary whose `lace version -o json` says another version, any other build of the
-  CLI included, is refused before a test runs.
+  with module directories; a developer of each test's own, signed out, with no saved selection and no tool of their own,
+  in a home of the test's own, which every process the test starts inherits, whatever the shell that runs the tests
+  holds; an engine with its root sessions and commands mapping as one window has them; and cleanups run after each test,
+  latest first. `engine/__tests__/engine-binary.mjs`, which the window e2e reads too, names the engine and the
+  developer. The engine is `bin/lace` when one is there, else the `lace` on `PATH`, and it is the release
+  `LACE_CLI_VERSION` names: a binary whose `lace version -o json` says another version, any other build of the CLI
+  included, is refused before a test runs. The developer's environment (`signedOutEnvironment`) unsets each variable the
+  CLI reads a developer's state from (`DEVELOPER_STATE_ENV`: the home, the Lace config directory, the key, the Lace
+  server, the organization and team, the cache directory, and a binary for each tool the CLI pins) but the home's.
 - **The chat tools end to end**: `tools/__tests__/lm-tools.engine.test.ts` invokes every tool `registerLaceTools`
   registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel) and
   commands mapping, signed out; a delete makes no request of the extension's own beyond the engine.
-- **The window e2e** (`packages/host-e2e/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha
-  suites, bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the
-  engine tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens two windows, each on
-  a fresh git repository of its own whose settings name the engine, with a Lace config directory of the run's own, so
-  every case is signed out. `window/` runs in a repository whose tests make their module directories: activation (every
-  manifest command registered, an engine of the extension's protocol), the palette's module commands (Validate,
-  Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit, a hand
-  edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that
-  holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder.
+- **The window e2e** (`packages/host-e2e/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha suites,
+  bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the engine
+  tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens two windows, each on a
+  fresh git repository of its own whose settings name the engine, for the engine tests' developer in a home of the run's
+  own, so every case is signed out; on macOS, where that home holds no keychain, each window uses Chromium's mock
+  keychain. `window/` runs in a repository whose tests make their module directories: activation (every manifest command
+  registered, an engine of the extension's protocol), the palette's module commands (Validate, Generate with no tab,
+  Convert in place), the canvas tab over one session per root (another client's edit, a hand edit, the lock,
+  `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that holds no
+  Terraform: Open Canvas from the palette starts the module in the workspace's folder.
 - **CI** (`.github/workflows/ci.yml`, every PR to `develop`) runs lint, typecheck, the `unit` tests, the build, the
   `build` tests and the `engine` tests on Linux and on Windows, and the window e2e on Linux alone, under `xvfb-run`.
   Both run the release `LACE_CLI_VERSION` names. On Linux the CLI's published installer installs it; on Windows, which
   the installer refuses, the job downloads the release's `lace-cli-windows-amd64-<version>.exe` with its `.sha256` and
   `.minisig` and checks them as the installer does (the checksum, then the signature by the installer's key, whose
-  trusted comment names that object and its digest) before it puts the binary on `PATH` as `lace.exe`. `.gitattributes`
-  checks every text file out with LF, the line ending biome checks, on Windows too.
+  trusted comment names that object and its digest) before it puts the binary on `PATH` as `lace.exe`. Both jobs then
+  put the tools that release pins on `PATH` (`.github/actions/setup-cli-tools`): terraform and tfsec at the versions the
+  CLI reports (`lace version -o json`, `tools`), each archive held to the digest the CLI pins for it, and check that the
+  CLI runs them: a format and a scan, in a home that holds nothing, download nothing. `.gitattributes` checks every text
+  file out with LF, the line ending biome checks, on Windows too.
 - **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
   organization and team) is unit-tested over scripted commands.
 - **Repository tests** in `src/__tests__/`: the manifest against the features (and each run row's menu against the

@@ -11,7 +11,6 @@ import {
   moduleIn,
   realEngine,
   scratchDirectory,
-  signedOutHome,
   until,
 } from '../../engine/__tests__/real-engine';
 import { commandDocument, commandOutcome } from '../../engine/command-outcome';
@@ -24,10 +23,10 @@ function twoRoots(): { a: string; b: string } {
   return { a: moduleIn(repository, 'a'), b: moduleIn(repository, 'b') };
 }
 
-// The window's commands mapping, for a developer whose home is `home`, and
-// its one runner, whose forms `answerer` answers.
-function window(home: string, answerer: Answerer = (form) => form.cancel()) {
-  const { commands } = realEngine({ home });
+// The window's commands mapping, for the test's developer, and its one
+// runner, whose forms `answerer` answers.
+function window(answerer: Answerer = (form) => form.cancel()) {
+  const { commands } = realEngine();
   const notices: { level: string; failure?: CommandFailure }[] = [];
   const runner = createRunnerHost({
     commands: () => commands.anywhere(),
@@ -61,9 +60,8 @@ const reasonOf = (run: NonNullable<RunSlot>): string | undefined =>
 
 describe('one runner for the window', () => {
   test('an apply runs in the root its RunCtx names, whichever root ran before, and opens no session', async () => {
-    const home = signedOutHome();
     const { a, b } = twoRoots();
-    const { commands, runner } = window(home);
+    const { commands, runner } = window();
     // `a` is certified and locked, as a developer readies a module to apply
     // (an apply refuses a root with no `.terraform.lock.hcl` before it reads
     // any credential); `b` is neither. The module calls no provider, so its
@@ -85,9 +83,8 @@ describe('one runner for the window', () => {
 
 describe('the Stacks tree signed out', () => {
   test('stack list names unauthenticated before any missing selection, and the view offers Sign In', async () => {
-    const home = signedOutHome();
     const { a } = twoRoots();
-    const { commands } = window(home);
+    const { commands } = window();
     const listed = await commandOutcome(await commands.anywhere(), 'stack list', { source: a });
     const failure = listed.kind === 'failure' ? listed.failure : undefined;
     expect(failure?.reason).toBe('unauthenticated');
@@ -97,9 +94,8 @@ describe('the Stacks tree signed out', () => {
 
 describe("a binding's form answered over the real engine", () => {
   test("Create Stack's slug and connection reach stack create in the root, whose refusal is the CLI's by its reason, and the run ends", async () => {
-    const home = signedOutHome();
     const { a } = twoRoots();
-    const { runner, notices } = window(home, (form) =>
+    const { runner, notices } = window((form) =>
       form.submit({ slug: 'prod', connection: 'conn_1' }),
     );
 
@@ -115,14 +111,13 @@ describe("a binding's form answered over the real engine", () => {
   });
 
   test("Import Existing Resources' statefile reaches stack import in the root, which needs credentials, and the run ends", async () => {
-    const home = signedOutHome();
     const { a } = twoRoots();
     const state = join(scratchDirectory(), 'pulled.tfstate');
     writeFileSync(
       state,
       JSON.stringify({ version: 4, serial: 1, lineage: 'l', outputs: {}, resources: [] }),
     );
-    const { runner, notices } = window(home, (form) => form.submit({ state }));
+    const { runner, notices } = window((form) => form.submit({ state }));
 
     const { ended } = await runner.run(binding('import'), {
       root: a,

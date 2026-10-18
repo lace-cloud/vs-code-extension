@@ -1,17 +1,18 @@
 // The real engine, the released `lace` CLI of `LACE_CLI_VERSION` in bin/ or
 // on PATH, and no other build (`engine-binary.mjs`), and what the tests of
 // the `engine` project build around it: module directories in a git
-// repository, a developer signed out, and an engine as one window has it.
-// Each test's resources are undone after it, the latest first.
+// repository, a developer of each test's own, signed out, and an engine as
+// one window has it. Each test's resources are undone after it, the latest
+// first.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeAll } from 'vitest';
+import { afterEach, beforeAll, beforeEach } from 'vitest';
 import { type CommandsMapping, createCommandsMapping } from '../commands-mapping';
 import { createEngine, type Engine, engineManager } from '../engine';
 import { createRootSessions, type RootSessions, type SessionObserver } from '../root-sessions';
-import { releasedEngine } from './engine-binary.mjs';
+import { DEVELOPER_STATE_ENV, releasedEngine, signedOutEnvironment } from './engine-binary.mjs';
 
 const ROOT = resolve(__dirname, '..', '..', '..');
 const ENGINE = releasedEngine(ROOT);
@@ -30,6 +31,34 @@ afterEach(async () => {
 export function afterTest(cleanup: () => Promise<void> | void): void {
   cleanups.push(cleanup);
 }
+
+// Sets each of `values` in this process's environment, unsetting a name
+// whose value is undefined.
+function setEnvironment(values: Record<string, string | undefined>): void {
+  for (const [name, value] of Object.entries(values)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+}
+
+// Each test runs for a developer of its own: signed out, with no saved
+// selection and no tool of their own, in a home of the test's own
+// (`signedOutEnvironment`). Every process the test starts inherits it, each
+// engine, any host that starts one and git, so none reads the state of the
+// developer who runs the tests. The home holds the tools and caches the
+// engine keeps there, which Windows can hold open for a moment after the
+// process that wrote them ends, so its removal retries.
+let home = '';
+beforeEach(() => {
+  const shell = Object.fromEntries(DEVELOPER_STATE_ENV.map((name) => [name, process.env[name]]));
+  const own = realpathSync(mkdtempSync(join(tmpdir(), 'lace-home-')));
+  home = own;
+  setEnvironment(signedOutEnvironment(own));
+  afterTest(() => {
+    setEnvironment(shell);
+    rmSync(own, { recursive: true, force: true, maxRetries: 10 });
+  });
+});
 
 // A module of one variable, in Lace form.
 export const MODULE = 'variable "name" {\n  type = string\n}\n';
@@ -70,42 +99,23 @@ export function moduleDirectory(files?: Record<string, string>): {
   return { repository, root: moduleIn(repository, 'infra', files) };
 }
 
-// The environment that names the developer's credentials and selection.
-const ACCOUNT = ['HOME', 'LACE_CONFIG_DIR', 'LACE_API_KEY', 'LACE_ORGANIZATION', 'LACE_TEAM'];
-
-// A developer with no credentials and no saved selection, in a home of the
-// test's own: an engine started after this reads that home. Resolves with
-// the home.
-export function signedOutHome(): string {
-  const home = realpathSync(mkdtempSync(join(tmpdir(), 'lace-home-')));
-  const saved = Object.fromEntries(ACCOUNT.map((name) => [name, process.env[name]]));
-  for (const name of ACCOUNT) delete process.env[name];
-  process.env.HOME = home;
-  afterTest(() => {
-    for (const [name, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-    rmSync(home, { recursive: true, force: true });
-  });
-  return home;
-}
-
 export type RealEngineOptions = {
   binaryPath?: string;
   autoRestart?: boolean;
-  // The directory a command that reads none runs in.
-  home?: string;
   observer?: SessionObserver;
 };
 
-// An engine as one window has it, with its root sessions, `observer`
-// attached to them, and its commands mapping; stopped after the test.
+// An engine as one window has it, for the test's developer: its root
+// sessions, `observer` attached to them, its commands mapping, whose
+// commands that read no directory run in the developer's `home`, and that
+// home; stopped after the test. Two engines of one test are two windows of
+// one developer.
 export function realEngine(options: RealEngineOptions = {}): {
   engine: Engine;
   rootSessions: RootSessions;
   commands: CommandsMapping;
   reports: unknown[];
+  home: string;
 } {
   const settings = {
     binaryPath: () => options.binaryPath ?? BINARY,
@@ -125,8 +135,8 @@ export function realEngine(options: RealEngineOptions = {}): {
     await rootSessions.dispose();
     await engine.stop();
   });
-  const commands = createCommandsMapping(engine, options.home);
-  return { engine, rootSessions, commands, reports };
+  const commands = createCommandsMapping(engine, home);
+  return { engine, rootSessions, commands, reports, home };
 }
 
 // Waits until `holds` is true, polling; resolves with how long that took.

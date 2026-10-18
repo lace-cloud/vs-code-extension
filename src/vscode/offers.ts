@@ -2,13 +2,15 @@
 // action per way out the failure's reason names, read from the failure
 // document and never from the message; a reason with no way out the host
 // can take offers nothing, and the message says what happened. A notice of
-// the window's runner offers, after those, each package action that answers
-// the failure (`FailureAnswer`, which the runner host binds to the failed
-// run); the one chosen runs as every run a trigger starts does, under a
-// progress notification until it ends (`runUnderProgress`). Beside an apply
-// held for approval: the held Run's page in the portal, and the page of each
-// record a change-management system keeps of its change request, where the
-// record carries one.
+// a run offers, after those, each package action that answers the failure
+// (`FailureAnswer`, which the runner host binds to the failed run); the one
+// chosen runs as every run a trigger starts does, under a progress
+// notification until it ends (`runUnderProgress`). `runNotice` draws both
+// notices of a run that offer them: each notice of the window's runner
+// (`offeringPresenter`), and the notice the Stacks tree's apply settles
+// with. Beside an apply held for approval: the held Run's page in the
+// portal, and the page of each record a change-management system keeps of
+// its change request, where the record carries one.
 //
 // Validate acts on a root: a notice that names the root the failure is
 // about offers Validate on that root, the palette's Validate. A notice of
@@ -17,7 +19,7 @@
 import type { CommandFailure, PresenterPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type ByReason, byReason } from '../engine/command-outcome';
-import type { RunnerPresenter } from '../engine/runner-host';
+import type { FailureAnswer, RunnerHost, RunnerPresenter } from '../engine/runner-host';
 import { type AuthoringRoot, type RootSources, rootOfRun } from '../roots/authoring-roots';
 import { type RunProgressApi, runUnderProgress } from './run-progress';
 
@@ -121,6 +123,29 @@ export async function notice<T extends vscode.MessageItem>(
   return extra.find((item) => item === clicked);
 }
 
+// Shows a notice of a run as `notice` does, with a button for each package
+// action in `answers` after its offers and before `extra`; the answer clicked
+// runs as every run a trigger starts does, under a progress notification
+// until it ends. Resolves with the item of `extra` clicked, once an answer
+// clicked has ended.
+export async function runNotice<T extends vscode.MessageItem>(
+  api: NoticeApi & RunProgressApi,
+  runner: Pick<RunnerHost, 'run'>,
+  actions: OfferActions,
+  said: { level: 'info' | 'warn' | 'error'; text: string; offers: readonly Offer[] },
+  answers: readonly FailureAnswer[],
+  extra: readonly T[] = [],
+): Promise<T | undefined> {
+  const buttons = answers.map((answer) => ({ title: answer.action.label, answer }));
+  const chosen = await notice(api, actions, said.level, said.text, said.offers, [
+    ...buttons,
+    ...extra,
+  ]);
+  const answer = buttons.find((button) => button === chosen)?.answer;
+  if (answer) await runUnderProgress(api, runner, answer.action, answer.ctx, answer.target);
+  return extra.find((item) => item === chosen);
+}
+
 export type OfferingPresenterOptions = {
   api: NoticeApi & RunProgressApi;
   actions: OfferActions;
@@ -143,14 +168,9 @@ export function offeringPresenter(options: OfferingPresenterOptions): RunnerPres
       const root = run === undefined ? undefined : rootOfRun(sources.folders(), run.ctx);
       const ways = root === undefined ? actions : { ...actions, validate: () => validate(root) };
       const answers = failure === undefined || run === undefined ? [] : run.answers(failure);
-      const buttons = answers.map((answer) => ({ title: answer.action.label, answer }));
-      notice(api, ways, level, text, offersFor(failure), buttons)
-        .then((chosen) => {
-          if (!chosen) return;
-          const { action, ctx, target } = chosen.answer;
-          return runUnderProgress(api, runner, action, ctx, target);
-        })
-        .catch((error) => report('acting on a Lace notice', error));
+      runNotice(api, runner, ways, { level, text, offers: offersFor(failure) }, answers).catch(
+        (error) => report('acting on a Lace notice', error),
+      );
     },
     confirm,
   });

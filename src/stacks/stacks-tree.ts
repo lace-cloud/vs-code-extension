@@ -31,14 +31,21 @@
 //
 // Selecting a stack picks it for the root, and the root's canvas draws its
 // badges; the tree redraws the row picked before and the row picked now.
-// VS Code redraws an element it was given, by identity, and keeps every
-// other row and what a context menu holds of it; a read of the whole tree
-// drops them until it settles, so only what may change the list reads it
-// all: a tick of the runner's store, a change of the account (made in this
-// window or found outside it), the view shown again, a `lace` command
-// that may change something (any the CLI declares more than a read) ended
-// in an integrated terminal, a change of the workspace's folders, a change
-// of the root it names, and Refresh.
+// VS Code redraws an element it was given, by identity, and names each by
+// its id (a stack by its root and id, a run by its stack and id), so a menu
+// opened on a row before a redraw names the same row after it. It drops what
+// it holds under a row it redraws, and every row when it redraws the whole
+// tree, until the provider answers its ask again, and a row's menu command
+// chosen meanwhile arrives with no row: so the tree reads first and tells
+// VS Code to redraw once it holds the answer, and answers VS Code's asks
+// from what it read, the stacks and the runs of each stack VS Code asked
+// for. Only what may change the list reads it whole: a tick of the runner's
+// store, a change of the account (made in this window or found outside it),
+// the view shown again, a `lace` command that may change something (any the
+// CLI declares more than a read) ended in an integrated terminal, a change
+// of the workspace's folders, a change of the root it names, and Refresh. A
+// stack row whose look changes with the store (an apply of it started,
+// reached a stage or settled) has its runs read again, then is redrawn.
 //
 // The tree and the root's canvas, whose badges are the picked stack's, read
 // the same facts, so one invalidation serves both: each read of the tree
@@ -78,7 +85,7 @@ import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import { binding, type RunnerHost } from '../engine/runner-host';
+import { binding, failureAnswers, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
   candidates,
@@ -96,11 +103,12 @@ import {
 import type { RootState } from '../state/root-state';
 import { registerCommands } from '../vscode/commands';
 import { onDidEndLaceCommand } from '../vscode/lace-command-lines';
-import { notice, type OfferActions } from '../vscode/offers';
+import { type OfferActions, runNotice } from '../vscode/offers';
 import { runUnderProgress } from '../vscode/run-progress';
 import type { RunOutput } from './run-output';
 import type { PickStack } from './stack-pick';
 import {
+  admittedLines,
   outcomeNotice,
   previewText,
   type RowLook,
@@ -110,6 +118,7 @@ import {
   runLook,
   type Stack,
   type StacksState,
+  sameLook,
   stackLook,
   stackRef,
 } from './stack-rows';
@@ -202,28 +211,63 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     create: binding('create'),
   };
 
+  type StackRow = Extract<Row, { kind: 'stack' }>;
+
   let root: AuthoringRoot | undefined;
-  // The stack rows shown, by stack id: the objects `getChildren` gave, which
-  // a pick and an apply's progress redraw.
-  let shown = new Map<string, Row>();
+  // The tree as last read, what VS Code's asks are answered from: the stack
+  // rows of the view's root, by stack id (the objects VS Code holds, which a
+  // pick and an apply's progress redraw), the run rows of each stack whose
+  // runs VS Code asked for, and the look each stack row was last drawn with.
+  let shown = new Map<string, StackRow>();
+  let runsOf = new Map<string, Promise<Row[]>>();
+  const drawn = new Map<string, RowLook>();
   // The refusal the view shows, kept for the welcome's action.
   let refusal: CommandFailure | undefined;
 
   const changed = new api.EventEmitter<Row | Row[] | undefined>();
-  const readTree = () => changed.fire(undefined);
-  // What may have changed the stacks: the tree is read again, and the canvas
-  // of the view's root and the canvas of the root `ran` names, a ticking
-  // run's, are each told their reads are stale, once.
+
+  // VS Code drops what it holds under a row it is told to redraw, and every
+  // row when told to redraw the whole tree, until the provider answers its
+  // ask again: a row's menu command chosen meanwhile arrives with no row. So
+  // the tree reads what may have changed first, and tells VS Code once it
+  // holds the answer, which VS Code's ask then reads with nothing run in
+  // between. A read started later supersedes one still under way.
+  let reads = 0;
+  let latest: Promise<boolean> | undefined;
+  // Reads the tree and holds what it found, unless a read started later
+  // meanwhile; resolves with whether this read's answer is held.
+  function readAndHold(): Promise<boolean> {
+    const at = ++reads;
+    const done = readTree().then((tree) => {
+      if (at !== reads) return false;
+      hold(tree);
+      return true;
+    });
+    latest = done;
+    return done;
+  }
+  // The tree read again, and redrawn whole once its answer is held.
+  function reread(): void {
+    void readAndHold().then((held) => {
+      if (held) changed.fire(undefined);
+    });
+  }
+  // What may have changed the stacks: the tree is read again and redrawn
+  // whole, and the canvas of the view's root and the canvas of the root
+  // `ran` names, a ticking run's, are each told their reads are stale, once.
   const refresh = (ran?: AuthoringRoot) => {
-    readTree();
+    reread();
     if (root) panels.tick(root);
     if (ran && !(root && sameRoot(root, ran))) panels.tick(ran);
   };
-  // Redraws the shown rows of the stacks `ids` names.
+  // Redraws the shown rows of the stacks `ids` names, each drawn with its
+  // look as it is now; VS Code's ask of each one's runs is answered from
+  // what the tree holds.
   const redraw = (ids: readonly (string | undefined)[]) => {
     const rows = [...new Set(ids)]
       .map((id) => (id === undefined ? undefined : shown.get(id)))
-      .filter((row): row is Row => row !== undefined);
+      .filter((row): row is StackRow => row !== undefined);
+    for (const row of rows) drawn.set(row.stack.id, look(row));
     if (rows.length > 0) changed.fire(rows);
   };
 
@@ -241,28 +285,82 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     activeTerraformDirectory: () => undefined,
   };
 
-  async function stackRows(of: AuthoringRoot): Promise<Row[]> {
-    let stacks: Stack[];
+  // What one read of the tree found: whether more than one root is a
+  // candidate (`lace.stacks.choice`), the root it names, the view's state
+  // and message, and the root's stacks with the runs of each stack whose runs
+  // are held, read again with it; or why there are none, a refusal kept for
+  // the welcome's action. A read that failed, whatever step failed, holds no
+  // stack and says why by the failure's reason, else its message (`failed`,
+  // whose welcome offers Retry).
+  type TreeRead = {
+    choice: boolean;
+    root: AuthoringRoot | undefined;
+    state: StacksState;
+    message?: string;
+    refusal?: CommandFailure;
+    stacks: readonly StackRow[];
+    runs: Map<string, Promise<Row[]>>;
+  };
+
+  async function readTree(): Promise<TreeRead> {
+    let choice = false;
+    let of = root;
     try {
+      // One read of the candidates per read of the tree: the choice, and the
+      // root found when the view has none.
+      const known = await candidates(sources);
+      choice = known.length > 1;
+      if (!of) {
+        const found = await findRoot(sources, async () => known);
+        if (found.kind !== 'root') {
+          return {
+            choice,
+            root: undefined,
+            state: rootlessState(found),
+            stacks: [],
+            runs: new Map(),
+          };
+        }
+        of = found.root;
+      }
+      const at = of;
       const listed = await commandDocument(await commands.anywhere(), 'stack list', {
-        source: rootPath(of),
+        source: rootPath(at),
       });
-      stacks = listed.items;
-    } catch (error) {
-      refusal = failureOf(error);
-      shown = new Map();
-      const state = refusedState(refusal);
-      setState(
-        state === 'noTeam' ? await teamState() : state,
-        state === 'failed' ? failureText(error) : undefined,
+      const stacks = listed.items.map((stack): StackRow => ({ kind: 'stack', root: at, stack }));
+      const runs = new Map(
+        stacks
+          .filter((row) => runsOf.has(row.stack.id))
+          .map((row) => [row.stack.id, runRows(row)] as const),
       );
-      return [];
+      await Promise.all(runs.values());
+      return { choice, root: at, state: stacks.length === 0 ? 'noStack' : 'stacks', stacks, runs };
+    } catch (error) {
+      const failure = failureOf(error);
+      const state = refusedState(failure);
+      return {
+        choice,
+        root: of,
+        state: state === 'noTeam' ? await teamState() : state,
+        message: state === 'failed' ? failureText(error) : undefined,
+        refusal: failure,
+        stacks: [],
+        runs: new Map(),
+      };
     }
-    refusal = undefined;
-    setState(stacks.length === 0 ? 'noStack' : 'stacks');
-    const rows: Row[] = stacks.map((stack) => ({ kind: 'stack', root: of, stack }));
-    shown = new Map(stacks.map((stack, at) => [stack.id, rows[at]]));
-    return rows;
+  }
+
+  // The tree holds what a read found, and the view says it.
+  function hold(tree: TreeRead): void {
+    void api.commands.executeCommand('setContext', STACKS_CHOICE, tree.choice);
+    root = tree.root;
+    view.description = tree.root && rootLabel(tree.root, sources.folders());
+    setState(tree.state, tree.message);
+    refusal = tree.refusal;
+    shown = new Map(tree.stacks.map((row) => [row.stack.id, row]));
+    runsOf = tree.runs;
+    drawn.clear();
+    for (const row of tree.stacks) drawn.set(row.stack.id, look(row));
   }
 
   // No team is selected: there is one to select, or the organization has
@@ -277,7 +375,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }
   }
 
-  async function runRows(row: Extract<Row, { kind: 'stack' }>): Promise<Row[]> {
+  async function runRows(row: StackRow): Promise<Row[]> {
     try {
       const listed = await commandDocument(await commands.anywhere(), 'run list', {
         stack: row.stack.id,
@@ -293,6 +391,41 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     } catch (error) {
       return [{ kind: 'note', text: failureText(error), icon: 'error' }];
     }
+  }
+
+  // A stack row's runs as the tree holds them, read when VS Code first asks
+  // for them.
+  function runsOfRow(row: StackRow): Promise<Row[]> {
+    const held = runsOf.get(row.stack.id);
+    if (held) return held;
+    const asked = runRows(row);
+    runsOf.set(row.stack.id, asked);
+    return asked;
+  }
+
+  // A stack row whose look changed with the store (an apply of it started,
+  // reached a stage or settled): its run may have changed with it, so its
+  // runs, when held, are read again, and the row is redrawn once they are.
+  // One read per row at a time; the row is drawn with its look as it is
+  // when that read is done.
+  const restacking = new Set<string>();
+  async function restack(id: string | undefined): Promise<void> {
+    const row = id === undefined ? undefined : shown.get(id);
+    if (!row || restacking.has(row.stack.id) || sameLook(look(row), drawn.get(row.stack.id))) {
+      return;
+    }
+    restacking.add(row.stack.id);
+    try {
+      const held = runsOf;
+      if (held.has(row.stack.id)) {
+        const again = runRows(row);
+        await again;
+        if (runsOf === held) held.set(row.stack.id, again);
+      }
+    } finally {
+      restacking.delete(row.stack.id);
+    }
+    redraw([row.stack.id]);
   }
 
   const look = (row: Row): RowLook => {
@@ -312,7 +445,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     };
   };
 
-  // A row's identity across reads, so an expanded stack stays expanded.
+  // A row's identity across reads, so an expanded stack stays expanded and
+  // a menu opened on a row before a redraw names the same row after it.
   const idOf = (row: Row): string | undefined =>
     row.kind === 'stack'
       ? `stack ${rootKey(row.root)} ${row.stack.id}`
@@ -338,23 +472,15 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       };
     },
     async getChildren(row) {
-      if (row?.kind === 'stack') return runRows(row);
+      if (row?.kind === 'stack') return runsOfRow(row);
       if (row) return [];
-      // One read of the candidates per read of the tree: the choice, and the
-      // root found when the view has none.
-      const known = await candidates(sources);
-      void api.commands.executeCommand('setContext', STACKS_CHOICE, known.length > 1);
-      if (!root) {
-        const found = await findRoot(sources, async () => known);
-        if (found.kind !== 'root') {
-          view.description = undefined;
-          setState(rootlessState(found));
-          return [];
-        }
-        root = found.root;
-      }
-      view.description = rootLabel(root, sources.folders());
-      return stackRows(root);
+      // The tree as the latest read holds it, read first when nothing is.
+      let answered: Promise<boolean>;
+      do {
+        answered = latest ?? readAndHold();
+        await answered;
+      } while (answered !== latest);
+      return [...shown.values()];
     },
   };
 
@@ -363,7 +489,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   function show(next: AuthoringRoot): void {
     if (root && sameRoot(root, next)) return;
     root = next;
-    readTree();
+    reread();
   }
 
   // Runs a stack row's binding over the root and the stack.
@@ -376,11 +502,15 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   }
 
   // An apply: under a progress notification until the run slot settles,
-  // then what it settled as, with Show Output and the ways out its failure
-  // names. Cancel is the run's explicit cancel.
+  // then the provider versions its Run ran under an admission, written to
+  // the stack's Output channel, and what it settled as, with the ways out
+  // its failure names, the package's actions that answer it over the
+  // apply's own `RunCtx`, and Show Output. Cancel is the run's explicit
+  // cancel.
   async function apply(of: AuthoringRoot, stack: StackRef): Promise<void> {
     const before = runner.store.getSnapshot().run?.token;
-    await runOnStack(BINDINGS.apply, of, stack);
+    const ctx: RunCtx = { root: rootPath(of), stack };
+    await runner.run(BINDINGS.apply, ctx);
     const started = runner.store.getSnapshot().run;
     // The runner refused it (another run is under way) or did not start it.
     if (!started || started.token === before) return;
@@ -401,18 +531,21 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
               resolve(slot);
               return;
             }
-            const phase = slot.phases.at(-1)?.name;
-            if (phase !== undefined) progress.report({ message: phase });
+            const stage = slot.stages.at(-1)?.name;
+            if (stage !== undefined) progress.report({ message: stage });
           };
           const unsubscribe = runner.store.subscribe(check);
           check();
         }),
     );
-    if (settled.outcome.kind === 'running') return;
-    const said = outcomeNotice(stack.slug, settled.outcome);
+    const { outcome } = settled;
+    if (outcome.kind === 'running') return;
+    runOutput.write(stack.slug, admittedLines(settled));
+    const said = outcomeNotice(stack.slug, { outcome, run: settled.run });
     const offers = { ...options.offers, validate: () => options.validate(of) };
+    const answers = said.failure === undefined ? [] : failureAnswers(ctx, said.failure);
     const showOutput = { title: SHOW_OUTPUT };
-    const chosen = await notice(api, offers, said.level, said.text, said.offers, [showOutput]);
+    const chosen = await runNotice(api, runner, offers, said, answers, [showOutput]);
     if (chosen === showOutput) runOutput.show(stack.slug);
   }
 
@@ -420,7 +553,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // names to `verb` a stack of, by the one stack pick. A root not named is
   // said as `rootToAct` says it.
   async function stackOf(
-    row: Extract<Row, { kind: 'stack' }> | undefined,
+    row: StackRow | undefined,
     verb: string,
   ): Promise<{ of: AuthoringRoot; stack: StackRef } | undefined> {
     if (row) return { of: row.root, stack: stackRef(row.stack) };
@@ -432,7 +565,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   const onStack =
     (verb: string, act: (of: AuthoringRoot, stack: StackRef) => Promise<void>) =>
-    async (row?: Extract<Row, { kind: 'stack' }>) => {
+    async (row?: StackRow) => {
       const chosen = await stackOf(row, verb);
       if (chosen) await act(chosen.of, chosen.stack);
     };
@@ -484,7 +617,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     const slots = runner.store.getSnapshot();
     const { preview, run } = slots;
     drawProgress(slots);
-    redraw([run?.readOver.stack]);
+    void restack(run?.readOver.stack);
     if (preview?.outcome.kind === 'succeeded' && preview.token !== shownPreview) {
       const { data } = preview.outcome;
       shownPreview = preview.token;
@@ -525,7 +658,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }),
     api.workspace.onDidChangeWorkspaceFolders(() => {
       if (root && !folderOpen(root, sources.folders())) root = undefined;
-      readTree();
+      reread();
     }),
     ...registerCommands(api, {
       [STACK_COMMANDS.refresh]: async () => refresh(),
