@@ -366,7 +366,7 @@ describe('the state of a view that names no root', () => {
 });
 
 describe('what a settled apply says', () => {
-  test('each outcome has its notice; a failure offers the ways out its reason names', () => {
+  test('each outcome has its notice; a failure offers the ways out its reason names, beside the failure the package answers', () => {
     const failure: CommandFailure = { reason: 'stale_certification', message: 'stale' };
     expect(outcomeNotice('prod', { outcome: { kind: 'succeeded' }, run: null })).toEqual({
       level: 'info',
@@ -382,6 +382,7 @@ describe('what a settled apply says', () => {
       level: 'warn',
       text: 'Error: stale',
       offers: [{ kind: 'validate' }],
+      failure,
     });
     expect(
       outcomeNotice('prod', { outcome: { kind: 'failed', message: 'Error: boom' }, run: null }),

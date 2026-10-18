@@ -41,8 +41,9 @@
 //   about, so a notice of a failure offers the ways out of that run's root,
 //   and, beside them, each package action placed on a failure's row whose
 //   `answers` names the failure's reason, run over the failed run's own
-//   `RunCtx` object, so it reuses what that run was answered. The runner's
-//   own requirement check still gates it.
+//   `RunCtx` object, so it reuses what that run was answered
+//   (`failureAnswers`, which an apply's settled notice reads too). The
+//   runner's own requirement check still gates it.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   type ActionContribution,
@@ -117,6 +118,17 @@ export type RunnerHostOptions = {
 };
 
 type Built = { port: CommandsPort; runner: ActionRunner };
+
+// The package actions that answer `failure`, as the package's `answering`
+// lists them, each to run over `ctx`, the failed run's own `RunCtx` object,
+// with the failure as its target.
+export function failureAnswers(ctx: RunCtx, failure: CommandFailure): readonly FailureAnswer[] {
+  return answering(CORE_COMMAND_ACTIONS, failure).map((action) => ({
+    action,
+    ctx,
+    target: { failure },
+  }));
+}
 
 // The package's binding `id`.
 export function binding(id: string): ActionContribution {
@@ -252,15 +264,7 @@ export function createRunnerHost(options: RunnerHostOptions): RunnerHost {
     noticed: () => {
       const noticed = runContext.getStore();
       if (!noticed) return undefined;
-      return {
-        ctx: noticed.ctx,
-        answers: (failure) =>
-          answering(CORE_COMMAND_ACTIONS, failure).map((action) => ({
-            action,
-            ctx: noticed.ctx,
-            target: { failure },
-          })),
-      };
+      return { ctx: noticed.ctx, answers: (failure) => failureAnswers(noticed.ctx, failure) };
     },
   });
   const confirm = shown.confirm;

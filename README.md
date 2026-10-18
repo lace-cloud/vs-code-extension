@@ -159,7 +159,8 @@ its ten most recent runs. The view's description names the module; it follows th
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
   Lace Plan document, whose lines wrap.
 - A stack command refused because the module has no current certification offers **Validate**, which validates that
-  module.
+  module. One refused because the module keeps no `.terraform.lock.hcl` offers **Lock providers**, which runs
+  `lace module lock` in the module and names the lockfile it wrote, to commit before you run the command again.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal. A `lace` command that may change a stack, run in

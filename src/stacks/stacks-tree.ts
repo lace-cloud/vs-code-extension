@@ -78,7 +78,7 @@ import type { Account } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
-import { binding, type RunnerHost } from '../engine/runner-host';
+import { binding, failureAnswers, type RunnerHost } from '../engine/runner-host';
 import {
   type AuthoringRoot,
   candidates,
@@ -96,7 +96,7 @@ import {
 import type { RootState } from '../state/root-state';
 import { registerCommands } from '../vscode/commands';
 import { onDidEndLaceCommand } from '../vscode/lace-command-lines';
-import { notice, type OfferActions } from '../vscode/offers';
+import { type OfferActions, runNotice } from '../vscode/offers';
 import { runUnderProgress } from '../vscode/run-progress';
 import type { RunOutput } from './run-output';
 import type { PickStack } from './stack-pick';
@@ -376,11 +376,13 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   }
 
   // An apply: under a progress notification until the run slot settles,
-  // then what it settled as, with Show Output and the ways out its failure
-  // names. Cancel is the run's explicit cancel.
+  // then what it settled as, with the ways out its failure names, the
+  // package's actions that answer it over the apply's own `RunCtx`, and
+  // Show Output. Cancel is the run's explicit cancel.
   async function apply(of: AuthoringRoot, stack: StackRef): Promise<void> {
     const before = runner.store.getSnapshot().run?.token;
-    await runOnStack(BINDINGS.apply, of, stack);
+    const ctx: RunCtx = { root: rootPath(of), stack };
+    await runner.run(BINDINGS.apply, ctx);
     const started = runner.store.getSnapshot().run;
     // The runner refused it (another run is under way) or did not start it.
     if (!started || started.token === before) return;
@@ -412,8 +414,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (outcome.kind === 'running') return;
     const said = outcomeNotice(stack.slug, { outcome, run: settled.run });
     const offers = { ...options.offers, validate: () => options.validate(of) };
+    const answers = said.failure === undefined ? [] : failureAnswers(ctx, said.failure);
     const showOutput = { title: SHOW_OUTPUT };
-    const chosen = await notice(api, offers, said.level, said.text, said.offers, [showOutput]);
+    const chosen = await runNotice(api, runner, offers, said, answers, [showOutput]);
     if (chosen === showOutput) runOutput.show(stack.slug);
   }
 

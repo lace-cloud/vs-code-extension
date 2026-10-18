@@ -139,10 +139,14 @@ export function runLook(run: Run): RowLook {
   };
 }
 
+// `failure` is the failure document an apply that failed or was blocked
+// ended on, when the CLI wrote one: the package actions that answer it are
+// offered beside `offers`.
 export type Notice = {
   level: 'info' | 'warn' | 'error';
   text: string;
   offers: readonly Offer[];
+  failure?: CommandFailure;
 };
 
 type ChangeRequest = Extract<RunOutcome, { kind: 'awaiting-approval' }>['changeRequest'];
@@ -218,8 +222,9 @@ export type SettledRun = Pick<NonNullable<RunSlot>, 'run'> & {
 };
 
 // What an apply that settled says, and what it offers: the ways out a
-// failure's reason names, and, for a Run held for approval, the Run's page
-// and the records of the change request it waits on.
+// failure's reason names, with the failure the package's actions answer,
+// and, for a Run held for approval, the Run's page and the records of the
+// change request it waits on.
 export function outcomeNotice(slug: string, { outcome, run }: SettledRun): Notice {
   switch (outcome.kind) {
     case 'succeeded':
@@ -227,9 +232,13 @@ export function outcomeNotice(slug: string, { outcome, run }: SettledRun): Notic
     case 'awaiting-approval':
       return awaitingNotice(slug, outcome.changeRequest, run?.url);
     case 'blocked':
-      return { level: 'warn', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'failed':
-      return { level: 'error', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
+      return {
+        level: outcome.kind === 'blocked' ? 'warn' : 'error',
+        text: outcome.message.trim(),
+        offers: offersFor(outcome.failure),
+        ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
+      };
     case 'cancelled':
       return { level: 'info', text: `Cancelled the apply of ${slug}.`, offers: [] };
     case 'detached':

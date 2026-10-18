@@ -280,7 +280,10 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 - An apply runs under a cancellable progress notification; every `log` line, the Preview Advisory included, goes to the
   stack's Output channel `Lace: <slug>` (`run-output.ts`), which Follow Logs writes to as well. Its notice offers the
   ways out its failure names; `no_certification` and `stale_certification` offer **Validate**, the palette's Validate
-  on the root that apply ran in, whose report lands where the palette's does. An apply held for approval says what the
+  on the root that apply ran in, whose report lands where the palette's does. After them it offers each package action
+  that answers the failure's reason (`failureAnswers`, as a notice of the window's runner does), run over the apply's
+  own `RunCtx` under a progress notification: `no_lockfile` offers **Lock providers**, `module lock` in the apply's
+  root, whose notice names the lockfile it wrote. An apply held for approval says what the
   Run waits on, from the change request its gate event carries: the change request and its state, each requirement
   with its state and its decider as the gate event names it (Lace, or a change-management system), and each record a
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and

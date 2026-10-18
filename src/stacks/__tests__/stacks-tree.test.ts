@@ -1278,6 +1278,53 @@ describe('an apply', () => {
     ]);
   });
 
+  test("refused for keeping no lockfile offers the package's Lock providers, which runs module lock in the apply's root under a progress notification and says what it locked", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': refusal('no_lockfile'),
+        'module lock': {
+          documents: [
+            {
+              path: fsPath('/work/repo/infra/prod'),
+              lockfile: fsPath('/work/repo/infra/prod/.terraform.lock.hcl'),
+              providers: [
+                {
+                  address: 'registry.terraform.io/hashicorp/aws',
+                  version: '5.0.0',
+                  platforms: ['linux_amd64'],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      answers: { no_lockfile: 'Lock providers' },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    await settled();
+
+    expect(t.messages).toContainEqual({
+      level: 'error',
+      text: 'no_lockfile',
+      buttons: ['Lock providers', 'Show Output'],
+    });
+    expect(t.commands.invoked.filter((c) => c.path === 'module lock')).toEqual([
+      { cwd: fsPath('/work/repo/infra/prod'), path: 'module lock', args: {} },
+    ]);
+    expect(t.progress.find((p) => p.title === 'Lock providers: prod')).toMatchObject({
+      ended: true,
+    });
+    expect(t.messages).toContainEqual({
+      level: 'info',
+      text: 'Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree, then run the command again.',
+      buttons: [],
+    });
+  });
+
   test('from the palette, names the root and picks one of its stacks', async () => {
     const t = setup({
       root: prod,
