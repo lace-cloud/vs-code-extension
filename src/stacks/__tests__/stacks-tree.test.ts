@@ -11,7 +11,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { outsideSignals } from '../../account/__tests__/fake-outside';
 import { authoringCommands } from '../../commands/authoring-commands';
-import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
+import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
@@ -30,6 +30,7 @@ import {
   STACKS_STATE,
   stacksTree,
 } from '../stacks-tree';
+import { fakeTreeView } from './fake-tree-view';
 import { memento, run, runs, stack, stacks } from './stack-fixtures';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -379,6 +380,8 @@ function setup(options: Options) {
     redrawn.push(rows as Row | Row[] | undefined);
   });
   const item = (row: Row) => provider?.getTreeItem(row) as vscode.TreeItem;
+  // The tree as VS Code holds it, over the provider the view was given.
+  const shownTree = () => fakeTreeView(provider as vscode.TreeDataProvider<Row>);
   const command = (id: string, ...args: unknown[]) => handlers.get(id)?.(...args);
   return {
     api,
@@ -387,6 +390,7 @@ function setup(options: Options) {
     tree,
     children,
     item,
+    shownTree,
     command,
     contexts,
     choices,
@@ -521,8 +525,10 @@ describe('the stacks of the current root', () => {
     expect(t.view.description).toBe('infra/prod');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
+    await settled();
     expect(t.redrawn).toEqual([]);
-    await t.children();
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
       { source: fsPath('/work/api/infra/prod') },
@@ -534,6 +540,7 @@ describe('the stacks of the current root', () => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.children();
     t.active.fire(staging);
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
     expect(t.panels.tick).not.toHaveBeenCalled();
     await t.children();
@@ -568,16 +575,19 @@ describe('the stacks of the current root', () => {
 
     folders.push(web);
     t.workspaceFolders.fire({ added: [web], removed: [] });
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
     await t.children();
     expect(t.view.description).toBe('api/infra/prod');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
+    await settled();
     await t.children();
     expect(t.view.description).toBe('web/infra/prod');
 
     folders.pop();
     t.workspaceFolders.fire({ added: [], removed: [web] });
+    await settled();
     expect(t.redrawn).toEqual([undefined, undefined, undefined]);
     await t.children();
     expect(t.view.description).toBe('infra/prod');
@@ -651,6 +661,7 @@ describe('the stacks of the current root', () => {
     expect(t.contexts).toEqual(['noModule']);
 
     t.active.fire({ folder: repo, relative: '' });
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
     await t.children();
     expect(t.view.description).toBe('repo');
@@ -668,7 +679,8 @@ describe('the stacks of the current root', () => {
 
     const rooted = setup({ root: prod, scripts: listed });
     await rooted.children();
-    await rooted.children();
+    await rooted.command(STACK_COMMANDS.refresh);
+    await settled();
     expect(rooted.terraformFiles).toHaveBeenCalledTimes(2);
   });
 
@@ -690,7 +702,8 @@ describe('the stacks of the current root', () => {
       terraformFiles: ['/work/repo/infra/prod/main.tf'],
     });
     await one.children();
-    await one.children();
+    await one.command(STACK_COMMANDS.refresh);
+    await settled();
     expect(one.choices).toEqual([false, false]);
 
     const two = setup({ root: prod, scripts: listed });
@@ -830,7 +843,9 @@ describe('when the stacks cannot be listed', () => {
     expect(t.view.message).toBe('unspecified');
 
     t.account.fire();
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
   });
 });
 
@@ -895,6 +910,7 @@ describe('Create Stack', () => {
     created = true;
     t.commands.held[0].finish([stack('stk_9', 'prod')]);
     await creating;
+    await settled();
     expect(t.messages).toContainEqual({ level: 'info', text: 'Created stack prod', buttons: [] });
     expect(t.redrawn).toContain(undefined);
     const [row] = await t.children();
@@ -990,7 +1006,9 @@ describe('a stack row', () => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();
     await change(t);
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
   });
 
@@ -1142,6 +1160,81 @@ describe('Cancel on a run row', () => {
     await cancelling;
     expect(notifications(t)).toEqual([{ title: 'Cancel: run_1', ended: true }]);
     expect(t.messages).toEqual([{ level: 'info', text: 'Run run_1 cancelled', buttons: [] }]);
+  });
+
+  // A run row drawn under its stack, whose stack's runs are listed again
+  // only once the test says: the first `run list` answers at once, every
+  // later one when `release` is called.
+  function drawnRun(scripts: Parameters<typeof setup>[0]['scripts'] = {}) {
+    let release: () => void = () => {};
+    const later = new Promise<Script>((resolve) => {
+      release = () => resolve({ documents: [runs(run('run_1', 'applying'))] });
+    });
+    let lists = 0;
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'run list': () =>
+          lists++ === 0 ? { documents: [runs(run('run_1', 'policy_eval'))] } : later,
+        'run cancel': { documents: [run('run_1', 'cancelled', { completedAt: COMPLETED })] },
+        ...scripts,
+      },
+    });
+    const tree = t.shownTree();
+    return { t, tree, release: () => release() };
+  }
+  const NO_RUN =
+    "This command acts on a run listed in the Stacks view; choose it from that run's menu.";
+
+  test("chosen from a run row's menu while an apply of its stack ticks the store, reaches that run and cancels it; the row is redrawn once its stack's runs are read", async () => {
+    const { t, tree, release } = drawnRun({
+      'stack apply': { held: true, written: [{ type: 'stage', name: 'plan' }] },
+    });
+    await tree.show();
+    const [stackHandle] = tree.drawn();
+    await tree.expand(stackHandle);
+    const [runHandle] = tree.drawn(stackHandle);
+
+    void t.command(STACK_COMMANDS.apply, tree.argument(stackHandle));
+    await settled();
+    await t.command(STACK_COMMANDS.cancel, tree.argument(runHandle));
+    await settled();
+
+    expect(t.messages.map(({ text }) => text)).not.toContain(NO_RUN);
+    expect(t.commands.invoked.filter((c) => c.path === 'run cancel').map((c) => c.args)).toEqual([
+      { run: 'run_1' },
+    ]);
+
+    release();
+    await settled();
+    await tree.answered();
+    expect(tree.drawn(stackHandle)).toEqual([runHandle]);
+    expect(t.item(tree.argument(stackHandle) as Row).description).toBe('prod · applying: plan');
+  });
+
+  test("chosen from a run row's menu while the view reads the whole tree again, reaches that run and cancels it", async () => {
+    const { t, tree, release } = drawnRun();
+    await tree.show();
+    const [stackHandle] = tree.drawn();
+    await tree.expand(stackHandle);
+    const [runHandle] = tree.drawn(stackHandle);
+
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    await t.command(STACK_COMMANDS.cancel, tree.argument(runHandle));
+    await settled();
+
+    expect(t.messages.map(({ text }) => text)).not.toContain(NO_RUN);
+    expect(t.commands.invoked.filter((c) => c.path === 'run cancel').map((c) => c.args)).toEqual([
+      { run: 'run_1' },
+    ]);
+
+    release();
+    await settled();
+    await tree.answered();
+    expect(tree.drawn(stackHandle)).toEqual([runHandle]);
+    expect(t.item(tree.argument(runHandle) as Row).description).toMatch(/^applying /);
   });
 
   test("a cancel the CLI refuses ends its progress with the failure document's message", async () => {

@@ -264,12 +264,18 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   root with the one stack pick (`stacks/stack-pick.ts`). A refusal of a stack command names the root its run was over,
   so `no_certification` and `stale_certification` offer Validate on it.
 - Selecting a stack picks it for its root (`root-state.ts`), and the root's canvas draws its badges; the tree redraws
-  the row picked before and the row picked now, the objects `getChildren` gave (VS Code redraws an element by identity).
-  A read of the whole tree drops every row VS Code holds until it settles, and a row's menu command run in that time
-  arrives with no row, so only what may change the list reads it whole: a tick, a change of the account, the view shown
-  again, a `lace` command that ended in an integrated terminal and that the CLI declares more than a read
-  (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a change of the root
-  the view names, and Refresh Stacks. The tree and the root's canvas badges read the same facts, so one invalidation
+  the row picked before and the row picked now, the objects `getChildren` gave (VS Code redraws an element by identity,
+  and names each by its id: a stack by its root and id, a run by its stack and id, so a menu opened on a row before a
+  redraw names the same row after it). VS Code drops what it holds under a row it redraws, and every row when it
+  redraws the whole tree, until the provider answers its ask again, and a row's menu command chosen in that time
+  arrives with no row: so the tree reads first and tells VS Code to redraw once it holds the answer, and answers VS
+  Code's asks from what it read (the stacks, and the runs of each stack VS Code asked for, read again with them); a
+  read started later supersedes one under way. Only what may change the list reads it whole: a tick, a change of the
+  account, the view shown again, a `lace` command that ended in an integrated terminal and that the CLI declares more
+  than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a change
+  of the root the view names, and Refresh Stacks. A stack row whose look changes with the runner's store (an apply of
+  it started, reached a stage or settled) has its runs read again, then is redrawn; any other change of the store
+  redraws nothing. The tree and the root's canvas badges read the same facts, so one invalidation
   serves both: each read for what may have changed the stacks (all of these but a change of the folders or of the root,
   which change no stack) ticks the canvas of the view's root once, and each tick of the runner's store (a run started or
   settled, a scan or a cancel done) ticks the canvas of the root that run was about too, its `RunCtx.root` as the

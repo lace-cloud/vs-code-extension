@@ -391,9 +391,11 @@ describe('what a settled apply says', () => {
       text: 'Error: boom',
       offers: [],
     });
-    expect(outcomeNotice('prod', { outcome: { kind: 'cancelled' }, run: null }).text).toBe(
-      'Cancelled the apply of prod.',
-    );
+    expect(outcomeNotice('prod', { outcome: { kind: 'cancelled' }, run: null })).toEqual({
+      level: 'info',
+      text: 'Cancelled the apply of prod.',
+      offers: [],
+    });
     expect(
       outcomeNotice('prod', { outcome: { kind: 'detached', submitted: true }, run: null }).text,
     ).toBe('Stopped following the apply of prod; the run goes on.');
