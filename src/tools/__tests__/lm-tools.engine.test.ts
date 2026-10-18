@@ -38,9 +38,10 @@ const MODULE = {
 const ROOT = 'infra';
 
 // What a Generate of `infra` reports: the root module's Terraform, and each
-// module it calls written at the directory its id names.
+// module it calls written at the directory its id names, each changed from
+// the hand-written files the test made.
 const GENERATED =
-  'Generated the Terraform. Files written: main.tf, modules/app/main.tf, modules/app/outputs.tf, modules/app/variables.tf, modules/net/main.tf, modules/net/outputs.tf.';
+  'Generated the Terraform. Changed main.tf, modules/app/main.tf, modules/app/outputs.tf, modules/app/variables.tf, modules/net/main.tf, modules/net/outputs.tf.';
 
 // The Terraform files under `directory`, as the workspace's file search
 // finds them.

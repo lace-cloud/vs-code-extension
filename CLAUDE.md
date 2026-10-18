@@ -48,7 +48,7 @@ src/
   tools/                  the chat tools as Language Model Tools
   protocol/               the webview ↔ host protocols, shared by both bundles
   vscode/                 command registration, dialogs, notices and their offers, the pick that waits on a read, a
-                          run's prompts and progress, webview HTML
+                          run's prompts and progress, webview HTML, the `lace` command lines the terminals end
   webview/                the page side of a webview: its postMessage pair; the canvas's theme from VS Code's theme
 resources/instructions/   the text-level instructions contributed to the developer's coding assistant
 packages/host-e2e/        the window e2e (a real VS Code against a real engine)

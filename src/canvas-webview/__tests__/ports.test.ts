@@ -48,7 +48,7 @@ describe('the ports the page builds', () => {
     expect(host.call).toHaveBeenCalledWith('confirm', { text: 'sure?' });
   });
 
-  test("the canvas's Generate tells the host the files it wrote, and yields every event as it came", async () => {
+  test("the canvas's Generate tells the host what the package reads of the tree it wrote, and yields every event as it came", async () => {
     const engine = fakeEngine();
     const host = fakeHost();
     const ports = await canvasPorts(engine.caller, host, { root: '/repo/infra', arrangement: {} });
@@ -57,7 +57,12 @@ describe('the ports the page builds', () => {
     for await (const event of ports.editor?.generate() ?? []) events.push(event.type);
 
     expect(events).toEqual(['progress', 'progress', 'success']);
-    expect(host.notices).toEqual([{ op: 'generated', written: ['main.tf'] }]);
+    expect(host.notices).toEqual([
+      {
+        op: 'generated',
+        tree: { changed: ['main.tf'], removed: [], unchanged: 0, treeChanged: true },
+      },
+    ]);
   });
 
   test('unsaved is forwarded when it changes', async () => {

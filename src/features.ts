@@ -102,7 +102,7 @@ export function windowHost(base: WindowBase): Host {
     // action comes long after both exist.
     validate: (root) => modules.validate(root),
     importResources: (root) => importResources(root),
-    generated: (root, written) => modules.generated(root, written),
+    generated: (root, tree) => modules.generated(root, tree),
     report,
   });
   const sources = workspaceRootSources(api, {

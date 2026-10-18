@@ -5,10 +5,11 @@
 // directory, until some client closes it, and the revision of each session's
 // latest frame, which an answer that moved the state names — and a test
 // decides when a deferred answer is given and how a stream ends. A Generate
-// reports its two stages on the session's streams, then writes `main.tf`,
-// and its validate finds the tree in Lace style. An Invoke says its command
+// reports each of its stages on the session's streams, then writes
+// `main.tf`, which it changed and which is the whole render, and its
+// validate finds the tree in Lace style. An Invoke says its command
 // started, then that it exited 0, as the engine's protocol orders them.
-import { type BridgeEngineCaller, bridgeCaller } from '@lace-cloud/canvas/engine';
+import { type BridgeEngineCaller, bridgeCaller, GENERATE_STAGES } from '@lace-cloud/canvas/engine';
 import {
   type BridgeRequest,
   type BridgeResponse,
@@ -110,7 +111,7 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
     }
     if (method === 'SessionGenerate') {
       const session = sessions.get(request.sessionId as string);
-      for (const stage of ['generating', 'validating']) {
+      for (const stage of GENERATE_STAGES) {
         for (const stream of session?.streams ?? []) {
           post({
             kind: 'event',
@@ -125,6 +126,8 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
         id,
         response: {
           files_written: ['main.tf'],
+          files_changed: ['main.tf'],
+          files_removed: [],
           validate_json: JSON.stringify(VALIDATED),
           revision: session?.revision ?? 0,
         },

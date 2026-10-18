@@ -9,6 +9,7 @@ import {
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { outsideSignals } from '../../account/__tests__/fake-outside';
 import { authoringCommands } from '../../commands/authoring-commands';
 import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
@@ -21,7 +22,14 @@ import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
 import { stackPick } from '../stack-pick';
-import { type Row, STACK_COMMANDS, STACKS_CHOICE, STACKS_STATE, stacksTree } from '../stacks-tree';
+import {
+  PREVIEW_SCHEME,
+  type Row,
+  STACK_COMMANDS,
+  STACKS_CHOICE,
+  STACKS_STATE,
+  stacksTree,
+} from '../stacks-tree';
 import { memento, run, runs, stack, stacks } from './stack-fixtures';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -83,7 +91,7 @@ const PROD_PREVIEW = {
   advisories: NO_AGENT,
 };
 const PROD_PREVIEW_TEXT =
-  'Preview of prod (tree h1)\nPlan: +1 ~0 -0\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n';
+  'Preview of prod (tree h1)\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n';
 const COMPLETED = '2026-09-01T01:00:00Z';
 const applyResult = (error: string | null = null) => ({
   type: 'result',
@@ -128,6 +136,8 @@ type Options = {
   folders?: vscode.WorkspaceFolder[];
 };
 
+type Setup = ReturnType<typeof setup>;
+
 function setup(options: Options) {
   const commands = fakeCommands(options.scripts);
   const mapping = commands.commands;
@@ -155,6 +165,9 @@ function setup(options: Options) {
   const shownChannels: string[] = [];
   let content: vscode.TextDocumentContentProvider | undefined;
   const opened: string[] = [];
+  // Each document the window shows: its URI and language, with the options
+  // it is shown with.
+  const shown: { document: unknown; options: unknown }[] = [];
   // Each progress the window shows: a notification's title, or the view it
   // is drawn over, and whether its task has ended.
   const progress: {
@@ -165,6 +178,8 @@ function setup(options: Options) {
     ended: boolean;
   }[] = [];
   const activeEditor = new Emitter<unknown>();
+  // A command line ending in one of the window's integrated terminals.
+  const outside = outsideSignals();
   // A change of the workspace's folders, told once `folders` holds them.
   const workspaceFolders = new Emitter<vscode.WorkspaceFoldersChangeEvent>();
   const quickPicks = fakeQuickPicks<{ label: string; stack?: { slug: string }; id?: string }>(
@@ -212,7 +227,10 @@ function setup(options: Options) {
       showErrorMessage: answer('error'),
       setStatusBarMessage: vi.fn(),
       onDidChangeActiveTextEditor: activeEditor.event,
-      showTextDocument: vi.fn(async () => {}),
+      onDidEndTerminalShellExecution: outside.window.onDidEndTerminalShellExecution,
+      showTextDocument: vi.fn(async (document: unknown, options: unknown) => {
+        shown.push({ document, options });
+      }),
       createOutputChannel: (name: string) => {
         const lines: string[] = [];
         channels.set(name, lines);
@@ -235,9 +253,15 @@ function setup(options: Options) {
       },
       openTextDocument: vi.fn(async (u: { path: string }) => {
         opened.push(String(content?.provideTextDocumentContent(u as never, {} as never)));
-        return {};
+        return { uri: u, languageId: 'plaintext' };
       }),
       onDidChangeWorkspaceFolders: workspaceFolders.event,
+    },
+    languages: {
+      setTextDocumentLanguage: vi.fn(async (document: object, languageId: string) => ({
+        ...document,
+        languageId,
+      })),
     },
     commands: {
       registerCommand: (id: string, run: (...args: unknown[]) => Promise<unknown>) => {
@@ -372,6 +396,7 @@ function setup(options: Options) {
     channels,
     shownChannels,
     opened,
+    shown,
     progress,
     offers,
     runner,
@@ -385,6 +410,7 @@ function setup(options: Options) {
     log,
     terraformFiles,
     workspaceFolders,
+    terminal: outside,
   };
 }
 
@@ -505,11 +531,12 @@ describe('the stacks of the current root', () => {
     ]);
   });
 
-  test('follows the canvas the developer turns to', async () => {
+  test('follows the canvas the developer turns to, which changes no stack and tells no canvas', async () => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.children();
     t.active.fire(staging);
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.panels.tick).not.toHaveBeenCalled();
     await t.children();
     expect(t.view.description).toBe('infra/staging');
     expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
@@ -949,11 +976,36 @@ describe('a stack row', () => {
     expect(t.item(qaRow).description).toBe('qa · on the canvas');
   });
 
-  test('Refresh Stacks reads the whole tree again', async () => {
+  // What may have changed the stacks of the view's root: the tree reads them
+  // again, and the root's canvas, whose badges read the same facts, is told
+  // its reads are stale, once.
+  test.each([
+    ['Refresh Stacks', (t: Setup) => t.command(STACK_COMMANDS.refresh)],
+    ['the view shown again', (t: Setup) => t.view.visibility.fire({ visible: true })],
+    ['a change of the account', (t: Setup) => t.account.fire()],
+    [
+      'a lace command that may change a stack, ended in an integrated terminal',
+      (t: Setup) => t.terminal.ended('lace stack destroy prod --yes'),
+    ],
+  ])("%s reads the whole tree again and tells the root's canvas once", async (_, change) => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();
-    await t.command(STACK_COMMANDS.refresh);
+    await change(t);
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+  });
+
+  test('the view hidden, and a command line that changes no stack, read nothing and tell no canvas', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    t.view.visibility.fire({ visible: false });
+    t.terminal.ended('lace stack list --source infra/prod');
+    t.terminal.ended('lace -o json run get run_1');
+    t.terminal.ended('echo lace stack destroy prod');
+    t.terminal.ended('lace engine');
+    await settled();
+    expect(t.redrawn).toEqual([]);
+    expect(t.panels.tick).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -1037,6 +1089,75 @@ describe('a stack row', () => {
     expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
     expect(t.channels.get('Lace: prod')).toEqual(['── lace run logs run_1 ──', 'line one']);
     expect(t.shownChannels).toContain('Lace: prod');
+  });
+
+  test('its Preview opens as a document of its own in the Lace plan language, which wraps its lines', async () => {
+    const t = setup({
+      root: prod,
+      scripts: { ...listed, 'stack preview': { documents: [PROD_PREVIEW] } },
+    });
+    const [row] = await t.children();
+
+    await t.command(STACK_COMMANDS.preview, row);
+    await settled();
+
+    expect(t.shown).toEqual([
+      {
+        document: {
+          uri: { scheme: PREVIEW_SCHEME, path: '/prod-1.plan' },
+          languageId: 'lace-plan',
+        },
+        options: { preview: false },
+      },
+    ]);
+  });
+});
+
+describe('Cancel on a run row', () => {
+  const listed = {
+    'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+    'run list': { documents: [runs(run('run_1', 'applying'))] },
+  };
+  // The titled progress notifications the window showed: the view's own
+  // progress has no title.
+  const notifications = (t: ReturnType<typeof setup>) =>
+    t.progress.filter((p) => p.title !== undefined).map(({ title, ended }) => ({ title, ended }));
+
+  test("runs the package's run cancel under a progress notification titled by the run until its run ends, and ends with the package's notice", async () => {
+    const t = setup({ root: prod, scripts: { ...listed, 'run cancel': { held: true } } });
+    const [row] = await t.children();
+    const [runRow] = await t.children(row);
+    let done = false;
+    const cancelling = t.command(STACK_COMMANDS.cancel, runRow)?.then(() => {
+      done = true;
+    });
+    await settled();
+
+    expect(t.commands.invoked.filter((c) => c.path === 'run cancel').map((c) => c.args)).toEqual([
+      { run: 'run_1' },
+    ]);
+    expect(notifications(t)).toEqual([{ title: 'Cancel: run_1', ended: false }]);
+    expect(done).toBe(false);
+
+    t.commands.held[0].finish([run('run_1', 'cancelled', { completedAt: COMPLETED })]);
+    await cancelling;
+    expect(notifications(t)).toEqual([{ title: 'Cancel: run_1', ended: true }]);
+    expect(t.messages).toEqual([{ level: 'info', text: 'Run run_1 cancelled', buttons: [] }]);
+  });
+
+  test("a cancel the CLI refuses ends its progress with the failure document's message", async () => {
+    const said = 'run run_1 cannot be cancelled in its current state';
+    const t = setup({
+      root: prod,
+      scripts: { ...listed, 'run cancel': refused({ reason: 'unspecified', message: said }) },
+    });
+    const [row] = await t.children();
+    const [runRow] = await t.children(row);
+    await t.command(STACK_COMMANDS.cancel, runRow);
+    await settled();
+
+    expect(notifications(t)).toEqual([{ title: 'Cancel: run_1', ended: true }]);
+    expect(t.messages).toEqual([{ level: 'error', text: said, buttons: [] }]);
   });
 });
 
@@ -1213,6 +1334,28 @@ describe('an apply', () => {
     await settled();
 
     expect(t.panels.tick.mock.calls).toEqual([[prod], [prod]]);
+  });
+
+  test("settled while the view names another root, reads the tree again and tells the view's canvas and its own once each", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': { held: true },
+      },
+    });
+    const [row] = await t.children();
+    const applying = t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+
+    t.active.fire(staging);
+    await t.children();
+    t.commands.held.find((c) => c.path === 'stack apply')?.finish([applyResult()]);
+    await applying;
+    await settled();
+
+    expect(t.panels.tick.mock.calls).toEqual([[prod], [staging], [prod]]);
   });
 
   test('held for approval, says what it waits on and offers the page of each record, which the window opens', async () => {

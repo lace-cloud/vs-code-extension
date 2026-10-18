@@ -6,8 +6,11 @@
 // the form. The runner host reuses what a run's context was answered
 // before, so a form asks only what that context never answered.
 //
-//   slug        an input box that refuses an empty value; the slug's own
-//               rule is the CLI's and the API's
+//   slug        an input box that opens on the root's directory name as it
+//               is (`proposedSlug`), selected for the developer to accept
+//               or type over, and refuses an empty value. Which names are
+//               slugs is the API's rule, kept nowhere here: a name that is
+//               none is refused by the CLI with the API's own message
 //   connection  a pick of the team's cloud connections (`lace connection
 //               list`, in the home), each as the CLI reports it, on screen
 //               while the list is read (`pick.ts`). A list that cannot be
@@ -21,7 +24,8 @@
 //
 // An argument with no prompt here cancels the form, and the notice says
 // this window cannot ask for it.
-import type { ActionContribution, RunCtx } from '@lace-cloud/canvas/engine';
+import { posix } from 'node:path';
+import type { ActionContribution, ActionTarget, RunCtx } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
@@ -59,6 +63,14 @@ type Prompt = (asking: Asking) => Promise<string | undefined>;
 
 const NO_CONNECTION = 'The team has no cloud connection yet. Add one in the portal.';
 
+// The slug a form proposes for a run over `root`: its directory's name as
+// the workspace calls it (the folder's name for a workspace folder itself),
+// as it is. A run over no root under a workspace folder proposes nothing.
+function proposedSlug(root: AuthoringRoot | undefined): string {
+  if (root === undefined) return '';
+  return root.relative === '' ? root.folder.name : posix.basename(root.relative);
+}
+
 export function formAnswerer(options: FormAnswererOptions): Answerer {
   const { api, commands, offers, sources, report } = options;
 
@@ -66,12 +78,16 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     said.catch((error) => report('acting on a Lace notice', error));
 
   const PROMPTS: Readonly<Record<string, Prompt>> = {
-    slug: async ({ title }) =>
-      api.window.showInputBox({
+    slug: async ({ title, root }) => {
+      const value = proposedSlug(root);
+      return api.window.showInputBox({
         title,
         prompt: 'The slug',
-        validateInput: (value) => (value === '' ? 'Type the slug' : undefined),
-      }),
+        value,
+        valueSelection: [0, value.length],
+        validateInput: (typed) => (typed === '' ? 'Type the slug' : undefined),
+      });
+    },
     connection: async ({ title }) => {
       const listed = commands
         .anywhere()
@@ -113,14 +129,19 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     },
   };
 
-  // What the prompts of a run of `action` over `ctx` ask with.
-  function asking(action: ActionContribution, ctx: RunCtx): Asking {
+  // What the prompts of a run of `action` over `ctx` and `target` ask with.
+  function asking(action: ActionContribution, ctx: RunCtx, target: ActionTarget): Asking {
     const folders = sources.folders();
     const root = rootOfRun(folders, ctx);
-    return { title: runTitle(action, ctx, root, folders), root };
+    return { title: runTitle(action, ctx, target, root, folders), root };
   }
 
-  async function answer(form: Form, action: ActionContribution, ctx: RunCtx): Promise<void> {
+  async function answer(
+    form: Form,
+    action: ActionContribution,
+    ctx: RunCtx,
+    target: ActionTarget,
+  ): Promise<void> {
     const unasked = form.missing.filter((name) => !Object.hasOwn(PROMPTS, name));
     if (unasked.length > 0) {
       form.cancel();
@@ -129,7 +150,7 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
       );
       return;
     }
-    const ask = asking(action, ctx);
+    const ask = asking(action, ctx, target);
     const values: Record<string, string> = {};
     for (const name of form.missing) {
       const value = await PROMPTS[name](ask);
@@ -142,8 +163,8 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
     form.submit(values);
   }
 
-  return (form, { action, ctx }) => {
-    answer(form, action, ctx).catch((error) => {
+  return (form, { action, ctx, target }) => {
+    answer(form, action, ctx, target).catch((error) => {
       form.cancel();
       report(`asking for what ${action.label} needs`, error);
     });

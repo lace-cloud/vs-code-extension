@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import {
   type ActionContribution,
   CORE_COMMAND_ACTIONS,
@@ -19,6 +20,8 @@ const action = (id: string) => {
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const STACK = { id: 'stk_1', slug: 'prod' };
+// What `stack scan` renders for a scan it triggered and did not wait on.
+const SCAN_TRIGGERED = { stack: STACK, triggered: true, reason: null, settled: null };
 const RESULT = {
   type: 'result',
   run: {
@@ -121,6 +124,7 @@ const IMPORTED = {
   changed: true,
   written: ['main.tf'],
   removed: [],
+  lock: { path: '/repo/infra', lockfile: '/repo/infra/.terraform.lock.hcl', providers: [] },
   diagnostics: [],
   importBlocks: 2,
   importResiduals: [],
@@ -175,22 +179,62 @@ describe('the runner host', () => {
     expect(runners.store.getSnapshot().run?.outcome).toEqual({ kind: 'succeeded' });
   });
 
-  test('each tick is told with the RunCtx of the run whose binding ticked it, however runs interleave', async () => {
+  test("each tick is told with the run the runner's tick names: its command and the RunCtx it was started with, however runs interleave", async () => {
     const { window, runners } = host({ 'stack scan': { held: true } });
-    const ticked: (string | undefined)[] = [];
-    runners.onDidTick((ctx) => ticked.push(ctx.root));
+    const ticked: CommandRun[] = [];
+    runners.onDidTick((run) => ticked.push(run));
     const prod = { root: '/repo/prod', stack: STACK };
     const staging = { root: '/repo/staging', stack: { id: 'stk_2', slug: 'staging' } };
 
     await runners.run(action('scan'), prod);
     await runners.run(action('scan'), staging);
     const [prodScan, stagingScan] = window.commands.held;
-    stagingScan.finish([{ triggered: true, reason: null, settled: null }]);
+    stagingScan.finish([SCAN_TRIGGERED]);
     await settled();
-    prodScan.finish([{ triggered: true, reason: null, settled: null }]);
+    prodScan.finish([SCAN_TRIGGERED]);
     await settled();
 
-    expect(ticked).toEqual(['/repo/staging', '/repo/prod']);
+    expect(ticked.map((run) => [run.path, run.ctx.root])).toEqual([
+      ['stack scan', '/repo/staging'],
+      ['stack scan', '/repo/prod'],
+    ]);
+    expect(ticked[0].ctx).toBe(staging);
+    expect(ticked[1].ctx).toBe(prod);
+  });
+
+  test("a tick is told with the run the runner's tick names, though it fires outside the run's async context", async () => {
+    // An emitter made outside every run: its listener runs in the context of
+    // whoever emits, as a frame arriving over a bridge does.
+    const outside = new EventEmitter();
+    const scanSettledOutside: ActionContribution = {
+      id: 'scan-settled-outside',
+      label: 'Scan',
+      placement: 'toolbar',
+      requiredPorts: ['commands'],
+      binding: defineCommand<'stack scan'>({
+        kind: 'command',
+        path: 'stack scan',
+        args: (ctx) => ({ stack: ctx.stack?.id }),
+        result: {
+          kind: 'notify',
+          consume: (rt) => {
+            outside.once('settled', () => rt.tick());
+          },
+        },
+      }),
+    };
+    const { runners } = host({ 'stack scan': { documents: [SCAN_TRIGGERED] } });
+    const ticked: CommandRun[] = [];
+    runners.onDidTick((run) => ticked.push(run));
+    const prod = { root: '/repo/prod', stack: STACK };
+
+    await runners.run(scanSettledOutside, prod);
+    await settled();
+    expect(ticked).toEqual([]);
+    outside.emit('settled');
+
+    expect(ticked.map((run) => [run.path, run.ctx])).toEqual([['stack scan', prod]]);
+    expect(ticked[0].ctx).toBe(prod);
   });
 
   test('one store for the window: an apply of one root is refused while one runs anywhere', async () => {
@@ -201,19 +245,23 @@ describe('the runner host', () => {
     expect(presenter.notify).toHaveBeenCalledWith('warn', 'A run is in progress');
   });
 
-  test('a restarted engine is a new port: the runner is built again and the store kept', async () => {
+  test('a restarted engine is a new port: the runner is built again, the store kept, and its ticks told', async () => {
     const { window, runners } = host({ 'stack apply': { documents: [RESULT] } });
+    const ticked: (string | undefined)[] = [];
+    runners.onDidTick((run) => ticked.push(run.ctx.root));
     await runners.run(action('apply'), { root: '/repo/infra', stack: STACK });
     await settled();
     const store = runners.store;
     const before = window.commands;
 
     window.commands = fakeCommands({ 'stack apply': { documents: [RESULT] } });
-    await runners.run(action('apply'), { root: '/repo/infra', stack: STACK });
+    await runners.run(action('apply'), { root: '/repo/next', stack: STACK });
     await settled();
     expect(before.invoked).toHaveLength(1);
     expect(window.commands.invoked).toHaveLength(1);
     expect(runners.store).toBe(store);
+    // An apply ticks at its start and at its settle.
+    expect(ticked).toEqual(['/repo/infra', '/repo/infra', '/repo/next', '/repo/next']);
   });
 
   test('the store it hands out marks a command running from its start to its end, however it ends', async () => {
@@ -228,7 +276,7 @@ describe('the runner host', () => {
       ['stack:stk_2', 'stack scan'],
     ]);
 
-    window.commands.held[0].finish([{ triggered: true, reason: null, settled: null }]);
+    window.commands.held[0].finish([SCAN_TRIGGERED]);
     window.commands.held[1].finish([], new CommandExitError(1, 'Error: no\n'));
     await settled();
     expect(running()).toEqual([]);
@@ -280,7 +328,7 @@ describe("a run's form", () => {
       'stack create': { documents: [CREATED] },
     });
     const ticked: RunCtx[] = [];
-    runners.onDidTick((ctx) => ticked.push(ctx));
+    runners.onDidTick((run) => ticked.push(run.ctx));
     const ctx = { root: '/repo/infra' };
 
     await runners.run(action('create'), ctx);
@@ -332,7 +380,7 @@ describe("a run's end", () => {
     const { ended } = await runners.run(action('scan'), { stack: STACK });
     expect(await hasEnded(ended)).toBe(false);
 
-    window.commands.held[0].finish([{ triggered: true, reason: null, settled: null }]);
+    window.commands.held[0].finish([SCAN_TRIGGERED]);
     expect(await hasEnded(ended)).toBe(true);
   });
 

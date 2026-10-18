@@ -613,13 +613,14 @@ describe('the page and the host', () => {
 
   test("the canvas's own Generate ends with the notice Lace: Generate shows, for the panel's root", async () => {
     const { canvasPanels, panels, generated } = setup();
+    const tree = { changed: ['main.tf'], removed: [], unchanged: 1, treeChanged: true };
     await canvasPanels.ensure(prod);
     panels[0].receive({
       ch: 'host',
-      frame: { kind: 'notice', notice: { op: 'generated', written: ['main.tf', 'outputs.tf'] } },
+      frame: { kind: 'notice', notice: { op: 'generated', tree } },
     });
     await settled();
-    expect(generated).toHaveBeenCalledWith(prod, ['main.tf', 'outputs.tf']);
+    expect(generated).toHaveBeenCalledWith(prod, tree);
   });
 
   test('an observer that fails is reported, and the next notice still lands', async () => {

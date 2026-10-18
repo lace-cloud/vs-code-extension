@@ -184,7 +184,11 @@ const refusedTree = (diagnostics: object[]) => ({
 });
 const VALIDATION_FAILED = new CommandExitError(1, 'Module validation failed\n');
 
-// What `module convert` wrote and removed, and the validate it ended with.
+// The lock `module convert` writes for the tree it wrote.
+const LOCK = { path: PROD, lockfile: `${PROD}/.terraform.lock.hcl`, providers: [] };
+
+// What `module convert` wrote and removed, the lock of the tree it wrote
+// (none when it wrote nothing), and the validate it ended with.
 const conversion = (
   written: string[],
   removed: string[] = [],
@@ -195,6 +199,7 @@ const conversion = (
       changed: written.length > 0,
       written,
       removed,
+      lock: written.length > 0 ? LOCK : null,
       validate: { ...VALIDATED, root: PROD, treeHash: 'h', diagnostics },
       diagnostics,
     },
@@ -203,11 +208,23 @@ const conversion = (
 
 const FINDING = { severity: 'error', message: 'not set', file: 'main.tf', line: 4, column: 2 };
 
+// What `module scan` reports of the root: the tfsec it ran, from the
+// release the CLI pins, and its diagnostics.
+const TFSEC = {
+  name: 'tfsec',
+  version: 'v1.28.13',
+  path: '/home/dev/.lace/bin/tfsec',
+  source: 'cache',
+};
+const scanned = (diagnostics: object[]): Script => ({
+  documents: [{ treeHash: 'h', tool: TFSEC, diagnostics }],
+});
+
 describe('the module commands', () => {
   test.each([
     [VALIDATE_MODULE, 'module validate', validated([])],
     [CONVERT_MODULE, 'module convert', conversion([])],
-    [SCAN_MODULE, 'module scan', { documents: [{ treeHash: 'h', diagnostics: [] }] }],
+    [SCAN_MODULE, 'module scan', scanned([])],
     [FORMAT_MODULE, 'module fmt', { documents: [{ changed: [] }] }],
     [GENERATE_DOCS, 'module docs', { documents: [{ markdown: '# m' }] }],
   ] as const)('%s runs %s in the authoring root, through the commands mapping', async (id, path, script) => {
@@ -247,7 +264,7 @@ describe('the module commands', () => {
   // canvas's Validate, and writes nothing into the tree.
   test.each([
     [VALIDATE_MODULE, false, 'module validate', validated([])],
-    [SCAN_MODULE, false, 'module scan', { documents: [{ treeHash: 'h', diagnostics: [] }] }],
+    [SCAN_MODULE, false, 'module scan', scanned([])],
     [GENERATE_DOCS, false, 'module docs', { documents: [{ markdown: '# m' }] }],
     [FORMAT_MODULE, true, 'module fmt', { documents: [{ changed: [] }] }],
     [CONVERT_MODULE, true, 'module convert', conversion([])],
@@ -422,10 +439,7 @@ describe('Validate and Scan', () => {
   });
 
   test('with the root’s session held, the report is left to Problems', async () => {
-    const { table, api, log } = setup(
-      { 'module scan': { documents: [{ treeHash: 'h', diagnostics: [FINDING] }] } },
-      { open: true },
-    );
+    const { table, api, log } = setup({ 'module scan': scanned([FINDING]) }, { open: true });
     await table[SCAN_MODULE]();
 
     expect(api.window.showWarningMessage).not.toHaveBeenCalled();
@@ -538,6 +552,7 @@ describe('Convert', () => {
               changed: true,
               written: ['main.tf'],
               removed: [],
+              lock: LOCK,
               validate: refusedTree([FINDING]),
               diagnostics: [FINDING],
             },
@@ -735,10 +750,20 @@ describe('Generate', () => {
     ),
   });
 
-  test("saves the root's dirty Terraform buffers, generates on a hold, and Show Changes opens Source Control", async () => {
+  // A Generate that succeeded, having written `written`, the whole render:
+  // `changed` the files whose bytes it changed, `removed` the source tf it
+  // deleted, as the engine reports them.
+  const success = (
+    written: string[],
+    changed: string[],
+    removed: string[] = [],
+  ): GenerateEvent => ({ type: 'success', written, changed, removed, validate: {} as never });
+
+  test("saves the root's dirty Terraform buffers, generates on a hold, says what it changed, and Show Changes opens Source Control", async () => {
     const editor = generating([
       { type: 'progress', stage: 'generating' },
-      { type: 'success', written: ['main.tf'], validate: {} as never },
+      { type: 'progress', stage: 'validating' },
+      success(['main.tf', 'outputs.tf', 'variables.tf', 'versions.tf'], ['main.tf']),
     ]);
     const { table, api, textDocuments, sessions } = setup(
       {},
@@ -752,19 +777,45 @@ describe('Generate', () => {
     expect(editor.generate).toHaveBeenCalledOnce();
     expect(sessions.holders()).toBe(0);
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'Generated the Terraform of infra/prod: main.tf.',
+      'Generated the Terraform of infra/prod: changed main.tf; 3 files unchanged.',
       'Show Changes',
     );
     expect(api.commands.executeCommand).toHaveBeenCalledWith('workbench.view.scm');
   });
 
-  test('a Generate that wrote no file says plainly that nothing was written, and offers no changes to show', async () => {
-    const editor = generating([{ type: 'success', written: [], validate: {} as never }]);
-    const { table, api } = setup({}, { open: false, editor, answer: 'Show Changes' });
+  test.each([
+    [
+      'what it changed and what it removed',
+      success(['main.tf', 'variables.tf'], ['main.tf', 'variables.tf'], ['old.tf']),
+      'changed main.tf, variables.tf; removed old.tf',
+    ],
+    [
+      'what it removed, and the one file it left as it was',
+      success(['main.tf'], [], ['old.tf']),
+      'removed old.tf; 1 file unchanged',
+    ],
+  ])('a Generate says %s, and offers its changes', async (_, event, said) => {
+    const { table, api } = setup({}, { open: false, editor: generating([event]) });
     await table[GENERATE_CANVAS]();
 
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'Generated the Terraform of infra/prod: nothing was written.',
+      `Generated the Terraform of infra/prod: ${said}.`,
+      'Show Changes',
+    );
+  });
+
+  test.each([
+    ['a render the tree already held', success(['main.tf', 'variables.tf'], [])],
+    ['nothing to render', success([], [])],
+  ])('a Generate that changed no file, %s, says nothing changed, and offers no changes to show', async (_, event) => {
+    const { table, api } = setup(
+      {},
+      { open: false, editor: generating([event]), answer: 'Show Changes' },
+    );
+    await table[GENERATE_CANVAS]();
+
+    expect(api.window.showInformationMessage).toHaveBeenCalledWith(
+      'Generated the Terraform of infra/prod: nothing changed.',
     );
     expect(api.commands.executeCommand).not.toHaveBeenCalled();
   });

@@ -1,7 +1,8 @@
-// What tells the window the account may have changed outside it, as VS Code
-// tells it, for a test to drive: the window gaining or losing focus, and a
-// command line ending in one of the window's integrated terminals. And the
-// document `lace whoami` answers for a developer who is signed in.
+// What tells the window that what the CLI reports (the account, the stacks)
+// may have changed outside it, as VS Code tells it, for a test to drive: the
+// window gaining or losing focus, and a command line ending in one of the
+// window's integrated terminals. And the document `lace whoami` answers for
+// a developer who is signed in.
 import type * as vscode from 'vscode';
 
 type Listen<T> = (listener: (event: T) => void) => vscode.Disposable;
@@ -29,7 +30,7 @@ export function outsideSignals() {
     },
     focus: (focused = true) => windowState.fire({ focused, active: focused }),
     // A command line ended in an integrated terminal; its terminal and shell
-    // integration are no part of what the account reads.
+    // integration are no part of what the window reads.
     ended: (commandLine: string) =>
       shellEnd.fire({
         execution: { commandLine: { value: commandLine, isTrusted: true, confidence: 2 } },

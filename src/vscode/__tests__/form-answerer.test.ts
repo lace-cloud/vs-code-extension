@@ -32,10 +32,22 @@ const connection = (id: string, name: string, status = 'ready') => ({
 });
 const connections = (...items: ReturnType<typeof connection>[]) => ({ items, createUrl: PORTAL });
 
+// The developer presses Enter on what an input box was opened with: VS Code
+// hands back the box's value.
+const accept = (opened: vscode.InputBoxOptions) => opened.value;
+
 type Options = {
+  // The workspace's folders.
+  folders?: vscode.WorkspaceFolder[];
   scripts?: Parameters<typeof fakeCommands>[0];
-  // What each input box answers, in order: a value, or a promise of one.
-  inputs?: (string | undefined | Promise<string | undefined>)[];
+  // What each input box answers, in order: a value, a promise of one, or
+  // what the developer makes of the box as it was opened.
+  inputs?: (
+    | string
+    | undefined
+    | Promise<string | undefined>
+    | ((opened: vscode.InputBoxOptions) => string | undefined)
+  )[];
   // The id of the item each quick pick picks, in order.
   picks?: (string | undefined)[];
   // The files each open dialog answers, in order.
@@ -66,7 +78,8 @@ function setup(options: Options = {}) {
   const window = {
     showInputBox: vi.fn(async (opened: vscode.InputBoxOptions) => {
       asked.push({ kind: 'input', options: opened });
-      return options.inputs?.shift();
+      const input = options.inputs?.shift();
+      return typeof input === 'function' ? input(opened) : input;
     }),
     createQuickPick: quickPicks.createQuickPick,
     withProgress: vi.fn(async (_opened: unknown, task: () => Promise<unknown>) => task()),
@@ -91,7 +104,7 @@ function setup(options: Options = {}) {
     api: { window: window as never },
     commands: commands.commands,
     offers,
-    sources: { folders: () => [repo] },
+    sources: { folders: () => options.folders ?? [repo] },
     report,
   });
   // Answers a form of the package's action `id` over `ctx`.
@@ -100,7 +113,7 @@ function setup(options: Options = {}) {
       submit: ReturnType<typeof vi.fn>;
       cancel: ReturnType<typeof vi.fn>;
     };
-    answerer(form, { action: binding(id), ctx });
+    answerer(form, { action: binding(id), ctx, target: {} });
     return form;
   };
   return {
@@ -117,8 +130,8 @@ function setup(options: Options = {}) {
 }
 
 describe('the answerer', () => {
-  test('asks for the slug in an input box titled by the action and the root, which refuses an empty value', async () => {
-    const t = setup({ inputs: ['prod'] });
+  test("asks for the slug in an input box titled by the action and the root, proposing the root's directory name selected, which refuses an empty value", async () => {
+    const t = setup({ inputs: ['prod-eu'] });
     const form = t.answer('create', ['slug'], { root: PROD });
     await settled();
 
@@ -128,6 +141,8 @@ describe('the answerer', () => {
         options: {
           title: 'Create stack: infra/prod',
           prompt: 'The slug',
+          value: 'prod',
+          valueSelection: [0, 4],
           validateInput: expect.any(Function),
         },
       },
@@ -135,6 +150,46 @@ describe('the answerer', () => {
     const { validateInput } = t.window.showInputBox.mock.calls[0][0];
     expect(validateInput?.('')).toBe('Type the slug');
     expect(validateInput?.('prod')).toBeUndefined();
+    expect(form.submit).toHaveBeenCalledWith({ slug: 'prod-eu' });
+  });
+
+  // The slug's rule is the API's, which the CLI's refusal states: the box
+  // proposes the folder's name as it is, and the owner refuses a name that
+  // is no slug.
+  test.each([
+    'qa-1651',
+    '1foo',
+    'My Stack',
+  ])('the slug box of the workspace folder %s opens on its name exactly as it is, selected, and submits it accepted', async (name) => {
+    const path = `/work/${name}`;
+    const t = setup({ folders: [folder(path)], inputs: [accept] });
+    const form = t.answer('create', ['slug'], { root: fsPath(path) });
+    await settled();
+
+    expect(t.asked).toMatchObject([
+      {
+        kind: 'input',
+        options: {
+          title: `Create stack: ${name}`,
+          value: name,
+          valueSelection: [0, name.length],
+        },
+      },
+    ]);
+    expect(form.submit).toHaveBeenCalledWith({ slug: name });
+  });
+
+  test.each([
+    ['a run whose root is under no workspace folder', [], { root: PROD }],
+    ['a run that names no root', undefined, {}],
+  ] as const)('the slug box of %s opens empty, proposing nothing', async (_, folders, ctx) => {
+    const t = setup({ ...(folders ? { folders: [...folders] } : {}), inputs: ['prod'] });
+    const form = t.answer('create', ['slug'], ctx);
+    await settled();
+
+    expect(t.asked).toMatchObject([
+      { kind: 'input', options: { prompt: 'The slug', value: '', valueSelection: [0, 0] } },
+    ]);
     expect(form.submit).toHaveBeenCalledWith({ slug: 'prod' });
   });
 
