@@ -63,8 +63,9 @@
 // (`PREVIEW_LANGUAGE`), whose lines wrap. Each tick of the runner's store
 // (a run started or settled, a scan or a cancel done) names its run, whose
 // `RunCtx` names the root it was about. The view draws its progress while
-// the store says a command is under way (the package's `commandUnderWay`),
-// and ends it when the store says none is.
+// a read of the whole tree is under way, since it shows the tree it holds
+// until the read's answer is held, and while the store says a command is
+// under way (the package's `commandUnderWay`); it ends it when neither is.
 //
 // With no root found, the view says why, by the reason finding one gave: no
 // folder is open; no directory holds a module yet, and Open Canvas starts
@@ -76,7 +77,6 @@ import {
   COMMANDS,
   type CommandFailure,
   commandUnderWay,
-  type ResultSlots,
   type RunCtx,
   type StackRef,
 } from '@lace-cloud/canvas/engine';
@@ -234,17 +234,45 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // between. A read started later supersedes one still under way.
   let reads = 0;
   let latest: Promise<boolean> | undefined;
+  // Reads of the whole tree under way.
+  let reading = 0;
   // Reads the tree and holds what it found, unless a read started later
-  // meanwhile; resolves with whether this read's answer is held.
+  // meanwhile; resolves with whether this read's answer is held. The view
+  // draws its progress while it reads.
   function readAndHold(): Promise<boolean> {
     const at = ++reads;
-    const done = readTree().then((tree) => {
-      if (at !== reads) return false;
-      hold(tree);
-      return true;
-    });
+    reading += 1;
+    drawProgress();
+    const done = readTree()
+      .then((tree) => {
+        if (at !== reads) return false;
+        hold(tree);
+        return true;
+      })
+      .finally(() => {
+        reading -= 1;
+        drawProgress();
+      });
     latest = done;
     return done;
+  }
+
+  // The view's progress, while a read of the whole tree is under way (the
+  // view shows the tree it holds until the read's answer is held) or the
+  // runner's store says a command is under way: the function that ends the
+  // one drawn, while one is.
+  let endProgress: (() => void) | undefined;
+  function drawProgress(): void {
+    const busy = reading > 0 || commandUnderWay(runner.store.getSnapshot());
+    if (busy && !endProgress) {
+      const ended = new Promise<void>((resolve) => {
+        endProgress = resolve;
+      });
+      void api.window.withProgress({ location: { viewId: STACKS_VIEW } }, () => ended);
+    } else if (!busy && endProgress) {
+      endProgress();
+      endProgress = undefined;
+    }
   }
   // The tree read again, and redrawn whole once its answer is held.
   function reread(): void {
@@ -592,22 +620,6 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     provideTextDocumentContent: (uri) => previews.get(uri.path) ?? '',
   });
 
-  // The view's progress while the store says a command is under way: the
-  // function that ends the one drawn, while one is.
-  let endProgress: (() => void) | undefined;
-  const drawProgress = (slots: ResultSlots) => {
-    const running = commandUnderWay(slots);
-    if (running && !endProgress) {
-      const ended = new Promise<void>((resolve) => {
-        endProgress = resolve;
-      });
-      void api.window.withProgress({ location: { viewId: STACKS_VIEW } }, () => ended);
-    } else if (!running && endProgress) {
-      endProgress();
-      endProgress = undefined;
-    }
-  };
-
   // What the runner's store says, as it says it: a preview opens once its
   // plan lands; a run redraws its stack's row; the view's progress follows
   // what is under way; each tick is what may have changed the stacks of the
@@ -616,7 +628,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   const offStore = runner.store.subscribe(() => {
     const slots = runner.store.getSnapshot();
     const { preview, run } = slots;
-    drawProgress(slots);
+    drawProgress();
     void restack(run?.readOver.stack);
     if (preview?.outcome.kind === 'succeeded' && preview.token !== shownPreview) {
       const { data } = preview.outcome;
