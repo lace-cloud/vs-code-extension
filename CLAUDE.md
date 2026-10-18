@@ -82,11 +82,13 @@ pnpm run manifest:tools  # writes package.json's languageModelTools entries from
 
 The three vitest projects are told apart by file name: `*.test.ts(x)` is `unit`, `*.build.test.ts` is `build`,
 `*.engine.test.ts` is `engine`. Every engine test builds on `src/engine/__tests__/real-engine.ts`, the one helper that
-starts the engine as one window has it, in a git repository and a developer home of the test's own (`signedOutHome()`
-leaves the developer signed out with no saved selection). The engine is `bin/lace` when one is there, else the `lace` on
-`PATH`, at the version `LACE_CLI_VERSION` names (`src/engine/__tests__/engine-binary.mjs`, which the window e2e reads
-too). To run the extension, press F5 (**Run Extension**); the engine is the `lace` on `PATH` unless `lace.binaryPath`
-names another executable.
+starts the engine as one window has it, in a git repository of the test's own, for a developer of the test's own: signed
+out, with no saved selection and no tool of their own, in a home of the test's own, whatever the shell that runs the
+tests holds. The engine is `bin/lace` when one is there, else the `lace` on `PATH`, at the version `LACE_CLI_VERSION`
+names; the developer's environment unsets each variable the CLI reads a developer's state from but the home's. Both are
+`src/engine/__tests__/engine-binary.mjs`'s (`releasedEngine`, `signedOutEnvironment`), which the window e2e reads too.
+To run the extension, press F5 (**Run Extension**); the engine is the `lace` on `PATH` unless `lace.binaryPath` names
+another executable.
 
 ### End-to-end tests
 
