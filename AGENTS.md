@@ -353,17 +353,18 @@ root with `findRoot`, which asks nothing, and shows why it found none by that re
   canvas offers **Save**).
 - **Validate**, **Format**, **Scan**, **Lock Providers** (`lace.lockModule`) and **Generate Docs** run `module
   validate`, `module fmt`, `module scan`, `module lock`, `module docs` through `commands.at(root)`, with no session.
-  Scan says the tool that ran at the version the CLI reports (its result's `tool`); Lock Providers names the lockfile it
-  wrote and how many providers it pinned. **Convert Module** (`lace.convertModule`) runs `module convert` the same way
-  and reports as Validate does, naming the lockfile its lock of the tree wrote, with no confirmation (the canvas action
-  has none); an open canvas picks the rewritten Terraform up live. A tree it changed whose providers did not lock (its
-  result's `changed` with a `lock` of null) is no change to commit yet: the report says so at warn, wherever it lands,
-  and offers **Lock Providers** on the root. Format and Convert are the commands the CLI declares rewrites
+  Scan says the tool that ran at the version the CLI reports (its result's `tool`); Lock Providers says what the package
+  says of a lock (`lockNotice`: how many providers it pinned, in which lockfile, to commit beside the tree) for the root
+  it names. **Convert Module** (`lace.convertModule`) runs `module convert` the same way and reports as Validate does,
+  naming the lockfile its lock of the tree wrote (the package's `lockedIn`), with no confirmation (the canvas action has
+  none); an open canvas picks the rewritten Terraform up live. When the package reads the tree's providers as not locked
+  (`lockFailed`), the report says so in the package's words (`DID_NOT_LOCK`) at warn, wherever it lands, and offers the
+  package's **Lock providers** (`LOCK_LABEL`) on the root. Format and Convert are the commands the CLI declares rewrites
   (`COMMANDS[path].effect`): they write the root's Terraform, so they first save its dirty `.tf` editors
   (`saveBuffersBefore`), as Generate does; Validate, Scan, Lock Providers (a write: it writes the lockfile beside the
-  tree) and Generate Docs read the files as they are on disk, as in a terminal. One operation behaves the same
-  by every trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read writes nothing into
-  the tree (a save before it would, and with saved but ungenerated canvas edits it would raise the conflict unasked).
+  tree) and Generate Docs read the files as they are on disk, as in a terminal. One operation behaves the same by every
+  trigger: the chat's validate tool and the canvas's Validate read the disk too, and a read writes nothing into the tree
+  (a save before it would, and with saved but ungenerated canvas edits it would raise the conflict unasked).
 - A report reaches Problems when this window holds the root's session (`operations.held`, which reads each held session's
   path back as the root it names and compares roots; the engine publishes the result to the session);
   otherwise it is the command's result: a notification with the verdict, when the run reached one (a tree Lace's rules or

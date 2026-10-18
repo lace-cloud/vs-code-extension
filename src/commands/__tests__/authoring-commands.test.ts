@@ -536,12 +536,12 @@ describe('Scan', () => {
 });
 
 describe('Lock Providers', () => {
-  test('names the lockfile it wrote and how many providers it locked', async () => {
+  test('says what the package says of the lock it made, for the root it locked', async () => {
     const { table, api, invoked } = setup({ 'module lock': { documents: [LOCK] } });
     await table[LOCK_MODULE]();
     expect(invoked).toEqual([{ cwd: fsPath(PROD), path: 'module lock', args: {} }]);
     expect(shownBy(api.window.showInformationMessage)).toEqual([
-      ['Locked 1 provider of infra/prod in .terraform.lock.hcl.'],
+      ['infra/prod: Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree.'],
     ]);
   });
 
@@ -638,19 +638,19 @@ describe('Convert', () => {
     );
   });
 
-  test("a tree whose providers did not lock says so, and Lock Providers locks the root's providers", async () => {
+  test("a tree whose providers did not lock says so, and Lock providers locks the root's providers", async () => {
     const { table, api, invoked } = setup(
       {
         'module convert': conversion(['main.tf'], [], [], null),
         'module lock': { documents: [LOCK] },
       },
-      { answer: 'Lock Providers' },
+      { answer: 'Lock providers' },
     );
     await table[CONVERT_MODULE]();
     expect(shownBy(api.window.showWarningMessage)).toEqual([
       [
-        "Converted infra/prod: wrote main.tf; already-lace-style, 0 diagnostics. The tree's providers did not lock: lock them before you commit it.",
-        'Lock Providers',
+        "Converted infra/prod: wrote main.tf; already-lace-style, 0 diagnostics. The tree's providers did not lock: run `lace module lock` once the cause is fixed, before you commit it.",
+        'Lock providers',
         'Show Report',
       ],
     ]);
@@ -659,7 +659,7 @@ describe('Convert', () => {
       [fsPath(PROD), 'module lock'],
     ]);
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'Locked 1 provider of infra/prod in .terraform.lock.hcl.',
+      'infra/prod: Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree.',
     );
   });
 
@@ -671,8 +671,8 @@ describe('Convert', () => {
     await table[CONVERT_MODULE]();
     expect(shownBy(api.window.showWarningMessage)).toEqual([
       [
-        "Converted infra/prod: wrote main.tf; already-lace-style; the report is in Problems. The tree's providers did not lock: lock them before you commit it.",
-        'Lock Providers',
+        "Converted infra/prod: wrote main.tf; already-lace-style; the report is in Problems. The tree's providers did not lock: run `lace module lock` once the cause is fixed, before you commit it.",
+        'Lock providers',
       ],
     ]);
     expect(api.window.setStatusBarMessage).not.toHaveBeenCalled();

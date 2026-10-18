@@ -31,11 +31,12 @@
 // canvas's Convert does: the root is a git repository, and git shows the
 // rewrite as any other change. An open canvas of the root picks the
 // rewritten Terraform up live. A Convert names the lockfile its lock of the
-// tree wrote; a tree it changed whose providers did not lock is no change to
-// commit yet (a stack's apply refuses a tree with no lockfile), so it says so
-// and offers Lock Providers. Lock Providers (`module lock`) names the
-// lockfile it wrote and how many providers it pinned; Scan names the tool
-// that ran, at the version the CLI reports.
+// tree wrote, as the package reads the lock (`lockedIn`); when the package
+// reads its providers as not locked (`lockFailed`), it says so in the
+// package's words (`DID_NOT_LOCK`) and offers the package's Lock providers
+// (`LOCK_LABEL`) on the root. Lock providers (`module lock`) says what the
+// package says of a lock (`lockNotice`), for the root it names; Scan names
+// the tool that ran, at the version the CLI reports.
 //
 // Where a report lands follows its one signal. With the root's session held
 // in this window, the engine publishes the result to the session and the
@@ -45,17 +46,21 @@
 // markdown opens in an untitled editor, and the developer's save is the
 // write.
 
-import { relative } from 'node:path';
 import {
   type ArgsOf,
   type BoundPath,
   type CommandFailure,
+  DID_NOT_LOCK,
   diagnosticsOfDocument,
   type GeneratedTree,
   type GenerateEvent,
   type GenerateStage,
   generatedTree,
   type JsonOf,
+  LOCK_LABEL,
+  lockedIn,
+  lockFailed,
+  lockNotice,
   Reason,
 } from '@lace-cloud/canvas/engine';
 import type { Diagnostic } from '@lace-cloud/proto';
@@ -113,7 +118,6 @@ export type AuthoringCommandsOptions = {
 const SHOW_REPORT = 'Show Report';
 const SHOW_CHANGES = 'Show Changes';
 const SAVE = 'Save';
-const LOCK_PROVIDERS = 'Lock Providers';
 
 // The progress of a Generate, by the stage the engine reports it at.
 const STAGES: Readonly<Record<GenerateStage, string>> = {
@@ -149,15 +153,10 @@ function validatedText(label: string, { verdict }: JsonOf<'module validate'>): s
   return verdict === undefined ? `Validated ${label}` : `Validated ${label}: ${verdict}`;
 }
 
-type Lock = JsonOf<'module lock'>;
-
-// The lockfile a lock wrote, named from the root it locked as the files a
-// command wrote are: the CLI writes it beside the tree.
-const lockfileOf = ({ path, lockfile }: Lock): string => relative(path, lockfile);
-
 // What a Convert of the root `label` changed: the files it wrote and the
-// files it removed, the lockfile its lock of the tree wrote, then the
-// verdict of the validate it ended with, when that validate reached one.
+// files it removed, what its lock of the tree pinned and where (`lockedIn`),
+// then the verdict of the validate it ended with, when that validate reached
+// one.
 export function convertedText(
   label: string,
   { changed, written, removed, lock, validate }: JsonOf<'module convert'>,
@@ -165,10 +164,7 @@ export function convertedText(
   if (!changed) return `${label} is in Lace style already, so Convert wrote nothing`;
   const wrote = `wrote ${written.join(', ')}`;
   const deleted = removed.length === 0 ? '' : `; removed ${removed.join(', ')}`;
-  const locked =
-    lock === null
-      ? ''
-      : `; locked ${count(lock.providers.length, 'provider')} in ${lockfileOf(lock)}`;
+  const locked = lock === null ? '' : `; locked ${lockedIn(lock)}`;
   const verdict = validate.verdict === undefined ? '' : `; ${validate.verdict}`;
   return `Converted ${label}: ${wrote}${deleted}${locked}${verdict}`;
 }
@@ -370,12 +366,8 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
           root,
           convertedText(label, document),
           diagnosticsOfDocument(document),
-          document.changed && document.lock === null
-            ? {
-                said: "The tree's providers did not lock: lock them before you commit it.",
-                button: LOCK_PROVIDERS,
-                run: () => lock(root),
-              }
+          lockFailed(document)
+            ? { said: DID_NOT_LOCK, button: LOCK_LABEL, run: () => lock(root) }
             : undefined,
         ),
     ),
@@ -392,9 +384,7 @@ export function authoringCommands(options: AuthoringCommandsOptions): ModuleComm
         args: {},
       },
       (_root, label, document) => {
-        void api.window.showInformationMessage(
-          `Locked ${count(document.providers.length, 'provider')} of ${label} in ${lockfileOf(document)}.`,
-        );
+        void api.window.showInformationMessage(`${label}: ${lockNotice(document)}`);
       },
     ),
     [FORMAT_MODULE]: inRoot(

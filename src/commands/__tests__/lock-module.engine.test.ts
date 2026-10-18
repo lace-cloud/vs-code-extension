@@ -10,14 +10,14 @@ import { window } from './engine-window';
 const MODULE = 'variable "name" {\n  type = string\n}\n';
 
 describe('Lock Providers on the real engine', () => {
-  test('writes the lockfile beside the module, names it with how many providers it locked, and rewrites no Terraform', async () => {
+  test('writes the lockfile beside the module, says what the package says of the lock, and rewrites no Terraform', async () => {
     const { repository, root } = moduleDirectory({ 'main.tf': MODULE });
     const { table, api } = window(repository);
 
     await table[LOCK_MODULE]();
     expect(api.window.showErrorMessage).not.toHaveBeenCalled();
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
-      'Locked 0 providers of infra in .terraform.lock.hcl.',
+      'infra: Locked 0 providers in .terraform.lock.hcl. Commit it beside the tree.',
     );
     expect(existsSync(join(root, '.terraform.lock.hcl'))).toBe(true);
     expect(readFileSync(join(root, 'main.tf'), 'utf8')).toBe(MODULE);
