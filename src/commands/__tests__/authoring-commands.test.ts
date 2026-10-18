@@ -24,6 +24,7 @@ import {
   FORMAT_MODULE,
   GENERATE_CANVAS,
   GENERATE_DOCS,
+  LOCK_MODULE,
   SAVE_CANVAS,
   SCAN_MODULE,
   VALIDATE_MODULE,
@@ -184,22 +185,37 @@ const refusedTree = (diagnostics: object[]) => ({
 });
 const VALIDATION_FAILED = new CommandExitError(1, 'Module validation failed\n');
 
-// The lock `module convert` writes for the tree it wrote.
-const LOCK = { path: PROD, lockfile: `${PROD}/.terraform.lock.hcl`, providers: [] };
+// The lock of the root, as `module lock` writes it and `module convert`
+// writes it for the tree it wrote: the lockfile beside the tree, and the
+// providers it pins.
+// The CLI writes the paths of its JSON with '/' on every system.
+const LOCK = {
+  path: PROD,
+  lockfile: `${PROD}/.terraform.lock.hcl`,
+  providers: [
+    {
+      address: 'registry.terraform.io/hashicorp/aws',
+      version: '5.0.0',
+      platforms: ['linux_amd64'],
+    },
+  ],
+};
 
 // What `module convert` wrote and removed, the lock of the tree it wrote
-// (none when it wrote nothing), and the validate it ended with.
+// (none when it wrote nothing, or when that lock failed), and the validate
+// it ended with.
 const conversion = (
   written: string[],
   removed: string[] = [],
   diagnostics: object[] = [],
+  lock: typeof LOCK | null = written.length > 0 ? LOCK : null,
 ): { documents: object[] } => ({
   documents: [
     {
       changed: written.length > 0,
       written,
       removed,
-      lock: written.length > 0 ? LOCK : null,
+      lock,
       validate: { ...VALIDATED, root: PROD, treeHash: 'h', diagnostics },
       diagnostics,
     },
@@ -212,12 +228,12 @@ const FINDING = { severity: 'error', message: 'not set', file: 'main.tf', line: 
 // release the CLI pins, and its diagnostics.
 const TFSEC = {
   name: 'tfsec',
-  version: 'v1.28.13',
+  version: '1.28.14' as string | null,
   path: '/home/dev/.lace/bin/tfsec',
   source: 'cache',
 };
-const scanned = (diagnostics: object[]): Script => ({
-  documents: [{ treeHash: 'h', tool: TFSEC, diagnostics }],
+const scanned = (diagnostics: object[], tool = TFSEC): Script => ({
+  documents: [{ treeHash: 'h', tool, diagnostics }],
 });
 
 describe('the module commands', () => {
@@ -227,6 +243,7 @@ describe('the module commands', () => {
     [SCAN_MODULE, 'module scan', scanned([])],
     [FORMAT_MODULE, 'module fmt', { documents: [{ changed: [] }] }],
     [GENERATE_DOCS, 'module docs', { documents: [{ markdown: '# m' }] }],
+    [LOCK_MODULE, 'module lock', { documents: [LOCK] }],
   ] as const)('%s runs %s in the authoring root, through the commands mapping', async (id, path, script) => {
     const { table, invoked } = setup({ [path]: script });
     await table[id]();
@@ -266,6 +283,7 @@ describe('the module commands', () => {
     [VALIDATE_MODULE, false, 'module validate', validated([])],
     [SCAN_MODULE, false, 'module scan', scanned([])],
     [GENERATE_DOCS, false, 'module docs', { documents: [{ markdown: '# m' }] }],
+    [LOCK_MODULE, false, 'module lock', { documents: [LOCK] }],
     [FORMAT_MODULE, true, 'module fmt', { documents: [{ changed: [] }] }],
     [CONVERT_MODULE, true, 'module convert', conversion([])],
   ] as const)('with a dirty buffer, %s saves it first: %s', async (id, saves, path, script) => {
@@ -498,6 +516,48 @@ describe('Validate and Scan', () => {
   });
 });
 
+describe('Scan', () => {
+  test('names the tool it ran, at the version the CLI reports, beside its diagnostics', async () => {
+    const { table, api } = setup({ 'module scan': scanned([FINDING]) });
+    await table[SCAN_MODULE]();
+    expect(shownBy(api.window.showWarningMessage)).toEqual([
+      ['Scanned infra/prod with tfsec 1.28.14, 1 diagnostic.', 'Show Report'],
+    ]);
+  });
+
+  test('names a tool that reports no version by its name alone', async () => {
+    const { table, api } = setup({
+      'module scan': scanned([], { ...TFSEC, version: null, source: 'env' }),
+    });
+    await table[SCAN_MODULE]();
+    expect(shownBy(api.window.showInformationMessage)).toEqual([
+      ['Scanned infra/prod with tfsec, 0 diagnostics.', 'Show Report'],
+    ]);
+  });
+});
+
+describe('Lock Providers', () => {
+  test('says what the package says of the lock it made, for the root it locked', async () => {
+    const { table, api, invoked } = setup({ 'module lock': { documents: [LOCK] } });
+    await table[LOCK_MODULE]();
+    expect(invoked).toEqual([{ cwd: fsPath(PROD), path: 'module lock', args: {} }]);
+    expect(shownBy(api.window.showInformationMessage)).toEqual([
+      ['infra/prod: Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree.'],
+    ]);
+  });
+
+  test('a failure offers the way out its reason names', async () => {
+    const failure: CommandFailure = { reason: 'unauthenticated', message: 'sign in to Lace' };
+    const { table, api, offers } = setup(
+      { 'module lock': refused(failure) },
+      { answer: 'Sign In' },
+    );
+    await table[LOCK_MODULE]();
+    expect(shownBy(api.window.showErrorMessage)).toEqual([['sign in to Lace', 'Sign In']]);
+    expect(offers.signIn).toHaveBeenCalledOnce();
+  });
+});
+
 describe('Convert', () => {
   test('saves the root’s dirty Terraform buffers, then reports the files it wrote and removed and its verdict', async () => {
     const { table, api, textDocuments, invoked, log } = setup(
@@ -511,7 +571,7 @@ describe('Convert', () => {
     expect(buffer.save).toHaveBeenCalled();
     expect(invoked).toEqual([{ cwd: fsPath(PROD), path: 'module convert', args: {} }]);
     const text =
-      'Converted infra/prod: wrote web/main.tf, main.tf; removed flat.tf; already-lace-style, 0 diagnostics.';
+      'Converted infra/prod: wrote web/main.tf, main.tf; removed flat.tf; locked 1 provider in .terraform.lock.hcl; already-lace-style, 0 diagnostics.';
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(text, 'Show Report');
     expect(log.appendLine).toHaveBeenCalledWith(text);
   });
@@ -538,7 +598,7 @@ describe('Convert', () => {
     );
     await table[CONVERT_MODULE]();
     expect(api.window.showWarningMessage).toHaveBeenCalledWith(
-      'Converted infra/prod: wrote main.tf; already-lace-style, 1 diagnostic.',
+      'Converted infra/prod: wrote main.tf; locked 1 provider in .terraform.lock.hcl; already-lace-style, 1 diagnostic.',
       'Show Report',
     );
   });
@@ -564,7 +624,7 @@ describe('Convert', () => {
     );
     await table[CONVERT_MODULE]();
     expect(api.window.showWarningMessage).toHaveBeenCalledWith(
-      'Converted infra/prod: wrote main.tf, 1 diagnostic.',
+      'Converted infra/prod: wrote main.tf; locked 1 provider in .terraform.lock.hcl, 1 diagnostic.',
       'Show Report',
     );
   });
@@ -574,9 +634,49 @@ describe('Convert', () => {
     await table[CONVERT_MODULE]();
     expect(api.window.showInformationMessage).not.toHaveBeenCalled();
     expect(api.window.setStatusBarMessage).toHaveBeenCalledWith(
-      'Lace: Converted infra/prod: wrote main.tf; already-lace-style; the report is in Problems',
+      'Lace: Converted infra/prod: wrote main.tf; locked 1 provider in .terraform.lock.hcl; already-lace-style; the report is in Problems',
       5000,
     );
+  });
+
+  test("a tree whose providers did not lock says so, and Lock providers locks the root's providers", async () => {
+    const { table, api, invoked } = setup(
+      {
+        'module convert': conversion(['main.tf'], [], [], null),
+        'module lock': { documents: [LOCK] },
+      },
+      { answer: 'Lock providers' },
+    );
+    await table[CONVERT_MODULE]();
+    expect(shownBy(api.window.showWarningMessage)).toEqual([
+      [
+        "Converted infra/prod: wrote main.tf; already-lace-style, 0 diagnostics. The tree's providers did not lock: run `lace module lock` once the cause is fixed, before you commit it.",
+        'Lock providers',
+        'Show Report',
+      ],
+    ]);
+    expect(invoked.map(({ cwd, path }) => [cwd, path])).toEqual([
+      [fsPath(PROD), 'module convert'],
+      [fsPath(PROD), 'module lock'],
+    ]);
+    expect(api.window.showInformationMessage).toHaveBeenCalledWith(
+      'infra/prod: Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree.',
+    );
+  });
+
+  test('with the root’s session held, a tree whose providers did not lock says so beside the report in Problems', async () => {
+    const { table, api } = setup(
+      { 'module convert': conversion(['main.tf'], [], [], null) },
+      { open: true },
+    );
+    await table[CONVERT_MODULE]();
+    expect(shownBy(api.window.showWarningMessage)).toEqual([
+      [
+        "Converted infra/prod: wrote main.tf; already-lace-style; the report is in Problems. The tree's providers did not lock: run `lace module lock` once the cause is fixed, before you commit it.",
+        'Lock providers',
+      ],
+    ]);
+    expect(api.window.setStatusBarMessage).not.toHaveBeenCalled();
   });
 
   test('a failure offers the way out its reason names', async () => {

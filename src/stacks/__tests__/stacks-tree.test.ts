@@ -11,7 +11,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { outsideSignals } from '../../account/__tests__/fake-outside';
 import { authoringCommands } from '../../commands/authoring-commands';
-import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
+import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
@@ -30,6 +30,7 @@ import {
   STACKS_STATE,
   stacksTree,
 } from '../stacks-tree';
+import { fakeTreeView } from './fake-tree-view';
 import { memento, run, runs, stack, stacks } from './stack-fixtures';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -97,7 +98,6 @@ const applyResult = (error: string | null = null) => ({
   type: 'result',
   run: run('run_9', error ? 'apply_failed' : 'apply_succeeded', { completedAt: COMPLETED }),
   summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
-  workspaceDir: '/cache',
   error,
 });
 // A failure document whose message is its reason.
@@ -380,6 +380,8 @@ function setup(options: Options) {
     redrawn.push(rows as Row | Row[] | undefined);
   });
   const item = (row: Row) => provider?.getTreeItem(row) as vscode.TreeItem;
+  // The tree as VS Code holds it, over the provider the view was given.
+  const shownTree = () => fakeTreeView(provider as vscode.TreeDataProvider<Row>);
   const command = (id: string, ...args: unknown[]) => handlers.get(id)?.(...args);
   return {
     api,
@@ -388,6 +390,7 @@ function setup(options: Options) {
     tree,
     children,
     item,
+    shownTree,
     command,
     contexts,
     choices,
@@ -522,8 +525,10 @@ describe('the stacks of the current root', () => {
     expect(t.view.description).toBe('infra/prod');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
+    await settled();
     expect(t.redrawn).toEqual([]);
-    await t.children();
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
       { source: fsPath('/work/api/infra/prod') },
@@ -535,11 +540,48 @@ describe('the stacks of the current root', () => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.children();
     t.active.fire(staging);
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
     expect(t.panels.tick).not.toHaveBeenCalled();
     await t.children();
     expect(t.view.description).toBe('infra/staging');
     expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
+  });
+
+  test('of two reads under way at once, the one started later is what the view holds and draws, whichever answers last', async () => {
+    type Listed = ReturnType<typeof stacks>;
+    const answers: ((listed: Listed) => void)[] = [];
+    let lists = 0;
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': () =>
+          lists++ === 0
+            ? { documents: [stacks(stack('stk_1', 'prod'))] }
+            : new Promise<Script>((resolve) => {
+                answers.push((listed) => resolve({ documents: [listed] }));
+              }),
+      },
+    });
+    const tree = t.shownTree();
+    await tree.show();
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+
+    const [older, later] = answers;
+    later(stacks(stack('stk_3', 'later')));
+    await settled();
+    await tree.answered();
+    older(stacks(stack('stk_2', 'older')));
+    await settled();
+    await tree.answered();
+
+    const slugOf = (row: unknown) => (row as Extract<Row, { kind: 'stack' }>).stack.slug;
+    expect((await t.children()).map(slugOf)).toEqual(['later']);
+    expect(tree.drawn().map((handle) => slugOf(tree.argument(handle)))).toEqual(['later']);
+    expect(t.redrawn).toEqual([undefined]);
   });
 
   test("in a workspace of several folders, the view names its root as the root's canvas tab is titled", async () => {
@@ -569,16 +611,19 @@ describe('the stacks of the current root', () => {
 
     folders.push(web);
     t.workspaceFolders.fire({ added: [web], removed: [] });
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
     await t.children();
     expect(t.view.description).toBe('api/infra/prod');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
+    await settled();
     await t.children();
     expect(t.view.description).toBe('web/infra/prod');
 
     folders.pop();
     t.workspaceFolders.fire({ added: [], removed: [web] });
+    await settled();
     expect(t.redrawn).toEqual([undefined, undefined, undefined]);
     await t.children();
     expect(t.view.description).toBe('infra/prod');
@@ -652,6 +697,7 @@ describe('the stacks of the current root', () => {
     expect(t.contexts).toEqual(['noModule']);
 
     t.active.fire({ folder: repo, relative: '' });
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
     await t.children();
     expect(t.view.description).toBe('repo');
@@ -669,7 +715,8 @@ describe('the stacks of the current root', () => {
 
     const rooted = setup({ root: prod, scripts: listed });
     await rooted.children();
-    await rooted.children();
+    await rooted.command(STACK_COMMANDS.refresh);
+    await settled();
     expect(rooted.terraformFiles).toHaveBeenCalledTimes(2);
   });
 
@@ -691,7 +738,8 @@ describe('the stacks of the current root', () => {
       terraformFiles: ['/work/repo/infra/prod/main.tf'],
     });
     await one.children();
-    await one.children();
+    await one.command(STACK_COMMANDS.refresh);
+    await settled();
     expect(one.choices).toEqual([false, false]);
 
     const two = setup({ root: prod, scripts: listed });
@@ -825,13 +873,33 @@ describe('when the stacks cannot be listed', () => {
     expect(t.api.env.openExternal).toHaveBeenCalledWith({ url: TEAM_CREATE_URL });
   });
 
+  test('a read that fails before the stacks are listed, for a root the view turned to, holds no stack of the root it left and says why', async () => {
+    const t = setup({
+      root: prod,
+      scripts: { 'stack list': { documents: [stacks(stack('stk_1', 'prod'))] } },
+    });
+    expect(await t.children()).toHaveLength(1);
+
+    t.terraformFiles.mockRejectedValueOnce(new Error('the workspace could not be searched'));
+    t.active.fire(staging);
+    await settled();
+
+    expect(t.redrawn).toEqual([undefined]);
+    expect(await t.children()).toEqual([]);
+    expect(t.view.description).toBe('infra/staging');
+    expect(t.contexts.at(-1)).toBe('failed');
+    expect(t.view.message).toBe('the workspace could not be searched');
+  });
+
   test('any other failure says its message, and is read again after a change of account', async () => {
     const t = await stateFor({ 'stack list': refusal('unspecified') });
     expect(t.contexts).toEqual(['failed']);
     expect(t.view.message).toBe('unspecified');
 
     t.account.fire();
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
   });
 });
 
@@ -896,6 +964,7 @@ describe('Create Stack', () => {
     created = true;
     t.commands.held[0].finish([stack('stk_9', 'prod')]);
     await creating;
+    await settled();
     expect(t.messages).toContainEqual({ level: 'info', text: 'Created stack prod', buttons: [] });
     expect(t.redrawn).toContain(undefined);
     const [row] = await t.children();
@@ -991,7 +1060,9 @@ describe('a stack row', () => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();
     await change(t);
+    await settled();
     expect(t.redrawn).toEqual([undefined]);
+    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
   });
 
@@ -1145,6 +1216,81 @@ describe('Cancel on a run row', () => {
     expect(t.messages).toEqual([{ level: 'info', text: 'Run run_1 cancelled', buttons: [] }]);
   });
 
+  // A run row drawn under its stack, whose stack's runs are listed again
+  // only once the test says: the first `run list` answers at once, every
+  // later one when `release` is called.
+  function drawnRun(scripts: Parameters<typeof setup>[0]['scripts'] = {}) {
+    let release: () => void = () => {};
+    const later = new Promise<Script>((resolve) => {
+      release = () => resolve({ documents: [runs(run('run_1', 'applying'))] });
+    });
+    let lists = 0;
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'run list': () =>
+          lists++ === 0 ? { documents: [runs(run('run_1', 'policy_eval'))] } : later,
+        'run cancel': { documents: [run('run_1', 'cancelled', { completedAt: COMPLETED })] },
+        ...scripts,
+      },
+    });
+    const tree = t.shownTree();
+    return { t, tree, release: () => release() };
+  }
+  const NO_RUN =
+    "This command acts on a run listed in the Stacks view; choose it from that run's menu.";
+
+  test("chosen from a run row's menu while an apply of its stack ticks the store, reaches that run and cancels it; the row is redrawn once its stack's runs are read", async () => {
+    const { t, tree, release } = drawnRun({
+      'stack apply': { held: true, written: [{ type: 'stage', name: 'plan' }] },
+    });
+    await tree.show();
+    const [stackHandle] = tree.drawn();
+    await tree.expand(stackHandle);
+    const [runHandle] = tree.drawn(stackHandle);
+
+    void t.command(STACK_COMMANDS.apply, tree.argument(stackHandle));
+    await settled();
+    await t.command(STACK_COMMANDS.cancel, tree.argument(runHandle));
+    await settled();
+
+    expect(t.messages.map(({ text }) => text)).not.toContain(NO_RUN);
+    expect(t.commands.invoked.filter((c) => c.path === 'run cancel').map((c) => c.args)).toEqual([
+      { run: 'run_1' },
+    ]);
+
+    release();
+    await settled();
+    await tree.answered();
+    expect(tree.drawn(stackHandle)).toEqual([runHandle]);
+    expect(t.item(tree.argument(stackHandle) as Row).description).toBe('prod · applying: plan');
+  });
+
+  test("chosen from a run row's menu while the view reads the whole tree again, reaches that run and cancels it", async () => {
+    const { t, tree, release } = drawnRun();
+    await tree.show();
+    const [stackHandle] = tree.drawn();
+    await tree.expand(stackHandle);
+    const [runHandle] = tree.drawn(stackHandle);
+
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    await t.command(STACK_COMMANDS.cancel, tree.argument(runHandle));
+    await settled();
+
+    expect(t.messages.map(({ text }) => text)).not.toContain(NO_RUN);
+    expect(t.commands.invoked.filter((c) => c.path === 'run cancel').map((c) => c.args)).toEqual([
+      { run: 'run_1' },
+    ]);
+
+    release();
+    await settled();
+    await tree.answered();
+    expect(tree.drawn(stackHandle)).toEqual([runHandle]);
+    expect(t.item(tree.argument(runHandle) as Row).description).toMatch(/^applying /);
+  });
+
   test("a cancel the CLI refuses ends its progress with the failure document's message", async () => {
     const said = 'run run_1 cannot be cancelled in its current state';
     const t = setup({
@@ -1166,7 +1312,7 @@ describe('an apply', () => {
     { type: 'log', text: 'Preview Advisory:' },
     { type: 'log', text: '  + aws_s3_bucket.b' },
     { type: 'log', text: '' },
-    { type: 'phase', name: 'plan' },
+    { type: 'stage', name: 'plan' },
     { type: 'log', text: 'Still creating...' },
     { type: 'log', text: 'Still creating...' },
   ];
@@ -1206,6 +1352,53 @@ describe('an apply', () => {
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
     // Each tick asks for the whole tree again.
     expect(t.redrawn).toContain(undefined);
+  });
+
+  test('settled, writes to the stack’s Output channel each provider version its Run ran under an admission, as lace run get prints them', async () => {
+    const admitted = {
+      ...applyResult(),
+      run: {
+        ...applyResult().run,
+        providers: [
+          { address: 'registry.terraform.io/hashicorp/aws', version: '5.0.0' },
+          {
+            address: 'registry.terraform.io/hashicorp/random',
+            version: '3.7.1',
+            admission: {
+              id: 'adm_1',
+              admittedBy: 'usr_1',
+              admittedByName: 'Dev Lead',
+              admittedAt: '2026-10-16T09:00:00Z',
+            },
+          },
+          {
+            address: 'registry.terraform.io/hashicorp/null',
+            version: '3.2.4',
+            admission: {
+              id: 'adm_2',
+              admittedBy: 'usr_2',
+              admittedByName: null,
+              admittedAt: '2026-10-17T10:00:00Z',
+            },
+          },
+        ],
+      },
+    };
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': { documents: [...lines, admitted] },
+      },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+
+    expect(t.channels.get('Lace: prod')?.slice(-2)).toEqual([
+      'Admitted:   registry.terraform.io/hashicorp/random 3.7.1 (admitted by Dev Lead, 2026-10-16T09:00:00Z)',
+      'Admitted:   registry.terraform.io/hashicorp/null 3.2.4 (admitted by usr_2, 2026-10-17T10:00:00Z)',
+    ]);
   });
 
   test('refused for no certification on one root offers Validate, which runs the palette’s Validate on that root, whatever ran since, and shows its diagnostics', async () => {
@@ -1277,6 +1470,83 @@ describe('an apply', () => {
       'Validated infra/staging: lossy, 1 diagnostic.',
       `  ${fsPath('/work/repo/infra/staging/main.tf')}:4:2: error: not set`,
     ]);
+  });
+
+  test("refused for keeping no lockfile offers the package's Lock providers, which runs module lock in the apply's root under a progress notification and says what it locked", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': refusal('no_lockfile'),
+        'module lock': {
+          documents: [
+            // The CLI writes the paths of its JSON with '/' on every system.
+            {
+              path: '/work/repo/infra/prod',
+              lockfile: '/work/repo/infra/prod/.terraform.lock.hcl',
+              providers: [
+                {
+                  address: 'registry.terraform.io/hashicorp/aws',
+                  version: '5.0.0',
+                  platforms: ['linux_amd64'],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      answers: { no_lockfile: 'Lock providers' },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    await settled();
+
+    expect(t.messages).toContainEqual({
+      level: 'error',
+      text: 'no_lockfile',
+      buttons: ['Lock providers', 'Show Output'],
+    });
+    expect(t.commands.invoked.filter((c) => c.path === 'module lock')).toEqual([
+      { cwd: fsPath('/work/repo/infra/prod'), path: 'module lock', args: {} },
+    ]);
+    expect(t.progress.find((p) => p.title === 'Lock providers: prod')).toMatchObject({
+      ended: true,
+    });
+    expect(t.messages).toContainEqual({
+      level: 'info',
+      text: 'Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree. Then run the refused command again.',
+      buttons: [],
+    });
+  });
+
+  test('cancelled by someone else while it ran, settles calm: the notice says the apply was cancelled, and nothing is an error', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': {
+          documents: [
+            { type: 'stage', name: 'runner' },
+            {
+              ...applyResult('run_cancelled'),
+              run: run('run_9', 'cancelled', { completedAt: COMPLETED }),
+            },
+          ],
+          fails: new CommandExitError(1, 'Source: /work/repo/infra/prod\nRun cancelled.\n'),
+        },
+      },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+
+    expect(t.messages).toContainEqual({
+      level: 'info',
+      text: 'Cancelled the apply of prod.',
+      buttons: ['Show Output'],
+    });
+    expect(t.messages.filter(({ level }) => level === 'error')).toEqual([]);
   });
 
   test('from the palette, names the root and picks one of its stacks', async () => {
@@ -1368,8 +1638,8 @@ describe('an apply', () => {
         'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
         'stack apply': {
           documents: [
-            { type: 'phase', name: 'submit' },
-            { type: 'phase', name: 'awaiting_approval' },
+            { type: 'stage', name: 'submit' },
+            { type: 'stage', name: 'awaiting_approval' },
             {
               type: 'gate',
               resolution: { mode: 'awaiting_approval' },

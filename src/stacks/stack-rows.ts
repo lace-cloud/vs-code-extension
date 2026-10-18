@@ -1,8 +1,8 @@
 // What the Stacks tree draws, as pure functions of the CLI's documents and
 // of naming a root: the state a view that names no root shows and the state
 // a list of stacks leaves the view in, each row's label, icon and actions,
-// an apply's outcome as a notice with what it offers, and a preview as a
-// document.
+// an apply's outcome as a notice with what it offers, the provider versions
+// its Run ran under an admission, and a preview as a document.
 import type {
   CommandFailure,
   JsonOf,
@@ -67,11 +67,16 @@ export type RowLook = {
   contextValue: string;
 };
 
+// Whether two looks draw the same row: every field the same.
+export function sameLook(a: RowLook, b: RowLook | undefined): boolean {
+  return b !== undefined && (Object.keys(a) as (keyof RowLook)[]).every((key) => a[key] === b[key]);
+}
+
 // A stack row: its name and slug, whether its badges are on the canvas, its
 // last drift scan, and an apply of it under way.
 export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook {
   const applying =
-    run !== null && run.outcome.kind === 'running' ? run.phases.at(-1)?.name : undefined;
+    run !== null && run.outcome.kind === 'running' ? run.stages.at(-1)?.name : undefined;
   const drift =
     stack.lastDriftStatus === null
       ? []
@@ -139,10 +144,14 @@ export function runLook(run: Run): RowLook {
   };
 }
 
+// `failure` is the failure document an apply that failed or was blocked
+// ended on, when the CLI wrote one: the package actions that answer it are
+// offered beside `offers`.
 export type Notice = {
   level: 'info' | 'warn' | 'error';
   text: string;
   offers: readonly Offer[];
+  failure?: CommandFailure;
 };
 
 type ChangeRequest = Extract<RunOutcome, { kind: 'awaiting-approval' }>['changeRequest'];
@@ -194,10 +203,10 @@ function recordSaid(record: ChangeRecord): { line: string; offers: Offer[] } {
 function awaitingNotice(
   slug: string,
   { id, state, requirements, records }: ChangeRequest,
-  runUrl: string | null,
+  runUrl: string | undefined,
 ): Notice {
   const said = records.map(recordSaid);
-  const runPage: Offer[] = runUrl === null ? [] : [{ kind: 'openPortal', url: runUrl }];
+  const runPage: Offer[] = runUrl === undefined ? [] : [{ kind: 'openPortal', url: runUrl }];
   return {
     level: 'info',
     text: [
@@ -212,21 +221,29 @@ function awaitingNotice(
   };
 }
 
+// A run slot that settled: its outcome, and the Run its result named.
+export type SettledRun = Pick<NonNullable<RunSlot>, 'run'> & {
+  outcome: Exclude<RunOutcome, { kind: 'running' }>;
+};
+
 // What an apply that settled says, and what it offers: the ways out a
-// failure's reason names, and the records of a change request it waits on.
-export function outcomeNotice(
-  slug: string,
-  outcome: Exclude<RunOutcome, { kind: 'running' }>,
-): Notice {
+// failure's reason names, with the failure the package's actions answer,
+// and, for a Run held for approval, the Run's page and the records of the
+// change request it waits on.
+export function outcomeNotice(slug: string, { outcome, run }: SettledRun): Notice {
   switch (outcome.kind) {
     case 'succeeded':
       return { level: 'info', text: `Applied ${slug}.`, offers: [] };
     case 'awaiting-approval':
-      return awaitingNotice(slug, outcome.changeRequest, outcome.runUrl);
+      return awaitingNotice(slug, outcome.changeRequest, run?.url);
     case 'blocked':
-      return { level: 'warn', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
     case 'failed':
-      return { level: 'error', text: outcome.message.trim(), offers: offersFor(outcome.failure) };
+      return {
+        level: outcome.kind === 'blocked' ? 'warn' : 'error',
+        text: outcome.message.trim(),
+        offers: offersFor(outcome.failure),
+        ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
+      };
     case 'cancelled':
       return { level: 'info', text: `Cancelled the apply of ${slug}.`, offers: [] };
     case 'detached':
@@ -242,6 +259,19 @@ export function outcomeNotice(
             offers: [],
           };
   }
+}
+
+// The provider versions a settled apply's Run ran under an organization's
+// admission, one line each as `lace run get` prints them: the admitter by
+// name, else by id. A Run its result never named ran none.
+export function admittedLines({ run }: Pick<SettledRun, 'run'>): string[] {
+  return (run?.providers ?? []).flatMap(({ address, version, admission }) =>
+    admission === undefined
+      ? []
+      : [
+          `Admitted:   ${address} ${version} (admitted by ${admission.admittedByName || admission.admittedBy}, ${admission.admittedAt})`,
+        ],
+  );
 }
 
 type Preview = JsonOf<'stack preview'>;

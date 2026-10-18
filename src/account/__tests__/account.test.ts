@@ -368,6 +368,57 @@ describe('signing in', () => {
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
+  const signedInAs = (replacedKey: object) => ({
+    login: {
+      documents: [
+        { type: 'code', code: 'ABCD-2345' },
+        {
+          type: 'result',
+          user: { id: 'usr_1', email: 'dev@example.com', name: 'Dev' },
+          replacedKey,
+        },
+      ],
+    },
+  });
+  const SIGNED_IN =
+    'Signed in to Lace as Dev (dev@example.com). The credentials this machine held before are replaced.';
+
+  test('over credentials this machine held, says their key is revoked, offers nothing and announces the change', async () => {
+    const { api, account, changed } = await setup(signedInAs({ revocation: 'revoked' }));
+    await account.signIn();
+    expect(shownBy(api.window.showInformationMessage)).toContainEqual([
+      `${SIGNED_IN} Their API key is revoked.`,
+    ]);
+    expect(api.window.showWarningMessage).not.toHaveBeenCalled();
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('over credentials whose key Lace did not revoke, warns that the key may still be live, and Open Portal opens the page the result names', async () => {
+    const PAGE = 'https://lace.example.com/account';
+    const { api, account, changed } = await setup(
+      signedInAs({
+        revocation: 'refused',
+        detail: 'the Lace server that issued this key does not accept it',
+        portalUrl: PAGE,
+      }),
+    );
+    let answer: (title: string) => void = () => {};
+    api.window.showWarningMessage.mockImplementationOnce(
+      () => new Promise<string | undefined>((resolve) => (answer = resolve)),
+    );
+    await account.signIn();
+    expect(shownBy(api.window.showWarningMessage)).toEqual([
+      [
+        `${SIGNED_IN} Lace did not revoke their API key: the Lace server that issued this key does not accept it. The key may still be live. Revoke it in the portal under Account, CLI keys.`,
+        'Open Portal',
+      ],
+    ]);
+    expect(changed).toHaveBeenCalledTimes(1);
+    answer('Open Portal');
+    await settled();
+    expect(api.env.openExternal).toHaveBeenCalledWith({ url: PAGE });
+  });
+
   test('the device flow opens the page its code carries', async () => {
     const { api, account } = await setup({
       login: {
@@ -407,7 +458,7 @@ describe('signing in', () => {
     [
       'the key Lace revoked',
       'revoked',
-      "Signed out of Lace. This machine's API key is revoked and its credentials removed.",
+      'Signed out of Lace: the credentials are removed from this machine. Their API key is revoked.',
     ],
     [
       'no key saved',
@@ -431,17 +482,17 @@ describe('signing in', () => {
     [
       'refused',
       'the Lace server that issued this key does not accept it',
-      'Signed out of Lace. The credentials are removed from this machine, but Lace did not revoke the API key: the Lace server that issued this key does not accept it.',
+      'Signed out of Lace: the credentials are removed from this machine. Lace did not revoke their API key: the Lace server that issued this key does not accept it.',
     ],
     [
       'unreachable',
       'dial tcp: connection refused',
-      'Signed out of Lace. The credentials are removed from this machine, but Lace could not be reached to revoke the API key: dial tcp: connection refused.',
+      'Signed out of Lace: the credentials are removed from this machine. Lace could not be reached to revoke their API key: dial tcp: connection refused.',
     ],
     [
       'unreadable',
       'open credentials.json: permission denied',
-      'Signed out of Lace. The credentials are removed from this machine; they could not be read, so their API key was not revoked: open credentials.json: permission denied.',
+      'Signed out of Lace: the credentials are removed from this machine. They could not be read, so their API key was not revoked: open credentials.json: permission denied.',
     ],
   ] as const)('signing out with the key %s announces the change, warns that the key may still be live, and Open Portal opens the page the result names', async (revocation, detail, said) => {
     const { api, account, changed } = await setup({

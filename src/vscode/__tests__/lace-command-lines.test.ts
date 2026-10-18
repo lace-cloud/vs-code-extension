@@ -19,6 +19,8 @@ describe('a lace command line ending in an integrated terminal', () => {
     ['C:\\Users\\dev\\bin\\lace.exe login', 'login'],
     ['lace -o json stack list', 'stack list'],
     ['lace --org acme stack apply prod', 'stack apply'],
+    ['lace --timeout 1m org list', 'org list'],
+    ['lace stack list --source infra/prod -o json', 'stack list'],
     ['lace module validate', 'module validate'],
   ])('%s is told as the CLI command %s', (line, path) => {
     expect(told(line)).toEqual([{ path }]);
@@ -29,6 +31,8 @@ describe('a lace command line ending in an integrated terminal', () => {
     'lace --help',
     'lace engine',
     'lace stak list',
+    'lace help stack apply',
+    'lace --org module validate',
   ])('%s is told as naming no command of the CLI', (line) => {
     expect(told(line)).toEqual([{ path: undefined }]);
   });

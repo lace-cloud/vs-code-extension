@@ -1,9 +1,10 @@
 // A commands mapping, and its port in the developer's home, whose commands
 // a test scripts per path: the documents a command writes, each read
 // through its path's schema as the engine's port reads it, then a clean end
-// or the error it fails with; or a command held until the test finishes it,
-// or until the signal it was invoked with aborts, which detaches it as the
-// engine's port detaches an Invoke whose stream is aborted.
+// or the error it fails with; or a command held, having written the
+// documents it has written so far, until the test finishes it, or until the
+// signal it was invoked with aborts, which detaches it as the engine's port
+// detaches an Invoke whose stream is aborted.
 // A script may be a function of the command's arguments, answered now or
 // later. Every invocation is recorded with the directory it ran in: the one
 // it names, else the port's own.
@@ -21,7 +22,9 @@ import type { CommandsMapping } from '../commands-mapping';
 
 export const HOME = '/home/dev';
 
-export type Script = { documents?: readonly unknown[]; fails?: Error } | { held: true };
+export type Script =
+  | { documents?: readonly unknown[]; fails?: Error }
+  | { held: true; written?: readonly unknown[] };
 
 export type Scripts = Partial<
   Record<BoundPath, Script | ((args: Record<string, unknown>) => Script | Promise<Script>)>
@@ -77,6 +80,8 @@ export function fakeCommands(scripts: Scripts) {
         typeof scripted === 'function' ? scripted(given) : scripted;
       const holding = !(script instanceof Promise) && 'held' in script ? hold(path, signal) : null;
       async function* events() {
+        const writing = holding && 'held' in script ? (script.written ?? []) : [];
+        for (const document of writing) yield parseBound(path, document);
         const answered: Script = holding ? await holding.finished : await script;
         if ('held' in answered) throw new Error(`a held answer for ${path} is not finished`);
         for (const document of answered.documents ?? []) {

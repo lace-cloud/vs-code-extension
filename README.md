@@ -19,8 +19,8 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 7, which Lace CLI
-  v2.53.1 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 8, which Lace CLI
+  v2.54.1 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
   to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
@@ -153,13 +153,15 @@ its ten most recent runs. The view's description names the module; it follows th
   has not ended, and **Open in Portal** when the run has a page there.
 - Selecting a stack picks it for its module, and the module's canvas draws that stack's badges on its nodes.
 - **Apply** runs under a progress notification you can cancel. Every line it prints, the Preview Advisory included, goes to
-  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. An apply held for approval
+  the stack's Output channel ("Lace: *stack*"), which **Follow Logs** writes to as well. When it ends, each provider
+  version its run ran under your organization's admission is written there too, as `lace run get` prints it. An apply held for approval
   names the change request the run waits on: each requirement with its state and whether Lace or a change-management
   system decides it, and each record that system keeps, with its state and **Open** on the record's page.
 - **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
   Lace Plan document, whose lines wrap.
 - A stack command refused because the module has no current certification offers **Validate**, which validates that
-  module.
+  module. One refused because the module keeps no `.terraform.lock.hcl` offers **Lock providers**, which runs
+  `lace module lock` in the module and names the lockfile it wrote, to commit before you run the command again.
 - The stack commands run the Terraform on disk, not the canvas: generate canvas edits before you preview or apply them.
   Per-environment values are `--var-file` and `--var` on `lace stack preview` and `lace stack apply` in a terminal.
   Tearing a stack down is `lace stack destroy` in a terminal. A `lace` command that may change a stack, run in
@@ -188,8 +190,9 @@ its ten most recent runs. The view's description names the module; it follows th
 ## Sign-in, organization and team
 
 **Lace: Sign In** runs `lace login`: it shows the confirmation code once, with **Copy Code**, and opens the sign-in page.
-**Lace: Sign Out** runs `lace logout` and says what became of this machine's API key: revoked, or not revoked and why.
-While the key may still be live, the notice is a warning, and **Open Portal** opens the page where you revoke it. The
+Signed in over credentials this machine held, it says what became of their API key: revoked, or not revoked and why.
+**Lace: Sign Out** runs `lace logout` and says the same of the API key of the credentials it removes. While the key may
+still be live, the notice is a warning, and **Open Portal** opens the page where you revoke it. The
 extension keeps no credentials; the CLI reads them for every command.
 
 The organization and team every scoped command runs in are the CLI's own selection, saved by `lace org use` and
@@ -296,10 +299,11 @@ full path of its executable.
 | Lace: Save                           | `lace.save`                    | Saves the module's open canvas; with none open there is nothing unsaved, and it says so.                         |
 | Lace: Generate                       | `lace.generate`                | Generates the saved canvas to the module's `.tf` files, with no tab, after saving the module's open `.tf` editors. |
 | Lace: Validate Module                | `lace.validateModule`          | Runs `lace module validate` on the module's Terraform and writes its certification under `.lace/`.              |
-| Lace: Convert Module                 | `lace.convertModule`           | Runs `lace module convert`, which rewrites the module's Terraform in Lace style, and reports as Validate does; an open canvas picks the rewritten files up. |
+| Lace: Convert Module                 | `lace.convertModule`           | Runs `lace module convert`, which rewrites the module's Terraform in Lace style and locks its providers, and reports as Validate does, naming the lockfile; an open canvas picks the rewritten files up. When the providers did not lock, it says so and offers **Lock providers**, which runs Lace: Lock Providers. |
 | Lace: Import Existing Resources      | `lace.importResources`         | Runs `lace stack import` on a stack of the module you pick, with a statefile you pick: converts the module as Convert does and adds an import block for each resource the statefile records. Also on the canvas's banner. |
 | Lace: Format Module                  | `lace.formatModule`            | Runs `lace module fmt` and names the files it changed.                                                           |
-| Lace: Scan Module                    | `lace.scanModule`              | Runs `lace module scan` (tfsec).                                                                                 |
+| Lace: Lock Providers                 | `lace.lockModule`              | Runs `lace module lock`, which writes the module's `.terraform.lock.hcl`, and says how many providers it locked, in which lockfile, to commit beside the tree. |
+| Lace: Scan Module                    | `lace.scanModule`              | Runs `lace module scan` (tfsec) and names the tfsec version that ran.                                            |
 | Lace: Generate Docs                  | `lace.generateDocs`            | Runs `lace module docs` (terraform-docs) and opens the markdown in an untitled editor; your save is the write. Also on the Explorer folder menu. |
 | Lace: Add Module to Canvas           | `lace.addModuleToCanvas`       | Picks a registry module and places it on the module's canvas; in a workspace with no module, on the canvas of the workspace folder, where the module starts. |
 | Lace: Refresh Registry               | `lace.refreshRegistry`         | Reads the registry again.                                                                                        |
@@ -322,11 +326,11 @@ full path of its executable.
 | Lace: Restart Engine                 | `lace.restartEngine`           | Restarts the Lace engine.                                                                                        |
 | Lace: Open Logs                      | `lace.openLogs`                | Shows the "Lace" Output channel.                                                                                 |
 
-The module commands act on the module directory chosen as described above. Validate, Convert, Format, Scan and Generate
-Docs run on the module's files as the same command typed in a terminal there would, and open no session. Generate,
-Format, Convert and Import Existing Resources write the module's `.tf` files, so they save its open `.tf` editors first;
-Validate, Scan and Generate Docs read the files as they are on disk, as the chat's validate tool and the canvas's
-Validate do, and write nothing.
+The module commands act on the module directory chosen as described above. Validate, Convert, Format, Scan, Lock
+Providers and Generate Docs run on the module's files as the same command typed in a terminal there would, and open no
+session. Generate, Format, Convert and Import Existing Resources write the module's `.tf` files, so they save its open
+`.tf` editors first; Validate, Scan, Lock Providers and Generate Docs read the files as they are on disk, as the chat's
+validate tool and the canvas's Validate do, and write none of them (Lock Providers writes the lockfile beside them).
 Lace binds no keys of its own.
 
 ## Settings

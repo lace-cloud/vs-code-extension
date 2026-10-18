@@ -62,7 +62,6 @@ const RESULT = {
     updatedAt: '2026-09-01T00:00:00Z',
   },
   summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
-  workspaceDir: '/cache',
   error: null,
 };
 
@@ -152,7 +151,7 @@ describe('the runner host', () => {
           { type: 'log', text: 'Preview Advisory:' },
           { type: 'log', text: '' },
           { type: 'log', text: '' },
-          { type: 'phase', name: 'plan' },
+          { type: 'stage', name: 'plan' },
           { type: 'log', text: 'Still creating...' },
           { type: 'log', text: 'Still creating...' },
           RESULT,
