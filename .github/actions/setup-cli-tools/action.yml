@@ -1,0 +1,142 @@
+name: Setup CLI tools
+description: >-
+  Put the tools the lace CLI pins on PATH, at the versions LACE_CLI_TOOLS names, each held to the
+  digest its vendor publishes for it, and check that the CLI on PATH runs them.
+
+# The CLI runs a tool's binary on PATH when it reports the CLI's pin, and
+# otherwise downloads its pinned build into ~/.lace/bin. Each engine test
+# runs in a home of its own, so with these on PATH no test downloads one.
+# The check runs the CLI in a home that holds nothing, a format (terraform)
+# and a scan (tfsec): it downloads nothing exactly when LACE_CLI_TOOLS names
+# its pins. The CLI that LACE_CLI_VERSION names is on PATH before this runs.
+
+runs:
+  using: composite
+  steps:
+    - name: Install the tools LACE_CLI_TOOLS names
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS" in Linux) os=linux ;; macOS) os=darwin ;; esac
+        case "$RUNNER_ARCH" in X64) arch=amd64 ;; ARM64) arch=arm64 ;; esac
+        bin="$RUNNER_TEMP/lace-cli-tools"
+        download="$RUNNER_TEMP/lace-cli-tools-download"
+        mkdir -p "$bin" "$download"
+
+        # The version LACE_CLI_TOOLS names for the tool $1.
+        pin() {
+          local version
+          version="$(awk -v tool="$1" '!/^#/ && $1 == tool { print $2 }' LACE_CLI_TOOLS)"
+          if [ -z "$version" ]; then echo "LACE_CLI_TOOLS names no $1" >&2; exit 1; fi
+          echo "$version"
+        }
+
+        # Downloads $2 from $1, held to the digest its vendor publishes for it
+        # in the checksums file $3 beside it.
+        fetch() {
+          local base="$1" object="$2" sums="$3" published actual
+          curl -fsSL --retry 3 -o "$download/$sums" "$base/$sums"
+          curl -fsSL --retry 3 -o "$download/$object" "$base/$object"
+          published="$(awk -v object="$object" '$2 == object { print $1 }' "$download/$sums")"
+          actual="$(sha256sum "$download/$object" | cut -d ' ' -f 1)"
+          if [ -z "$published" ] || [ "$actual" != "$published" ]; then
+            echo "$object has digest $actual, not the one $base/$sums publishes for it (${published:-none})" >&2
+            exit 1
+          fi
+        }
+
+        terraform="$(pin terraform)"
+        zip="terraform_${terraform}_${os}_${arch}.zip"
+        fetch "https://releases.hashicorp.com/terraform/$terraform" "$zip" "terraform_${terraform}_SHA256SUMS"
+        unzip -q -o "$download/$zip" terraform -d "$bin"
+
+        tfsec="$(pin tfsec)"
+        fetch "https://github.com/aquasecurity/tfsec/releases/download/v$tfsec" "tfsec-$os-$arch" tfsec_checksums.txt
+        install -m 0755 "$download/tfsec-$os-$arch" "$bin/tfsec"
+
+        empty="$RUNNER_TEMP/lace-cli-tools-home"
+        module="$RUNNER_TEMP/lace-cli-tools-module"
+        mkdir -p "$empty" "$module"
+        git init --quiet "$module"
+        printf 'variable "name" {\n  type = string\n}\n' > "$module/main.tf"
+        (
+          cd "$module"
+          export PATH="$bin:$PATH" HOME="$empty"
+          lace module fmt
+          lace module scan
+        )
+        if [ -e "$empty/.lace/bin" ]; then
+          echo "$(lace version) downloaded $(cd "$empty/.lace/bin" && echo *): it pins another version than LACE_CLI_TOOLS names" >&2
+          exit 1
+        fi
+        echo "$bin" >> "$GITHUB_PATH"
+        echo "terraform $terraform and tfsec $tfsec are on PATH, at $bin"
+
+    - name: Install the tools LACE_CLI_TOOLS names
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $pins = @{}
+        foreach ($line in Get-Content LACE_CLI_TOOLS) {
+          if ($line -eq '' -or $line.StartsWith('#')) { continue }
+          $tool, $version = -split $line
+          $pins[$tool] = $version
+        }
+        foreach ($tool in 'terraform', 'tfsec') {
+          if (-not $pins[$tool]) { throw "LACE_CLI_TOOLS names no $tool" }
+        }
+        $arch = @{ X64 = 'amd64'; ARM64 = 'arm64' }[$env:RUNNER_ARCH]
+        $bin = Join-Path $env:RUNNER_TEMP 'lace-cli-tools'
+        $download = Join-Path $env:RUNNER_TEMP 'lace-cli-tools-download'
+        New-Item -ItemType Directory -Force -Path $bin, $download | Out-Null
+
+        # Downloads $object from $base, held to the digest its vendor
+        # publishes for it in the checksums file $sums beside it.
+        function Fetch($base, $object, $sums) {
+          foreach ($name in $sums, $object) {
+            curl.exe -fsSL --retry 3 -o (Join-Path $download $name) "$base/$name"
+            if ($LASTEXITCODE -ne 0) { throw "could not download $base/$name" }
+          }
+          $published = foreach ($entry in Get-Content -LiteralPath (Join-Path $download $sums)) {
+            $digest, $name = -split $entry
+            if ($name -eq $object) { $digest }
+          }
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $download $object)).Hash.ToLowerInvariant()
+          if (-not $published -or $sha256 -ne $published) {
+            throw "$object has digest $sha256, not the one $base/$sums publishes for it ($published)"
+          }
+        }
+
+        $terraform = $pins['terraform']
+        $zip = "terraform_${terraform}_windows_$arch.zip"
+        Fetch "https://releases.hashicorp.com/terraform/$terraform" $zip "terraform_${terraform}_SHA256SUMS"
+        Expand-Archive -LiteralPath (Join-Path $download $zip) -DestinationPath $bin -Force
+
+        $tfsec = $pins['tfsec']
+        $exe = "tfsec-windows-$arch.exe"
+        Fetch "https://github.com/aquasecurity/tfsec/releases/download/v$tfsec" $exe tfsec_checksums.txt
+        Copy-Item -LiteralPath (Join-Path $download $exe) -Destination (Join-Path $bin 'tfsec.exe')
+
+        $empty = Join-Path $env:RUNNER_TEMP 'lace-cli-tools-home'
+        $module = Join-Path $env:RUNNER_TEMP 'lace-cli-tools-module'
+        New-Item -ItemType Directory -Force -Path $empty, $module | Out-Null
+        git init --quiet $module
+        if ($LASTEXITCODE -ne 0) { throw "git init $module failed" }
+        Set-Content -LiteralPath (Join-Path $module 'main.tf') -Value "variable `"name`" {`n  type = string`n}"
+        $env:PATH = "$bin$([IO.Path]::PathSeparator)$env:PATH"
+        $env:USERPROFILE = $empty
+        $env:HOME = $empty
+        Push-Location $module
+        lace module fmt
+        if ($LASTEXITCODE -ne 0) { throw 'lace module fmt failed' }
+        lace module scan
+        if ($LASTEXITCODE -ne 0) { throw 'lace module scan failed' }
+        Pop-Location
+        $downloaded = Join-Path $empty '.lace' 'bin'
+        if (Test-Path -LiteralPath $downloaded) {
+          $names = (Get-ChildItem -LiteralPath $downloaded).Name -join ' '
+          throw "$(lace version) downloaded ${names}: it pins another version than LACE_CLI_TOOLS names"
+        }
+        Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin
+        "terraform $terraform and tfsec $tfsec are on PATH, at $bin"

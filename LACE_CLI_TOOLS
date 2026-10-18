@@ -1,0 +1,6 @@
+# The tools the released `lace` CLI that LACE_CLI_VERSION names pins, each at
+# the version that release pins: CI puts them on PATH, where the CLI runs a
+# binary that reports its pin instead of downloading its own, and checks that
+# it does. It moves with LACE_CLI_VERSION.
+terraform 1.9.8
+tfsec 1.28.14
