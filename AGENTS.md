@@ -487,30 +487,37 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   the window that what the CLI reports may have changed outside it: focus, and a command line ending in an integrated
   terminal).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
-  with module directories, a signed-out developer home of the test's own, an engine with its root sessions and commands
-  mapping as one window has them, and cleanups run after each test, latest first. The engine is `bin/lace` when one is
-  there, else the `lace` on `PATH` (`engine/__tests__/engine-binary.mjs`, which the window e2e reads too), and it is the
-  release `LACE_CLI_VERSION` names: a binary whose `lace version -o json` says another version, any other build of the
-  CLI included, is refused before a test runs.
+  with module directories; a developer of each test's own, signed out, with no saved selection and no tool of their own,
+  in a home of the test's own, which every process the test starts inherits, whatever the shell that runs the tests
+  holds; an engine with its root sessions and commands mapping as one window has them; and cleanups run after each test,
+  latest first. `engine/__tests__/engine-binary.mjs`, which the window e2e reads too, names the engine and the
+  developer. The engine is `bin/lace` when one is there, else the `lace` on `PATH`, and it is the release
+  `LACE_CLI_VERSION` names: a binary whose `lace version -o json` says another version, any other build of the CLI
+  included, is refused before a test runs. The developer's environment (`signedOutEnvironment`) unsets each variable the
+  CLI reads a developer's state from (`DEVELOPER_STATE_ENV`: the home, the Lace config directory, the key, the Lace
+  server, the organization and team, the cache directory, and a binary for each tool the CLI pins) but the home's.
 - **The chat tools end to end**: `tools/__tests__/lm-tools.engine.test.ts` invokes every tool `registerLaceTools`
   registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel) and
   commands mapping, signed out; a delete makes no request of the extension's own beyond the engine.
 - **The window e2e** (`packages/host-e2e/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha
   suites, bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the
   engine tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens two windows, each on
-  a fresh git repository of its own whose settings name the engine, with a Lace config directory of the run's own, so
-  every case is signed out. `window/` runs in a repository whose tests make their module directories: activation (every
-  manifest command registered, an engine of the extension's protocol), the palette's module commands (Validate,
-  Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit, a hand
-  edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that
-  holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder.
+  a fresh git repository of its own whose settings name the engine, for the engine tests' developer in a home of the
+  run's own, so every case is signed out. `window/` runs in a repository whose tests make their module directories:
+  activation (every manifest command registered, an engine of the extension's protocol), the palette's module commands
+  (Validate, Generate with no tab, Convert in place), the canvas tab over one session per root (another client's edit, a
+  hand edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one
+  that holds no Terraform: Open Canvas from the palette starts the module in the workspace's folder.
 - **CI** (`.github/workflows/ci.yml`, every PR to `develop`) runs lint, typecheck, the `unit` tests, the build, the
   `build` tests and the `engine` tests on Linux and on Windows, and the window e2e on Linux alone, under `xvfb-run`.
   Both run the release `LACE_CLI_VERSION` names. On Linux the CLI's published installer installs it; on Windows, which
   the installer refuses, the job downloads the release's `lace-cli-windows-amd64-<version>.exe` with its `.sha256` and
   `.minisig` and checks them as the installer does (the checksum, then the signature by the installer's key, whose
-  trusted comment names that object and its digest) before it puts the binary on `PATH` as `lace.exe`. `.gitattributes`
-  checks every text file out with LF, the line ending biome checks, on Windows too.
+  trusted comment names that object and its digest) before it puts the binary on `PATH` as `lace.exe`. Both jobs then
+  put the tools that release pins on `PATH` (`.github/actions/setup-cli-tools`): terraform and tfsec at the versions
+  `LACE_CLI_TOOLS` names, each held to the digest its vendor publishes for it, and check that the CLI runs them: a
+  format and a scan, in a home that holds nothing, download nothing. `.gitattributes` checks every text file out with
+  LF, the line ending biome checks, on Windows too.
 - **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
   organization and team) is unit-tested over scripted commands.
 - **Repository tests** in `src/__tests__/`: the manifest against the features (and each run row's menu against the
