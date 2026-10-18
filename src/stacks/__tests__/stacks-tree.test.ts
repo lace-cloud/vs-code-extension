@@ -1514,9 +1514,38 @@ describe('an apply', () => {
     });
     expect(t.messages).toContainEqual({
       level: 'info',
-      text: 'Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree, then run the command again.',
+      text: 'Locked 1 provider in .terraform.lock.hcl. Commit it beside the tree. Then run the refused command again.',
       buttons: [],
     });
+  });
+
+  test('cancelled by someone else while it ran, settles calm: the notice says the apply was cancelled, and nothing is an error', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'stack apply': {
+          documents: [
+            { type: 'stage', name: 'runner' },
+            {
+              ...applyResult('run_cancelled'),
+              run: run('run_9', 'cancelled', { completedAt: COMPLETED }),
+            },
+          ],
+          fails: new CommandExitError(1, 'Source: /work/repo/infra/prod\nRun cancelled.\n'),
+        },
+      },
+    });
+    const [row] = await t.children();
+    await t.command(STACK_COMMANDS.apply, row);
+    await settled();
+
+    expect(t.messages).toContainEqual({
+      level: 'info',
+      text: 'Cancelled the apply of prod.',
+      buttons: ['Show Output'],
+    });
+    expect(t.messages.filter(({ level }) => level === 'error')).toEqual([]);
   });
 
   test('from the palette, names the root and picks one of its stacks', async () => {
