@@ -270,8 +270,11 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   the whole tree, until the provider answers its ask again, and a row's menu command chosen in that time arrives with no
   row: so the tree reads first and tells VS Code to redraw once it holds the answer, and answers VS Code's asks from
   what it read (the stacks, and the runs of each stack VS Code asked for, read again with them); a read started later
-  supersedes one under way. Only what may change the list reads it whole: a tick, a change of the account, the view
-  shown again, a `lace` command that ended in an integrated terminal and that the CLI declares more than a read
+  supersedes one under way. A read's answer redraws the whole tree only when it names another root or other stacks
+  (which, in which order); else it redraws the rows VS Code holds whose look or runs it changed, each kept as the object
+  VS Code holds with its stack as the read found it, and a read that changed nothing redraws nothing, so no row loses
+  its element. Only what may change the list reads it whole: a tick, a change of the account, the view shown again, a
+  `lace` command that ended in an integrated terminal and that the CLI declares more than a read
   (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a change of the root
   the view names, and Refresh Stacks. A stack row whose look changes with the runner's store (an apply of it started,
   reached a stage or settled) has its runs read again, then is redrawn; any other change of the store redraws nothing.

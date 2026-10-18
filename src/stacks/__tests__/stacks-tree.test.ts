@@ -22,6 +22,7 @@ import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
 import { stackPick } from '../stack-pick';
+import type { Stack } from '../stack-rows';
 import {
   PREVIEW_SCHEME,
   type Row,
@@ -565,7 +566,8 @@ describe('the stacks of the current root', () => {
               }),
       },
     });
-    for (const row of await t.children()) await t.children(row);
+    const rows = await t.children();
+    for (const row of rows) await t.children(row);
 
     void t.command(STACK_COMMANDS.refresh);
     await settled();
@@ -577,6 +579,87 @@ describe('the stacks of the current root', () => {
     await settled();
     expect(t.redrawn).toEqual([]);
     answers[2]();
+    await settled();
+    expect(t.redrawn).toEqual([rows]);
+  });
+
+  // A read of the whole tree whose second answer is `next`: each read after
+  // the first lists the stacks `next` gives and their runs `runsOf` gives.
+  function rereadTo(
+    first: Stack[],
+    next: () => Stack[],
+    runsOf: (read: number) => ReturnType<typeof runs> = () => runs(run('run_1', 'applying')),
+  ) {
+    let lists = 0;
+    let runLists = 0;
+    return setup({
+      root: prod,
+      scripts: {
+        'stack list': () => ({ documents: [stacks(...(lists++ === 0 ? first : next()))] }),
+        'run list': () => ({ documents: [runsOf(runLists++)] }),
+      },
+    });
+  }
+  const drifted = (id: string, slug: string) => ({
+    ...stack(id, slug),
+    lastDriftStatus: 'DRIFTED',
+    lastDriftCount: 1,
+  });
+
+  test("a read of the whole tree whose answer changes one stack's look redraws that row alone, the object the view holds", async () => {
+    const t = rereadTo([stack('stk_1', 'prod'), drifted('stk_2', 'qa')], () => [
+      stack('stk_1', 'prod'),
+      { ...stack('stk_2', 'qa'), lastDriftStatus: 'IN_SYNC' },
+    ]);
+    const [, qa] = await t.children();
+    expect(t.item(qa).description).toBe('qa · drift drifted (1)');
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.redrawn).toEqual([[qa]]);
+    expect(t.item(qa).description).toBe('qa · drift in_sync');
+  });
+
+  test("a read of the whole tree whose answer changes a held stack's runs redraws that stack's row alone", async () => {
+    const t = rereadTo(
+      [stack('stk_1', 'prod'), stack('stk_2', 'qa')],
+      () => [stack('stk_1', 'prod'), stack('stk_2', 'qa')],
+      (read) =>
+        read < 3
+          ? runs(run('run_1', 'applying'))
+          : runs(run('run_1', 'apply_succeeded', { completedAt: COMPLETED })),
+    );
+    const [prodRow, qaRow] = await t.children();
+    await t.children(prodRow);
+    await t.children(qaRow);
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.redrawn).toEqual([[qaRow]]);
+    const [qaRun] = await t.children(qaRow);
+    expect(t.item(qaRun).contextValue).toBe('laceRun ended');
+  });
+
+  test('a read of the whole tree that changes nothing redraws nothing, and tells the canvas its reads are stale', async () => {
+    const t = rereadTo([stack('stk_1', 'prod')], () => [stack('stk_1', 'prod')]);
+    const [row] = await t.children();
+    await t.children(row);
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(t.redrawn).toEqual([]);
+    expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+  });
+
+  test.each([
+    ['adds a stack', () => [stack('stk_1', 'prod'), stack('stk_2', 'qa')]],
+    ['removes one', () => []],
+  ])('a read of the whole tree that %s redraws the whole tree', async (_, next) => {
+    const t = rereadTo([stack('stk_1', 'prod')], next);
+    await t.children();
+
+    await t.command(STACK_COMMANDS.refresh);
     await settled();
     expect(t.redrawn).toEqual([undefined]);
   });
@@ -645,8 +728,7 @@ describe('the stacks of the current root', () => {
     folders.push(web);
     t.workspaceFolders.fire({ added: [web], removed: [] });
     await settled();
-    expect(t.redrawn).toEqual([undefined]);
-    await t.children();
+    expect(t.redrawn).toEqual([]);
     expect(t.view.description).toBe('api/infra/prod');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
@@ -657,7 +739,7 @@ describe('the stacks of the current root', () => {
     folders.pop();
     t.workspaceFolders.fire({ added: [], removed: [web] });
     await settled();
-    expect(t.redrawn).toEqual([undefined, undefined, undefined]);
+    expect(t.redrawn).toEqual([undefined, undefined]);
     await t.children();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
@@ -931,8 +1013,8 @@ describe('when the stacks cannot be listed', () => {
 
     t.account.fire();
     await settled();
-    expect(t.redrawn).toEqual([undefined]);
     expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(t.redrawn).toEqual([]);
   });
 });
 
@@ -1089,13 +1171,13 @@ describe('a stack row', () => {
       'a lace command that may change a stack, ended in an integrated terminal',
       (t: Setup) => t.terminal.ended('lace stack destroy prod --yes'),
     ],
-  ])("%s reads the whole tree again and tells the root's canvas once", async (_, change) => {
+  ])("%s reads the whole tree again, redraws none of what it left as it was, and tells the root's canvas once", async (_, change) => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();
     await change(t);
     await settled();
-    expect(t.redrawn).toEqual([undefined]);
     expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(t.redrawn).toEqual([]);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
   });
 
@@ -1383,8 +1465,8 @@ describe('an apply', () => {
     });
     expect(t.shownChannels).toEqual(['Lace: prod']);
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
-    // Each tick asks for the whole tree again.
-    expect(t.redrawn).toContain(undefined);
+    // Each tick reads the whole tree again.
+    expect(t.commands.paths().filter((path) => path === 'stack list').length).toBeGreaterThan(1);
   });
 
   test('settled, writes to the stack’s Output channel each provider version its Run ran under an admission, as lace run get prints them', async () => {
@@ -1770,7 +1852,7 @@ describe("the view's progress", () => {
     expect(overView(t).slice(before)).toEqual([{ ended: false }]);
     expect(t.redrawn).toEqual([]);
 
-    answer(stacks(stack('stk_1', 'prod')));
+    answer(stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa')));
     await settled();
     expect(overView(t).slice(before)).toEqual([{ ended: true }]);
     expect(t.redrawn).toEqual([undefined]);

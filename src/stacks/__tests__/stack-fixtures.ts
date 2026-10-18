@@ -2,8 +2,9 @@
 // list` lists it, and the list; a run as `lace run list` lists it, and the
 // list; and a `Memento` that keeps what the window keeps per root.
 import type * as vscode from 'vscode';
+import type { Stack } from '../stack-rows';
 
-export const stack = (id: string, slug: string) => ({
+export const stack = (id: string, slug: string): Stack => ({
   id,
   orgId: 'org_1',
   teamId: 'team_1',
@@ -23,8 +24,6 @@ export const stack = (id: string, slug: string) => ({
   lastDriftStale: false,
   lastDriftConfirmedAt: null,
   lastDriftUndeterminedReason: null,
-  chaosLockedByRunId: null,
-  chaosLockedAt: null,
   createdBy: 'usr_1',
   createdAt: '2026-09-01T00:00:00Z',
   updatedAt: '2026-09-01T00:00:00Z',
@@ -34,7 +33,7 @@ export const stack = (id: string, slug: string) => ({
   lastApply: null,
 });
 
-export const stacks = (...items: ReturnType<typeof stack>[]) => ({
+export const stacks = (...items: Stack[]) => ({
   items,
   nextCursor: null,
   hasMore: false,
