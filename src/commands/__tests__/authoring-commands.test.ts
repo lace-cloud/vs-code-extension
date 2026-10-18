@@ -188,6 +188,7 @@ const VALIDATION_FAILED = new CommandExitError(1, 'Module validation failed\n');
 // The lock of the root, as `module lock` writes it and `module convert`
 // writes it for the tree it wrote: the lockfile beside the tree, and the
 // providers it pins.
+// The CLI writes the paths of its JSON with '/' on every system.
 const LOCK = {
   path: PROD,
   lockfile: `${PROD}/.terraform.lock.hcl`,

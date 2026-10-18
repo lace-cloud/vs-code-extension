@@ -1480,9 +1480,10 @@ describe('an apply', () => {
         'stack apply': refusal('no_lockfile'),
         'module lock': {
           documents: [
+            // The CLI writes the paths of its JSON with '/' on every system.
             {
-              path: fsPath('/work/repo/infra/prod'),
-              lockfile: fsPath('/work/repo/infra/prod/.terraform.lock.hcl'),
+              path: '/work/repo/infra/prod',
+              lockfile: '/work/repo/infra/prod/.terraform.lock.hcl',
               providers: [
                 {
                   address: 'registry.terraform.io/hashicorp/aws',

@@ -37,6 +37,7 @@ const imported = (residuals: CommandFailure['importResiduals'] = []) => ({
   changed: true,
   written: ['main.tf'],
   removed: [],
+  // The CLI writes the paths of its JSON with '/' on every system.
   lock: {
     path: '/work/repo/infra/prod',
     lockfile: '/work/repo/infra/prod/.terraform.lock.hcl',
