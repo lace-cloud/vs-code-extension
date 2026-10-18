@@ -59,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE=$(jq -r .version package.json)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+          IFS='.' read -r MAJOR MINOR _ <<< "$BASE"
           # Invariant: stable must live on even minors. If this fails, the
           # stable-side guard (release-guard.yml) was bypassed and needs
           # fixing — do not publish a pre-release that would collide with
