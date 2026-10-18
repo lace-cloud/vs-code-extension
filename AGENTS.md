@@ -514,10 +514,10 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   the installer refuses, the job downloads the release's `lace-cli-windows-amd64-<version>.exe` with its `.sha256` and
   `.minisig` and checks them as the installer does (the checksum, then the signature by the installer's key, whose
   trusted comment names that object and its digest) before it puts the binary on `PATH` as `lace.exe`. Both jobs then
-  put the tools that release pins on `PATH` (`.github/actions/setup-cli-tools`): terraform and tfsec at the versions
-  `LACE_CLI_TOOLS` names, each held to the digest its vendor publishes for it, and check that the CLI runs them: a
-  format and a scan, in a home that holds nothing, download nothing. `.gitattributes` checks every text file out with
-  LF, the line ending biome checks, on Windows too.
+  put the tools that release pins on `PATH` (`.github/actions/setup-cli-tools`): terraform and tfsec at the versions the
+  CLI reports (`lace version -o json`, `tools`), each archive held to the digest the CLI pins for it, and check that the
+  CLI runs them: a format and a scan, in a home that holds nothing, download nothing. `.gitattributes` checks every text
+  file out with LF, the line ending biome checks, on Windows too.
 - **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
   organization and team) is unit-tested over scripted commands.
 - **Repository tests** in `src/__tests__/`: the manifest against the features (and each run row's menu against the

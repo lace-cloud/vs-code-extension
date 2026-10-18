@@ -12,9 +12,10 @@ name: CI
 # the CLI's published installer installs it; on Windows, which the installer
 # refuses, the job installs the release's `.exe` and runs the installer's
 # checks itself. The tools that release pins (terraform, tfsec) are on PATH
-# at the versions LACE_CLI_TOOLS names, each held to the digest its vendor
-# publishes for it (.github/actions/setup-cli-tools), so the CLI runs them
-# and no engine test downloads one into its home. Nothing here signs in.
+# at the versions it reports (`lace version -o json`), each archive held to
+# the digest the CLI pins for it (.github/actions/setup-cli-tools), so the
+# CLI runs them and no engine test downloads one into its home. Nothing
+# here signs in.
 
 on:
   pull_request:
@@ -50,7 +51,7 @@ jobs:
           echo "$RUNNER_TEMP/lace-cli" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/lace-cli/lace" version
 
-      # terraform and tfsec at the CLI's pins (LACE_CLI_TOOLS), on PATH.
+      # terraform and tfsec at the pins the CLI reports, on PATH.
       - uses: ./.github/actions/setup-cli-tools
 
       - name: Lint
@@ -160,7 +161,7 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_PATH -Value $install
           "Installed lace $installed to $install\lace.exe"
 
-      # terraform and tfsec at the CLI's pins (LACE_CLI_TOOLS), on PATH.
+      # terraform and tfsec at the pins the CLI reports, on PATH.
       - uses: ./.github/actions/setup-cli-tools
 
       - name: Lint
