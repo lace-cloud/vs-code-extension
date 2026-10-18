@@ -11,13 +11,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { createCanvasPanels } from '../../canvas/canvas-panels';
 import { canvasOperations } from '../../commands/canvas-operations';
-import {
-  afterTest,
-  moduleDirectory,
-  realEngine,
-  signedOutHome,
-  until,
-} from '../../engine/__tests__/real-engine';
+import { afterTest, moduleDirectory, realEngine, until } from '../../engine/__tests__/real-engine';
 import type { CommandsMapping } from '../../engine/commands-mapping';
 import { file, folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import { createRootState } from '../../state/root-state';
@@ -133,7 +127,6 @@ const fileSystem = {
 // The window's tools over the real engine, registered as VS Code registers
 // them, in a repository whose directory `infra` holds `module`.
 function toolsWindow(module: Record<string, string> = MODULE) {
-  const home = signedOutHome();
   const { repository, root } = moduleDirectory({});
   for (const [file, content] of Object.entries(module)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
@@ -141,7 +134,7 @@ function toolsWindow(module: Record<string, string> = MODULE) {
   }
   const reports: { what: string; error: unknown }[] = [];
   const report = (what: string, error: unknown) => reports.push({ what, error });
-  const { engine, rootSessions, commands } = realEngine({ home });
+  const { engine, rootSessions, commands, home } = realEngine();
   const lace = recording(commands, home);
 
   const opened: { title: string; preserveFocus: boolean }[] = [];
