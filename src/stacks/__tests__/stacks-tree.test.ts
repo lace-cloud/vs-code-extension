@@ -22,6 +22,7 @@ import { formAnswerer } from '../../vscode/form-answerer';
 import { type OfferActions, offeringPresenter } from '../../vscode/offers';
 import { createRunOutput } from '../run-output';
 import { stackPick } from '../stack-pick';
+import type { Stack } from '../stack-rows';
 import {
   PREVIEW_SCHEME,
   type Row,
@@ -548,6 +549,210 @@ describe('the stacks of the current root', () => {
     expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
   });
 
+  test('a read of the whole tree reads the runs of every stack it holds runs of at once, and waits for the slowest', async () => {
+    const answers: (() => void)[] = [];
+    let lists = 0;
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': {
+          documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'), stack('stk_3', 'dev'))],
+        },
+        'run list': () =>
+          lists++ < 3
+            ? { documents: [runs(run('run_1', 'applying'))] }
+            : new Promise<Script>((resolve) => {
+                answers.push(() => resolve({ documents: [runs(run('run_1', 'apply_succeeded'))] }));
+              }),
+      },
+    });
+    const rows = await t.children();
+    for (const row of rows) await t.children(row);
+
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.commands.paths().filter((path) => path === 'run list')).toHaveLength(6);
+    expect(answers).toHaveLength(3);
+    expect(t.redrawn).toEqual([]);
+
+    for (const answered of answers.slice(0, 2)) answered();
+    await settled();
+    expect(t.redrawn).toEqual([]);
+    answers[2]();
+    await settled();
+    expect(t.redrawn).toEqual([rows]);
+  });
+
+  // A read of the whole tree whose second answer is `next`: each read after
+  // the first lists the stacks `next` gives and their runs `runsOf` gives.
+  function rereadTo(
+    first: Stack[],
+    next: () => Stack[],
+    runsOf: (read: number) => ReturnType<typeof runs> = () => runs(run('run_1', 'applying')),
+  ) {
+    let lists = 0;
+    let runLists = 0;
+    return setup({
+      root: prod,
+      scripts: {
+        'stack list': () => ({ documents: [stacks(...(lists++ === 0 ? first : next()))] }),
+        'run list': () => ({ documents: [runsOf(runLists++)] }),
+      },
+    });
+  }
+  const drifted = (id: string, slug: string) => ({
+    ...stack(id, slug),
+    lastDriftStatus: 'DRIFTED',
+    lastDriftCount: 1,
+  });
+
+  test("a read of the whole tree whose answer changes one stack's look redraws that row alone, the object the view holds", async () => {
+    const t = rereadTo([stack('stk_1', 'prod'), drifted('stk_2', 'qa')], () => [
+      stack('stk_1', 'prod'),
+      { ...stack('stk_2', 'qa'), lastDriftStatus: 'IN_SYNC' },
+    ]);
+    const [, qa] = await t.children();
+    expect(t.item(qa).description).toBe('qa · drift drifted (1)');
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.redrawn).toEqual([[qa]]);
+    expect(t.item(qa).description).toBe('qa · drift in_sync');
+  });
+
+  test("a read of the whole tree whose answer changes a held stack's runs redraws that stack's row alone", async () => {
+    const t = rereadTo(
+      [stack('stk_1', 'prod'), stack('stk_2', 'qa')],
+      () => [stack('stk_1', 'prod'), stack('stk_2', 'qa')],
+      (read) =>
+        read < 3
+          ? runs(run('run_1', 'applying'))
+          : runs(run('run_1', 'apply_succeeded', { completedAt: COMPLETED })),
+    );
+    const [prodRow, qaRow] = await t.children();
+    await t.children(prodRow);
+    await t.children(qaRow);
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.redrawn).toEqual([[qaRow]]);
+    const [qaRun] = await t.children(qaRow);
+    expect(t.item(qaRun).contextValue).toBe('laceRun ended');
+  });
+
+  test('a stack expanded while a read of the whole tree is under way keeps its runs, and a later read that changes them redraws its row with them', async () => {
+    let releasePrimary: () => void = () => {};
+    const primaryLater = new Promise<Script>((resolve) => {
+      releasePrimary = () => resolve({ documents: [runs(run('run_1', 'applying'))] });
+    });
+    const calls = { stk_1: 0, stk_2: 0 };
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+        'run list': (args) => {
+          if (args.stack === 'stk_1') {
+            return calls.stk_1++ === 0
+              ? { documents: [runs(run('run_1', 'applying'))] }
+              : primaryLater;
+          }
+          return calls.stk_2++ === 0
+            ? { documents: [runs(run('run_2', 'applying'))] }
+            : { documents: [runs(run('run_2', 'apply_succeeded', { completedAt: COMPLETED }))] };
+        },
+      },
+    });
+    const [prodRow, qaRow] = await t.children();
+    await t.children(prodRow);
+
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    const [qaRun] = await t.children(qaRow);
+    expect(t.item(qaRun).contextValue).toBe('laceRun running');
+    releasePrimary();
+    await settled();
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(calls.stk_2).toBe(2);
+    expect(t.redrawn.at(-1)).toEqual([qaRow]);
+    const [qaRunNow] = await t.children(qaRow);
+    expect(t.item(qaRunNow).contextValue).toBe('laceRun ended');
+  });
+
+  test("a stack that leaves the list while its runs' first read is under way, and comes back, has its runs read again, not that read's", async () => {
+    const release: Record<string, () => void> = {};
+    const held = (key: string, documents: object[]) =>
+      new Promise<Script>((resolve) => {
+        release[key] = () => resolve({ documents });
+      });
+    const listsOf = [['stk_1', 'stk_2'], ['stk_1'], ['stk_1', 'stk_2']];
+    let lists = 0;
+    const calls = { stk_1: 0, stk_2: 0 };
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': () => ({
+          documents: [stacks(...listsOf[Math.min(lists++, 2)].map((id) => stack(id, id)))],
+        }),
+        'run list': (args) => {
+          if (args.stack === 'stk_1') {
+            return calls.stk_1++ < 2
+              ? { documents: [runs(run('run_1', 'applying'))] }
+              : held('stk_1', [runs(run('run_1', 'applying'))]);
+          }
+          return calls.stk_2++ === 0
+            ? held('stk_2', [runs(run('run_old', 'applying'))])
+            : { documents: [runs(run('run_new', 'apply_succeeded', { completedAt: COMPLETED }))] };
+        },
+      },
+    });
+    const [first, second] = await t.children();
+    await t.children(first);
+    void t.children(second);
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    release.stk_2();
+    await settled();
+    release.stk_1();
+    await settled();
+
+    const [, back] = await t.children();
+    const [backRun] = await t.children(back);
+    expect(calls.stk_2).toBe(2);
+    expect(t.item(backRun)).toMatchObject({
+      label: 'apply · run_new',
+      contextValue: 'laceRun ended',
+    });
+  });
+
+  test('a read of the whole tree that changes nothing redraws nothing, and tells the canvas its reads are stale', async () => {
+    const t = rereadTo([stack('stk_1', 'prod')], () => [stack('stk_1', 'prod')]);
+    const [row] = await t.children();
+    await t.children(row);
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(t.redrawn).toEqual([]);
+    expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+  });
+
+  test.each([
+    ['adds a stack', () => [stack('stk_1', 'prod'), stack('stk_2', 'qa')]],
+    ['removes one', () => []],
+  ])('a read of the whole tree that %s redraws the whole tree', async (_, next) => {
+    const t = rereadTo([stack('stk_1', 'prod')], next);
+    await t.children();
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.redrawn).toEqual([undefined]);
+  });
+
   test('of two reads under way at once, the one started later is what the view holds and draws, whichever answers last', async () => {
     type Listed = ReturnType<typeof stacks>;
     const answers: ((listed: Listed) => void)[] = [];
@@ -612,8 +817,7 @@ describe('the stacks of the current root', () => {
     folders.push(web);
     t.workspaceFolders.fire({ added: [web], removed: [] });
     await settled();
-    expect(t.redrawn).toEqual([undefined]);
-    await t.children();
+    expect(t.redrawn).toEqual([]);
     expect(t.view.description).toBe('api/infra/prod');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
@@ -624,7 +828,7 @@ describe('the stacks of the current root', () => {
     folders.pop();
     t.workspaceFolders.fire({ added: [], removed: [web] });
     await settled();
-    expect(t.redrawn).toEqual([undefined, undefined, undefined]);
+    expect(t.redrawn).toEqual([undefined, undefined]);
     await t.children();
     expect(t.view.description).toBe('infra/prod');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
@@ -898,8 +1102,8 @@ describe('when the stacks cannot be listed', () => {
 
     t.account.fire();
     await settled();
-    expect(t.redrawn).toEqual([undefined]);
     expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(t.redrawn).toEqual([]);
   });
 });
 
@@ -1056,13 +1260,13 @@ describe('a stack row', () => {
       'a lace command that may change a stack, ended in an integrated terminal',
       (t: Setup) => t.terminal.ended('lace stack destroy prod --yes'),
     ],
-  ])("%s reads the whole tree again and tells the root's canvas once", async (_, change) => {
+  ])("%s reads the whole tree again, redraws none of what it left as it was, and tells the root's canvas once", async (_, change) => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();
     await change(t);
     await settled();
-    expect(t.redrawn).toEqual([undefined]);
     expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(t.redrawn).toEqual([]);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
   });
 
@@ -1350,8 +1554,8 @@ describe('an apply', () => {
     });
     expect(t.shownChannels).toEqual(['Lace: prod']);
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
-    // Each tick asks for the whole tree again.
-    expect(t.redrawn).toContain(undefined);
+    // Each tick reads the whole tree again.
+    expect(t.commands.paths().filter((path) => path === 'stack list').length).toBeGreaterThan(1);
   });
 
   test('settled, writes to the stack’s Output channel each provider version its Run ran under an admission, as lace run get prints them', async () => {
@@ -1715,9 +1919,38 @@ describe("the view's progress", () => {
   const overView = (t: ReturnType<typeof setup>) =>
     t.progress.filter((p) => p.view === 'laceStacks').map(({ ended }) => ({ ended }));
 
+  test('is drawn while the tree reads the whole tree again, and ends once the read is held, as the view is redrawn', async () => {
+    let answer: (listed: ReturnType<typeof stacks>) => void = () => {};
+    let lists = 0;
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': () =>
+          lists++ === 0
+            ? { documents: [stacks(stack('stk_1', 'prod'))] }
+            : new Promise<Script>((resolve) => {
+                answer = (listed) => resolve({ documents: [listed] });
+              }),
+      },
+    });
+    await t.children();
+    const before = overView(t).length;
+
+    void t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: false }]);
+    expect(t.redrawn).toEqual([]);
+
+    answer(stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa')));
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: true }]);
+    expect(t.redrawn).toEqual([undefined]);
+  });
+
   test("is drawn from the store's running mark, from the moment it is set until it is cleared", async () => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();
+    const shown = overView(t).length;
     const token = {};
     t.runner.store.begin(
       'notify',
@@ -1726,50 +1959,53 @@ describe("the view's progress", () => {
       { target: {}, on: 'stack:stk_1', path: 'stack scan', label: 'Scan for drift' },
     );
     await settled();
-    expect(overView(t)).toEqual([{ ended: false }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: false }]);
 
     t.runner.store.detach('notify', token);
     await settled();
-    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: true }]);
   });
 
   test('is drawn while a scan of a stack runs, and ends when it ends, however it ends', async () => {
     const t = setup({ root: prod, scripts: { ...listed, 'stack scan': { held: true } } });
     const [row] = await t.children();
+    const shown = overView(t).length;
 
     await t.command(STACK_COMMANDS.scan, row);
     await settled();
-    expect(overView(t)).toEqual([{ ended: false }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: false }]);
 
     t.commands.held[0].finish([], new CommandExitError(1, 'Error: no\n'));
     await settled();
-    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: true }]);
   });
 
   test('is drawn while a preview runs, and ends when its plan lands, which opens then', async () => {
     const t = setup({ root: prod, scripts: { ...listed, 'stack preview': { held: true } } });
     const [row] = await t.children();
+    const shown = overView(t).length;
 
     await t.command(STACK_COMMANDS.preview, row);
     await settled();
-    expect(overView(t)).toEqual([{ ended: false }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: false }]);
     expect(t.opened).toEqual([]);
 
     t.commands.held[0].finish([PROD_PREVIEW]);
     await settled();
-    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: true }]);
     expect(t.opened).toEqual([PROD_PREVIEW_TEXT]);
   });
 
   test('ends when a preview fails, which opens nothing', async () => {
     const t = setup({ root: prod, scripts: { ...listed, 'stack preview': { held: true } } });
     const [row] = await t.children();
+    const shown = overView(t).length;
 
     await t.command(STACK_COMMANDS.preview, row);
     await settled();
     t.commands.held[0].finish([], new CommandExitError(1, 'Error: no\n'));
     await settled();
-    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: true }]);
     expect(t.opened).toEqual([]);
   });
 
@@ -1785,23 +2021,25 @@ describe("the view's progress", () => {
     });
     const [row] = await t.children();
     const [runRow] = await t.children(row);
+    const shown = overView(t).length;
 
     await t.command(STACK_COMMANDS.followLogs, runRow);
     await settled();
-    expect(overView(t)).toEqual([]);
+    expect(overView(t).slice(shown)).toEqual([]);
   });
 
-  test('is drawn while an apply runs, and ends when its run settles', async () => {
+  test('is drawn while an apply runs, and ends when its run settles; the read of the tree its settling starts draws its own', async () => {
     const t = setup({ root: prod, scripts: { ...listed, 'stack apply': { held: true } } });
     const [row] = await t.children();
+    const shown = overView(t).length;
 
     const applying = t.command(STACK_COMMANDS.apply, row);
     await settled();
-    expect(overView(t)).toEqual([{ ended: false }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: false }]);
 
     t.commands.held[0].finish([applyResult()]);
     await applying;
     await settled();
-    expect(overView(t)).toEqual([{ ended: true }]);
+    expect(overView(t).slice(shown)).toEqual([{ ended: true }, { ended: true }]);
   });
 });
