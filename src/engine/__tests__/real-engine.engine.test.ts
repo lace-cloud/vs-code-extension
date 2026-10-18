@@ -14,8 +14,10 @@ import { commandOutcome } from '../command-outcome';
 import { moduleDirectory, realEngine } from './real-engine';
 
 // The developer's Lace server, which is also the proxy the shell names for
-// every other server. It records each request as `<method> <target>`,
-// answers one sent to it as the developer's `/me`, and refuses a tunnel.
+// every other server, in both spellings a proxy is named by (the host's own
+// gRPC reads the lower-case ones). It records each request as `<method>
+// <target>`, answers one sent to it as the developer's `/me`, and refuses a
+// tunnel.
 const requests: string[] = [];
 const server = createServer((request, response) => {
   requests.push(`${request.method} ${request.url}`);
@@ -86,6 +88,8 @@ describe.each(KEYS)('a developer whose key is in %s', (_where, shell) => {
     ...shell(),
     HTTPS_PROXY: serverUrl,
     HTTP_PROXY: serverUrl,
+    https_proxy: serverUrl,
+    http_proxy: serverUrl,
     NO_PROXY: undefined,
     no_proxy: undefined,
   }));
