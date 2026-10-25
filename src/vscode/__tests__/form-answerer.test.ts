@@ -2,6 +2,7 @@ import {
   type CommandFailure,
   CommandUnobservedError,
   type RunCtx,
+  stackSlugRule,
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
@@ -130,7 +131,7 @@ function setup(options: Options = {}) {
 }
 
 describe('the answerer', () => {
-  test("asks for the slug in an input box titled by the action and the root, proposing the root's directory name selected, which refuses an empty value", async () => {
+  test("asks for the slug in an input box titled by the action and the root, saying what a slug is, proposing the root's directory name selected, which refuses an empty value and a slug the rule refuses", async () => {
     const t = setup({ inputs: ['prod-eu'] });
     const form = t.answer('create', ['slug'], { root: PROD });
     await settled();
@@ -140,7 +141,8 @@ describe('the answerer', () => {
         kind: 'input',
         options: {
           title: 'Create stack: infra/prod',
-          prompt: 'The slug',
+          prompt: "The stack's slug: its id in lace commands and in the portal",
+          placeHolder: 'payments-prod',
           value: 'prod',
           valueSelection: [0, 4],
           validateInput: expect.any(Function),
@@ -150,17 +152,20 @@ describe('the answerer', () => {
     const { validateInput } = t.window.showInputBox.mock.calls[0][0];
     expect(validateInput?.('')).toBe('Type the slug');
     expect(validateInput?.('prod')).toBeUndefined();
+    expect(validateInput?.('payments-prod')).toBeUndefined();
+    expect(validateInput?.('Bad Slug!')).toBe(stackSlugRule.description);
+    expect(validateInput?.('trailing-')).toBe(stackSlugRule.description);
     expect(form.submit).toHaveBeenCalledWith({ slug: 'prod-eu' });
   });
 
-  // The slug's rule is the API's, which the CLI's refusal states: the box
-  // proposes the folder's name as it is, and the owner refuses a name that
-  // is no slug.
+  // The slug's rule is the API's: the box proposes the folder's name made a
+  // slug the rule accepts.
   test.each([
-    'qa-1651',
-    '1foo',
-    'My Stack',
-  ])('the slug box of the workspace folder %s opens on its name exactly as it is, selected, and submits it accepted', async (name) => {
+    ['qa-1651', 'qa-1651'],
+    ['1foo', 'foo'],
+    ['My Stack', 'my-stack'],
+    ['terraform_data_marker', 'terraform-data-marker'],
+  ])('the slug box of the workspace folder %s opens on %s, selected, and submits it accepted', async (name, slug) => {
     const path = `/work/${name}`;
     const t = setup({ folders: [folder(path)], inputs: [accept] });
     const form = t.answer('create', ['slug'], { root: fsPath(path) });
@@ -171,12 +176,13 @@ describe('the answerer', () => {
         kind: 'input',
         options: {
           title: `Create stack: ${name}`,
-          value: name,
-          valueSelection: [0, name.length],
+          value: slug,
+          valueSelection: [0, slug.length],
         },
       },
     ]);
-    expect(form.submit).toHaveBeenCalledWith({ slug: name });
+    expect(stackSlugRule.pattern.test(slug)).toBe(true);
+    expect(form.submit).toHaveBeenCalledWith({ slug });
   });
 
   test.each([
@@ -188,7 +194,7 @@ describe('the answerer', () => {
     await settled();
 
     expect(t.asked).toMatchObject([
-      { kind: 'input', options: { prompt: 'The slug', value: '', valueSelection: [0, 0] } },
+      { kind: 'input', options: { value: '', valueSelection: [0, 0] } },
     ]);
     expect(form.submit).toHaveBeenCalledWith({ slug: 'prod' });
   });
