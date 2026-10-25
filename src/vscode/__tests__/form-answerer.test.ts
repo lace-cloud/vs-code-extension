@@ -391,7 +391,7 @@ describe("the answerer of the window's runner", () => {
   test("asks no statefile of a run over a failed run's context: Import the rest reads the one that run was given", async () => {
     const t = setup({
       scripts: {
-        'stack import': (args) =>
+        'module import': (args) =>
           args.allowPartial
             ? { documents: [] }
             : refused({

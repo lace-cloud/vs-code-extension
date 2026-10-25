@@ -104,7 +104,7 @@ async function pickTeam(
       items: teams.items.map((team) => ({
         label: team.name,
         description: described(team.slug, current),
-        detail: team.description,
+        detail: team.description ?? undefined,
         slug: team.slug,
       })),
       placeholder: placeholder('team', current),

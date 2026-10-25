@@ -110,7 +110,7 @@ describe("a binding's form answered over the real engine", () => {
     ]);
   });
 
-  test("Import Existing Resources' statefile reaches stack import in the root, which needs credentials, and the run ends", async () => {
+  test("Import Existing Resources' statefile reaches module import in the root, which needs credentials, and the run ends", async () => {
     const { a } = twoRoots();
     const state = join(scratchDirectory(), 'pulled.tfstate');
     writeFileSync(

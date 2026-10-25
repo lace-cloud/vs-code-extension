@@ -1334,7 +1334,7 @@ describe('a stack row', () => {
         ...listed,
         'run list': { documents: [runs(run('run_1', 'applying'))] },
         'stack preview': { documents: [PROD_PREVIEW] },
-        'stack scan': { documents: [{ triggered: true, reason: null, settled: null }] },
+        'drift scan': { documents: [{ triggered: true, reason: null, settled: null }] },
         'run logs': {
           documents: [
             { type: 'log', text: 'line one' },
@@ -1356,7 +1356,7 @@ describe('a stack row', () => {
     const ran = t.commands.invoked.filter((c) => !c.path.endsWith('list'));
     expect(ran.map((c) => [c.path, c.args])).toEqual([
       ['stack preview', { stack: 'stk_1' }],
-      ['stack scan', { stack: 'stk_1', wait: true }],
+      ['drift scan', { stack: 'stk_1', wait: true }],
       ['run logs', { run: 'run_1', follow: true }],
       ['run cancel', { run: 'run_1' }],
     ]);
@@ -1956,7 +1956,7 @@ describe("the view's progress", () => {
       'notify',
       token,
       { stack: 'stk_1' },
-      { target: {}, on: 'stack:stk_1', path: 'stack scan', label: 'Scan for drift' },
+      { target: {}, on: 'stack:stk_1', path: 'drift scan', label: 'Scan for drift' },
     );
     await settled();
     expect(overView(t).slice(shown)).toEqual([{ ended: false }]);
@@ -1967,7 +1967,7 @@ describe("the view's progress", () => {
   });
 
   test('is drawn while a scan of a stack runs, and ends when it ends, however it ends', async () => {
-    const t = setup({ root: prod, scripts: { ...listed, 'stack scan': { held: true } } });
+    const t = setup({ root: prod, scripts: { ...listed, 'drift scan': { held: true } } });
     const [row] = await t.children();
     const shown = overView(t).length;
 

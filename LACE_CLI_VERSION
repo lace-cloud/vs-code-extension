@@ -1,4 +1,4 @@
 # The released `lace` CLI the extension's engine tests and window e2e run:
 # CI installs this release, through the CLI's published installer on Linux
 # and from the release's own signed objects on Windows.
-v2.54.1
+v2.56.0
