@@ -255,6 +255,14 @@ const VALIDATE = 'lace_validate_module_terraform';
 const SEARCH_REGISTRY = 'lace_search_module_registry';
 const DESCRIBE_REGISTRY_MODULE = 'lace_describe_registry_module';
 
+// Signed out, the CLI reads the public catalog: a search answers its
+// modules, and a describe of a module it does not hold fails as signed out.
+const NOT_PUBLIC =
+  /^lace registry describe failed \(reason unauthenticated\): resolve acme\/vpc: acme\/vpc is not in the public registry/;
+
+// A search's answer: the trimmed list of registry modules.
+const SEARCHED = { modules: expect.any(Array), truncated: expect.any(Boolean) };
+
 const RENAME_NET = { changes: [{ operation: 'rename', instance: 'net', value: 'network' }] };
 
 // The names of the instances the root module calls, sorted.
@@ -279,14 +287,12 @@ describe('the chat tools on the real engine', () => {
     expect(await window.invoke(VALIDATE, { root: ROOT })).toContain(
       '"verdict":"already-lace-style"',
     );
-    await expect(window.invoke(SEARCH_REGISTRY, { root: ROOT, query: 'vpc' })).rejects.toThrow(
-      /^lace registry list failed \(reason unauthenticated\): no credentials found/,
-    );
+    expect(
+      JSON.parse(await window.invoke(SEARCH_REGISTRY, { root: ROOT, query: 'vpc' })),
+    ).toMatchObject(SEARCHED);
     await expect(
       window.invoke(DESCRIBE_REGISTRY_MODULE, { root: ROOT, module: 'acme/vpc' }),
-    ).rejects.toThrow(
-      /^lace registry describe failed \(reason unauthenticated\): no credentials found/,
-    );
+    ).rejects.toThrow(NOT_PUBLIC);
   });
 
   test('a root that names no directory of the workspace is an error listing the ones that hold Terraform', async () => {
@@ -485,15 +491,17 @@ describe('validate in the root', () => {
 });
 
 describe('the registry tools in the home, signed out', () => {
-  test("run in the developer's home on no session, and fail as the tool's error with the CLI's failure", async () => {
+  test("run in the developer's home on no session: a search answers from the public catalog, and a describe of a module outside it fails as the tool's error with the CLI's failure", async () => {
     const window = toolsWindow();
 
-    await expect(window.invoke(SEARCH_REGISTRY, { root: ROOT, query: 'vpc' })).rejects.toThrow(
-      "no credentials found; run 'lace login' or set LACE_TOKEN",
-    );
+    expect(
+      JSON.parse(await window.invoke(SEARCH_REGISTRY, { root: ROOT, query: 'vpc' })),
+    ).toMatchObject(SEARCHED);
     await expect(
       window.invoke(DESCRIBE_REGISTRY_MODULE, { root: ROOT, module: 'acme/vpc' }),
-    ).rejects.toThrow("no credentials found; run 'lace login' or set LACE_TOKEN");
+    ).rejects.toThrow(
+      "acme/vpc is not in the public registry; sign in (`lace login`) to use your organization's modules",
+    );
     expect(window.invoked.map(({ cwd, path }) => [cwd, path])).toEqual([
       [window.home, 'registry list'],
       [window.home, 'registry describe'],
@@ -502,16 +510,13 @@ describe('the registry tools in the home, signed out', () => {
     expect(window.opened).toEqual([]);
   });
 
-  test('a signed-out call names the reason unauthenticated', async () => {
+  test('a signed-out describe of a module the public catalog lacks names the reason unauthenticated', async () => {
     const window = toolsWindow();
 
-    await expect(window.invoke(SEARCH_REGISTRY, { root: ROOT, query: 'vpc' })).rejects.toThrow(
-      "lace registry list failed (reason unauthenticated): no credentials found; run 'lace login' or set LACE_TOKEN",
-    );
     await expect(
       window.invoke(DESCRIBE_REGISTRY_MODULE, { root: ROOT, module: 'acme/vpc' }),
     ).rejects.toThrow(
-      "lace registry describe failed (reason unauthenticated): no credentials found; run 'lace login' or set LACE_TOKEN",
+      "lace registry describe failed (reason unauthenticated): resolve acme/vpc: acme/vpc is not in the public registry; sign in (`lace login`) to use your organization's modules",
     );
   });
 });

@@ -30,8 +30,9 @@ export type Read<T> =
   | { kind: 'loaded'; value: T }
   | { kind: 'failed'; message: string };
 
-// What the sidebar draws. `signedOut` and `noOrganization` are the states
-// a read's failure names by its reason; `failed` is any other failure.
+// What the sidebar draws. `signedOut` (a session the server refuses) and
+// `noOrganization` are the states a read's failure names by its reason;
+// `failed` is any other failure.
 export type SidebarState =
   | { kind: 'loading' }
   | { kind: 'signedOut' }
