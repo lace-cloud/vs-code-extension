@@ -139,7 +139,8 @@
       },
       {
         "command": "lace.selectTeam",
-        "title": "Lace: Select Team"
+        "title": "Lace: Select Team",
+        "icon": "$(organization)"
       },
       {
         "command": "lace.refreshStacks",
@@ -314,9 +315,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "lace.refreshStacks",
+          "command": "lace.selectTeam",
           "when": "view == laceStacks",
           "group": "navigation@2"
+        },
+        {
+          "command": "lace.refreshStacks",
+          "when": "view == laceStacks",
+          "group": "navigation@3"
         },
         {
           "command": "lace.refreshRegistry",

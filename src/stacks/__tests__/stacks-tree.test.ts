@@ -140,7 +140,11 @@ type Options = {
 type Setup = ReturnType<typeof setup>;
 
 function setup(options: Options) {
-  const commands = fakeCommands(options.scripts);
+  // The team a stack list is scoped to, unless the test says otherwise.
+  const commands = fakeCommands({
+    'team current': { documents: [{ slug: 'platform', source: 'config' }] },
+    ...options.scripts,
+  });
   const mapping = commands.commands;
   let provider: vscode.TreeDataProvider<Row> | undefined;
   const view = {
@@ -442,8 +446,9 @@ describe('the stacks of the current root', () => {
 
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
       ['stack list', { source: fsPath('/work/repo/infra/prod') }],
+      ['team current', {}],
     ]);
-    expect(t.view.description).toBe('infra/prod');
+    expect(t.view.description).toBe('infra/prod · platform');
     expect(t.contexts).toEqual(['stacks']);
     expect(rows.map((row) => t.item(row).label)).toEqual(['Prod', 'Qa']);
     expect(t.item(rows[0])).toMatchObject({
@@ -523,18 +528,42 @@ describe('the stacks of the current root', () => {
       scripts: { 'stack list': { documents: [stacks()] } },
     });
     await t.children();
-    expect(t.view.description).toBe('infra/prod');
+    expect(t.view.description).toBe('infra/prod · platform');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
     await settled();
     expect(t.redrawn).toEqual([]);
     await t.command(STACK_COMMANDS.refresh);
     await settled();
-    expect(t.view.description).toBe('infra/prod');
+    expect(t.view.description).toBe('infra/prod · platform');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
       { source: fsPath('/work/api/infra/prod') },
+      {},
       { source: fsPath('/work/api/infra/prod') },
+      {},
     ]);
+  });
+
+  test('names the team its stacks are listed for beside the root, and the root alone when no team is selected', async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'))] },
+        'team current': { documents: [{ slug: 'data', source: 'env' }] },
+      },
+    });
+    await t.children();
+    expect(t.view.description).toBe('infra/prod · data');
+
+    const none = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks()] },
+        'team current': { documents: [{ slug: null, source: null }] },
+      },
+    });
+    await none.children();
+    expect(none.view.description).toBe('infra/prod');
   });
 
   test('follows the canvas the developer turns to, which changes no stack and tells no canvas', async () => {
@@ -545,8 +574,10 @@ describe('the stacks of the current root', () => {
     expect(t.redrawn).toEqual([undefined]);
     expect(t.panels.tick).not.toHaveBeenCalled();
     await t.children();
-    expect(t.view.description).toBe('infra/staging');
-    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/staging') });
+    expect(t.view.description).toBe('infra/staging · platform');
+    expect(t.commands.invoked.filter((c) => c.path === 'stack list').at(-1)?.args).toEqual({
+      source: fsPath('/work/repo/infra/staging'),
+    });
   });
 
   test('a read of the whole tree reads the runs of every stack it holds runs of at once, and waits for the slowest', async () => {
@@ -799,7 +830,7 @@ describe('the stacks of the current root', () => {
       scripts: { 'stack list': { documents: [stacks()] } },
     });
     await t.children();
-    expect(t.view.description).toBe('api/infra/prod');
+    expect(t.view.description).toBe('api/infra/prod · platform');
   });
 
   test("when the workspace's folders change, the view names its root by the folders open now, and finds another when its root's folder left", async () => {
@@ -812,30 +843,34 @@ describe('the stacks of the current root', () => {
       scripts: { 'stack list': { documents: [stacks()] } },
     });
     await t.children();
-    expect(t.view.description).toBe('infra/prod');
+    expect(t.view.description).toBe('infra/prod · platform');
 
     folders.push(web);
     t.workspaceFolders.fire({ added: [web], removed: [] });
     await settled();
     expect(t.redrawn).toEqual([]);
-    expect(t.view.description).toBe('api/infra/prod');
+    expect(t.view.description).toBe('api/infra/prod · platform');
 
     t.active.fire({ folder: web, relative: 'infra/prod' });
     await settled();
     await t.children();
-    expect(t.view.description).toBe('web/infra/prod');
+    expect(t.view.description).toBe('web/infra/prod · platform');
 
     folders.pop();
     t.workspaceFolders.fire({ added: [], removed: [web] });
     await settled();
     expect(t.redrawn).toEqual([undefined, undefined]);
     await t.children();
-    expect(t.view.description).toBe('infra/prod');
+    expect(t.view.description).toBe('infra/prod · platform');
     expect(t.commands.invoked.map((c) => c.args)).toEqual([
       { source: fsPath('/work/api/infra/prod') },
+      {},
       { source: fsPath('/work/api/infra/prod') },
+      {},
       { source: fsPath('/work/web/infra/prod') },
+      {},
       { source: fsPath('/work/api/infra/prod') },
+      {},
     ]);
   });
 
@@ -850,7 +885,7 @@ describe('the stacks of the current root', () => {
 
     await t.command(STACK_COMMANDS.chooseModule);
     await t.children();
-    expect(t.view.description).toBe('infra/staging');
+    expect(t.view.description).toBe('infra/staging · platform');
     expect(t.contexts.at(-1)).toBe('noStack');
   });
 
@@ -904,9 +939,10 @@ describe('the stacks of the current root', () => {
     await settled();
     expect(t.redrawn).toEqual([undefined]);
     await t.children();
-    expect(t.view.description).toBe('repo');
+    expect(t.view.description).toBe('repo · platform');
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
       ['stack list', { source: fsPath('/work/repo') }],
+      ['team current', {}],
     ]);
   });
 
@@ -970,9 +1006,10 @@ describe('the stacks of the current root', () => {
       openCanvases: [fresh],
     });
     await t.children();
-    expect(t.view.description).toBe('infra/new');
+    expect(t.view.description).toBe('infra/new · platform');
     expect(t.commands.invoked.map((c) => [c.path, c.args])).toEqual([
       ['stack list', { source: fsPath('/work/repo/infra/new') }],
+      ['team current', {}],
     ]);
   });
 
@@ -985,8 +1022,10 @@ describe('the stacks of the current root', () => {
     await t.command(STACK_COMMANDS.chooseModule);
     await t.children();
     expect(t.messages).toEqual([]);
-    expect(t.view.description).toBe('infra/new');
-    expect(t.commands.invoked.at(-1)?.args).toEqual({ source: fsPath('/work/repo/infra/new') });
+    expect(t.view.description).toBe('infra/new · platform');
+    expect(t.commands.invoked.filter((c) => c.path === 'stack list').at(-1)?.args).toEqual({
+      source: fsPath('/work/repo/infra/new'),
+    });
   });
 });
 
@@ -1201,7 +1240,7 @@ describe('Create Stack', () => {
     const t = setup({ root: prod, scripts: { 'stack list': { documents: [stacks()] } } });
     await t.children();
     await t.command(STACK_COMMANDS.create);
-    expect(t.commands.paths()).toEqual(['stack list']);
+    expect(t.commands.paths()).toEqual(['stack list', 'team current']);
     expect(t.progress.flatMap((p) => p.title ?? [])).toEqual(['Create stack: infra/prod']);
   });
 });
@@ -1353,7 +1392,8 @@ describe('a stack row', () => {
     await t.command(STACK_COMMANDS.cancel, runRow);
     await settled();
 
-    const ran = t.commands.invoked.filter((c) => !c.path.endsWith('list'));
+    const treeReads = new Set(['stack list', 'run list', 'team current']);
+    const ran = t.commands.invoked.filter((c) => !treeReads.has(c.path));
     expect(ran.map((c) => [c.path, c.args])).toEqual([
       ['stack preview', { stack: 'stk_1' }],
       ['drift scan', { stack: 'stk_1', wait: true }],
