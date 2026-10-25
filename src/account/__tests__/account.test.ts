@@ -111,10 +111,11 @@ describe('selecting the organization', () => {
     );
     await account.selectOrganization();
 
-    expect(picks[0].items.map((item) => [item.label, item.description, item.detail])).toEqual([
-      ['Acme', 'acme · current · owner', undefined],
-      ['Globex', 'globex · member', undefined],
+    expect(picks[0].items.map((item) => [item.label, item.description])).toEqual([
+      ['Acme', 'acme · current · owner'],
+      ['Globex', 'globex · member'],
     ]);
+    expect(picks[0].items.some((item) => 'detail' in item)).toBe(false);
     expect(picks[1].items.map((item) => [item.label, item.description])).toEqual([
       ['Platform', 'platform'],
       ['Data', 'data'],
