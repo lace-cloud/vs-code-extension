@@ -111,9 +111,13 @@ describe('selecting the organization', () => {
     );
     await account.selectOrganization();
 
-    expect(picks[0].items.map((item) => [item.label, item.description])).toEqual([
-      ['Acme', 'acme · current'],
-      ['Globex', 'globex'],
+    expect(picks[0].items.map((item) => [item.label, item.description, item.detail])).toEqual([
+      ['Acme', 'acme · current · owner', undefined],
+      ['Globex', 'globex · member', undefined],
+    ]);
+    expect(picks[1].items.map((item) => [item.label, item.description])).toEqual([
+      ['Platform', 'platform'],
+      ['Data', 'data'],
     ]);
     expect(picks[0].placeholder).toBe('Select a Lace organization');
     expect(picks[1].placeholder).toBe('Select a Lace team');
@@ -132,6 +136,45 @@ describe('selecting the organization', () => {
         .map((c) => c.path),
     ).toEqual(['org use', 'team use']);
     expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a row whose name is its slug names it once, with the current mark and the role on the same line', async () => {
+    const { account, picks } = await setup(
+      {
+        'org list': {
+          documents: [
+            {
+              items: [
+                { slug: 'raji', name: 'raji', role: 'admin' },
+                { slug: 'new-qxf2-qa', name: 'new-qxf2-qa', role: 'admin' },
+              ],
+            },
+          ],
+        },
+        'org current': { documents: [current('raji')] },
+        'org use': { documents: [{ organization: 'new-qxf2-qa', team: null }] },
+        'team list': {
+          documents: [
+            {
+              ...teams('new-delhi-qa'),
+              items: [{ ...team('new-delhi-qa'), name: 'new-delhi-qa' }],
+            },
+          ],
+        },
+        'team current': { documents: [current('new-delhi-qa')] },
+        'team use': { documents: [{ organization: 'new-qxf2-qa', team: 'new-delhi-qa' }] },
+      },
+      ['new-qxf2-qa', 'new-delhi-qa'],
+    );
+    await account.selectOrganization();
+
+    expect(picks[0].items.map((item) => [item.label, item.description])).toEqual([
+      ['raji', 'current · admin'],
+      ['new-qxf2-qa', 'admin'],
+    ]);
+    expect(picks[1].items.map((item) => [item.label, item.description])).toEqual([
+      ['new-delhi-qa', 'current'],
+    ]);
   });
 
   test('the organization pick is on screen, busy, while the organizations are read', async () => {
