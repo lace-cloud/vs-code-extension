@@ -175,8 +175,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
         await hold.release();
       },
     );
-    const viewColumn =
-      preserveFocus && api.window.activeTextEditor ? api.ViewColumn.Beside : api.ViewColumn.Active;
+    const viewColumn = shownIn(preserveFocus, undefined) ?? api.ViewColumn.Active;
     let panel: vscode.WebviewPanel;
     try {
       panel = api.window.createWebviewPanel(
@@ -337,6 +336,20 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     return { root, hold, panel, tick: () => postEvent(host, { op: 'tick' }) };
   }
 
+  // The column a canvas shows in, created (`column` undefined: the active
+  // group) or revealed (its own column): a show that takes no focus, as the
+  // chat tools' does, goes beside the active text editor whenever showing it
+  // there would cover that editor.
+  function shownIn(
+    preserveFocus: boolean | undefined,
+    column: vscode.ViewColumn | undefined,
+  ): vscode.ViewColumn | undefined {
+    const editor = api.window.activeTextEditor;
+    return preserveFocus && editor && (column === undefined || column === editor.viewColumn)
+      ? api.ViewColumn.Beside
+      : column;
+  }
+
   // Panels being created, so two `ensure` calls for one root in flight make
   // one panel.
   const creating = new Map<string, Promise<Entry>>();
@@ -345,7 +358,7 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
     async ensure(root, { preserveFocus } = {}) {
       const existing = panels.find((entry) => sameRoot(entry.root, root));
       if (existing) {
-        existing.panel.reveal(undefined, preserveFocus);
+        existing.panel.reveal(shownIn(preserveFocus, existing.panel.viewColumn), preserveFocus);
         return existing;
       }
       const key = rootUri(root).toString();

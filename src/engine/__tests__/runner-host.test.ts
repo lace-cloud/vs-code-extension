@@ -20,7 +20,7 @@ const action = (id: string) => {
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const STACK = { id: 'stk_1', slug: 'prod' };
-// What `stack scan` renders for a scan it triggered and did not wait on.
+// What `drift scan` renders for a scan it triggered and did not wait on.
 const SCAN_TRIGGERED = { stack: STACK, triggered: true, reason: null, settled: null };
 const RESULT = {
   type: 'result',
@@ -179,7 +179,7 @@ describe('the runner host', () => {
   });
 
   test("each tick is told with the run the runner's tick names: its command and the RunCtx it was started with, however runs interleave", async () => {
-    const { window, runners } = host({ 'stack scan': { held: true } });
+    const { window, runners } = host({ 'drift scan': { held: true } });
     const ticked: CommandRun[] = [];
     runners.onDidTick((run) => ticked.push(run));
     const prod = { root: '/repo/prod', stack: STACK };
@@ -194,8 +194,8 @@ describe('the runner host', () => {
     await settled();
 
     expect(ticked.map((run) => [run.path, run.ctx.root])).toEqual([
-      ['stack scan', '/repo/staging'],
-      ['stack scan', '/repo/prod'],
+      ['drift scan', '/repo/staging'],
+      ['drift scan', '/repo/prod'],
     ]);
     expect(ticked[0].ctx).toBe(staging);
     expect(ticked[1].ctx).toBe(prod);
@@ -210,9 +210,9 @@ describe('the runner host', () => {
       label: 'Scan',
       placement: 'toolbar',
       requiredPorts: ['commands'],
-      binding: defineCommand<'stack scan'>({
+      binding: defineCommand<'drift scan'>({
         kind: 'command',
-        path: 'stack scan',
+        path: 'drift scan',
         args: (ctx) => ({ stack: ctx.stack?.id }),
         result: {
           kind: 'notify',
@@ -222,7 +222,7 @@ describe('the runner host', () => {
         },
       }),
     };
-    const { runners } = host({ 'stack scan': { documents: [SCAN_TRIGGERED] } });
+    const { runners } = host({ 'drift scan': { documents: [SCAN_TRIGGERED] } });
     const ticked: CommandRun[] = [];
     runners.onDidTick((run) => ticked.push(run));
     const prod = { root: '/repo/prod', stack: STACK };
@@ -232,7 +232,7 @@ describe('the runner host', () => {
     expect(ticked).toEqual([]);
     outside.emit('settled');
 
-    expect(ticked.map((run) => [run.path, run.ctx])).toEqual([['stack scan', prod]]);
+    expect(ticked.map((run) => [run.path, run.ctx])).toEqual([['drift scan', prod]]);
     expect(ticked[0].ctx).toBe(prod);
   });
 
@@ -264,15 +264,15 @@ describe('the runner host', () => {
   });
 
   test('the store it hands out marks a command running from its start to its end, however it ends', async () => {
-    const { window, runners } = host({ 'stack scan': { held: true } });
+    const { window, runners } = host({ 'drift scan': { held: true } });
     const running = () =>
       [...runners.store.getSnapshot().running].map(([on, { path }]) => [on, path]);
 
     await runners.run(action('scan'), { stack: STACK });
     await runners.run(action('scan'), { stack: { id: 'stk_2', slug: 'qa' } });
     expect(running()).toEqual([
-      ['stack:stk_1', 'stack scan'],
-      ['stack:stk_2', 'stack scan'],
+      ['stack:stk_1', 'drift scan'],
+      ['stack:stk_2', 'drift scan'],
     ]);
 
     window.commands.held[0].finish([SCAN_TRIGGERED]);
@@ -375,7 +375,7 @@ describe("a run's form", () => {
 
 describe("a run's end", () => {
   test('comes once every invocation it started has ended', async () => {
-    const { window, runners } = host({ 'stack scan': { held: true } });
+    const { window, runners } = host({ 'drift scan': { held: true } });
     const { ended } = await runners.run(action('scan'), { stack: STACK });
     expect(await hasEnded(ended)).toBe(false);
 
@@ -384,7 +384,7 @@ describe("a run's end", () => {
   });
 
   test('comes at once for a run the runner refuses', async () => {
-    const { window, runners, presenter } = host({ 'stack import': { documents: [IMPORTED] } });
+    const { window, runners, presenter } = host({ 'module import': { documents: [IMPORTED] } });
     const { ended } = await runners.run(action('import'), { root: '/repo/infra' });
     expect(presenter.notify).toHaveBeenCalledWith(
       'warn',
@@ -461,7 +461,7 @@ describe("a run's end", () => {
 
   test('after a submit, comes when the confirmation is answered no, and nothing runs', async () => {
     const { window, runners, forms, presenter } = host(
-      { 'stack import': { documents: [IMPORTED] } },
+      { 'module import': { documents: [IMPORTED] } },
       false,
     );
     const { ended } = await runners.run(
@@ -479,7 +479,7 @@ describe("a run's end", () => {
 describe('a failure a package action answers', () => {
   test("is offered with it, which runs over the failed run's context and reuses the statefile that run was given", async () => {
     const { window, runners, forms, shown, presenter } = host({
-      'stack import': (args) =>
+      'module import': (args) =>
         args.allowPartial
           ? { documents: [{ ...IMPORTED, importResiduals: RESIDUALS }] }
           : refused(RESIDUAL_FAILURE),
@@ -506,17 +506,17 @@ describe('a failure a package action answers', () => {
       text: "Import into prod without adopting aws_s3_bucket.logs? Lace writes no import block for them, so the stack's apply creates them anew beside the live ones.",
     });
     expect(window.commands.invoked).toEqual([
-      { cwd: '/repo/infra', path: 'stack import', args: { stack: 'stk_1', state: STATE } },
+      { cwd: '/repo/infra', path: 'module import', args: { stack: 'stk_1', state: STATE } },
       {
         cwd: '/repo/infra',
-        path: 'stack import',
+        path: 'module import',
         args: { stack: 'stk_1', allowPartial: true, state: STATE },
       },
     ]);
   });
 
   test('a run over another context asks for its statefile again', async () => {
-    const { runners, forms } = host({ 'stack import': refused(RESIDUAL_FAILURE) });
+    const { runners, forms } = host({ 'module import': refused(RESIDUAL_FAILURE) });
     await runners.run(action('import'), { root: '/repo/infra', stack: STACK });
     forms[0].form.submit({ state: STATE });
     await settled();
@@ -526,7 +526,7 @@ describe('a failure a package action answers', () => {
   });
 
   test('is told with the RunCtx of the run it is about, the one the run was started with', async () => {
-    const { runners, forms, shown } = host({ 'stack import': refused(RESIDUAL_FAILURE) });
+    const { runners, forms, shown } = host({ 'module import': refused(RESIDUAL_FAILURE) });
     const ctx = { root: '/repo/infra', stack: STACK };
     await runners.run(action('import'), ctx);
     forms[0].form.submit({ state: STATE });
@@ -537,7 +537,7 @@ describe('a failure a package action answers', () => {
 
   test('a failure no package action answers offers none', async () => {
     const { runners, shown } = host({
-      'stack scan': refused({ reason: 'unauthenticated', message: 'sign in' }),
+      'drift scan': refused({ reason: 'unauthenticated', message: 'sign in' }),
     });
     await runners.run(action('scan'), { stack: STACK });
     await settled();

@@ -2,7 +2,7 @@
 // changes the disk does not have yet. Whatever writes the root's Terraform
 // saves them first, so it writes over what the developer sees: Generate,
 // and each CLI command the CLI declares a rewrite (`COMMANDS[path].effect`),
-// which are Format, Convert and Import Existing Resources's `stack import`.
+// which are Format, Convert and Import Existing Resources's `module import`.
 import { COMMANDS, type CommandPath } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type AuthoringRoot, isTerraformFile, rootUri } from '../roots/authoring-roots';

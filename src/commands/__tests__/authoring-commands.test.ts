@@ -763,7 +763,7 @@ describe('saving buffers', () => {
     ['module scan', false],
     ['module docs', false],
     ['module fmt', true],
-    ['stack import', true],
+    ['module import', true],
   ] as const)('before `lace %s`, saves the root’s dirty Terraform only when the CLI declares it a rewrite: %s', async (path, saves) => {
     const dirty = document(`${PROD}/main.tf`, true);
     const workspace = { textDocuments: [dirty] } as unknown as typeof vscode.workspace;

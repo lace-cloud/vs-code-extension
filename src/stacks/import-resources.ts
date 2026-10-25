@@ -1,7 +1,7 @@
-// Import Existing Resources: the package's `import` binding (`lace stack
-// import`, which converts the root's Terraform as Convert does and adds an
-// import block for each resource a statefile records) run through the
-// window's runner over the root and a stack of it. It is a stack command,
+// Import Existing Resources: the package's `import` binding (`lace module
+// import --stack`, which converts the root's Terraform as Convert does and
+// adds an import block for each resource a statefile records) run through
+// the window's runner over the root and a stack of it. It acts on a stack,
 // so the host draws it: the canvas's source-refused banner offers it beside
 // Convert on the panel's root, and Lace: Import Existing Resources on the
 // root `rootToAct` names.
@@ -9,7 +9,7 @@
 // The stack is the one stack pick's (`pickStack`), which stops at a root
 // with no stack. The root's Terraform files with unsaved changes in an
 // editor are saved first, as Convert saves them, since the CLI declares
-// `stack import` a rewrite (`saveBuffersBefore`): the import writes over
+// `module import` a rewrite (`saveBuffersBefore`): the import writes over
 // what the developer sees. The import runs under a progress notification
 // until its run ends (`runUnderProgress`); the runner's form asks for the
 // statefile, and the package's notice says what the import did. A failure
@@ -50,7 +50,7 @@ export function resourceImporter(options: ResourceImporterOptions): ImportResour
   return async (root) => {
     const stack = await pickStack(root, 'import into');
     if (!stack) return;
-    if (!(await saveBuffersBefore(api.workspace, root, 'stack import'))) {
+    if (!(await saveBuffersBefore(api.workspace, root, 'module import'))) {
       void api.window.showErrorMessage(
         `A Terraform file in ${rootLabel(root, sources.folders())} did not save, so Lace did not import into ${stack.slug}.`,
       );

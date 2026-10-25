@@ -9,8 +9,9 @@
 // window regains focus (a terminal outside it) and each time a `lace`
 // command line ends in one of its integrated terminals, which changes no
 // focus (`onDidEndLaceCommand`), and a read that differs from the last one
-// is announced: who is signed in (`whoami`'s user, or the reason it gives
-// for none), the organization and the team.
+// is announced: who is signed in (`whoami`'s document: a person's user, or
+// none for a machine credential; else the reason it gives for no one), the
+// organization and the team.
 import type { CommandsPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandOutcome, failureOf, failureText } from '../engine/command-outcome';
@@ -54,7 +55,7 @@ async function accountRead(commands: CommandsPort): Promise<string> {
     commandOutcome(commands, 'whoami', {}),
     currentSelection(commands),
   ]);
-  const signedIn = who.kind === 'result' ? who.document.user.id : who.failure.reason;
+  const signedIn = who.kind === 'result' ? who.document : who.failure.reason;
   return JSON.stringify({ signedIn, ...selection });
 }
 

@@ -545,8 +545,9 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   CLI reports (`lace version -o json`, `tools`), each archive held to the digest the CLI pins for it, and check that the
   CLI runs them: a format and a scan, in a home that holds nothing, download nothing. `.gitattributes` checks every text
   file out with LF, the line ending biome checks, on Windows too.
-- **Nothing in the tests signs in.** What needs a developer who is signed in (the registry, the Stacks tree, the
-  organization and team) is unit-tested over scripted commands.
+- **Nothing in the tests signs in.** Signed out, the registry reads answer from the public catalog on lace.cloud, and
+  the engine tests read it there. What needs a developer who is signed in (an organization's registry, the Stacks
+  tree, the organization and team) is unit-tested over scripted commands.
 - **Repository tests** in `src/__tests__/`: the manifest against the features (and each run row's menu against the
   run's state), the tracked pins (published versions only, and a lockfile that locks exactly what the manifests name),
   the configuration (every tsconfig include holds tracked files, every workflow runs on `develop` or `main`), the host

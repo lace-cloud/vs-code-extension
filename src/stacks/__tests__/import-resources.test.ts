@@ -155,29 +155,29 @@ function setup(options: Options) {
   });
   const importResources = resourceImporter({ api: api as never, sources, runner, pickStack });
   const palette = importResourcesCommand(window as never, sources, importResources);
-  const imports = () => commands.invoked.filter(({ path }) => path === 'stack import');
+  const imports = () => commands.invoked.filter(({ path }) => path === 'module import');
   return { commands, window, messages, progress, importResources, palette, imports };
 }
 
 describe('Import Existing Resources', () => {
-  test("saves the root's Terraform, as the CLI declares `stack import` a rewrite, then imports into the stack picked with the statefile the form asks for, under a progress notification until its run ends", async () => {
+  test("saves the root's Terraform, as the CLI declares `module import` a rewrite, then imports into the stack picked with the statefile the form asks for, under a progress notification until its run ends", async () => {
     const edited = document('/work/repo/infra/prod/main.tf', true);
     const elsewhere = document('/work/repo/infra/staging/main.tf', true);
     const t = setup({
-      scripts: { ...LISTED, 'stack import': { held: true } },
+      scripts: { ...LISTED, 'module import': { held: true } },
       documents: [edited, elsewhere],
     });
     const done = t.importResources(prod);
     await settled();
 
-    expect(COMMANDS['stack import'].effect).toBe('rewrite');
-    expect(saveBuffersBefore).toHaveBeenCalledWith(expect.anything(), prod, 'stack import');
+    expect(COMMANDS['module import'].effect).toBe('rewrite');
+    expect(saveBuffersBefore).toHaveBeenCalledWith(expect.anything(), prod, 'module import');
     expect(edited.save).toHaveBeenCalledOnce();
     expect(elsewhere.save).not.toHaveBeenCalled();
     expect(t.imports()).toEqual([
       {
         cwd: fsPath('/work/repo/infra/prod'),
-        path: 'stack import',
+        path: 'module import',
         args: { stack: 'stk_1', state: fsPath(STATE) },
       },
     ]);
@@ -214,7 +214,7 @@ describe('Import Existing Resources', () => {
 
   test('stops when a Terraform file of the root did not save', async () => {
     const t = setup({
-      scripts: { ...LISTED, 'stack import': { documents: [imported()] } },
+      scripts: { ...LISTED, 'module import': { documents: [imported()] } },
       documents: [document('/work/repo/infra/prod/main.tf', true, false)],
     });
     await t.importResources(prod);
@@ -230,7 +230,7 @@ describe('Import Existing Resources', () => {
   });
 
   test('a dismissed statefile ends the run and imports nothing', async () => {
-    const t = setup({ scripts: { ...LISTED, 'stack import': { documents: [imported()] } } });
+    const t = setup({ scripts: { ...LISTED, 'module import': { documents: [imported()] } } });
     t.window.showOpenDialog.mockResolvedValueOnce(undefined as never);
     await t.importResources(prod);
 
@@ -242,7 +242,7 @@ describe('Import Existing Resources', () => {
     const t = setup({
       scripts: {
         ...LISTED,
-        'stack import': (args) => (args.allowPartial ? { held: true } : refused(RESIDUAL)),
+        'module import': (args) => (args.allowPartial ? { held: true } : refused(RESIDUAL)),
       },
       answers: { '1 resource has no import id': 'Import the rest' },
     });
@@ -272,7 +272,7 @@ describe('Import Existing Resources', () => {
   });
 
   test('from the palette, imports into a stack of the root it is pointed at', async () => {
-    const t = setup({ scripts: { ...LISTED, 'stack import': { documents: [imported()] } } });
+    const t = setup({ scripts: { ...LISTED, 'module import': { documents: [imported()] } } });
     await t.palette(uri('/work/repo/infra/prod'));
     expect(t.imports().map(({ cwd }) => cwd)).toEqual([fsPath('/work/repo/infra/prod')]);
   });

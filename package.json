@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.18.1",
+  "version": "0.20.0",
   "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
@@ -139,7 +139,8 @@
       },
       {
         "command": "lace.selectTeam",
-        "title": "Lace: Select Team"
+        "title": "Lace: Select Team",
+        "icon": "$(organization)"
       },
       {
         "command": "lace.refreshStacks",
@@ -314,9 +315,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "lace.refreshStacks",
+          "command": "lace.selectTeam",
           "when": "view == laceStacks",
           "group": "navigation@2"
+        },
+        {
+          "command": "lace.refreshStacks",
+          "when": "view == laceStacks",
+          "group": "navigation@3"
         },
         {
           "command": "lace.refreshRegistry",
@@ -657,11 +663,11 @@
     ]
   },
   "dependencies": {
-    "@lace-cloud/canvas": "0.32.0",
-    "@lace-cloud/chat-core": "0.32.0",
-    "@lace-cloud/design-tokens": "0.32.0",
-    "@lace-cloud/host": "0.32.0",
-    "@lace-cloud/proto": "0.32.0",
+    "@lace-cloud/canvas": "0.34.0",
+    "@lace-cloud/chat-core": "0.34.0",
+    "@lace-cloud/design-tokens": "0.34.0",
+    "@lace-cloud/host": "0.34.0",
+    "@lace-cloud/proto": "0.34.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",

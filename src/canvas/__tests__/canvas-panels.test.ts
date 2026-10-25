@@ -79,6 +79,7 @@ function fakePanel() {
     title: '',
     active: false,
     visible: true,
+    viewColumn: 1 as number | undefined,
     reveal: vi.fn(),
     dispose: () => {
       disposed = true;
@@ -142,7 +143,7 @@ function setup(
   const api = {
     window: {
       // The text editor the developer is in, when the active group holds one.
-      activeTextEditor: undefined as object | undefined,
+      activeTextEditor: undefined as { viewColumn?: number } | undefined,
       createWebviewPanel: vi.fn((_type, title, showOptions) => {
         events.push(`create:${title}:${showOptions.preserveFocus}`);
         const made = fakePanel();
@@ -278,13 +279,30 @@ describe('ensure', () => {
   test('two ensure calls give one panel; a later one reveals it in its own column', async () => {
     const { canvasPanels, panels, api } = setup();
     const [a, b] = await Promise.all([canvasPanels.ensure(prod), canvasPanels.ensure(prod)]);
-    api.window.activeTextEditor = {};
+    api.window.activeTextEditor = { viewColumn: 2 };
     const c = await canvasPanels.ensure(prod, { preserveFocus: true });
+    await canvasPanels.ensure(prod);
 
     expect(a).toBe(b);
     expect(c).toBe(a);
     expect(api.window.createWebviewPanel).toHaveBeenCalledTimes(1);
-    expect(panels[0].panel.reveal).toHaveBeenCalledWith(undefined, true);
+    expect(panels[0].panel.reveal.mock.calls).toEqual([
+      [1, true],
+      [1, undefined],
+    ]);
+  });
+
+  test("revealed without focus in the active text editor's own group, the canvas goes beside it, leaving the editor shown", async () => {
+    const { canvasPanels, panels, api } = setup();
+    await canvasPanels.ensure(prod);
+    api.window.activeTextEditor = { viewColumn: 1 };
+    await canvasPanels.ensure(prod, { preserveFocus: true });
+    await canvasPanels.ensure(prod);
+
+    expect(panels[0].panel.reveal.mock.calls).toEqual([
+      [api.ViewColumn.Beside, true],
+      [1, undefined],
+    ]);
   });
 
   const shownIn = (viewColumn: number, preserveFocus: boolean) => [
