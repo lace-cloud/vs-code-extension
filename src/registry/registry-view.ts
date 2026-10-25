@@ -7,8 +7,10 @@
 // from whichever surface made it, and one a terminal or another window
 // made, which the account finds when it reads itself again (`account.ts`).
 //
-// Signed out and no organization are the states the list's failure names
-// by its reason; any other failure shows its message with Retry. The
+// Signed out, the CLI lists the public catalog, drawn with no organization.
+// A session the server refuses and no organization are the states the
+// list's failure names by its reason; any other failure shows its message
+// with Retry. The
 // organization shown is the CLI's selection, and its picker runs Select
 // Organization. Favourites and recently used are drawn as they change,
 // whichever surface placed the module.

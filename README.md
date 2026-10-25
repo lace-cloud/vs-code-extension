@@ -20,11 +20,12 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
   **Remote** tab of Settings, to the CLI's path on that machine. The extension speaks engine protocol 8, which Lace CLI
-  v2.54.1 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
+  v2.57.0 speaks; when the CLI and the extension speak different engine protocols, the extension says which of the two
   to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
   wrote.
-- A Lace account for the registry and the stacks. Sign in from VS Code with **Lace: Sign In**.
+- A Lace account for your organization's registry modules and the stacks; the public registry needs none. Sign in from
+  VS Code with **Lace: Sign In**.
 - For **Lace: Generate Docs**, [terraform-docs](https://terraform-docs.io). Without it, the notification names it with an
   **Install** link; Lace does not install it. **Lace: Scan Module** needs nothing of yours: `lace module scan` runs
   [tfsec](https://github.com/aquasecurity/tfsec) at the version Lace pins, the one on `PATH` when it is that version,
@@ -137,8 +138,10 @@ it runs **Lace: Select Organization** to switch it.
 - Clicking a row opens **module detail**: **Details** renders the module's README, **Interface** lists its inputs and
   outputs as Lace certified them (describing a version downloads and certifies it, so it loads after the rest),
   **Versions** and **Examples**, with **Add to Canvas** in the header.
-- Signed out, the view offers **Sign In**; with no organization selected, **Select Organization**; with no module
-  published, it says so and links to the guide on publishing one. A sign-in, sign-out or organization picked in a
+- Signed out, the view lists the public registry's modules, and the **Organization** dropdown reads **Public
+  Registry**; sign in to see your organization's. A session Lace no longer accepts offers **Sign In**; with no
+  organization selected, the view offers **Select Organization**; with no module published, it says so and links to
+  the guide on publishing one. A sign-in, sign-out or organization picked in a
   terminal reaches the view as described under [Sign-in, organization and team](#sign-in-organization-and-team).
 - A placement the registry refuses says why, naming the module; **Show Details** opens the full message in the "Lace"
   Output channel.
@@ -179,7 +182,7 @@ its ten most recent runs. The view's description names the module; it follows th
   with no cloud connection yet is told so, with **Open Portal**, where connections are added. **Preview**, **Apply** and
   **Scan for Drift** from the Command Palette on a module with no stack say to create one in the Stacks view.
 - **Lace: Import Existing Resources** (`lace.importResources`), also on the canvas's banner for a module not in Lace
-  style, adopts resources that already exist into a stack of the module (`lace stack import`): you pick the stack,
+  style, adopts resources that already exist into a stack of the module (`lace module import`): you pick the stack,
   then the statefile that records them, any file you name. It saves the module's open `.tf` editors, then restructures
   the module as Convert does and writes an import block for each resource the statefile records, under a progress
   notification. Review the change in git, commit it, then apply the stack to adopt them. An import that cannot derive
@@ -300,7 +303,7 @@ full path of its executable.
 | Lace: Generate                       | `lace.generate`                | Generates the saved canvas to the module's `.tf` files, with no tab, after saving the module's open `.tf` editors. |
 | Lace: Validate Module                | `lace.validateModule`          | Runs `lace module validate` on the module's Terraform and writes its certification under `.lace/`.              |
 | Lace: Convert Module                 | `lace.convertModule`           | Runs `lace module convert`, which rewrites the module's Terraform in Lace style and locks its providers, and reports as Validate does, naming the lockfile; an open canvas picks the rewritten files up. When the providers did not lock, it says so and offers **Lock providers**, which runs Lace: Lock Providers. |
-| Lace: Import Existing Resources      | `lace.importResources`         | Runs `lace stack import` on a stack of the module you pick, with a statefile you pick: converts the module as Convert does and adds an import block for each resource the statefile records. Also on the canvas's banner. |
+| Lace: Import Existing Resources      | `lace.importResources`         | Runs `lace module import` on a stack of the module you pick, with a statefile you pick: converts the module as Convert does and adds an import block for each resource the statefile records. Also on the canvas's banner. |
 | Lace: Format Module                  | `lace.formatModule`            | Runs `lace module fmt` and names the files it changed.                                                           |
 | Lace: Lock Providers                 | `lace.lockModule`              | Runs `lace module lock`, which writes the module's `.terraform.lock.hcl`, and says how many providers it locked, in which lockfile, to commit beside the tree. |
 | Lace: Scan Module                    | `lace.scanModule`              | Runs `lace module scan` (tfsec) and names the tfsec version that ran.                                            |

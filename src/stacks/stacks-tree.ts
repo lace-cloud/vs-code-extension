@@ -375,6 +375,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   type TreeRead = {
     choice: boolean;
     root: AuthoringRoot | undefined;
+    // The team whose stacks the read listed.
+    team?: string;
     state: StacksState;
     message?: string;
     refusal?: CommandFailure;
@@ -407,9 +409,12 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
         of = found.root;
       }
       const at = of;
-      const listed = await commandDocument(await commands.anywhere(), 'stack list', {
-        source: rootPath(at),
-      });
+      const anywhere = await commands.anywhere();
+      // The team named beside the root is the one this list was scoped to.
+      const [listed, team] = await Promise.all([
+        commandDocument(anywhere, 'stack list', { source: rootPath(at) }),
+        commandDocument(anywhere, 'team current', {}),
+      ]);
       const stacks = listed.items.map((stack): StackRow => ({ kind: 'stack', root: at, stack }));
       const runs = new Map(
         await Promise.all(
@@ -418,7 +423,14 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
             .map(async (row) => [row.stack.id, await readRuns(row)] as const),
         ),
       );
-      return { choice, root: at, state: stacks.length === 0 ? 'noStack' : 'stacks', stacks, runs };
+      return {
+        choice,
+        root: at,
+        team: team.slug ?? undefined,
+        state: stacks.length === 0 ? 'noStack' : 'stacks',
+        stacks,
+        runs,
+      };
     } catch (error) {
       const failure = failureOf(error);
       const state = refusedState(failure);
@@ -452,7 +464,11 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       tree.stacks.every((row, at) => row.stack.id === ids[at]);
     root = tree.root;
     heldRoot = tree.root;
-    view.description = tree.root && rootLabel(tree.root, sources.folders());
+    view.description =
+      tree.root &&
+      [rootLabel(tree.root, sources.folders()), tree.team]
+        .filter((part) => part !== undefined)
+        .join(' · ');
     setState(tree.state, tree.message);
     refusal = tree.refusal;
     if (!sameStacks) {

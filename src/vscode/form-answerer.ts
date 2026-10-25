@@ -25,7 +25,13 @@
 // An argument with no prompt here cancels the form, and the notice says
 // this window cannot ask for it.
 import { posix } from 'node:path';
-import type { ActionContribution, ActionTarget, RunCtx } from '@lace-cloud/canvas/engine';
+import {
+  type ActionContribution,
+  type ActionTarget,
+  proposeStackSlug,
+  type RunCtx,
+  stackSlugRule,
+} from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandDocument, failureOf, failureText } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
@@ -65,11 +71,14 @@ const NO_CONNECTION = 'The team has no cloud connection yet. Add one in the port
 
 // The slug a form proposes for a run over `root`: its directory's name as
 // the workspace calls it (the folder's name for a workspace folder itself),
-// as it is. A run over no root under a workspace folder proposes nothing.
+// made one the stack slug rule accepts (`proposeStackSlug`). A run over no
+// root under a workspace folder proposes nothing.
 function proposedSlug(root: AuthoringRoot | undefined): string {
   if (root === undefined) return '';
-  return root.relative === '' ? root.folder.name : posix.basename(root.relative);
+  return proposeStackSlug(root.relative === '' ? root.folder.name : posix.basename(root.relative));
 }
+
+const SLUG_PROMPT = "The stack's slug: its id in lace commands and in the portal";
 
 export function formAnswerer(options: FormAnswererOptions): Answerer {
   const { api, commands, offers, sources, report } = options;
@@ -82,10 +91,18 @@ export function formAnswerer(options: FormAnswererOptions): Answerer {
       const value = proposedSlug(root);
       return api.window.showInputBox({
         title,
-        prompt: 'The slug',
+        prompt: SLUG_PROMPT,
+        placeHolder: 'payments-prod',
         value,
         valueSelection: [0, value.length],
-        validateInput: (typed) => (typed === '' ? 'Type the slug' : undefined),
+        // The rule is the API's, in its words, so a slug it refuses is
+        // refused as it is typed, not after the run.
+        validateInput: (typed) =>
+          typed === ''
+            ? 'Type the slug'
+            : stackSlugRule.pattern.test(typed)
+              ? undefined
+              : stackSlugRule.description,
       });
     },
     connection: async ({ title }) => {

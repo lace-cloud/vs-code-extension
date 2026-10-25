@@ -37,8 +37,16 @@ function placeholder(noun: Noun, current: Current): string {
     : asking(noun);
 }
 
-const described = (slug: string, current: Current): string =>
-  slug === current.slug ? `${slug} · current` : slug;
+// A row's description: the slug where it says more than the name, whether it
+// is the current one, then what else the row carries, on the row's one line.
+const described = (
+  row: { name: string; slug: string },
+  current: Current,
+  ...rest: string[]
+): string =>
+  [row.slug === row.name ? '' : row.slug, row.slug === current.slug ? 'current' : '', ...rest]
+    .filter((part) => part !== '')
+    .join(' · ');
 
 // The teams `lace team list` lists in `scope`, and the one `lace team
 // current` reports there.
@@ -60,8 +68,7 @@ export async function selectOrganization(commands: CommandsPort, api: ScopeApi):
     listed.then(([organizations, current]) => ({
       items: organizations.items.map((organization) => ({
         label: organization.name,
-        description: described(organization.slug, current),
-        detail: organization.role,
+        description: described(organization, current, organization.role),
         slug: organization.slug,
       })),
       placeholder: placeholder('organization', current),
@@ -103,8 +110,8 @@ async function pickTeam(
     listed.then(([teams, current]) => ({
       items: teams.items.map((team) => ({
         label: team.name,
-        description: described(team.slug, current),
-        detail: team.description,
+        description: described(team, current),
+        detail: team.description ?? undefined,
         slug: team.slug,
       })),
       placeholder: placeholder('team', current),
