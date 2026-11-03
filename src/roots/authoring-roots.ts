@@ -111,10 +111,20 @@ export function sameRoot(a: AuthoringRoot, b: AuthoringRoot): boolean {
   return rootUri(a).toString() === rootUri(b).toString();
 }
 
+// A local drive letter names the same drive in either case; every other URI
+// part keeps its own case.
+function comparisonPath(uri: vscode.Uri): string {
+  return uri.scheme === 'file'
+    ? uri.path.replace(/^\/[a-z]:/i, (drive) => drive.toLowerCase())
+    : uri.path;
+}
+
 function under(folder: vscode.WorkspaceFolder, uri: vscode.Uri): boolean {
-  const { scheme, authority, path } = folder.uri;
+  const { scheme, authority } = folder.uri;
   if (uri.scheme !== scheme || uri.authority !== authority) return false;
-  return uri.path === path || uri.path.startsWith(path.endsWith('/') ? path : `${path}/`);
+  const path = comparisonPath(folder.uri);
+  const candidate = comparisonPath(uri);
+  return candidate === path || candidate.startsWith(path.endsWith('/') ? path : `${path}/`);
 }
 
 // What finding a root, asking nothing, found: the root, or why there is
@@ -149,7 +159,7 @@ export function placeOf(folders: readonly vscode.WorkspaceFolder[], directory: v
     .filter((candidate) => under(candidate, directory))
     .sort((a, b) => b.uri.path.length - a.uri.path.length);
   if (!folder) return { kind: 'outsideWorkspace', directory };
-  const relative = posix.relative(folder.uri.path, directory.path);
+  const relative = posix.relative(comparisonPath(folder.uri), comparisonPath(directory));
   const segments = relative.split('/');
   const at = segments.findIndex((segment) => NOT_AUTHORED.includes(segment));
   if (at >= 0) {

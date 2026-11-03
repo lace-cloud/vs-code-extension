@@ -510,6 +510,18 @@ describe('the candidates', () => {
     ]);
   });
 
+  test("treat a Windows drive letter's case as the same directory, keeping the folder's own URI", async () => {
+    const windows = folder('/C:/work/repo');
+    const roots = await candidatesOf(
+      [windows],
+      ['/c:/work/repo/main.tf', '/c:/work/repo/infra/prod/main.tf', '/c:/work/repository/main.tf'],
+    );
+    expect(roots).toEqual([
+      { folder: windows, relative: '' },
+      { folder: windows, relative: 'infra/prod' },
+    ]);
+  });
+
   test('leave out an open canvas whose folder has left the workspace', async () => {
     const api = folder('/work/api', 0);
     const web = folder('/work/web', 1);
