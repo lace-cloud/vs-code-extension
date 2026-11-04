@@ -70,7 +70,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
-| When the account changed: a change this window makes, or a read that differs from the last one | `account/account.ts` (`createAccount`, `onDidChange`) | the status bar, the registry view, the Stacks tree |
+| When the account changed: a change this window makes, or a read that differs from the last one, whoever asked for the read (a focus, an ended `lace` command line, a view's refresh) | `account/account.ts` (`createAccount`, `onDidChange`, `refreshWith`) | the status bar, the registry view, the Stacks tree |
 | Which CLI command a `lace` command line that ended in an integrated terminal ran | `vscode/lace-command-lines.ts` (`onDidEndLaceCommand`) | the account, the Stacks tree |
 | The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
 | A slug-bearing row's slug beside its name: the slug only where it differs from the name, in its one-line description (then its markers, joined with ' · ') and in a tooltip's name (`Name (slug)`) | `vscode/slug-beside.ts` (`slugBeside`, `rowDescription`, `nameWithSlug`) | the organization, team and stack picks, the Stacks tree's stack rows |
@@ -227,8 +227,10 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 
 - `registry-reads.ts`: `registry list --axis module --limit 500`, `registry get`, `registry describe`, `org current`, each
   in the home. The sidebar reads once, unfiltered, and the page filters as the developer searches and picks categories; a
-  row's versions are read on expand. The view reads again when it becomes visible and at each change of the account,
-  made in this window or found outside it (see Account).
+  row's versions are read on expand. The view shows loading at once, and has the account read itself first
+  (`refreshWith`, see Account), when it is first shown, becomes visible again, or Refresh Registry or Retry runs: a
+  change that read finds is announced and the view reads the registry on the announcement, else it reads the registry
+  itself. It also reads again at each change of the account, made in this window or found outside it.
 - The sidebar's states come from a failed list's `reason`: `unauthenticated` → Sign In, `no_organization` → Select
   Organization, anything else its message with Retry. An empty registry shows "No modules are published yet" with the
   publishing guide link the list itself carries.
@@ -277,7 +279,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   read that changed nothing redraws nothing, so no row loses its element. Only what may change the list reads it whole:
   a tick, a change of the account, the view shown again, a `lace` command that ended in an integrated terminal and that
   the CLI declares more than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the
-  workspace's folders, a change of the root the view names, and Refresh Stacks. A stack row whose look changes with the
+  workspace's folders, a change of the root the view names, and Refresh Stacks, which has the account read itself
+  first (`refreshWith`): a change that read finds reads the tree through the announcement, else Refresh reads it
+  itself, and either way the tree is read and the canvas ticked once. A stack row whose look changes with the
   runner's store (an apply of it started, reached a stage or settled) has its runs read again, then is redrawn; any
   other change of the store redraws nothing. The tree and the root's canvas badges read the same facts, so one
   invalidation serves both: each read for what may have changed the stacks (all of these but a change of the folders or
@@ -419,13 +423,16 @@ listed and saved with `--org` naming the organization just picked, so the saved 
 with Open Portal on the page `team list` names (`createUrl`). A team pick dismissed while the organization is saved
 still announces the saved organization. The status bar item shows the selection and runs Select Organization. The
 account's one change event (`onDidChange`) fires after each sign-in, sign-out or saved selection this window makes, and
-when a read of the account differs from the last one. A read is who is signed in (`whoami`'s user, or the reason its
-failure gives) and the selection (`org current`, `team current`); `lace logout` clears only the credentials, so the
-selection alone cannot see it. The account is read when the window starts, after each change made here, when the window
-regains focus (a terminal or another window outside it) and when a command line running `lace` ends in an integrated
-terminal with shell integration (`window.onDidEndTerminalShellExecution`, read by `vscode/lace-command-lines.ts`), which
-changes no focus. The status bar, the registry view and the Stacks tree read again on the event. Nothing is cached but
-the last read. A failed account command offers the way out its reason names (`vscode/offers.ts`).
+when a read of the account differs from the last one, the first read after a failed one included. A read is who is
+signed in (`whoami`'s user, or the reason its failure gives) and the selection (`org current`, `team current`); `lace
+logout` clears only the credentials, so the selection alone cannot see it. The account is read when the window starts,
+after each change made here, when the window regains focus (a terminal or another window outside it), when a command
+line running `lace` ends in an integrated terminal with shell integration (`window.onDidEndTerminalShellExecution`,
+read by `vscode/lace-command-lines.ts`), which changes no focus, and when a view's refresh asks: `refreshWith(refresh)`
+reads the account and, when the read found a change, announces it and leaves the redraw to the listeners, else runs
+`refresh` (the Registry's first showing, showing again, Refresh and Retry; Refresh Stacks). The status bar, the registry
+view and the Stacks tree read again on the event, each by its plain refresh, never by `refreshWith`. Nothing is cached
+but the last read. A failed account command offers the way out its reason names (`vscode/offers.ts`).
 
 ## The chat tools
 
@@ -512,7 +519,7 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   screen from `show()` until hidden, each hiding firing `onDidHide` once, with whether it was busy when it came on
   screen; a test's developer answers each pick once its items are in), `account/__tests__/fake-outside.ts` (what tells
   the window that what the CLI reports may have changed outside it: focus, and a command line ending in an integrated
-  terminal).
+  terminal), `account/__tests__/fake-status-bar.ts` (the status bar item the account's controls draw).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories; a developer of each test's own, signed out, with no saved selection and no tool of their own,
   in a home of the test's own, which every process the test starts inherits, whatever the shell that runs the tests

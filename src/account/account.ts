@@ -6,12 +6,13 @@
 //
 // A terminal or another window can change the account too: `lace login`,
 // `lace logout`, `lace org use`. So the account is read again each time the
-// window regains focus (a terminal outside it) and each time a `lace`
-// command line ends in one of its integrated terminals, which changes no
-// focus (`onDidEndLaceCommand`), and a read that differs from the last one
-// is announced: who is signed in (`whoami`'s document: a person's user, or
-// none for a machine credential; else the reason it gives for no one), the
-// organization and the team.
+// window regains focus (a terminal outside it), each time a `lace` command
+// line ends in one of its integrated terminals, which changes no focus
+// (`onDidEndLaceCommand`), and each time a view's own refresh asks
+// (`refreshWith`), and a read that differs from the last one is announced:
+// who is signed in (`whoami`'s document: a person's user, or none for a
+// machine credential; else the reason it gives for no one), the organization
+// and the team.
 import type { CommandsPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { commandOutcome, failureOf, failureText } from '../engine/command-outcome';
@@ -41,6 +42,9 @@ export type Account = {
   // `listener` is called after each sign-in, sign-out or saved selection
   // this window makes, and when a read finds the account changed outside it.
   onDidChange: (listener: () => void) => () => void;
+  // Reads the account first: a change it finds is announced and the views redraw
+  // on it; `refresh` runs only when it found none or failed.
+  refreshWith: (refresh: () => Promise<void>) => Promise<void>;
   dispose: () => void;
 };
 
@@ -65,30 +69,45 @@ export function createAccount(
   report: (what: string, error: unknown) => void,
 ): Account {
   const listeners = new Set<() => void>();
+  const failed = (error: unknown) => report('reading the Lace account', error);
   const changed = () => {
     for (const listener of [...listeners]) listener();
   };
 
-  // The account as last read, and each read's turn: a read is kept only
-  // while no later one started.
-  let last: string | undefined;
+  // The account as last read, and each read's turn: a read is kept only while
+  // no later one started. A failed read leaves `UNREAD`: the next is announced.
+  const UNREAD = Symbol('a read that failed');
+  let last: string | typeof UNREAD | undefined;
   let reading = 0;
   // Reads the account and keeps it; resolves whether it differs from the
   // read kept before it, when there was one.
   async function read(): Promise<boolean> {
     const turn = ++reading;
-    const now = await accountRead(await commands.anywhere());
+    let now: string;
+    try {
+      now = await accountRead(await commands.anywhere());
+    } catch (error) {
+      if (turn === reading) last = UNREAD;
+      throw error;
+    }
     if (turn !== reading) return false;
     const differs = last !== undefined && now !== last;
     last = now;
     return differs;
   }
-  const failed = (error: unknown) => report('reading the Lace account', error);
-  // The account may have changed outside this window.
+  // The account may have changed outside this window: resolves whether a
+  // change was announced; a read that failed is reported and announces none.
   const readAgain = () =>
-    read().then((differs) => {
-      if (differs) changed();
-    }, failed);
+    read().then(
+      (differs) => {
+        if (differs) changed();
+        return differs;
+      },
+      (error) => {
+        failed(error);
+        return false;
+      },
+    );
   // A change this window made: announced, then read as it is now, the read
   // the next one is compared with.
   const madeHere = () => {
@@ -119,6 +138,9 @@ export function createAccount(
     onDidChange(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    async refreshWith(refresh) {
+      if (!(await readAgain())) await refresh();
     },
     dispose() {
       focus.dispose();

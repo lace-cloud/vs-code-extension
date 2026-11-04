@@ -192,7 +192,7 @@ export type StacksTreeOptions = {
   commands: CommandsMapping;
   runner: RunnerHost;
   runOutput: RunOutput;
-  account: Pick<Account, 'onDidChange'>;
+  account: Pick<Account, 'onDidChange' | 'refreshWith'>;
   offers: OfferActions;
   rootState: RootState;
   panels: Pick<CanvasPanels, 'tick' | 'onDidChangeActive'>;
@@ -776,7 +776,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       reread();
     }),
     ...registerCommands(api, {
-      [STACK_COMMANDS.refresh]: async () => refresh(),
+      [STACK_COMMANDS.refresh]: () => options.account.refreshWith(async () => refresh()),
       [STACK_COMMANDS.chooseModule]: async () => {
         const chosen = await rootToAct(picking, api.window, 'show the stacks of');
         if (chosen) show(chosen);

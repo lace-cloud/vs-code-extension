@@ -2,10 +2,11 @@
 // drawn by the registry-sidebar page from the state this host sends. The
 // host reads the module axis of the registry once, unfiltered, and the
 // page narrows it as the developer searches and picks categories; a row's
-// versions are read when it is expanded. The view reads again each time it
-// becomes visible and at each change of the account: one this window makes,
-// from whichever surface made it, and one a terminal or another window
-// made, which the account finds when it reads itself again (`account.ts`).
+// versions are read when it is expanded. The view reads again at each change
+// of the account: one this window makes, from whichever surface made it, and
+// one a terminal or another window made, which the account finds when it
+// reads itself again (`account.ts`). First shown, shown again, Refresh and
+// Retry show loading at once and have the account read itself first.
 //
 // Signed out, the CLI lists the public catalog, drawn with no organization.
 // A session the server refuses and no organization are the states the
@@ -43,7 +44,7 @@ export type RegistryViewOptions = {
   extensionUri: vscode.Uri;
   reads: RegistryReads;
   marks: RegistryMarks;
-  account: Pick<Account, 'onDidChange'>;
+  account: Pick<Account, 'onDidChange' | 'refreshWith'>;
   place: (module: { author: string; name: string; version: string }) => Promise<void>;
   showDetail: (row: RegistryRow) => void;
   report: (what: string, error: unknown) => void;
@@ -101,10 +102,15 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
     void view?.webview.postMessage({ op: 'state', state: state() } satisfies ToPage<SidebarState>);
   }
 
-  async function refresh(): Promise<void> {
-    const turn = ++reading;
+  function showLoading(): void {
+    if ('kind' in shown && shown.kind === 'loading') return;
     shown = { kind: 'loading' };
     post();
+  }
+
+  async function refresh(): Promise<void> {
+    const turn = ++reading;
+    showLoading();
     let next: Listing | Unlisted;
     try {
       const [list, organization] = await Promise.all([reads.list(), reads.organization()]);
@@ -126,6 +132,11 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
     shown = next;
     post();
   }
+
+  const reload = (): Promise<void> => {
+    showLoading();
+    return options.account.refreshWith(refresh);
+  };
 
   const rowOf = (key: string): RegistryRow | undefined =>
     'kind' in shown ? undefined : shown.rows.find((row) => moduleKey(row) === key);
@@ -153,7 +164,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
         post();
         return;
       case 'refresh':
-        return refresh();
+        return reload();
       case 'signIn':
         await api.commands.executeCommand(SIGN_IN);
         return;
@@ -184,7 +195,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
   const offAccount = options.account.onDidChange(() => void refresh());
 
   return {
-    refresh,
+    refresh: reload,
     dispose() {
       offMarks();
       offAccount();
@@ -197,7 +208,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
         receive(raw).catch((error) => report('a message from the registry sidebar', error)),
       );
       webviewView.onDidChangeVisibility(() => {
-        if (webviewView.visible) void refresh();
+        if (webviewView.visible) void reload();
       });
       webviewView.onDidDispose(() => {
         if (view === webviewView) view = undefined;
@@ -211,7 +222,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
         },
         { bundle: 'registry-sidebar', images: ['https:', 'data:'] },
       );
-      void refresh();
+      void reload();
     },
   };
 }

@@ -9,9 +9,20 @@ import {
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
-import { outsideSignals } from '../../account/__tests__/fake-outside';
+import {
+  outsideSignals,
+  refreshWithNoChange,
+  signedInAs,
+} from '../../account/__tests__/fake-outside';
+import { createAccount } from '../../account/account';
 import { authoringCommands } from '../../commands/authoring-commands';
-import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
+import {
+  failsWith,
+  fakeCommands,
+  refused,
+  type Script,
+  timesRun,
+} from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
@@ -135,6 +146,9 @@ type Options = {
   openCanvases?: AuthoringRoot[];
   // The workspace's folders; one by default.
   folders?: vscode.WorkspaceFolder[];
+  // The tree's account is the window's own over the same commands, which
+  // finds what changed outside it when asked, not a stand-in.
+  windowAccount?: boolean;
 };
 
 type Setup = ReturnType<typeof setup>;
@@ -331,6 +345,14 @@ function setup(options: Options) {
   };
   const account = new Emitter<void>();
   const report = vi.fn();
+  // The stand-in account finds no change when asked to read itself.
+  const standIn = {
+    onDidChange: (l: () => void) => account.event(l).dispose,
+    refreshWith: refreshWithNoChange(),
+  };
+  const windowAccount = options.windowAccount
+    ? createAccount(mapping, { window: outside.window } as never, report)
+    : undefined;
   const runner = createRunnerHost({
     commands: () => mapping.anywhere(),
     presenter: offeringPresenter({
@@ -368,7 +390,7 @@ function setup(options: Options) {
     commands: mapping,
     runner,
     runOutput,
-    account: { onDidChange: (l) => account.event(l).dispose },
+    account: windowAccount ?? standIn,
     offers,
     rootState,
     panels,
@@ -413,6 +435,7 @@ function setup(options: Options) {
     panels,
     active,
     account,
+    standIn,
     report,
     redrawn,
     log,
@@ -602,7 +625,7 @@ describe('the stacks of the current root', () => {
 
     void t.command(STACK_COMMANDS.refresh);
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'run list')).toHaveLength(6);
+    expect(timesRun(t.commands.invoked, 'run list')).toBe(6);
     expect(answers).toHaveLength(3);
     expect(t.redrawn).toEqual([]);
 
@@ -789,7 +812,7 @@ describe('the stacks of the current root', () => {
 
     await t.command(STACK_COMMANDS.refresh);
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
     expect(t.redrawn).toEqual([]);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
   });
@@ -1163,7 +1186,7 @@ describe('when the stacks cannot be listed', () => {
 
     t.account.fire();
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
     expect(t.redrawn).toEqual([]);
   });
 });
@@ -1326,9 +1349,92 @@ describe('a stack row', () => {
     await t.children();
     await change(t);
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
     expect(t.redrawn).toEqual([]);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+  });
+
+  describe('Refresh Stacks asks the account to read itself first', () => {
+    // A developer signed in whose team a terminal outside the window changes.
+    async function windowed() {
+      const account = { team: 'platform', whoami: 'works' as 'works' | 'fails' };
+      const t = setup({
+        root: prod,
+        windowAccount: true,
+        scripts: {
+          ...listed,
+          whoami: () =>
+            account.whoami === 'fails'
+              ? failsWith('the engine stopped')
+              : { documents: [signedInAs('usr_1')] },
+          'team current': () => ({ documents: [{ slug: account.team, source: 'config' }] }),
+        },
+      });
+      await t.children();
+      await settled();
+      const count = (path: 'stack list' | 'whoami') => timesRun(t.commands.invoked, path);
+      t.panels.tick.mockClear();
+      return { t, account, count };
+    }
+
+    test('a team switched outside is announced: the header names it, the tree is read once more and the root’s canvas is told once', async () => {
+      const { t, account, count } = await windowed();
+      expect(t.view.description).toBe('infra/prod · platform');
+      const lists = count('stack list');
+
+      account.team = 'data';
+      await t.command(STACK_COMMANDS.refresh);
+      await settled();
+
+      expect(t.view.description).toBe('infra/prod · data');
+      expect(count('stack list')).toBe(lists + 1);
+      expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+    });
+
+    test('an announced change is read by the tree as the plain refresh: the account is read once for the Refresh', async () => {
+      const { t, account, count } = await windowed();
+      const reads = count('whoami');
+      account.team = 'data';
+      await t.command(STACK_COMMANDS.refresh);
+      await settled();
+      expect(count('whoami')).toBe(reads + 1);
+    });
+
+    test('the account as it was announces nothing, and the tree is read once and the canvas told once', async () => {
+      const { t, count } = await windowed();
+      const lists = count('stack list');
+      await t.command(STACK_COMMANDS.refresh);
+      await settled();
+      expect(t.view.description).toBe('infra/prod · platform');
+      expect(count('stack list')).toBe(lists + 1);
+      expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+    });
+
+    test('an account that cannot be read is reported, and the tree is still read again', async () => {
+      const { t, account, count } = await windowed();
+      const lists = count('stack list');
+      account.whoami = 'fails';
+      t.report.mockClear();
+
+      await expect(t.command(STACK_COMMANDS.refresh)).resolves.toBeUndefined();
+      await settled();
+
+      expect(t.report).toHaveBeenCalledWith('reading the Lace account', expect.any(Error));
+      expect(count('stack list')).toBe(lists + 1);
+      expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+    });
+
+    test('the tree’s own listener of the account reads the tree, and does not have the account read itself', async () => {
+      const t = setup({ root: prod, scripts: { ...listed } });
+      await t.children();
+      t.standIn.refreshWith.mockClear();
+
+      t.account.fire();
+      await settled();
+
+      expect(t.standIn.refreshWith).not.toHaveBeenCalled();
+      expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
+    });
   });
 
   test('the view hidden, and a command line that changes no stack, read nothing and tell no canvas', async () => {
@@ -1617,7 +1723,7 @@ describe('an apply', () => {
     expect(t.shownChannels).toEqual(['Lace: prod']);
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
     // Each tick reads the whole tree again.
-    expect(t.commands.paths().filter((path) => path === 'stack list').length).toBeGreaterThan(1);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBeGreaterThan(1);
   });
 
   test('settled, writes to the stack’s Output channel each provider version its Run ran under an admission, as lace run get prints them', async () => {
