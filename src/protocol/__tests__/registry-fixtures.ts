@@ -67,7 +67,6 @@ export function record(over: { readme?: string | null; versions?: string[] } = {
       readme: over.readme ?? null,
       vendor: null,
       status: 'published',
-      installCount: 12,
       publishedAt: '2026-09-30T10:00:00Z',
       publishedBy: null,
       createdAt: '2026-09-30T10:00:00Z',

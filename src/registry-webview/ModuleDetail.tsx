@@ -208,10 +208,7 @@ function Details({
     ['Inputs', counted(described?.interface.inputs.length)],
     ['Outputs', counted(described?.interface.outputs.length)],
   ];
-  if (latest) {
-    reference.push(['Installs', String(latest.installCount)]);
-    if (latest.publishedAt) reference.push(['Published', latest.publishedAt.slice(0, 10)]);
-  }
+  if (latest?.publishedAt) reference.push(['Published', latest.publishedAt.slice(0, 10)]);
   return (
     <div className="tab-content active">
       <div className="section">

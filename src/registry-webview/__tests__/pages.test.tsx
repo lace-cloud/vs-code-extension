@@ -418,6 +418,12 @@ describe('the module detail page', () => {
     expect(html).toContain('A VPC module');
   });
 
+  test('no install count: a Module has none', () => {
+    const html = renderToStaticMarkup(<ModuleDetail state={detail()} send={nothing} />);
+    expect(html).not.toContain('Installs');
+    expect(html).toContain('<td>Published</td><td>2026-09-30</td>');
+  });
+
   test("Interface draws the described inputs and outputs; a refusal is the banner's message", () => {
     const html = renderToStaticMarkup(<Interface read={{ kind: 'loaded', value: described }} />);
     for (const text of ['cidr', 'string', 'The VPC range', 'vpc_id']) expect(html).toContain(text);
