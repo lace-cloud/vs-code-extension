@@ -2,9 +2,8 @@
 //
 // Open source, on each row of the Diagnostics list, sends the host the
 // file, line and column the row's diagnostic names, and the host opens that
-// file beside the canvas. A diagnostic that names no file (one located in
-// the graph, such as a required input not set) is said to have none, and
-// nothing is sent.
+// file beside the canvas. A diagnostic that names no file is said to have
+// none, and to have a place on the canvas or not; nothing is sent.
 //
 // Import existing resources, on the source-refused banner while the tree is
 // out of lace shape, beside the package's Convert: the banner says what each
@@ -27,10 +26,11 @@ export function hostContributions(host: Pick<HostCaller, 'call'>): Contributions
         if (!diagnostic) return;
         const { file, line, column, message } = diagnostic;
         if (file === undefined) {
-          rt.ports.presenter.notify(
-            'info',
-            `${message}: it names no file, only its place on the canvas.`,
-          );
+          const names =
+            diagnostic.instance_id === undefined
+              ? 'no file and no place on the canvas'
+              : 'no file, only its place on the canvas';
+          rt.ports.presenter.notify('info', `${message}: it names ${names}.`);
           return;
         }
         await host.call('openSource', {

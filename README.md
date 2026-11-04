@@ -48,7 +48,7 @@ lock.
 
 Each entry of the canvas's Diagnostics list has **Open source**, which opens the file the diagnostic names at its line
 and column, beside the canvas. For one located on the canvas alone, such as a required input not set, it says the
-diagnostic names no file.
+diagnostic names no file; for one with no place either, it says it names no place on the canvas.
 
 A directory with no `.tf` file opens an empty canvas you can edit: the module starts there, as it would in a new `.tf`
 file, and Generate writes its first `.tf` files. In a workspace with no `.tf` file and no canvas open, **Lace: Open

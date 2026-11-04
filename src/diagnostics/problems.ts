@@ -13,9 +13,8 @@
 // A diagnostic's file is relative to its root, and its URI is the workspace
 // folder's own URI extended by the root's path and the file, so it attaches
 // to the document VS Code has open. One with no line is placed at line 1.
-// One that names no file (located in the graph, such as a required input
-// not set, or a command's failure) has no place in a file: it stays on the
-// canvas, and Problems skips it.
+// One that names no file (located in the graph, or a command's failure)
+// has no place in a file: it stays on the canvas, and Problems skips it.
 import {
   type CanvasSource,
   type CommandResult,
