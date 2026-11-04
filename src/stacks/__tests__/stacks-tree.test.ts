@@ -1613,7 +1613,7 @@ describe('Cancel on a run row', () => {
   const NO_RUN =
     "This command acts on a run listed in the Stacks view; choose it from that run's menu.";
 
-  test("chosen from a run row's menu while an apply of its stack ticks the store, reaches that run and cancels it; the row is redrawn once its stack's runs are read", async () => {
+  test("chosen from a run row's menu while an apply of its stack ticks the store, reaches that run and cancels it; the row is redrawn at once, and again once its stack's runs are read", async () => {
     const { t, tree, release } = drawnRun({
       'stack apply': { held: true, written: [{ type: 'stage', name: 'plan' }] },
     });
@@ -1632,11 +1632,17 @@ describe('Cancel on a run row', () => {
       { run: 'run_1' },
     ]);
 
+    const stackRow = tree.argument(stackHandle) as Row;
+    expect(t.redrawn.flat()).toContain(stackRow);
+    expect(t.item(stackRow).description).toBe('prod · applying: plan');
+    const redrawnAtOnce = t.redrawn.length;
+
     release();
     await settled();
     await tree.answered();
+    expect(t.redrawn.length).toBeGreaterThan(redrawnAtOnce);
     expect(tree.drawn(stackHandle)).toEqual([runHandle]);
-    expect(t.item(tree.argument(stackHandle) as Row).description).toBe('prod · applying: plan');
+    expect(t.item(stackRow).description).toBe('prod · applying: plan');
   });
 
   test("chosen from a run row's menu while the view reads the whole tree again, reaches that run and cancels it", async () => {
@@ -2079,6 +2085,278 @@ describe('an apply', () => {
       text: 'Cancelled the apply of prod.',
       buttons: ['Show Output'],
     });
+  });
+});
+
+describe('a stack row as its apply settles', () => {
+  const ended = (status: string) => ({
+    ...applyResult(),
+    run: run('run_1', status, { completedAt: COMPLETED }),
+  });
+  const readFails = { fails: new CommandUnobservedError('run list') };
+
+  // A stack at stage `runner` of an apply, its run listed as `auto_apply`.
+  // Reads answer at once until `holdReads` (or `inFlight`), then `answer` does.
+  async function applying({
+    expand = true,
+    inFlight = false,
+    staged = true,
+    written,
+    listed = [runs(run('run_1', 'auto_apply'))],
+    later,
+  }: {
+    expand?: boolean;
+    inFlight?: boolean;
+    staged?: boolean;
+    written?: object[];
+    listed?: ReturnType<typeof runs>[];
+    later?: Script;
+  } = {}) {
+    let held = false;
+    let readsAtSettle = 0;
+    const reads: ((script: Script) => void)[] = [];
+    const t = setup({
+      root: prod,
+      scripts: {
+        // The read of the whole tree a tick starts stays under way, so what
+        // redraws the row is the store alone.
+        'stack list': () =>
+          held ? new Promise<Script>(() => {}) : { documents: [stacks(stack('stk_1', 'prod'))] },
+        'run list': () => {
+          if (!held) return { documents: listed };
+          return (
+            later ??
+            new Promise<Script>((resolve) => {
+              reads.push(resolve);
+            })
+          );
+        },
+        'stack apply': {
+          held: true,
+          written: written ?? (staged ? [{ type: 'stage', name: 'runner' }] : []),
+        },
+      },
+    });
+    const tree = t.shownTree();
+    await tree.show();
+    const [stackHandle] = tree.drawn();
+    if (expand) await tree.expand(stackHandle);
+    const row = tree.argument(stackHandle) as Row;
+    held = inFlight;
+    void t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    await tree.answered();
+    expect(t.item(row).description).toBe(staged ? 'prod · applying: runner' : 'prod');
+    return {
+      t,
+      tree,
+      row,
+      holdReads: () => {
+        held = true;
+      },
+      // The apply settles with `result`, and the notice and the redraws that follow are in.
+      async settle(result: object, failure?: Error) {
+        const before = t.redrawn.length;
+        readsAtSettle = reads.length;
+        t.commands.held.find((c) => c.path === 'stack apply')?.finish([result], failure);
+        await settled();
+        await tree.answered();
+        return t.redrawn.slice(before).flat();
+      },
+      // The reads of the runs started after the settle answer `documents`.
+      answer: async (documents: object[]) => {
+        for (const read of reads.slice(readsAtSettle)) read({ documents });
+        await settled();
+        await tree.answered();
+      },
+      // The ones under way at the settle answer `documents`.
+      answerUnderWay: async (documents: object[]) => {
+        for (const read of reads.slice(0, readsAtSettle)) read({ documents });
+        await settled();
+        await tree.answered();
+      },
+      runRows: () => tree.drawn(stackHandle).map((handle) => t.item(tree.argument(handle) as Row)),
+    };
+  }
+
+  test('expanded, with its runs read again, is redrawn without applying when the notice says it applied, and its run row says apply_succeeded', async () => {
+    const a = await applying();
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Applied prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row)).toMatchObject({ description: 'prod', iconPath: { id: 'layers' } });
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^apply_succeeded /), contextValue: 'laceRun ended' },
+    ]);
+  });
+
+  test('expanded, its runs read again once they are listed: the list answers what the row says', async () => {
+    const a = await applying();
+    a.holdReads();
+    await a.settle(ended('apply_succeeded'));
+    await a.answer([
+      runs(
+        run('run_1', 'apply_succeeded', { completedAt: COMPLETED }),
+        run('run_0', 'apply_failed'),
+      ),
+    ]);
+
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows().map(({ label }) => label)).toEqual(['apply · run_1', 'apply · run_0']);
+    expect(a.runRows()[1]).toMatchObject({ description: expect.stringMatching(/^apply_failed /) });
+  });
+
+  test('expanded, with a read of its runs already under way when it settles, is redrawn at once all the same', async () => {
+    const a = await applying({ inFlight: true });
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([{ contextValue: 'laceRun ended' }]);
+
+    await a.answerUnderWay([runs(run('run_1', 'auto_apply'))]);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect((await a.t.children(a.row)).map((row) => a.t.item(row))).toMatchObject([
+      { description: expect.stringMatching(/^apply_succeeded /) },
+    ]);
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^apply_succeeded /), contextValue: 'laceRun ended' },
+    ]);
+
+    await a.answer([
+      runs(
+        run('run_1', 'apply_succeeded', { completedAt: COMPLETED }),
+        run('run_0', 'apply_failed'),
+      ),
+    ]);
+    expect(a.runRows().map(({ label }) => label)).toEqual(['apply · run_1', 'apply · run_0']);
+  });
+
+  test('expanded, cancelled by someone else while it ran, is redrawn without applying when the notice says so, and its run row says cancelled', async () => {
+    const a = await applying();
+    a.holdReads();
+    const redrawn = await a.settle(
+      ended('cancelled'),
+      new CommandExitError(1, 'Source: /work/repo/infra/prod\nRun cancelled.\n'),
+    );
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Cancelled the apply of prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^cancelled /), iconPath: { id: 'circle-slash' } },
+    ]);
+  });
+
+  test('expanded, with no run listed yet, is redrawn without applying, and its runs are what the read lists', async () => {
+    const a = await applying({ listed: [runs()] });
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([{ label: 'No runs yet' }]);
+
+    await a.answer([runs(run('run_1', 'apply_succeeded', { completedAt: COMPLETED }))]);
+    expect(a.runRows()).toMatchObject([{ label: 'apply · run_1' }]);
+  });
+
+  test("another stack's row, expanded, says nothing of the apply, and its runs are left as they were", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+        'run list': { documents: [runs(run('run_1', 'auto_apply'))] },
+        'stack apply': { held: true, written: [{ type: 'stage', name: 'runner' }] },
+      },
+    });
+    const [prodRow, qaRow] = await t.children();
+    await t.children(qaRow);
+    void t.command(STACK_COMMANDS.apply, prodRow);
+    await settled();
+    expect(t.item(prodRow).description).toBe('prod · applying: runner');
+    expect(t.item(qaRow).description).toBe('qa');
+    t.commands.held.find((c) => c.path === 'stack apply')?.finish([ended('apply_succeeded')]);
+    await settled();
+
+    expect(t.item(prodRow).description).toBe('prod');
+    expect(t.item(qaRow).description).toBe('qa');
+    expect((await t.children(qaRow)).map((row) => t.item(row))).toMatchObject([
+      { description: expect.stringMatching(/^auto_apply /) },
+    ]);
+  });
+
+  test('expanded, cancelled before its first stage, shows its run as cancelled when the notice says so', async () => {
+    const a = await applying({ staged: false });
+    a.holdReads();
+    const redrawn = await a.settle(
+      ended('cancelled'),
+      new CommandExitError(1, 'Source: /work/repo/infra/prod\nRun cancelled.\n'),
+    );
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Cancelled the apply of prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^cancelled /), iconPath: { id: 'circle-slash' } },
+    ]);
+  });
+
+  test('expanded, a later tick of the store does not draw the settled Run over what the list since answered', async () => {
+    const a = await applying({ staged: false });
+    a.holdReads();
+    await a.settle(ended('apply_succeeded'));
+    await a.answer([runs(run('run_1', 'awaiting_approval'))]);
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^awaiting_approval /) },
+    ]);
+
+    a.t.runner.store.detach('notify', {});
+    await settled();
+    await a.tree.answered();
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^awaiting_approval /) },
+    ]);
+  });
+
+  test('expanded, its apply still running when a result frame arrives, keeps its run row as the list read it', async () => {
+    const a = await applying({
+      inFlight: true,
+      written: [
+        { type: 'stage', name: 'runner' },
+        { ...applyResult('still going'), run: run('run_1', 'policy_eval') },
+      ],
+    });
+    expect(a.t.item(a.row).description).toBe('prod · applying: runner');
+    expect(a.runRows()).toMatchObject([{ description: expect.stringMatching(/^auto_apply /) }]);
+  });
+
+  test('collapsed, is redrawn without applying when it settles', async () => {
+    const a = await applying({ expand: false });
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Applied prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+  });
+
+  test('expanded, with its runs read failing, is redrawn without applying, and the failure is what its runs say', async () => {
+    const a = await applying({ later: readFails });
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([
+      {
+        label: "the engine's stream ended before `lace run list` exited; run it again",
+        iconPath: { id: 'error' },
+      },
+    ]);
+    expect(a.t.report).not.toHaveBeenCalled();
   });
 });
 

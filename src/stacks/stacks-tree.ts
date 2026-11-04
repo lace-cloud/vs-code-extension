@@ -49,7 +49,8 @@
 // CLI declares more than a read) ended in an integrated terminal, a change
 // of the workspace's folders, a change of the root it names, and Refresh. A
 // stack row whose look changes with the store (an apply of it started,
-// reached a stage or settled) has its runs read again, then is redrawn.
+// reached a stage or settled) is redrawn at once, with its settled Run, when
+// its runs are held, drawn as the store says it ended; they are then read again.
 //
 // The tree and the root's canvas, whose badges are the picked stack's, read
 // the same facts, so one invalidation serves both: each read of the tree
@@ -203,6 +204,15 @@ export type StacksTreeOptions = {
   report: (what: string, error: unknown) => void;
 };
 
+// The rows with the Run `ended` drawn in place of its row, or undefined when
+// they list none: an apply's result says how it ended before a read does.
+function settledRows(rows: readonly Row[], ended: Run): Row[] | undefined {
+  if (!rows.some((row) => row.kind === 'run' && row.run.id === ended.id)) return undefined;
+  return rows.map((row) =>
+    row.kind === 'run' && row.run.id === ended.id ? { ...row, run: ended } : row,
+  );
+}
+
 export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   const { api, commands, runner, runOutput, rootState, panels, sources, pickStack, report } =
     options;
@@ -239,6 +249,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   type HeldRuns = { at: number; asked: Promise<Row[]>; read?: Row[] };
   const heldRuns = new Map<string, HeldRuns>();
   let runReadsStarted = 0;
+  const nextReadAt = () => ++runReadsStarted;
   // A read of a stack's runs: when it started among them, and its rows.
   type RunsRead = { at: number; rows: Row[] };
 
@@ -256,7 +267,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   // Reads the runs of a stack row's stack.
   async function readRuns(row: StackRow): Promise<RunsRead> {
-    const at = ++runReadsStarted;
+    const at = nextReadAt();
     return { at, rows: await runRows(row) };
   }
 
@@ -265,7 +276,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   function askRuns(row: StackRow): Promise<Row[]> {
     const held = heldRuns.get(row.stack.id);
     if (held) return held.asked;
-    const asking: HeldRuns = { at: ++runReadsStarted, asked: runRows(row) };
+    const asking: HeldRuns = { at: nextReadAt(), asked: runRows(row) };
     heldRuns.set(row.stack.id, asking);
     void asking.asked.then((rows) => holdRuns(row.stack.id, { at: asking.at, rows }));
     return asking.asked;
@@ -539,20 +550,45 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }
   }
 
-  // A stack row whose look changed with the store (an apply of it started,
-  // reached a stage or settled): its run may have changed with it, so its
-  // runs, when held, are read again, and the row is redrawn once they are.
-  // One read per row at a time; the row is drawn with its look as it is
-  // when that read is done.
+  // The run slot, when it is about the stack `id`.
+  const slotOf = (id: string) => {
+    const { run } = runner.store.getSnapshot();
+    return run?.readOver.stack === id ? run : null;
+  };
+
+  let settledToken: object | undefined;
+  // Holds the Run an apply of stack `id` settled with, once per settled slot, as
+  // the newest read of its runs until a read started after answers; whether it did.
+  function holdSettledRun(id: string): boolean {
+    const slot = slotOf(id);
+    if (!slot?.run || slot.outcome.kind === 'running' || slot.token === settledToken) return false;
+    settledToken = slot.token;
+    const read = heldRuns.get(id)?.read;
+    const rows = read && settledRows(read, slot.run);
+    return rows !== undefined && holdRuns(id, { at: nextReadAt(), rows });
+  }
+
+  // A stack row whose look changed with the store, or whose settled Run was drawn,
+  // is redrawn at once; its held runs are read again, one read at a time.
   const restacking = new Set<string>();
+  const restackAgain = new Set<string>();
   async function restack(id: string | undefined): Promise<void> {
     const row = id === undefined ? undefined : shown.get(id);
-    if (!row || restacking.has(row.stack.id) || sameLook(look(row), drawn.get(row.stack.id))) {
+    if (!row) return;
+    const settled = holdSettledRun(row.stack.id);
+    if (!settled && sameLook(look(row), drawn.get(row.stack.id))) return;
+    redraw([row.stack.id]);
+    if (!heldRuns.has(row.stack.id)) return;
+    if (restacking.has(row.stack.id)) {
+      restackAgain.add(row.stack.id);
       return;
     }
     restacking.add(row.stack.id);
     try {
-      if (heldRuns.has(row.stack.id)) holdRuns(row.stack.id, await readRuns(row));
+      do {
+        restackAgain.delete(row.stack.id);
+        holdRuns(row.stack.id, await readRuns(row));
+      } while (restackAgain.has(row.stack.id));
     } finally {
       restacking.delete(row.stack.id);
     }
@@ -562,9 +598,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   const look = (row: Row): RowLook => {
     if (row.kind === 'stack') {
       const picked = rootState.stack(row.root)?.id === row.stack.id;
-      const { run } = runner.store.getSnapshot();
-      const ours = run?.readOver.stack === row.stack.id ? run : null;
-      return stackLook(row.stack, picked, ours);
+      return stackLook(row.stack, picked, slotOf(row.stack.id));
     }
     if (row.kind === 'run') return runLook(row.run);
     return {
