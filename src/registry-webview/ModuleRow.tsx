@@ -12,8 +12,9 @@ import type {
   RegistryVersion,
   SendSidebarMessage,
 } from '../protocol/registry-protocol';
-import { moduleKey, moduleLabel } from '../protocol/registry-protocol';
+import { moduleKey, moduleLabel, versionTitle } from '../protocol/registry-protocol';
 import { ModuleIcon } from './ModuleIcon';
+import { VersionLabel } from './VersionLabel';
 
 export function ModuleRow({
   row,
@@ -46,7 +47,10 @@ export function ModuleRow({
           <ModuleIcon vendor={row.vendor} className="module-icon" />
           <span className="module-info">
             <span className="module-name" id={`${id}-name`}>
-              {label} <span className="module-version">{row.version}</span>
+              <span className="module-title">{label}</span>{' '}
+              <span className="module-version">
+                <VersionLabel version={row.version} status={row.status} />
+              </span>
             </span>
             {row.categories.length > 0 && (
               <span className="module-categories" id={`${id}-categories`}>
@@ -70,7 +74,7 @@ export function ModuleRow({
           <button
             type="button"
             className="module-add"
-            title={`Add ${label} ${row.version} to the canvas`}
+            title={`Add ${label} ${versionTitle(row.version, row.status)} to the canvas`}
             onClick={() => send({ op: 'place', key, version: row.version })}
           >
             <span aria-hidden="true">+</span>
@@ -114,11 +118,13 @@ function OlderVersions({
       {versions?.kind === 'loaded' && older.length === 0 && note('No other versions')}
       {older.map((v) => (
         <div className="version-row" key={v.version}>
-          <span className="version-row-label">{v.version}</span>
+          <span className="version-row-label">
+            <VersionLabel version={v.version} status={v.status} />
+          </span>
           <button
             type="button"
             className="version-row-add"
-            title={`Add ${moduleLabel(row)} ${v.version} to the canvas`}
+            title={`Add ${moduleLabel(row)} ${versionTitle(v.version, v.status)} to the canvas`}
             onClick={() => send({ op: 'place', key: moduleKey(row), version: v.version })}
           >
             <span aria-hidden="true">+</span>

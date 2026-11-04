@@ -23,12 +23,48 @@ export const moduleKey = (module: { author: string; name: string }): string =>
 export const moduleLabel = (module: { displayName: string; name: string }): string =>
   module.displayName || module.name;
 
+// The registry's words for a version's status, and the one word a page or a
+// pick marks a deprecated version with.
+export const DEPRECATED = 'Deprecated';
+export const isDeprecated = (status: string): boolean => status === 'deprecated';
+export const isPublished = (status: string): boolean => status === 'published';
+
+// The version the registry names as a module's latest, and its status.
+export type Latest = Pick<RegistryVersion, 'version' | 'status'>;
+
+// The note that another version is the newest the registry has published, when
+// `latest` is a published version other than `version`.
+export const newestPublishedNote = (
+  latest: Latest | undefined,
+  version: string,
+): string | undefined =>
+  latest && isPublished(latest.status) && latest.version !== version
+    ? `${latest.version} is the newest published version`
+    : undefined;
+
+// A version where its name is read or picked: a deprecated one says so.
+export const versionTitle = (version: string, status: string): string =>
+  isDeprecated(status) ? `${version} (${DEPRECATED})` : version;
+
+// The status of one of a row's versions: the row's own, else the one the
+// versions listed for its module give it, else none.
+export const statusOf = (
+  row: Pick<RegistryRow, 'version' | 'status'>,
+  listed: readonly RegistryVersion[] | undefined,
+  version: string,
+): string =>
+  version === row.version ? row.status : (listed?.find((v) => v.version === version)?.status ?? '');
+
 // A read the host started for the page: under way, its document, or what
 // the command said instead.
 export type Read<T> =
   | { kind: 'loading' }
   | { kind: 'loaded'; value: T }
   | { kind: 'failed'; message: string };
+
+// What a read holds once it has loaded.
+export const loaded = <T>(read: Read<T> | undefined): T | undefined =>
+  read?.kind === 'loaded' ? read.value : undefined;
 
 // What the sidebar draws. `signedOut` (a session the server refuses) and
 // `noOrganization` are the states a read's failure names by its reason;

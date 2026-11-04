@@ -17,9 +17,22 @@ import { SIGN_IN } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { type ByReason, byReason, failureText } from '../engine/command-outcome';
 import type { RootSessions } from '../engine/root-sessions';
+import {
+  isDeprecated,
+  type Latest,
+  loaded,
+  moduleKey,
+  newestPublishedNote,
+  versionTitle,
+} from '../protocol/registry-protocol';
 import { rootLabel, rootPath, rootToAct, type StartingSources } from '../roots/authoring-roots';
+import { asRead, type RegistryReads } from './registry-reads';
 
 export type PlacedModule = { author: string; name: string; version: string };
+
+// Places a module at the status the registry lists its version with, which the
+// engine is not sent, and, when the caller has read it, the module's latest.
+export type Place = (module: PlacedModule, status: string, latest?: Latest) => Promise<void>;
 
 export type PlaceApi = {
   window: Pick<
@@ -35,6 +48,7 @@ export type PlaceOptions = {
   sources: StartingSources;
   panels: Pick<CanvasPanels, 'ensure'>;
   rootSessions: Pick<RootSessions, 'acquire'>;
+  reads: Pick<RegistryReads, 'get'>;
   log: Pick<vscode.OutputChannel, 'appendLine' | 'show'>;
   // Called once the module is on the canvas.
   placed: (module: PlacedModule) => Promise<void>;
@@ -58,8 +72,8 @@ export const PLACEMENT_API_REFUSALS: Readonly<Record<string, string>> = {
 const SHOW_DETAILS = 'Show Details';
 const SIGN_IN_ACTION = 'Sign In';
 
-export function placeModule(options: PlaceOptions): (module: PlacedModule) => Promise<void> {
-  const { api, sources, panels, rootSessions, log, placed } = options;
+export function placeModule(options: PlaceOptions): Place {
+  const { api, sources, panels, rootSessions, reads, log, placed } = options;
 
   async function refused(named: string, label: string, error: ConnectError): Promise<void> {
     const reason = error.apiCode ?? reasonWire(error.reason);
@@ -84,11 +98,35 @@ export function placeModule(options: PlaceOptions): (module: PlacedModule) => Pr
     log.show(true);
   }
 
+  // What a deprecated placement adds: the newest published version, from the
+  // caller's latest or one `registry get`; a read that fails is logged.
+  async function suggestion(module: PlacedModule, known: Latest | undefined): Promise<string> {
+    let latest = known;
+    if (!latest) {
+      const key = moduleKey(module);
+      const say = (what: string) => log.appendLine(`Reading the latest version of ${key}: ${what}`);
+      let thrown = false;
+      const read = await asRead(
+        () => reads.get(key),
+        (error) => {
+          thrown = true;
+          say(failureText(error));
+        },
+      );
+      if (read.kind === 'failed' && !thrown) say(read.message);
+      latest = loaded(read)?.latest;
+    }
+    const note = newestPublishedNote(latest, module.version);
+    return note ? ` — ${note}; place that one instead.` : '';
+  }
+
   async function apply(
     editor: EditorPort,
     module: PlacedModule,
     named: string,
     label: string,
+    status: string,
+    latest: Latest | undefined,
   ): Promise<void> {
     const action: Action = { place_module: module };
     const result = await api.window.withProgress(
@@ -101,12 +139,13 @@ export function placeModule(options: PlaceOptions): (module: PlacedModule) => Pr
       );
       return;
     }
-    api.window.setStatusBarMessage(`Lace: added ${named} to ${label}`, 5000);
+    const advice = isDeprecated(status) ? await suggestion(module, latest) : '';
+    api.window.setStatusBarMessage(`Lace: added ${named} to ${label}${advice}`, 5000);
     await placed(module);
   }
 
-  return async (module) => {
-    const named = `${module.author}/${module.name} ${module.version}`;
+  return async (module, status, latest) => {
+    const named = `${module.author}/${module.name} ${versionTitle(module.version, status)}`;
     const root = await rootToAct(sources, api.window, `add ${named} to`);
     if (!root) return;
     const label = rootLabel(root, sources.folders());
@@ -114,7 +153,7 @@ export function placeModule(options: PlaceOptions): (module: PlacedModule) => Pr
       await panels.ensure(root, { preserveFocus: true });
       const hold = await rootSessions.acquire(rootPath(root));
       try {
-        await apply(hold.ports.editor, module, named, label);
+        await apply(hold.ports.editor, module, named, label, status, latest);
       } finally {
         await hold.release();
       }

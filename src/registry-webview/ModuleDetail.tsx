@@ -15,8 +15,15 @@ import type {
   RegistryRecord,
   SendDetailMessage,
 } from '../protocol/registry-protocol';
-import { moduleLabel } from '../protocol/registry-protocol';
+import {
+  isDeprecated,
+  loaded,
+  moduleLabel,
+  newestPublishedNote,
+  versionTitle,
+} from '../protocol/registry-protocol';
 import { ModuleIcon } from './ModuleIcon';
+import { VersionLabel } from './VersionLabel';
 
 const TABS = [
   ['details', 'Details'],
@@ -79,8 +86,12 @@ const TAB_KEYS: Record<string, (at: number) => number> = {
   End: () => TABS.length - 1,
 };
 
-const loaded = <T,>(read: Read<T>): T | undefined =>
-  read.kind === 'loaded' ? read.value : undefined;
+// What the page says of a deprecated version: that it is, and the newest
+// version the registry has published when that is another.
+const deprecation = (row: DetailState['row'], record: RegistryRecord | undefined): string => {
+  const newest = newestPublishedNote(record?.latest, row.version);
+  return newest ? `This version is deprecated. ${newest}.` : 'This version is deprecated.';
+};
 
 export function ModuleDetail({ state, send }: { state: DetailState; send: SendDetailMessage }) {
   const [tab, setTab] = useState<Tab>('details');
@@ -110,7 +121,9 @@ export function ModuleDetail({ state, send }: { state: DetailState; send: SendDe
             <h1>{moduleLabel(row)}</h1>
             <div className="header-meta">
               <span className="badge">{KIND}</span>
-              <span>{row.version}</span>
+              <span>
+                <VersionLabel version={row.version} status={row.status} />
+              </span>
               <span className="meta-next">{row.system.toUpperCase()}</span>
               {row.categories.length > 0 && (
                 <span className="meta-next">{row.categories.join(', ')}</span>
@@ -130,6 +143,7 @@ export function ModuleDetail({ state, send }: { state: DetailState; send: SendDe
         </div>
       </div>
 
+      {isDeprecated(row.status) && <div className="error-banner">{deprecation(row, record)}</div>}
       {state.describe.kind === 'failed' && (
         <div className="error-banner">
           The module's interface could not be loaded: {state.describe.message}
@@ -199,10 +213,11 @@ function Details({
   const { row } = state;
   const latest = record?.latest;
   const counted = (n: number | undefined) => (n === undefined ? '—' : `${n} defined`);
-  const reference: [string, string][] = [
+  const shown = latest ?? row;
+  const reference: [string, ReactNode][] = [
     ['System', row.system.toUpperCase()],
     ['Kind', KIND],
-    ['Latest Version', row.version],
+    ['Latest Version', <VersionLabel key="latest" version={shown.version} status={shown.status} />],
     ['Author', latest?.vendor?.displayName ?? row.author],
     ['Source', row.sourceAddress || '—'],
     ['Inputs', counted(described?.interface.inputs.length)],
@@ -351,7 +366,7 @@ export function Versions({ read, current }: { read: Read<RegistryRecord>; curren
                 key={v.version}
                 className={`version-tag${v.version === current ? ' active' : ''}`}
               >
-                {v.version}
+                <VersionLabel version={v.version} status={v.status} />
               </span>
             ))
           )}
@@ -365,7 +380,10 @@ export function Versions({ read, current }: { read: Read<RegistryRecord>; curren
 // loaded: the inputs and outputs, then the steps on the canvas.
 export function usageExample(state: DetailState, described: ModuleInterface | undefined): string {
   const { row } = state;
-  const lines = [`# ${moduleLabel(row)} (${row.system})`, `# Version: ${row.version}`];
+  const lines = [
+    `# ${moduleLabel(row)} (${row.system})`,
+    `# Version: ${versionTitle(row.version, row.status)}`,
+  ];
   if (described) lines.push(`# Source: ${described.source}`);
   lines.push('');
   const { inputs, outputs } = described?.interface ?? { inputs: [], outputs: [] };

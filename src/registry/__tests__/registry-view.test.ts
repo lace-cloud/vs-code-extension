@@ -20,6 +20,7 @@ import { settled } from '../../engine/__tests__/fake-engine';
 import { described, GUIDE, list, record, row } from '../../protocol/__tests__/registry-fixtures';
 import type { SidebarState } from '../../protocol/registry-protocol';
 import { uri } from '../../roots/__tests__/fake-uri';
+import type { Place } from '../place-module';
 import { type RegistryMarks, registryMarks } from '../registry-marks';
 import { LIST_LIMIT, registryReads } from '../registry-reads';
 import { createRegistryView, failedListState } from '../registry-view';
@@ -94,7 +95,7 @@ function setup(
     commands: { executeCommand: vi.fn(async () => undefined) },
     Uri: { parse: (value: string) => ({ parsed: value }) },
   };
-  const place = vi.fn(async () => {});
+  const place = vi.fn<Place>(async () => {});
   const showDetail = vi.fn();
   const reports: unknown[] = [];
   const changes = new Set<() => void>();
@@ -264,7 +265,32 @@ describe('the registry sidebar', () => {
     await settled();
     await page.send({ op: 'place', key: 'acme/vpc', version: '1.0.0' });
     await page.send({ op: 'place', key: 'evil/thing', version: '1.0.0' });
-    expect(place.mock.calls).toEqual([[{ author: 'acme', name: 'vpc', version: '1.0.0' }]]);
+    expect(place.mock.calls).toEqual([[{ author: 'acme', name: 'vpc', version: '1.0.0' }, '']]);
+  });
+
+  test("names a placed version as deprecated by the status the host's own reads give it: the row's, or its versions' read", async () => {
+    const { page, place } = setup({
+      'registry list': { documents: [list([row({ status: 'deprecated' })])] },
+      'registry get': {
+        documents: [
+          record({ versions: ['v2.0.0', 'v1.5.0', 'v1.0.0'], deprecated: ['v2.0.0', 'v1.0.0'] }),
+        ],
+      },
+    });
+    await settled();
+    const placeAt = (version: string) =>
+      page.send({ op: 'place', key: 'acme/vpc', version, status: 'published' });
+    await placeAt('v1.0.0');
+    await page.send({ op: 'versions', key: 'acme/vpc' });
+    await settled();
+    for (const version of ['v2.0.0', 'v1.5.0', 'v1.0.0']) await placeAt(version);
+    expect(place.mock.calls.map(([module, status]) => [module.version, status])).toEqual([
+      ['v1.0.0', ''],
+      ['v2.0.0', 'deprecated'],
+      ['v1.5.0', 'published'],
+      ['v1.0.0', 'deprecated'],
+    ]);
+    expect(place.mock.calls.every(([module]) => !('status' in module))).toBe(true);
   });
 
   test('a favourite is keyed on author and name, so a new latest version keeps it', async () => {

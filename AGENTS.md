@@ -67,6 +67,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | Whether this window holds a root's session, root compared with root | `commands/canvas-operations.ts` (`held`) | Save, where a module command's report lands |
 | The picked stack and the canvas arrangement per root | `state/root-state.ts` (`workspaceState`) | the Stacks tree, the canvas page |
 | Favourites and recently used modules | `registry/registry-marks.ts` (`globalState`) | the registry sidebar |
+| A version's deprecated mark, and its name where read or picked | `protocol/registry-protocol.ts` (`isDeprecated`, `DEPRECATED`, `versionTitle`, `statusOf`, `newestPublishedNote`), `registry-webview/VersionLabel.tsx` | the sidebar, module detail, Add Module to Canvas, placement |
 | When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
@@ -242,6 +243,19 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   offers Sign In; `not_lace_form`, `hash_mismatch`, `registry_unavailable`, `not_found`, `version_not_found`,
   `forbidden` are named with the module (any other reason as "the engine refused it"), and **Show Details** writes the
   engine's full message to the "Lace" Output channel.
+- A version's status is the registry's own (`registry list`'s row `status`, `registry get`'s `versions[].status` and
+  `latest.status`), and only `deprecated` marks it. `VersionLabel` draws a version with the word **Deprecated** after it
+  (`DEPRECATED`, `isDeprecated`; one `deprecated-mark.css` rule in both pages' stylesheets) on a row, among its versions,
+  in module detail's header, Details (`Latest Version`: the page's own `registry get`'s `latest` once it has loaded, else
+  the row's) and Versions; a row's label shortens with an ellipsis and never the version beside it. Where a name is
+  read or picked, `versionTitle` says `v0.4.0 (Deprecated)`: the "+" titles, the Add Module to Canvas pick, the usage
+  example, the placement's progress and status-bar message. A deprecated version places as any other: the host takes
+  its status with `statusOf` (the row's, else the one of the versions its sidebar read or its detail's `registry get`
+  lists) and hands `place` that status, which names the version with `versionTitle`, while the engine is sent the
+  module and its version alone. After a deprecated placement the status-bar message adds the newest published version
+  (`newestPublishedNote`: the `latest` of module detail's own `registry get`, else one `registry get` read by the
+  placement; a failed read is logged and adds nothing). Module detail shows the `.error-banner` "This version is
+  deprecated." above its tabs, with the same note.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
 - Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
   that cannot be read closes it and says why with the ways out its reason names, and an empty registry closes it and

@@ -8,13 +8,15 @@ import type * as vscode from 'vscode';
 import {
   type DetailState,
   detailMessageOf,
+  loaded,
   moduleKey,
   moduleLabel,
   type RegistryRow,
+  statusOf,
   type ToPage,
 } from '../protocol/registry-protocol';
 import { pageHtml } from '../vscode/webview-html';
-import type { PlacedModule } from './place-module';
+import type { Place } from './place-module';
 import { asRead, type RegistryReads } from './registry-reads';
 
 export const MODULE_DETAIL_VIEW_TYPE = 'lace.moduleDetail';
@@ -28,7 +30,7 @@ export type ModuleDetailOptions = {
   api: ModuleDetailApi;
   extensionUri: vscode.Uri;
   reads: Pick<RegistryReads, 'get' | 'describe'>;
-  place: (module: PlacedModule) => Promise<void>;
+  place: Place;
   report: (what: string, error: unknown) => void;
 };
 
@@ -62,9 +64,13 @@ export function createModuleDetailPanels(options: ModuleDetailOptions): ModuleDe
       const message = detailMessageOf(raw);
       if (message?.op === 'ready') post();
       if (message?.op === 'place') {
-        place({ author: row.author, name: row.name, version: message.version }).catch((error) =>
-          report(`adding ${key} to a canvas`, error),
-        );
+        const { version } = message;
+        const record = loaded(state.record);
+        place(
+          { author: row.author, name: row.name, version },
+          statusOf(row, record?.versions, version),
+          record?.latest,
+        ).catch((error) => report(`adding ${key} to a canvas`, error));
       }
     });
     panel.onDidDispose(() => {

@@ -135,6 +135,12 @@ it runs **Lace: Select Organization** to switch it.
 
 - **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens beside the
   file you are editing, or comes forward, without taking focus, so you see the edit land.
+- A version the registry has deprecated is marked **Deprecated**, in your theme's warning colour, wherever it is
+  listed: on its row, among a row's versions, and in module detail's header, **Details** and **Versions**; a tooltip,
+  the Add Module to Canvas pick, the version line of the **Examples** tab, and the progress notification and the
+  message of a placement say `(Deprecated)` after it. **+** and **Add to Canvas** still place it, and the message that
+  follows names the newest published version to use instead, when there is another. Module detail shows "This version
+  is deprecated." above its tabs with that version, and its **Latest Version** is the one the registry names.
 - Clicking a row opens **module detail**: **Details** renders the module's README, **Interface** lists its inputs and
   outputs as Lace certified them (describing a version downloads and certifies it, so it loads after the rest),
   **Versions** and **Examples**, with **Add to Canvas** in the header.

@@ -188,6 +188,7 @@ function registry(host: Host): vscode.Disposable {
     sources: startingSources(api.window, host.sources),
     panels: host.panels,
     rootSessions: host.rootSessions,
+    reads,
     log: host.log,
     placed: (module) => marks.placed(moduleKey(module)),
   });

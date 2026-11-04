@@ -20,13 +20,16 @@ import type * as vscode from 'vscode';
 import { type Account, SELECT_ORGANIZATION, SIGN_IN } from '../account/account';
 import { type CommandOutcome, failureText } from '../engine/command-outcome';
 import {
+  loaded,
   moduleKey,
   type RegistryRow,
   type SidebarState,
   sidebarMessageOf,
+  statusOf,
   type ToPage,
 } from '../protocol/registry-protocol';
 import { pageHtml } from '../vscode/webview-html';
+import type { Place } from './place-module';
 import type { RegistryMarks } from './registry-marks';
 import { asRead, type RegistryReads } from './registry-reads';
 
@@ -45,7 +48,7 @@ export type RegistryViewOptions = {
   reads: RegistryReads;
   marks: RegistryMarks;
   account: Pick<Account, 'onDidChange' | 'refreshWith'>;
-  place: (module: { author: string; name: string; version: string }) => Promise<void>;
+  place: Place;
   showDetail: (row: RegistryRow) => void;
   report: (what: string, error: unknown) => void;
 };
@@ -185,7 +188,14 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
       }
       case 'place': {
         const row = rowOf(message.key);
-        if (row) await place({ author: row.author, name: row.name, version: message.version });
+        if (row) {
+          const { version } = message;
+          const listed = loaded('kind' in shown ? undefined : shown.versions[message.key]);
+          await place(
+            { author: row.author, name: row.name, version },
+            statusOf(row, listed, version),
+          );
+        }
         return;
       }
     }

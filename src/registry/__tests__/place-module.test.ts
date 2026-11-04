@@ -1,7 +1,9 @@
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
 import { type FakeEngine, fakeEngine } from '../../engine/__tests__/fake-engine';
 import { createRootSessions, type RootHold } from '../../engine/root-sessions';
+import { record } from '../../protocol/__tests__/registry-fixtures';
 import { folder, fsPath } from '../../roots/__tests__/fake-uri';
 import { type AuthoringRoot, rootPath, type StartingSources } from '../../roots/authoring-roots';
 import {
@@ -10,6 +12,7 @@ import {
   type PlaceApi,
   placeModule,
 } from '../place-module';
+import { registryReads } from '../registry-reads';
 
 const repo = folder('/work/repo');
 const prod: AuthoringRoot = { folder: repo, relative: 'infra/prod' };
@@ -39,6 +42,8 @@ function setup(
     folders?: readonly vscode.WorkspaceFolder[];
     // The canvases open in the window, focused or not.
     open?: readonly AuthoringRoot[];
+    // What `registry get` answers when the placement reads the module.
+    get?: Script;
   } = {},
 ) {
   const engine: FakeEngine = fakeEngine();
@@ -70,6 +75,7 @@ function setup(
   };
   const log = { appendLine: vi.fn(), show: vi.fn() };
   const placed = vi.fn(async () => {});
+  const commands = fakeCommands({ 'registry get': options.get ?? { documents: [record()] } });
   const place = placeModule({
     api: api as unknown as PlaceApi,
     sources: sources(
@@ -79,17 +85,19 @@ function setup(
     ),
     panels,
     rootSessions,
+    reads: registryReads(commands.commands),
     log,
     placed,
   });
   const sent = (method: string) => engine.sent.filter((s) => s.method === method);
-  return { engine, place, api, log, placed, panels, rootSessions, events, sent, panelHolds };
+  const reads = () => commands.invoked.filter((run) => run.path === 'registry get');
+  return { engine, place, api, log, placed, panels, rootSessions, events, sent, panelHolds, reads };
 }
 
 describe('placing a registry module', () => {
   test("holds the root's canvas first, applies one place_module, and the session stays open after", async () => {
     const { place, events, sent, engine, rootSessions, placed } = setup();
-    await place(VPC);
+    await place(VPC, 'published');
 
     expect(events).toEqual([`ensure ${fsPath('/work/repo/infra/prod')} true`]);
     expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
@@ -101,10 +109,95 @@ describe('placing a registry module', () => {
     expect(placed).toHaveBeenCalledWith(VPC);
   });
 
+  test('says in the status bar which version it added, and that a deprecated one is', async () => {
+    const { place, api, sent, placed } = setup({
+      get: { documents: [record({ latest: { version: 'v1.0.0', status: 'published' } })] },
+    });
+    await place(VPC, 'published');
+    expect(api.window.setStatusBarMessage).toHaveBeenLastCalledWith(
+      'Lace: added acme/vpc v2.0.0 to infra/prod',
+      5000,
+    );
+    const deprecated = { ...VPC, version: 'v1.0.0' };
+    await place(deprecated, 'deprecated');
+    expect(api.window.setStatusBarMessage).toHaveBeenLastCalledWith(
+      'Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod',
+      5000,
+    );
+    expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([
+      [{ placeModule: VPC }],
+      [{ placeModule: deprecated }],
+    ]);
+    expect(placed).toHaveBeenLastCalledWith(deprecated);
+  });
+
+  describe('a deprecated version', () => {
+    const OLD = { ...VPC, version: 'v1.0.0' };
+    const latest = (version: string, status: string) => ({
+      documents: [record({ latest: { version, status } })],
+    });
+    const bar = (api: ReturnType<typeof setup>['api']) =>
+      api.window.setStatusBarMessage.mock.lastCall?.[0];
+
+    test('names the newest published version in the placement message, and still places it', async () => {
+      const { place, api, sent, reads } = setup({ get: latest('v2.0.0', 'published') });
+      await place(OLD, 'deprecated');
+      expect(bar(api)).toBe(
+        'Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod — v2.0.0 is the newest published version; place that one instead.',
+      );
+      expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: OLD }]]);
+      expect(reads()).toHaveLength(1);
+    });
+
+    test.each([
+      ['nothing is published', 'v2.0.0', 'deprecated'],
+      ['the newest published is the version placed', 'v1.0.0', 'published'],
+    ])('suggests nothing when %s', async (_case, version, status) => {
+      const { place, api } = setup({ get: latest(version, status) });
+      await place(OLD, 'deprecated');
+      expect(bar(api)).toBe('Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod');
+    });
+
+    test('uses the latest the caller already read, and reads nothing', async () => {
+      const { place, api, reads } = setup();
+      await place(OLD, 'deprecated', { version: 'v3.0.0', status: 'published' });
+      expect(bar(api)).toContain('v3.0.0 is the newest published version');
+      expect(reads()).toEqual([]);
+    });
+
+    test('is placed with no suggestion when the read fails, and the failure is logged', async () => {
+      const { place, api, placed, log, sent } = setup({
+        get: refused({ reason: 'unauthenticated', message: 'offline' }),
+      });
+      await place(OLD, 'deprecated');
+      expect(bar(api)).toBe('Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod');
+      expect(sent('ApplyAction')).toHaveLength(1);
+      expect(placed).toHaveBeenCalledWith(OLD);
+      expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('offline'));
+    });
+
+    test('is placed with no suggestion when the read throws, and the error is logged', async () => {
+      const { place, api, placed, log } = setup({
+        get: { fails: new Error('the engine stopped') },
+      });
+      await place(OLD, 'deprecated');
+      expect(bar(api)).toBe('Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod');
+      expect(placed).toHaveBeenCalledWith(OLD);
+      expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('the engine stopped'));
+    });
+
+    test('is a published version that is placed with no extra read', async () => {
+      const { place, api, reads } = setup();
+      await place(VPC, 'published');
+      expect(bar(api)).toBe('Lace: added acme/vpc v2.0.0 to infra/prod');
+      expect(reads()).toEqual([]);
+    });
+  });
+
   test('ensures the canvas before the edit is sent', async () => {
     const { place, engine, panels } = setup();
     const ensured = panels.ensure.mock;
-    await place(VPC);
+    await place(VPC, 'published');
     const firstApply = engine.sent.findIndex((s) => s.method === 'ApplyAction');
     const firstOpen = engine.sent.findIndex((s) => s.method === 'SessionOpen');
     expect(ensured.calls).toHaveLength(1);
@@ -113,7 +206,7 @@ describe('placing a registry module', () => {
 
   test('in a workspace that holds no Terraform, the module is placed on a new canvas of the workspace folder', async () => {
     const { place, events, sent, api, placed } = setup({ root: null });
-    await place(VPC);
+    await place(VPC, 'published');
     expect(events).toEqual([`ensure ${fsPath('/work/repo')} true`]);
     expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
     expect(api.window.showInformationMessage).not.toHaveBeenCalled();
@@ -125,14 +218,14 @@ describe('placing a registry module', () => {
       root: null,
       open: [{ folder: repo, relative: 'infra/new' }],
     });
-    await place(VPC);
+    await place(VPC, 'published');
     expect(events).toEqual([`ensure ${fsPath('/work/repo/infra/new')} true`]);
     expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: VPC }]]);
   });
 
   test('with no folder open, nothing is opened, and the notice says why', async () => {
     const { place, panels, sent, api } = setup({ root: null, folders: [] });
-    await place(VPC);
+    await place(VPC, 'published');
     expect(panels.ensure).not.toHaveBeenCalled();
     expect(sent('SessionOpen')).toEqual([]);
     expect(api.window.showInformationMessage).toHaveBeenCalledWith(
@@ -156,7 +249,7 @@ describe('placing a registry module', () => {
   ])('a refusal for %s names the module and says why', async (_name, why, reason, apiCode) => {
     const { place, engine, api, placed } = setup();
     engine.refuse('ApplyAction', String(reason), 'the engine says so', apiCode);
-    await place(VPC);
+    await place(VPC, 'published');
     expect(api.window.showErrorMessage).toHaveBeenCalledWith(
       `Lace could not add acme/vpc v2.0.0 to infra/prod: ${why}.`,
       'Show Details',
@@ -167,7 +260,7 @@ describe('placing a registry module', () => {
   test("Show Details writes the engine's message to the Output channel", async () => {
     const { place, engine, log } = setup({ answer: 'Show Details' });
     engine.refuse('ApplyAction', 'REASON_NOT_LACE_FORM', 'verdict: lossy');
-    await place(VPC);
+    await place(VPC, 'published');
     expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('verdict: lossy'));
     expect(log.show).toHaveBeenCalled();
   });
@@ -180,7 +273,7 @@ describe('placing a registry module', () => {
       'Authentication required',
       'unauthenticated',
     );
-    await place(VPC);
+    await place(VPC, 'published');
     expect(api.window.showErrorMessage).toHaveBeenCalledWith(
       'Sign in to add acme/vpc v2.0.0 from the Lace registry.',
       'Sign In',
@@ -191,7 +284,7 @@ describe('placing a registry module', () => {
   test('a root the engine will not open is shown, and the call does not reject', async () => {
     const { place, engine, api } = setup();
     engine.refuse('SessionOpen', 'REASON_ROOT_LOCKED');
-    await expect(place(VPC)).resolves.toBeUndefined();
+    await expect(place(VPC, 'published')).resolves.toBeUndefined();
     expect(api.window.showErrorMessage).toHaveBeenCalledWith(
       'Lace could not add acme/vpc v2.0.0 to infra/prod: the engine refused it.',
       'Show Details',

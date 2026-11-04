@@ -108,7 +108,7 @@ describe('module detail', () => {
     expect(last.record.kind).toBe('loaded');
   });
 
-  test('Add to Canvas places the version the page names', async () => {
+  test('Add to Canvas places the version the page names, as the row lists it', async () => {
     const { details, made, place } = setup({
       'registry get': { documents: [record()] },
       'registry describe': { documents: [described] },
@@ -116,7 +116,38 @@ describe('module detail', () => {
     details.show(VPC);
     made[0].send({ op: 'place', version: '1.0.0' });
     made[0].send({ op: 'place' });
-    expect(place.mock.calls).toEqual([[{ author: 'acme', name: 'vpc', version: '1.0.0' }]]);
+    expect(place.mock.calls).toEqual([
+      [{ author: 'acme', name: 'vpc', version: '1.0.0' }, '', undefined],
+    ]);
+  });
+
+  test.each([
+    ['a deprecated row, a published version the record lists', 'deprecated', 'v1.5.0', 'published'],
+    ['a deprecated row, its own version', 'deprecated', 'v2.0.0', 'deprecated'],
+    [
+      'a published row, a version the record lists as deprecated',
+      'published',
+      'v1.0.0',
+      'deprecated',
+    ],
+    ['a published row, a version the record does not list', 'published', 'v9.9.9', ''],
+  ])('Add to Canvas of %s places it as %j, with the record latest', async (_case, status, version, listed) => {
+    const { details, made, place } = setup({
+      'registry get': {
+        documents: [record({ versions: ['v2.0.0', 'v1.5.0', 'v1.0.0'], deprecated: ['v1.0.0'] })],
+      },
+      'registry describe': { documents: [described] },
+    });
+    details.show(row({ status }));
+    await settled();
+    made[0].send({ op: 'place', version });
+    expect(place.mock.calls).toEqual([
+      [
+        { author: 'acme', name: 'vpc', version },
+        listed,
+        expect.objectContaining({ version: 'v2.0.0', status: 'published' }),
+      ],
+    ]);
   });
 
   test('serves its page under a CSP that loads https images', () => {

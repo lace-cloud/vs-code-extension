@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
-import { described, LOGO, record, row, vendor } from '../../protocol/__tests__/registry-fixtures';
+import { coloursOf, rulesOf } from '../../__tests__/css-rules';
+import {
+  described,
+  LOGO,
+  record,
+  row,
+  vendor,
+  versionEntry,
+} from '../../protocol/__tests__/registry-fixtures';
 import type { DetailState, SidebarState } from '../../protocol/registry-protocol';
 import { CategoryChips } from '../CategoryChips';
 import { Interface, ModuleDetail, usageExample, Versions } from '../ModuleDetail';
@@ -137,25 +145,25 @@ describe('the registry sidebar page', () => {
 });
 
 // The sidebar's stylesheet, read no further than its rules' selectors and
-// the VS Code colours they declare: how they draw is the browser's.
+// the VS Code colours and layout they declare: how they draw is the browser's.
 describe("the registry sidebar's stylesheet", () => {
-  const rules = readFileSync(join(__dirname, '..', 'sidebar.css'), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('}')
-    .map((rule) => rule.split('{'))
-    .map(([selectors = '', declarations = '']) => ({ selectors, declarations }));
+  const rules = rulesOf(readFileSync(join(__dirname, '..', 'sidebar.css'), 'utf8'));
   // The VS Code colours the rules naming `part` declare.
-  const coloursOf = (part: RegExp): Set<string> =>
-    new Set(
-      rules
-        .filter(({ selectors }) => part.test(selectors))
-        .flatMap(({ declarations }) => [...declarations.matchAll(/--vscode-[\w-]+/g)])
-        .map(([token]) => token),
-    );
+  const coloursNamed = (part: RegExp): Set<string> => new Set(coloursOf(rules, part));
+  // What the rule for exactly `selector` declares.
+  const declared = (selector: string): string =>
+    rules.find((rule) => rule.selectors === selector)?.declarations ?? '';
+
+  test('shortens the label of a row with an ellipsis and never the version beside it', () => {
+    expect(declared('.module-title')).toContain('text-overflow: ellipsis');
+    expect(declared('.module-title')).toContain('min-width: 0');
+    expect(declared('.module-version')).toContain('flex-shrink: 0');
+    expect(declared('.module-name')).toContain('display: flex');
+  });
 
   test('draws the organization picker as a VS Code dropdown, in none of the search input’s colours', () => {
-    const picker = coloursOf(/\.org-picker/);
-    const input = coloursOf(/\.search-input/);
+    const picker = coloursNamed(/\.org-picker/);
+    const input = coloursNamed(/\.search-input/);
     for (const token of [
       '--vscode-dropdown-background',
       '--vscode-dropdown-border',
@@ -327,9 +335,15 @@ const scrollBoxes = (html: string): string[] =>
     ...html.matchAll(/class="scroll-box[^"]*" tabindex="0" role="region" aria-label="([^"]+)"/g),
   ].map(([, name]) => name);
 
+// A record read that has loaded: the record of `over`.
+const loadedRecord = (over?: Parameters<typeof record>[0]): DetailState['record'] => ({
+  kind: 'loaded',
+  value: record(over),
+});
+
 const detail = (over: Partial<DetailState> = {}): DetailState => ({
   row: VPC,
-  record: { kind: 'loaded', value: record({ readme: '# Usage\n\nPlace it **once**.' }) },
+  record: loadedRecord({ readme: '# Usage\n\nPlace it **once**.' }),
   describe: { kind: 'loaded', value: described },
   ...over,
 });
@@ -354,10 +368,7 @@ describe('the module detail page', () => {
     const readme =
       '| Input | Type |\n|---|---|\n| `cidr` | `string` |\n\n```hcl\nmodule "vpc" {}\n```';
     const details = renderToStaticMarkup(
-      <ModuleDetail
-        state={detail({ record: { kind: 'loaded', value: record({ readme }) } })}
-        send={nothing}
-      />,
+      <ModuleDetail state={detail({ record: loadedRecord({ readme }) })} send={nothing} />,
     );
     expect(scrollBoxes(details)).toEqual(['README table', 'README code block', 'Quick Reference']);
     expect(details).toContain('aria-label="README table"><table>');
@@ -398,10 +409,7 @@ describe('the module detail page', () => {
   test("a README's raw HTML is not run as markup", () => {
     const readme = 'Hi <script>alert(1)</script><img src=x onerror="alert(2)">';
     const html = renderToStaticMarkup(
-      <ModuleDetail
-        state={detail({ record: { kind: 'loaded', value: record({ readme }) } })}
-        send={nothing}
-      />,
+      <ModuleDetail state={detail({ record: loadedRecord({ readme }) })} send={nothing} />,
     );
     expect(html).not.toContain('<script');
     expect(html).not.toMatch(/<img[^>]*onerror/);
@@ -410,10 +418,7 @@ describe('the module detail page', () => {
 
   test('without a README, Details shows the description', () => {
     const html = renderToStaticMarkup(
-      <ModuleDetail
-        state={detail({ record: { kind: 'loaded', value: record() } })}
-        send={nothing}
-      />,
+      <ModuleDetail state={detail({ record: loadedRecord() })} send={nothing} />,
     );
     expect(html).toContain('A VPC module');
   });
@@ -442,9 +447,7 @@ describe('the module detail page', () => {
   });
 
   test('Versions marks the version the row shows', () => {
-    const html = renderToStaticMarkup(
-      <Versions read={{ kind: 'loaded', value: record() }} current="v2.0.0" />,
-    );
+    const html = renderToStaticMarkup(<Versions read={loadedRecord()} current="v2.0.0" />);
     expect(html).toContain('version-tag active">v2.0.0');
     expect(html).toContain('version-tag">v1.0.0');
   });
@@ -454,5 +457,208 @@ describe('the module detail page', () => {
     expect(example).toContain('# Version: v2.0.0');
     expect(example).toContain('# Source: lace.cloud/acme/vpc/aws');
     expect(example).toContain('#   cidr: string (required)');
+  });
+});
+
+// A module whose listed version the registry has deprecated.
+const BLOCKS = row({
+  author: 'issue-982-qa',
+  name: 'qa-1521-blocks',
+  displayName: 'QA 1521 registry blocks module',
+  version: 'v0.4.0',
+  status: 'deprecated',
+});
+const MARK = '<span class="deprecated-mark">Deprecated</span>';
+const marksIn = (html: string): number => html.split('class="deprecated-mark"').length - 1;
+
+describe('a deprecated version in the registry sidebar', () => {
+  test('is marked Deprecated in its row, which the module button is named by', () => {
+    const html = moduleRow({ row: BLOCKS });
+    const open = attributesOf(html, 'module-open');
+    expect(elementText(html, open['aria-labelledby'])).toBe(
+      'QA 1521 registry blocks module v0.4.0 Deprecated',
+    );
+  });
+
+  test('is marked by a word of its own, which a screen reader reads', () => {
+    const html = moduleRow({ row: BLOCKS });
+    expect(html).toContain(MARK);
+    expect(attributesOf(html, 'deprecated-mark')).toEqual({ class: 'deprecated-mark' });
+  });
+
+  test('leaves the label to shorten and keeps the version and its mark whole', () => {
+    const html = moduleRow({ row: BLOCKS });
+    expect(html).toContain(
+      '<span class="module-title">QA 1521 registry blocks module</span> <span class="module-version">v0.4.0 ' +
+        `${MARK}</span>`,
+    );
+  });
+
+  test('says so in the title of its "+", which still adds the version as the registry spells it', () => {
+    expect(attributesOf(moduleRow({ row: BLOCKS }), 'module-add').title).toBe(
+      'Add QA 1521 registry blocks module v0.4.0 (Deprecated) to the canvas',
+    );
+  });
+
+  test('is the only row marked in a list of published and deprecated ones', () => {
+    const html = sidebar(loaded({ rows: [VPC, BLOCKS, DB] }));
+    expect(marksIn(html)).toBe(1);
+    expect(html).toContain(`v0.4.0 ${MARK}`);
+    expect(html).toContain('<span class="module-version">v2.0.0</span>');
+  });
+
+  test.each([
+    ['published'],
+    [''],
+    ['yanked'],
+    ['Deprecated'],
+  ])('a version whose status is %j gets no mark and its plain title', (status) => {
+    const html = moduleRow({ row: row({ status }) });
+    expect(marksIn(html)).toBe(0);
+    expect(html).not.toContain('Deprecated');
+    expect(attributesOf(html, 'module-add').title).toBe('Add ACME VPC v2.0.0 to the canvas');
+    expect(html).toContain('<span class="module-version">v2.0.0</span>');
+  });
+
+  test("marks an older version by that version's own status, not its row's", () => {
+    const html = moduleRow({
+      expanded: true,
+      versions: {
+        kind: 'loaded',
+        value: [
+          versionEntry('v2.0.0', 'published'),
+          versionEntry('v1.5.0', 'published'),
+          versionEntry('v1.0.0', 'deprecated'),
+        ],
+      },
+    });
+    expect(html).toContain(`<span class="version-row-label">v1.0.0 ${MARK}</span>`);
+    expect(html).toContain('<span class="version-row-label">v1.5.0</span>');
+    expect(marksIn(html)).toBe(1);
+    expect(html).toContain('title="Add ACME DB v1.0.0 (Deprecated) to the canvas"');
+    expect(html).toContain('title="Add ACME DB v1.5.0 to the canvas"');
+  });
+
+  test('a deprecated row leaves its published older versions unmarked', () => {
+    const html = moduleRow({
+      row: BLOCKS,
+      expanded: true,
+      versions: {
+        kind: 'loaded',
+        value: [versionEntry('v0.4.0', 'deprecated'), versionEntry('v0.3.0', 'published')],
+      },
+    });
+    expect(html).toContain('<span class="version-row-label">v0.3.0</span>');
+    expect(marksIn(html)).toBe(1);
+  });
+});
+
+// The text of the banner of `html`.
+const bannerOf = (html: string): string | undefined => {
+  const banner = html.match(/<div class="error-banner">(.*?)<\/div>/)?.[1];
+  return banner === undefined ? undefined : textOf(banner);
+};
+
+describe('a deprecated version on the module detail page', () => {
+  const page = (state: DetailState) =>
+    renderToStaticMarkup(<ModuleDetail state={state} send={nothing} />);
+
+  test('is marked beside its version in the header', () => {
+    expect(page(detail({ row: BLOCKS }))).toContain(
+      `<span>v0.4.0 ${MARK}</span><span class="meta-next">AWS</span>`,
+    );
+    expect(marksIn(page(detail()))).toBe(0);
+  });
+
+  test('has a banner that says so, and names the newest published version when it is another', () => {
+    const state = detail({
+      row: BLOCKS,
+      record: loadedRecord({
+        versions: ['v0.4.0', 'v0.3.0'],
+        deprecated: ['v0.4.0'],
+        latest: { version: 'v0.3.0', status: 'published' },
+      }),
+    });
+    expect(bannerOf(page(state))).toBe(
+      'This version is deprecated. v0.3.0 is the newest published version.',
+    );
+  });
+
+  test.each([
+    ['is this version', { version: 'v0.4.0', status: 'deprecated' }],
+    ['is deprecated too', { version: 'v0.3.0', status: 'deprecated' }],
+    ['is in no known status', { version: 'v0.3.0', status: '' }],
+  ])('has a banner that names no latest version when the latest %s', (_name, latest) => {
+    expect(bannerOf(page(detail({ row: BLOCKS, record: loadedRecord({ latest }) })))).toBe(
+      'This version is deprecated.',
+    );
+  });
+
+  test('has a banner that names no latest version when the registry has since published this one as the latest', () => {
+    const latest = { version: 'v0.4.0', status: 'published' };
+    expect(bannerOf(page(detail({ row: BLOCKS, record: loadedRecord({ latest }) })))).toBe(
+      'This version is deprecated.',
+    );
+  });
+
+  test('has a banner before the record has loaded, which names no latest version', () => {
+    expect(bannerOf(page(detail({ row: BLOCKS, record: { kind: 'loading' } })))).toBe(
+      'This version is deprecated.',
+    );
+  });
+
+  test('has no banner for a published version, whatever the latest is', () => {
+    expect(bannerOf(page(detail()))).toBeUndefined();
+    expect(page(detail())).not.toContain('deprecated');
+    const older = detail({
+      row: row({ version: 'v0.3.0' }),
+      record: loadedRecord({ latest: { version: 'v0.4.0', status: 'deprecated' } }),
+    });
+    expect(bannerOf(page(older))).toBeUndefined();
+  });
+
+  test('has no banner for a status the registry does not call deprecated', () => {
+    for (const status of ['', 'yanked', 'Deprecated']) {
+      expect(bannerOf(page(detail({ row: row({ status }) })))).toBeUndefined();
+    }
+  });
+
+  test('shows the Latest Version the registry names once it has loaded, with its status', () => {
+    const latest = { version: 'v0.3.0', status: 'published' };
+    const html = page(detail({ row: BLOCKS, record: loadedRecord({ latest }) }));
+    expect(html).toContain('<td>Latest Version</td><td>v0.3.0</td>');
+    const deprecated = page(
+      detail({
+        row: BLOCKS,
+        record: loadedRecord({ latest: { version: 'v0.5.0', status: 'deprecated' } }),
+      }),
+    );
+    expect(deprecated).toContain(`<td>Latest Version</td><td>v0.5.0 ${MARK}</td>`);
+  });
+
+  test("shows the row's version as the Latest Version until the record has loaded", () => {
+    for (const record of [{ kind: 'loading' }, { kind: 'failed', message: 'offline' }] as const) {
+      expect(page(detail({ row: BLOCKS, record }))).toContain(
+        `<td>Latest Version</td><td>v0.4.0 ${MARK}</td>`,
+      );
+    }
+  });
+
+  test('is marked on its tag in Versions, and the published tags are not', () => {
+    const html = renderToStaticMarkup(
+      <Versions
+        read={loadedRecord({ versions: ['v0.4.0', 'v0.3.0'], deprecated: ['v0.4.0'] })}
+        current="v0.4.0"
+      />,
+    );
+    expect(html).toContain(`version-tag active">v0.4.0 ${MARK}</span>`);
+    expect(html).toContain('version-tag">v0.3.0</span>');
+    expect(marksIn(html)).toBe(1);
+  });
+
+  test("names it in the usage example's version line", () => {
+    const lines = (state: DetailState) => usageExample(state, described).split('\n');
+    expect(lines(detail({ row: BLOCKS }))).toContain('# Version: v0.4.0 (Deprecated)');
+    expect(lines(detail())).toContain('# Version: v2.0.0');
   });
 });
