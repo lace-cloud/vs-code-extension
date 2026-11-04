@@ -73,6 +73,7 @@ each other: every contributed command, view and tool is one a feature registers,
 | When the account changed: a change this window makes, or a read that differs from the last one | `account/account.ts` (`createAccount`, `onDidChange`) | the status bar, the registry view, the Stacks tree |
 | Which CLI command a `lace` command line that ended in an integrated terminal ran | `vscode/lace-command-lines.ts` (`onDidEndLaceCommand`) | the account, the Stacks tree |
 | The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
+| A slug-bearing row's slug beside its name: the slug only where it differs from the name, in its one-line description (then its markers, joined with ' · ') and in a tooltip's name (`Name (slug)`) | `vscode/slug-beside.ts` (`slugBeside`, `rowDescription`, `nameWithSlug`) | the organization, team and stack picks, the Stacks tree's stack rows |
 | What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
 | Which stack of a root a stack command no row names acts on | `stacks/stack-pick.ts` (`pickStack`) | the palette's Preview, Apply and Scan; Import Existing Resources |
 | Import Existing Resources on a root | `stacks/import-resources.ts` (`resourceImporter`) | the canvas's source-refused banner, the palette |

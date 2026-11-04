@@ -13,6 +13,7 @@ import type {
 import { type ByReason, byReason } from '../engine/command-outcome';
 import type { Found } from '../roots/authoring-roots';
 import { type Offer, offersFor } from '../vscode/offers';
+import { nameWithSlug, rowDescription } from '../vscode/slug-beside';
 
 export type Stack = JsonOf<'stack list'>['items'][number];
 export type Run = JsonOf<'run list'>['items'][number];
@@ -72,7 +73,12 @@ export function sameLook(a: RowLook, b: RowLook | undefined): boolean {
   return b !== undefined && (Object.keys(a) as (keyof RowLook)[]).every((key) => a[key] === b[key]);
 }
 
-// A stack row: its name and slug, whether its badges are on the canvas, its
+// What a stack's row or pick says beside its name: its slug where it differs, whether its badges
+// are on the canvas, then the `more` a row adds.
+export const stackDescription = (stack: Stack, picked: boolean, more: string[] = []): string =>
+  rowDescription(stack, [...(picked ? ['on the canvas'] : []), ...more]);
+
+// A stack row: its name, and its slug where it differs, whether its badges are on the canvas, its
 // last drift scan, and an apply of it under way.
 export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook {
   const applying =
@@ -83,17 +89,14 @@ export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook 
       : [
           `drift ${stack.lastDriftStatus.toLowerCase()}${stack.lastDriftCount > 0 ? ` (${stack.lastDriftCount})` : ''}`,
         ];
-  const description = [
-    stack.slug,
-    ...(picked ? ['on the canvas'] : []),
-    ...drift,
-    ...(applying === undefined ? [] : [`applying: ${applying}`]),
-  ].join(' · ');
   return {
     label: stack.name,
-    description,
+    description: stackDescription(stack, picked, [
+      ...drift,
+      ...(applying === undefined ? [] : [`applying: ${applying}`]),
+    ]),
     tooltip: [
-      `Stack: ${stack.name} (${stack.slug})`,
+      `Stack: ${nameWithSlug(stack)}`,
       `Source: ${stack.source ? `${stack.source.repoUrl}${stack.source.path ? ` ${stack.source.path}` : ''}` : 'none'}`,
       `Last applied: ${stack.lastApply?.completedAt ?? 'never'}`,
       `Last drift scan: ${stack.lastDriftScanAt ?? 'never'}`,

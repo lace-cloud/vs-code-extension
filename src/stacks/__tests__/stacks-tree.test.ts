@@ -651,6 +651,28 @@ describe('the stacks of the current root', () => {
     expect(t.item(qa).description).toBe('qa · drift in_sync');
   });
 
+  test('a stack named as its slug draws it once, keeps its id over a read, and is redrawn with the slug beside the name a later read gives it', async () => {
+    let name = 'prod';
+    const named = () => ({ ...stack('stk_1', 'prod'), name });
+    const t = rereadTo([named()], () => [named()]);
+    const [row] = await t.children();
+    const id = t.item(row).id;
+    expect(t.item(row)).toMatchObject({ label: 'prod', description: '' });
+    expect(String(t.item(row).tooltip).split('\n')[0]).toBe('Stack: prod');
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.item(row).id).toBe(id);
+    expect(t.redrawn).toEqual([]);
+
+    name = 'Prod';
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.redrawn).toEqual([[row]]);
+    expect(t.item(row)).toMatchObject({ id, label: 'Prod', description: 'prod' });
+    expect(String(t.item(row).tooltip).split('\n')[0]).toBe('Stack: Prod (prod)');
+  });
+
   test("a read of the whole tree whose answer changes a held stack's runs redraws that stack's row alone", async () => {
     const t = rereadTo(
       [stack('stk_1', 'prod'), stack('stk_2', 'qa')],

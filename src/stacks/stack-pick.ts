@@ -19,7 +19,7 @@ import {
 import type { RootState } from '../state/root-state';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import { pickFrom } from '../vscode/pick';
-import { stackRef } from './stack-rows';
+import { stackDescription, stackRef } from './stack-rows';
 
 // A stack of `root` the developer picks to `verb`; undefined when there is
 // none to pick, or the pick was dismissed.
@@ -54,7 +54,7 @@ export function stackPick(options: StackPickOptions): PickStack {
           return {
             items: items.map((stack) => ({
               label: stack.name,
-              description: stack.id === picked ? `${stack.slug} · on the canvas` : stack.slug,
+              description: stackDescription(stack, stack.id === picked),
               stack,
             })),
             none: () =>
