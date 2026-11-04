@@ -319,6 +319,25 @@ engine.on('exit', (code) => process.exit(code ?? 1));
     );
   }
 
+  test('an older CLI on the same protocol is refused with an upgrade instruction', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'lace-engine-'));
+    afterTest(() => rmSync(directory, { recursive: true, force: true }));
+    const binary = nodeProgram(
+      directory,
+      'lace',
+      `const { spawn } = require('node:child_process');
+const readline = require('node:readline');
+const engine = spawn(${JSON.stringify(BINARY)}, process.argv.slice(2), { stdio: ['inherit', 'pipe', 'inherit'] });
+readline.createInterface({ input: engine.stdout }).on('line', (line) => {
+  process.stdout.write(line.replace(/^LACE_ENGINE_VERSION=.*$/, 'LACE_ENGINE_VERSION=v2.57.0') + '\\n');
+});
+engine.on('exit', (code) => process.exit(code ?? 1));
+`,
+    );
+    const { engine } = realEngine({ binaryPath: binary });
+    await expect(engine.caller()).rejects.toThrow('Install Lace CLI v2.58.0 or newer');
+  });
+
   test('an engine below the protocol this extension speaks is reported as too old', async () => {
     const older = Number(ENGINE_PROTOCOL_VERSION) - 1;
     const { engine } = realEngine({ binaryPath: engineSpeaking(older) });

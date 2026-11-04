@@ -48,6 +48,7 @@ const RESULT = {
     applyLogLocation: null,
     policyResultsLocation: null,
     policyPassed: null,
+    policyEvaluatedWithoutBlock: null,
     policyResolution: null,
     changeRequestId: null,
     cancelReason: null,

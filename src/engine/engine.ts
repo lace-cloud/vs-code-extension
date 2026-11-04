@@ -9,6 +9,7 @@
 // with it.
 import { type BridgeEngineCaller, bridgeCaller } from '@lace-cloud/canvas/engine';
 import {
+  type EngineHandshake,
   EngineProtocolMismatchError,
   EngineSpawnError,
   type EngineTransport,
@@ -97,9 +98,20 @@ export type Engine = {
   restart: () => Promise<void>;
 };
 
+// The Run JSON contract consumed by the current libraries first shipped in
+// v2.58.0. Protocol 8 alone cannot distinguish the earlier contract.
+function supportedCli(version: string): boolean {
+  if (version === 'dev') return true; // Locally built CLI, under the developer's control.
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (!match) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  return major > 2 || (major === 2 && (minor > 58 || (minor === 58 && patch >= 0)));
+}
+
 // What the engine reads from its process manager; `ServerManager` is one.
 export type EngineManager = {
   readonly currentState: ServerState;
+  readonly handshake: Pick<EngineHandshake, 'version'> | null;
   readonly transport: EngineTransport | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
@@ -156,7 +168,23 @@ function bridgePair(): { host: MessageBridge; caller: MessageBridge } {
 
 export function createEngine(manager: EngineManager, settings: EngineSettings): Engine {
   const listeners = new Set<(state: EngineState) => void>();
+  let unsupported: Error | null = null;
+  let closing: Promise<void> | null = null;
   manager.on('state', (state) => {
+    if (state === 'running' && !supportedCli(manager.handshake?.version ?? '')) {
+      const version = manager.handshake?.version || 'unknown';
+      unsupported = new Error(
+        `Lace CLI ${version} is not supported. Install Lace CLI v2.58.0 or newer, then restart the engine.`,
+      );
+      // Refuse the transport before notifying consumers, including after an
+      // automatic restart. Stop asynchronously: state listeners are synchronous.
+      for (const listener of [...listeners]) listener('error');
+      closing = manager.stop().finally(() => {
+        closing = null;
+      });
+      closing.catch(() => {});
+      return;
+    }
     for (const listener of [...listeners]) listener(state);
   });
 
@@ -183,7 +211,7 @@ export function createEngine(manager: EngineManager, settings: EngineSettings): 
   }
 
   const running = (): EngineTransport | null =>
-    manager.currentState === 'running' ? manager.transport : null;
+    manager.currentState === 'running' && !unsupported ? manager.transport : null;
 
   // Resolves with the transport at the next `running`; with `orStopped`,
   // rejects at a state that says no start is under way.
@@ -204,8 +232,16 @@ export function createEngine(manager: EngineManager, settings: EngineSettings): 
 
   let starting: Promise<void> | null = null;
   function start(): Promise<void> {
-    starting ??= manager
-      .start()
+    starting ??= (async () => {
+      if (closing) await closing;
+      unsupported = null;
+      await manager.start();
+      if (unsupported) {
+        const failure = unsupported;
+        if (closing) await closing;
+        throw failure;
+      }
+    })()
       .catch((cause) => {
         throw new EngineStartError(settings.binaryPath(), cause);
       })

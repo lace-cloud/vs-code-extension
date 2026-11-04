@@ -38,6 +38,7 @@ function fakeManager() {
   const manager = {
     currentState: 'stopped' as ServerState,
     transport: null as EngineTransport | null,
+    handshake: { version: 'v2.58.0' },
     starts: 0,
     // What the next start does once `come` is called.
     failure: undefined as Error | undefined,
@@ -100,6 +101,35 @@ describe('the engine starts on demand', () => {
     expect(await version(await first)).toBe('engine1');
     expect(await engine.caller()).toBe(await first);
     expect(manager.starts).toBe(1);
+  });
+
+  test('an older CLI is refused before any caller can use it', async () => {
+    const manager = fakeManager();
+    manager.handshake.version = 'v2.57.0';
+    const engine = createEngine(manager, settings);
+    const asked = engine.caller();
+    await tick();
+    manager.come();
+    await expect(asked).rejects.toThrow('Install Lace CLI v2.58.0 or newer');
+    expect(manager.transport).toBeNull();
+  });
+
+  test('an automatic restart cannot expose an older CLI transport', async () => {
+    const manager = fakeManager();
+    const engine = createEngine(manager, settings);
+    const first = engine.caller();
+    await tick();
+    manager.come();
+    const previous = await first;
+    manager.enter('stopped');
+    manager.handshake.version = 'v2.57.0';
+    manager.run();
+    expect(manager.transport).toBeNull();
+    const retry = engine.caller();
+    await tick();
+    manager.handshake.version = 'v2.58.0';
+    manager.come();
+    expect(await retry).not.toBe(previous);
   });
 
   test('a start that fails rejects with where the binary was read from and why', async () => {
