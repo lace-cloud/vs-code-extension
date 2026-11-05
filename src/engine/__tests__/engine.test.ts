@@ -168,6 +168,18 @@ describe('the engine starts on demand', () => {
     );
   });
 
+  test('a CLI upgrade instruction keeps its single final period', async () => {
+    expect(
+      await startSays(
+        new Error(
+          'Lace CLI v2.57.0 is not supported. Install Lace CLI v2.58.0 or newer, then restart the engine.',
+        ),
+      ),
+    ).toBe(
+      'The Lace engine did not start from /opt/lace (the setting lace.binaryPath): Lace CLI v2.57.0 is not supported. Install Lace CLI v2.58.0 or newer, then restart the engine.',
+    );
+  });
+
   test('an engine of another protocol names the side that is behind, and one of another tree neither', async () => {
     const said = async (engineProtocol: string, engineContract: string) => {
       const manager = fakeManager();
