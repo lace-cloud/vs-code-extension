@@ -1,7 +1,14 @@
 import { type CommandFailure, type LaceReason, parseBound } from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
-import { outcomeNotice, previewText, refusedState, rootlessState, runLook } from '../stack-rows';
-import { run } from './stack-fixtures';
+import {
+  outcomeNotice,
+  previewText,
+  refusedState,
+  rootlessState,
+  runLook,
+  stackLook,
+} from '../stack-rows';
+import { run, stack } from './stack-fixtures';
 
 type Binding = {
   policyId: string;
@@ -318,6 +325,27 @@ describe("a preview's Advisories", () => {
 
   test('end the document, after the policy verdict', () => {
     expect(previewText(preview('')).endsWith('\n\nAdvisories: none\n')).toBe(true);
+  });
+});
+
+describe("a stack row's look", () => {
+  const named = { ...stack('stk_1', 'prod'), name: 'prod' };
+  const drifted = { ...named, lastDriftStatus: 'DRIFTED', lastDriftCount: 1 };
+
+  test('names the slug beside a name that differs from it', () => {
+    const look = stackLook(stack('stk_1', 'prod'), true, null);
+    expect(look.label).toBe('Prod');
+    expect(look.description).toBe('prod · picked for this module');
+    expect(look.tooltip.split('\n')[0]).toBe('Stack: Prod (prod)');
+  });
+
+  test('names a name that is its slug once, in the row and in its tooltip', () => {
+    expect(stackLook(named, false, null).description).toBe('');
+    expect(stackLook(named, true, null).description).toBe('picked for this module');
+    expect(stackLook(drifted, true, null).description).toBe(
+      'picked for this module · drift drifted (1)',
+    );
+    expect(stackLook(named, false, null).tooltip.split('\n')[0]).toBe('Stack: prod');
   });
 });
 

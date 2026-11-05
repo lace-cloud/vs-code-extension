@@ -311,17 +311,26 @@ body {
   overflow: hidden;
 }
 
+/* The label shortens with an ellipsis; the version and the mark after it
+ * stay whole. */
 .module-name {
-  display: block;
+  display: flex;
+  gap: 4px;
   font-weight: 600;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--vscode-foreground);
 }
 
+.module-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .module-version {
+  flex-shrink: 0;
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
   font-weight: 400;

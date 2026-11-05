@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { coloursOf, rulesOf } from './css-rules';
 
 const OUT = resolve(__dirname, '..', '..', 'out');
 
@@ -19,6 +20,9 @@ function copiesOf(name: string, modules: readonly string[]): string[] {
     .map((module) => module.slice(0, module.lastIndexOf(marker)));
   return [...new Set(roots)];
 }
+
+// The rules of a built stylesheet of out/.
+const builtRules = (stylesheet: string) => rulesOf(readFileSync(join(OUT, stylesheet), 'utf8'));
 
 describe('the canvas webview bundle', () => {
   const modules = bundledModules('canvas-webview.js');
@@ -56,13 +60,7 @@ describe.each([
 // these tests read no further than its rules' selectors and declarations:
 // whether Tab reaches a row's actions and focus shows is the browser's.
 describe("the registry sidebar's stylesheet", () => {
-  const rules = readFileSync(join(OUT, 'registry-sidebar.css'), 'utf8')
-    .split('}')
-    .map((rule) => rule.split('{'))
-    .map(([selectors = '', declarations = '']) => ({
-      selectors,
-      declarations: declarations.replace(/\s/g, ''),
-    }));
+  const rules = builtRules('registry-sidebar.css');
   // A row's actions and what holds them.
   const IN_A_ROW =
     /\.(module-add|module-star|version-toggle|version-row-add|module-actions|version-row)\b/;
@@ -99,6 +97,16 @@ describe("the registry sidebar's stylesheet", () => {
           declarations.includes('var(--vscode-focusBorder)'),
       ),
     ).toBe(true);
+  });
+});
+
+// The mark of a deprecated version is drawn in the warning colour on both
+// pages, from the one rule each page's stylesheet is built with.
+describe.each(['registry-sidebar.css', 'module-detail.css'])('the %s stylesheet', (stylesheet) => {
+  test('draws the deprecated mark in the warning colour', () => {
+    expect(coloursOf(builtRules(stylesheet), /\.deprecated-mark\b/)).toEqual([
+      '--vscode-editorWarning-foreground',
+    ]);
   });
 });
 

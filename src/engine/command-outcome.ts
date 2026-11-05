@@ -66,11 +66,12 @@ export async function commandOutcome<P extends BoundPath>(
 // it. Throws `CommandFailedError` when the command ended on its failure
 // document.
 export function documentOf<P extends BoundPath>(outcome: CommandOutcome<P>): JsonOf<P> {
-  if (outcome.kind === 'failure') {
-    throw new CommandFailedError({ message: outcome.failure.message, failure: outcome.failure });
-  }
+  if (outcome.kind === 'failure') throw failedWith(outcome.failure);
   return outcome.document;
 }
+
+export const failedWith = (failure: CommandFailure): CommandFailedError =>
+  new CommandFailedError({ message: failure.message, failure });
 
 // The document a command's outcome is, for a caller that goes on only with
 // it. Rejects as `documentOf` throws and as `commandOutcome` rejects.

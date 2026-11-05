@@ -57,7 +57,7 @@ function setup(
 }
 
 describe('the stack pick', () => {
-  test("lists the root's stacks in the home, the one on its canvas marked, and gives the one picked", async () => {
+  test("lists the root's stacks in the home, the one picked for its module marked, and gives the one picked", async () => {
     const t = setup(
       { 'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] } },
       { pick: 'qa' },
@@ -70,10 +70,33 @@ describe('the stack pick', () => {
     ]);
     const [pick] = t.picks;
     expect(pick.items.map(({ label, description }) => ({ label, description }))).toEqual([
-      { label: 'Prod', description: 'prod · on the canvas' },
+      { label: 'Prod', description: 'prod · picked for this module' },
       { label: 'Qa', description: 'qa' },
     ]);
     expect(pick.placeholder).toBe('The stack deployed from infra/prod to import into');
+  });
+
+  test('names a stack whose name is its slug once', async () => {
+    const t = setup(
+      {
+        'stack list': {
+          documents: [
+            stacks(
+              { ...stack('stk_1', 'prod'), name: 'prod' },
+              { ...stack('stk_2', 'qa'), name: 'qa' },
+            ),
+          ],
+        },
+      },
+      { pick: 'qa' },
+    );
+    await t.rootState.pickStack(prod, { id: 'stk_1', slug: 'prod' });
+    await t.pickStack(prod, 'preview');
+
+    expect(t.picks[0].items.map(({ label, description }) => ({ label, description }))).toEqual([
+      { label: 'prod', description: 'picked for this module' },
+      { label: 'qa', description: '' },
+    ]);
   });
 
   test('is on screen, busy, while the stacks are listed', async () => {

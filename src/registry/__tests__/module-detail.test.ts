@@ -49,14 +49,15 @@ function setup(answers: Record<string, Script>) {
     ViewColumn: { Active: -1 },
   };
   const place = vi.fn(async () => {});
+  const report = vi.fn();
   const details = createModuleDetailPanels({
     api: api as never,
     extensionUri: uri('/ext'),
     reads: registryReads(commands),
     place,
-    report: () => {},
+    report,
   });
-  return { details, made, invoked, place, api };
+  return { details, made, invoked, place, api, report };
 }
 
 const VPC = row();
@@ -108,7 +109,27 @@ describe('module detail', () => {
     expect(last.record.kind).toBe('loaded');
   });
 
-  test('Add to Canvas places the version the page names', async () => {
+  test.each([
+    ['get', 'the details could not be loaded', 'reading acme/vpc from the registry'],
+    ['describe', 'acme/vpc 2.0.0 is not in Lace form', 'describing acme/vpc v2.0.0'],
+  ])('a refused %s is reported once, by what it read', async (path, message, what) => {
+    const { details, report } = setup({
+      'registry get':
+        path === 'get'
+          ? refused({ reason: 'registry_unavailable', message })
+          : { documents: [record()] },
+      'registry describe':
+        path === 'describe'
+          ? refused({ reason: 'not_lace_form', message })
+          : { documents: [described] },
+    });
+    details.show(VPC);
+    await settled();
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith(what, expect.objectContaining({ message }));
+  });
+
+  test('Add to Canvas places the version the page names, as the row lists it', async () => {
     const { details, made, place } = setup({
       'registry get': { documents: [record()] },
       'registry describe': { documents: [described] },
@@ -116,7 +137,38 @@ describe('module detail', () => {
     details.show(VPC);
     made[0].send({ op: 'place', version: '1.0.0' });
     made[0].send({ op: 'place' });
-    expect(place.mock.calls).toEqual([[{ author: 'acme', name: 'vpc', version: '1.0.0' }]]);
+    expect(place.mock.calls).toEqual([
+      [{ author: 'acme', name: 'vpc', version: '1.0.0' }, '', undefined],
+    ]);
+  });
+
+  test.each([
+    ['a deprecated row, a published version the record lists', 'deprecated', 'v1.5.0', 'published'],
+    ['a deprecated row, its own version', 'deprecated', 'v2.0.0', 'deprecated'],
+    [
+      'a published row, a version the record lists as deprecated',
+      'published',
+      'v1.0.0',
+      'deprecated',
+    ],
+    ['a published row, a version the record does not list', 'published', 'v9.9.9', ''],
+  ])('Add to Canvas of %s places it as %j, with the record latest', async (_case, status, version, listed) => {
+    const { details, made, place } = setup({
+      'registry get': {
+        documents: [record({ versions: ['v2.0.0', 'v1.5.0', 'v1.0.0'], deprecated: ['v1.0.0'] })],
+      },
+      'registry describe': { documents: [described] },
+    });
+    details.show(row({ status }));
+    await settled();
+    made[0].send({ op: 'place', version });
+    expect(place.mock.calls).toEqual([
+      [
+        { author: 'acme', name: 'vpc', version },
+        listed,
+        expect.objectContaining({ version: 'v2.0.0', status: 'published' }),
+      ],
+    ]);
   });
 
   test('serves its page under a CSP that loads https images', () => {

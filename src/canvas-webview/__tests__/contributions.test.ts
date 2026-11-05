@@ -68,6 +68,50 @@ describe('Open source on a Diagnostics row', () => {
       'Required input "vpc_id" is not set: it names no file, only its place on the canvas.',
     );
   });
+
+  test('says a command failure names no file and no place on the canvas, and sends nothing', async () => {
+    const host = fakeHost();
+    const { run, notify } = openSource(host);
+    await run({
+      severity: 'error',
+      message:
+        '1 Terraform construct(s) Lace cannot carry; the report names each with what to change',
+    });
+    expect(host.call).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      'info',
+      '1 Terraform construct(s) Lace cannot carry; the report names each with what to change: it names no file and no place on the canvas.',
+    );
+  });
+
+  test.each([
+    ['an instance and no module', { instance_id: 'vpc' }],
+    ['an empty instance, which the Diagnostics row draws a chip for', { instance_id: '' }],
+  ])('gives the place sentence to a row with %s', async (_name, place) => {
+    const { run, notify } = openSource(fakeHost());
+    await run({ severity: 'error', message: 'm', ...place });
+    expect(notify).toHaveBeenCalledWith(
+      'info',
+      'm: it names no file, only its place on the canvas.',
+    );
+  });
+
+  test.each([
+    ['a module and no instance', { module_key: 'm' }],
+    ['an input name and no instance', { input_name: 'vpc_id' }],
+  ])('gives the no-place sentence to a row with %s', async (_name, place) => {
+    const { run, notify } = openSource(fakeHost());
+    await run({ severity: 'error', message: 'm', ...place });
+    expect(notify).toHaveBeenCalledWith('info', 'm: it names no file and no place on the canvas.');
+  });
+
+  test('opens the source of a row with a file and no place, with no notice', async () => {
+    const host = fakeHost();
+    const { run, notify } = openSource(host);
+    await run({ severity: 'error', message: 'm', file: 'main.tf' });
+    expect(host.call).toHaveBeenCalledWith('openSource', { file: 'main.tf' });
+    expect(notify).not.toHaveBeenCalled();
+  });
 });
 
 describe('Import existing resources on the source-refused banner', () => {

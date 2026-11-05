@@ -9,9 +9,20 @@ import {
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
-import { outsideSignals } from '../../account/__tests__/fake-outside';
+import {
+  outsideSignals,
+  refreshWithNoChange,
+  signedInAs,
+} from '../../account/__tests__/fake-outside';
+import { createAccount } from '../../account/account';
 import { authoringCommands } from '../../commands/authoring-commands';
-import { fakeCommands, refused, type Script } from '../../engine/__tests__/fake-commands';
+import {
+  failsWith,
+  fakeCommands,
+  refused,
+  type Script,
+  timesRun,
+} from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
@@ -135,6 +146,9 @@ type Options = {
   openCanvases?: AuthoringRoot[];
   // The workspace's folders; one by default.
   folders?: vscode.WorkspaceFolder[];
+  // The tree's account is the window's own over the same commands, which
+  // finds what changed outside it when asked, not a stand-in.
+  windowAccount?: boolean;
 };
 
 type Setup = ReturnType<typeof setup>;
@@ -331,6 +345,14 @@ function setup(options: Options) {
   };
   const account = new Emitter<void>();
   const report = vi.fn();
+  // The stand-in account finds no change when asked to read itself.
+  const standIn = {
+    onDidChange: (l: () => void) => account.event(l).dispose,
+    refreshWith: refreshWithNoChange(),
+  };
+  const windowAccount = options.windowAccount
+    ? createAccount(mapping, { window: outside.window } as never, report)
+    : undefined;
   const runner = createRunnerHost({
     commands: () => mapping.anywhere(),
     presenter: offeringPresenter({
@@ -368,7 +390,7 @@ function setup(options: Options) {
     commands: mapping,
     runner,
     runOutput,
-    account: { onDidChange: (l) => account.event(l).dispose },
+    account: windowAccount ?? standIn,
     offers,
     rootState,
     panels,
@@ -413,6 +435,7 @@ function setup(options: Options) {
     panels,
     active,
     account,
+    standIn,
     report,
     redrawn,
     log,
@@ -602,7 +625,7 @@ describe('the stacks of the current root', () => {
 
     void t.command(STACK_COMMANDS.refresh);
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'run list')).toHaveLength(6);
+    expect(timesRun(t.commands.invoked, 'run list')).toBe(6);
     expect(answers).toHaveLength(3);
     expect(t.redrawn).toEqual([]);
 
@@ -649,6 +672,28 @@ describe('the stacks of the current root', () => {
     await settled();
     expect(t.redrawn).toEqual([[qa]]);
     expect(t.item(qa).description).toBe('qa · drift in_sync');
+  });
+
+  test('a stack named as its slug draws it once, keeps its id over a read, and is redrawn with the slug beside the name a later read gives it', async () => {
+    let name = 'prod';
+    const named = () => ({ ...stack('stk_1', 'prod'), name });
+    const t = rereadTo([named()], () => [named()]);
+    const [row] = await t.children();
+    const id = t.item(row).id;
+    expect(t.item(row)).toMatchObject({ label: 'prod', description: '' });
+    expect(String(t.item(row).tooltip).split('\n')[0]).toBe('Stack: prod');
+
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.item(row).id).toBe(id);
+    expect(t.redrawn).toEqual([]);
+
+    name = 'Prod';
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(t.redrawn).toEqual([[row]]);
+    expect(t.item(row)).toMatchObject({ id, label: 'Prod', description: 'prod' });
+    expect(String(t.item(row).tooltip).split('\n')[0]).toBe('Stack: Prod (prod)');
   });
 
   test("a read of the whole tree whose answer changes a held stack's runs redraws that stack's row alone", async () => {
@@ -767,7 +812,7 @@ describe('the stacks of the current root', () => {
 
     await t.command(STACK_COMMANDS.refresh);
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
     expect(t.redrawn).toEqual([]);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
   });
@@ -1141,7 +1186,7 @@ describe('when the stacks cannot be listed', () => {
 
     t.account.fire();
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
     expect(t.redrawn).toEqual([]);
   });
 });
@@ -1258,7 +1303,7 @@ describe('a stack row', () => {
       slug: 'prod',
     });
     expect(t.item(row)).toMatchObject({
-      description: 'prod · on the canvas',
+      description: 'prod · picked for this module',
       iconPath: { id: 'layers-active' },
     });
   });
@@ -1285,7 +1330,7 @@ describe('a stack row', () => {
     expect(second[0]).toBe(prodRow);
     expect(second[1]).toBe(qaRow);
     expect(t.item(prodRow).description).toBe('prod');
-    expect(t.item(qaRow).description).toBe('qa · on the canvas');
+    expect(t.item(qaRow).description).toBe('qa · picked for this module');
   });
 
   // What may have changed the stacks of the view's root: the tree reads them
@@ -1304,9 +1349,92 @@ describe('a stack row', () => {
     await t.children();
     await change(t);
     await settled();
-    expect(t.commands.paths().filter((path) => path === 'stack list')).toHaveLength(2);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
     expect(t.redrawn).toEqual([]);
     expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+  });
+
+  describe('Refresh Stacks asks the account to read itself first', () => {
+    // A developer signed in whose team a terminal outside the window changes.
+    async function windowed() {
+      const account = { team: 'platform', whoami: 'works' as 'works' | 'fails' };
+      const t = setup({
+        root: prod,
+        windowAccount: true,
+        scripts: {
+          ...listed,
+          whoami: () =>
+            account.whoami === 'fails'
+              ? failsWith('the engine stopped')
+              : { documents: [signedInAs('usr_1')] },
+          'team current': () => ({ documents: [{ slug: account.team, source: 'config' }] }),
+        },
+      });
+      await t.children();
+      await settled();
+      const count = (path: 'stack list' | 'whoami') => timesRun(t.commands.invoked, path);
+      t.panels.tick.mockClear();
+      return { t, account, count };
+    }
+
+    test('a team switched outside is announced: the header names it, the tree is read once more and the root’s canvas is told once', async () => {
+      const { t, account, count } = await windowed();
+      expect(t.view.description).toBe('infra/prod · platform');
+      const lists = count('stack list');
+
+      account.team = 'data';
+      await t.command(STACK_COMMANDS.refresh);
+      await settled();
+
+      expect(t.view.description).toBe('infra/prod · data');
+      expect(count('stack list')).toBe(lists + 1);
+      expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+    });
+
+    test('an announced change is read by the tree as the plain refresh: the account is read once for the Refresh', async () => {
+      const { t, account, count } = await windowed();
+      const reads = count('whoami');
+      account.team = 'data';
+      await t.command(STACK_COMMANDS.refresh);
+      await settled();
+      expect(count('whoami')).toBe(reads + 1);
+    });
+
+    test('the account as it was announces nothing, and the tree is read once and the canvas told once', async () => {
+      const { t, count } = await windowed();
+      const lists = count('stack list');
+      await t.command(STACK_COMMANDS.refresh);
+      await settled();
+      expect(t.view.description).toBe('infra/prod · platform');
+      expect(count('stack list')).toBe(lists + 1);
+      expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+    });
+
+    test('an account that cannot be read is reported, and the tree is still read again', async () => {
+      const { t, account, count } = await windowed();
+      const lists = count('stack list');
+      account.whoami = 'fails';
+      t.report.mockClear();
+
+      await expect(t.command(STACK_COMMANDS.refresh)).resolves.toBeUndefined();
+      await settled();
+
+      expect(t.report).toHaveBeenCalledWith('reading the Lace account', expect.any(Error));
+      expect(count('stack list')).toBe(lists + 1);
+      expect(t.panels.tick.mock.calls).toEqual([[prod]]);
+    });
+
+    test('the tree’s own listener of the account reads the tree, and does not have the account read itself', async () => {
+      const t = setup({ root: prod, scripts: { ...listed } });
+      await t.children();
+      t.standIn.refreshWith.mockClear();
+
+      t.account.fire();
+      await settled();
+
+      expect(t.standIn.refreshWith).not.toHaveBeenCalled();
+      expect(timesRun(t.commands.invoked, 'stack list')).toBe(2);
+    });
   });
 
   test('the view hidden, and a command line that changes no stack, read nothing and tell no canvas', async () => {
@@ -1485,7 +1613,7 @@ describe('Cancel on a run row', () => {
   const NO_RUN =
     "This command acts on a run listed in the Stacks view; choose it from that run's menu.";
 
-  test("chosen from a run row's menu while an apply of its stack ticks the store, reaches that run and cancels it; the row is redrawn once its stack's runs are read", async () => {
+  test("chosen from a run row's menu while an apply of its stack ticks the store, reaches that run and cancels it; the row is redrawn at once, and again once its stack's runs are read", async () => {
     const { t, tree, release } = drawnRun({
       'stack apply': { held: true, written: [{ type: 'stage', name: 'plan' }] },
     });
@@ -1504,11 +1632,17 @@ describe('Cancel on a run row', () => {
       { run: 'run_1' },
     ]);
 
+    const stackRow = tree.argument(stackHandle) as Row;
+    expect(t.redrawn.flat()).toContain(stackRow);
+    expect(t.item(stackRow).description).toBe('prod · applying: plan');
+    const redrawnAtOnce = t.redrawn.length;
+
     release();
     await settled();
     await tree.answered();
+    expect(t.redrawn.length).toBeGreaterThan(redrawnAtOnce);
     expect(tree.drawn(stackHandle)).toEqual([runHandle]);
-    expect(t.item(tree.argument(stackHandle) as Row).description).toBe('prod · applying: plan');
+    expect(t.item(stackRow).description).toBe('prod · applying: plan');
   });
 
   test("chosen from a run row's menu while the view reads the whole tree again, reaches that run and cancels it", async () => {
@@ -1595,7 +1729,7 @@ describe('an apply', () => {
     expect(t.shownChannels).toEqual(['Lace: prod']);
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
     // Each tick reads the whole tree again.
-    expect(t.commands.paths().filter((path) => path === 'stack list').length).toBeGreaterThan(1);
+    expect(timesRun(t.commands.invoked, 'stack list')).toBeGreaterThan(1);
   });
 
   test('settled, writes to the stack’s Output channel each provider version its Run ran under an admission, as lace run get prints them', async () => {
@@ -1954,6 +2088,278 @@ describe('an apply', () => {
   });
 });
 
+describe('a stack row as its apply settles', () => {
+  const ended = (status: string) => ({
+    ...applyResult(),
+    run: run('run_1', status, { completedAt: COMPLETED }),
+  });
+  const readFails = { fails: new CommandUnobservedError('run list') };
+
+  // A stack at stage `runner` of an apply, its run listed as `auto_apply`.
+  // Reads answer at once until `holdReads` (or `inFlight`), then `answer` does.
+  async function applying({
+    expand = true,
+    inFlight = false,
+    staged = true,
+    written,
+    listed = [runs(run('run_1', 'auto_apply'))],
+    later,
+  }: {
+    expand?: boolean;
+    inFlight?: boolean;
+    staged?: boolean;
+    written?: object[];
+    listed?: ReturnType<typeof runs>[];
+    later?: Script;
+  } = {}) {
+    let held = false;
+    let readsAtSettle = 0;
+    const reads: ((script: Script) => void)[] = [];
+    const t = setup({
+      root: prod,
+      scripts: {
+        // The read of the whole tree a tick starts stays under way, so what
+        // redraws the row is the store alone.
+        'stack list': () =>
+          held ? new Promise<Script>(() => {}) : { documents: [stacks(stack('stk_1', 'prod'))] },
+        'run list': () => {
+          if (!held) return { documents: listed };
+          return (
+            later ??
+            new Promise<Script>((resolve) => {
+              reads.push(resolve);
+            })
+          );
+        },
+        'stack apply': {
+          held: true,
+          written: written ?? (staged ? [{ type: 'stage', name: 'runner' }] : []),
+        },
+      },
+    });
+    const tree = t.shownTree();
+    await tree.show();
+    const [stackHandle] = tree.drawn();
+    if (expand) await tree.expand(stackHandle);
+    const row = tree.argument(stackHandle) as Row;
+    held = inFlight;
+    void t.command(STACK_COMMANDS.apply, row);
+    await settled();
+    await tree.answered();
+    expect(t.item(row).description).toBe(staged ? 'prod · applying: runner' : 'prod');
+    return {
+      t,
+      tree,
+      row,
+      holdReads: () => {
+        held = true;
+      },
+      // The apply settles with `result`, and the notice and the redraws that follow are in.
+      async settle(result: object, failure?: Error) {
+        const before = t.redrawn.length;
+        readsAtSettle = reads.length;
+        t.commands.held.find((c) => c.path === 'stack apply')?.finish([result], failure);
+        await settled();
+        await tree.answered();
+        return t.redrawn.slice(before).flat();
+      },
+      // The reads of the runs started after the settle answer `documents`.
+      answer: async (documents: object[]) => {
+        for (const read of reads.slice(readsAtSettle)) read({ documents });
+        await settled();
+        await tree.answered();
+      },
+      // The ones under way at the settle answer `documents`.
+      answerUnderWay: async (documents: object[]) => {
+        for (const read of reads.slice(0, readsAtSettle)) read({ documents });
+        await settled();
+        await tree.answered();
+      },
+      runRows: () => tree.drawn(stackHandle).map((handle) => t.item(tree.argument(handle) as Row)),
+    };
+  }
+
+  test('expanded, with its runs read again, is redrawn without applying when the notice says it applied, and its run row says apply_succeeded', async () => {
+    const a = await applying();
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Applied prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row)).toMatchObject({ description: 'prod', iconPath: { id: 'layers' } });
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^apply_succeeded /), contextValue: 'laceRun ended' },
+    ]);
+  });
+
+  test('expanded, its runs read again once they are listed: the list answers what the row says', async () => {
+    const a = await applying();
+    a.holdReads();
+    await a.settle(ended('apply_succeeded'));
+    await a.answer([
+      runs(
+        run('run_1', 'apply_succeeded', { completedAt: COMPLETED }),
+        run('run_0', 'apply_failed'),
+      ),
+    ]);
+
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows().map(({ label }) => label)).toEqual(['apply · run_1', 'apply · run_0']);
+    expect(a.runRows()[1]).toMatchObject({ description: expect.stringMatching(/^apply_failed /) });
+  });
+
+  test('expanded, with a read of its runs already under way when it settles, is redrawn at once all the same', async () => {
+    const a = await applying({ inFlight: true });
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([{ contextValue: 'laceRun ended' }]);
+
+    await a.answerUnderWay([runs(run('run_1', 'auto_apply'))]);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect((await a.t.children(a.row)).map((row) => a.t.item(row))).toMatchObject([
+      { description: expect.stringMatching(/^apply_succeeded /) },
+    ]);
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^apply_succeeded /), contextValue: 'laceRun ended' },
+    ]);
+
+    await a.answer([
+      runs(
+        run('run_1', 'apply_succeeded', { completedAt: COMPLETED }),
+        run('run_0', 'apply_failed'),
+      ),
+    ]);
+    expect(a.runRows().map(({ label }) => label)).toEqual(['apply · run_1', 'apply · run_0']);
+  });
+
+  test('expanded, cancelled by someone else while it ran, is redrawn without applying when the notice says so, and its run row says cancelled', async () => {
+    const a = await applying();
+    a.holdReads();
+    const redrawn = await a.settle(
+      ended('cancelled'),
+      new CommandExitError(1, 'Source: /work/repo/infra/prod\nRun cancelled.\n'),
+    );
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Cancelled the apply of prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^cancelled /), iconPath: { id: 'circle-slash' } },
+    ]);
+  });
+
+  test('expanded, with no run listed yet, is redrawn without applying, and its runs are what the read lists', async () => {
+    const a = await applying({ listed: [runs()] });
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([{ label: 'No runs yet' }]);
+
+    await a.answer([runs(run('run_1', 'apply_succeeded', { completedAt: COMPLETED }))]);
+    expect(a.runRows()).toMatchObject([{ label: 'apply · run_1' }]);
+  });
+
+  test("another stack's row, expanded, says nothing of the apply, and its runs are left as they were", async () => {
+    const t = setup({
+      root: prod,
+      scripts: {
+        'stack list': { documents: [stacks(stack('stk_1', 'prod'), stack('stk_2', 'qa'))] },
+        'run list': { documents: [runs(run('run_1', 'auto_apply'))] },
+        'stack apply': { held: true, written: [{ type: 'stage', name: 'runner' }] },
+      },
+    });
+    const [prodRow, qaRow] = await t.children();
+    await t.children(qaRow);
+    void t.command(STACK_COMMANDS.apply, prodRow);
+    await settled();
+    expect(t.item(prodRow).description).toBe('prod · applying: runner');
+    expect(t.item(qaRow).description).toBe('qa');
+    t.commands.held.find((c) => c.path === 'stack apply')?.finish([ended('apply_succeeded')]);
+    await settled();
+
+    expect(t.item(prodRow).description).toBe('prod');
+    expect(t.item(qaRow).description).toBe('qa');
+    expect((await t.children(qaRow)).map((row) => t.item(row))).toMatchObject([
+      { description: expect.stringMatching(/^auto_apply /) },
+    ]);
+  });
+
+  test('expanded, cancelled before its first stage, shows its run as cancelled when the notice says so', async () => {
+    const a = await applying({ staged: false });
+    a.holdReads();
+    const redrawn = await a.settle(
+      ended('cancelled'),
+      new CommandExitError(1, 'Source: /work/repo/infra/prod\nRun cancelled.\n'),
+    );
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Cancelled the apply of prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^cancelled /), iconPath: { id: 'circle-slash' } },
+    ]);
+  });
+
+  test('expanded, a later tick of the store does not draw the settled Run over what the list since answered', async () => {
+    const a = await applying({ staged: false });
+    a.holdReads();
+    await a.settle(ended('apply_succeeded'));
+    await a.answer([runs(run('run_1', 'awaiting_approval'))]);
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^awaiting_approval /) },
+    ]);
+
+    a.t.runner.store.detach('notify', {});
+    await settled();
+    await a.tree.answered();
+    expect(a.runRows()).toMatchObject([
+      { description: expect.stringMatching(/^awaiting_approval /) },
+    ]);
+  });
+
+  test('expanded, its apply still running when a result frame arrives, keeps its run row as the list read it', async () => {
+    const a = await applying({
+      inFlight: true,
+      written: [
+        { type: 'stage', name: 'runner' },
+        { ...applyResult('still going'), run: run('run_1', 'policy_eval') },
+      ],
+    });
+    expect(a.t.item(a.row).description).toBe('prod · applying: runner');
+    expect(a.runRows()).toMatchObject([{ description: expect.stringMatching(/^auto_apply /) }]);
+  });
+
+  test('collapsed, is redrawn without applying when it settles', async () => {
+    const a = await applying({ expand: false });
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(a.t.messages.map(({ text }) => text)).toContain('Applied prod.');
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+  });
+
+  test('expanded, with its runs read failing, is redrawn without applying, and the failure is what its runs say', async () => {
+    const a = await applying({ later: readFails });
+    a.holdReads();
+    const redrawn = await a.settle(ended('apply_succeeded'));
+
+    expect(redrawn).toContain(a.row);
+    expect(a.t.item(a.row).description).toBe('prod');
+    expect(a.runRows()).toMatchObject([
+      {
+        label: "the engine's stream ended before `lace run list` exited; run it again",
+        iconPath: { id: 'error' },
+      },
+    ]);
+    expect(a.t.report).not.toHaveBeenCalled();
+  });
+});
+
 describe("the view's progress", () => {
   const listed = { 'stack list': { documents: [stacks(stack('stk_1', 'prod'))] } };
   const overView = (t: ReturnType<typeof setup>) =>
@@ -1985,6 +2391,69 @@ describe("the view's progress", () => {
     await settled();
     expect(overView(t).slice(before)).toEqual([{ ended: true }]);
     expect(t.redrawn).toEqual([undefined]);
+  });
+
+  // The Registry draws its loading before the account is read; so does this view.
+  test.each([
+    ['Refresh Stacks', (t: ReturnType<typeof setup>) => t.command(STACK_COMMANDS.refresh)],
+    [
+      'the view shown again',
+      (t: ReturnType<typeof setup>) => t.view.visibility.fire({ visible: true }),
+    ],
+  ])('%s draws it once, before the account is read, and ends it with the tree read', async (_, ask) => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    const before = overView(t).length;
+    let readAccount = () => {};
+    t.standIn.refreshWith.mockImplementation(async (refresh) => {
+      await new Promise<void>((resolve) => {
+        readAccount = resolve;
+      });
+      await refresh();
+    });
+
+    void ask(t);
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: false }]);
+
+    readAccount();
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: true }]);
+  });
+
+  test('the view shown again has the account read itself first, and hidden does not', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    t.standIn.refreshWith.mockClear();
+
+    t.view.visibility.fire({ visible: false });
+    await settled();
+    expect(t.standIn.refreshWith).not.toHaveBeenCalled();
+
+    t.view.visibility.fire({ visible: true });
+    await settled();
+    expect(t.standIn.refreshWith).toHaveBeenCalledTimes(1);
+  });
+
+  test('a change the account read finds is read by the tree under the one progress it drew first', async () => {
+    const account = { team: 'platform' };
+    const t = setup({
+      root: prod,
+      windowAccount: true,
+      scripts: {
+        ...listed,
+        'team current': () => ({ documents: [{ slug: account.team, source: 'config' }] }),
+      },
+    });
+    await t.children();
+    await settled();
+    const before = overView(t).length;
+
+    account.team = 'data';
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: true }]);
+    expect(t.view.description).toBe('infra/prod · data');
   });
 
   test("is drawn from the store's running mark, from the moment it is set until it is cleared", async () => {

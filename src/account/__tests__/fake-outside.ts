@@ -2,7 +2,8 @@
 // may have changed outside it, as VS Code tells it, for a test to drive: the
 // window gaining or losing focus, and a command line ending in one of the
 // window's integrated terminals. And the document `lace whoami` answers for
-// a developer who is signed in.
+// a developer who is signed in, and a stand-in account's `refreshWith`.
+import { vi } from 'vitest';
 import type * as vscode from 'vscode';
 
 type Listen<T> = (listener: (event: T) => void) => vscode.Disposable;
@@ -37,6 +38,9 @@ export function outsideSignals() {
       } as unknown as vscode.TerminalShellExecutionEndEvent),
   };
 }
+
+// The `refreshWith` of an account that finds no change: it runs the refresh.
+export const refreshWithNoChange = () => vi.fn(async (refresh: () => Promise<void>) => refresh());
 
 export const signedInAs = (id: string) => ({
   organization: null,

@@ -2,10 +2,11 @@
 // drawn by the registry-sidebar page from the state this host sends. The
 // host reads the module axis of the registry once, unfiltered, and the
 // page narrows it as the developer searches and picks categories; a row's
-// versions are read when it is expanded. The view reads again each time it
-// becomes visible and at each change of the account: one this window makes,
-// from whichever surface made it, and one a terminal or another window
-// made, which the account finds when it reads itself again (`account.ts`).
+// versions are read when it is expanded. The view reads again at each change
+// of the account: one this window makes, from whichever surface made it, and
+// one a terminal or another window made, which the account finds when it
+// reads itself again (`account.ts`). First shown, shown again, Refresh and
+// Retry show loading at once and have the account read itself first.
 //
 // Signed out, the CLI lists the public catalog, drawn with no organization.
 // A session the server refuses and no organization are the states the
@@ -19,15 +20,21 @@ import type * as vscode from 'vscode';
 import { type Account, SELECT_ORGANIZATION, SIGN_IN } from '../account/account';
 import { type CommandOutcome, failureText } from '../engine/command-outcome';
 import {
+  loaded,
   moduleKey,
+  placement,
+  type Read,
+  type RegistryRecord,
   type RegistryRow,
+  type RegistryVersion,
   type SidebarState,
   sidebarMessageOf,
   type ToPage,
 } from '../protocol/registry-protocol';
 import { pageHtml } from '../vscode/webview-html';
+import type { Place } from './place-module';
 import type { RegistryMarks } from './registry-marks';
-import { asRead, type RegistryReads } from './registry-reads';
+import { asRead, type RegistryReads, reportFailure } from './registry-reads';
 
 export const REGISTRY_VIEW = 'laceRegistry';
 export const REFRESH_REGISTRY = 'lace.refreshRegistry';
@@ -43,8 +50,8 @@ export type RegistryViewOptions = {
   extensionUri: vscode.Uri;
   reads: RegistryReads;
   marks: RegistryMarks;
-  account: Pick<Account, 'onDidChange'>;
-  place: (module: { author: string; name: string; version: string }) => Promise<void>;
+  account: Pick<Account, 'onDidChange' | 'refreshWith'>;
+  place: Place;
   showDetail: (row: RegistryRow) => void;
   report: (what: string, error: unknown) => void;
 };
@@ -68,8 +75,13 @@ type Listing = {
   truncated: boolean;
   organization: string | null;
   publishingGuideUrl: string;
-  versions: Extract<SidebarState, { kind: 'loaded' }>['versions'];
+  // The record each expanded module's read found: the sidebar draws its
+  // versions, and a placement is given its latest.
+  records: Readonly<Record<string, Read<RegistryRecord>>>;
 };
+
+const versionsOf = (read: Read<RegistryRecord>): Read<readonly RegistryVersion[]> =>
+  read.kind === 'loaded' ? { kind: 'loaded', value: read.value.versions } : read;
 
 const organizationOf = (outcome: CommandOutcome<'org current'>): string | null =>
   outcome.kind === 'result' ? outcome.document.slug : null;
@@ -85,13 +97,15 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
 
   function state(): SidebarState {
     if ('kind' in shown) return shown;
-    const { rows, truncated, organization, versions } = shown;
+    const { rows, truncated, organization, records } = shown;
     return {
       kind: 'loaded',
       rows,
       truncated,
       organization,
-      versions,
+      versions: Object.fromEntries(
+        Object.entries(records).map(([key, read]) => [key, versionsOf(read)]),
+      ),
       favourites: marks.favourites(),
       recents: marks.recents(),
     };
@@ -101,25 +115,32 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
     void view?.webview.postMessage({ op: 'state', state: state() } satisfies ToPage<SidebarState>);
   }
 
-  async function refresh(): Promise<void> {
-    const turn = ++reading;
+  function showLoading(): void {
+    if ('kind' in shown && shown.kind === 'loading') return;
     shown = { kind: 'loading' };
     post();
+  }
+
+  async function refresh(): Promise<void> {
+    const turn = ++reading;
+    showLoading();
+    const toReport = (error: unknown) => report('reading the Lace registry', error);
     let next: Listing | Unlisted;
     try {
       const [list, organization] = await Promise.all([reads.list(), reads.organization()]);
+      reportFailure(list, toReport);
       if (list.kind === 'failure') next = failedListState(list.failure);
       else {
         next = {
           rows: list.document.items,
           truncated: list.document.truncated,
-          organization: organizationOf(organization),
+          organization: organizationOf(reportFailure(organization, toReport)),
           publishingGuideUrl: list.document.publishingGuideUrl,
-          versions: {},
+          records: {},
         };
       }
     } catch (error) {
-      report('reading the Lace registry', error);
+      toReport(error);
       next = { kind: 'failed', message: failureText(error) };
     }
     if (turn !== reading) return;
@@ -127,22 +148,29 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
     post();
   }
 
+  const reload = (): Promise<void> => {
+    showLoading();
+    return options.account.refreshWith(refresh);
+  };
+
+  const listing = (): Listing | undefined => ('kind' in shown ? undefined : shown);
   const rowOf = (key: string): RegistryRow | undefined =>
-    'kind' in shown ? undefined : shown.rows.find((row) => moduleKey(row) === key);
+    listing()?.rows.find((row) => moduleKey(row) === key);
 
   async function readVersions(key: string): Promise<void> {
-    const listing = shown;
-    if ('kind' in listing) return;
-    const set = (read: Listing['versions'][string]) => {
-      listing.versions = { ...listing.versions, [key]: read };
-      if (shown === listing) post();
+    const current = listing();
+    if (!current) return;
+    const set = (read: Read<RegistryRecord>) => {
+      current.records = { ...current.records, [key]: read };
+      if (shown === current) post();
     };
     set({ kind: 'loading' });
-    const record = await asRead(
-      () => reads.get(key),
-      (error) => report(`reading the versions of ${key}`, error),
+    set(
+      await asRead(
+        () => reads.get(key),
+        (error) => report(`reading the versions of ${key}`, error),
+      ),
     );
-    set(record.kind === 'loaded' ? { kind: 'loaded', value: record.value.versions } : record);
   }
 
   async function receive(raw: unknown): Promise<void> {
@@ -153,16 +181,18 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
         post();
         return;
       case 'refresh':
-        return refresh();
+        return reload();
       case 'signIn':
         await api.commands.executeCommand(SIGN_IN);
         return;
       case 'selectOrganization':
         await api.commands.executeCommand(SELECT_ORGANIZATION);
         return;
-      case 'openPublishingGuide':
-        if (!('kind' in shown)) await api.env.openExternal(api.Uri.parse(shown.publishingGuideUrl));
+      case 'openPublishingGuide': {
+        const current = listing();
+        if (current) await api.env.openExternal(api.Uri.parse(current.publishingGuideUrl));
         return;
+      }
       case 'toggleFavourite':
         return marks.toggleFavourite(message.key);
       case 'versions':
@@ -174,7 +204,9 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
       }
       case 'place': {
         const row = rowOf(message.key);
-        if (row) await place({ author: row.author, name: row.name, version: message.version });
+        if (row) {
+          await place(...placement(row, message.version, loaded(listing()?.records[message.key])));
+        }
         return;
       }
     }
@@ -184,7 +216,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
   const offAccount = options.account.onDidChange(() => void refresh());
 
   return {
-    refresh,
+    refresh: reload,
     dispose() {
       offMarks();
       offAccount();
@@ -197,7 +229,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
         receive(raw).catch((error) => report('a message from the registry sidebar', error)),
       );
       webviewView.onDidChangeVisibility(() => {
-        if (webviewView.visible) void refresh();
+        if (webviewView.visible) void reload();
       });
       webviewView.onDidDispose(() => {
         if (view === webviewView) view = undefined;
@@ -211,7 +243,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
         },
         { bundle: 'registry-sidebar', images: ['https:', 'data:'] },
       );
-      void refresh();
+      void reload();
     },
   };
 }

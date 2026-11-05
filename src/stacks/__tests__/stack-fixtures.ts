@@ -68,7 +68,6 @@ export const run = (
   planHumanLocation: null,
   applyLogLocation: null,
   policyResultsLocation: null,
-  policyPassed: null,
   policyEvaluatedWithoutBlock: null,
   policyResolution: null,
   changeRequestId: null,
