@@ -291,7 +291,7 @@ describe('the window closing', () => {
     await until('the refused source', () => frame.sourceRefused);
 
     await hold.release();
-    const said = `was not saved (source_refused): [failed_precondition] the source tf is refused, and its diagnostics name why; resolve it (convert a tree out of lace shape), then edit, save or generate again`;
+    const said = `was not saved (source_refused): [failed_precondition] the source tf is refused, and its diagnostics name why; resolve it, then edit, save or generate again`;
     expect(saving.log).toEqual([`The canvas of ${root} ${said}`]);
     expect(saving.shown).toEqual([`The canvas of ${root} ${said}`]);
     expect(rootSessions.held()).toEqual([]);
@@ -319,7 +319,7 @@ engine.on('exit', (code) => process.exit(code ?? 1));
     );
   }
 
-  test('an older CLI on the same protocol is refused with an upgrade instruction', async () => {
+  test('an engine of this protocol built from another tree is refused, naming no older side', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'lace-engine-'));
     afterTest(() => rmSync(directory, { recursive: true, force: true }));
     const binary = nodeProgram(
@@ -329,13 +329,21 @@ engine.on('exit', (code) => process.exit(code ?? 1));
 const readline = require('node:readline');
 const engine = spawn(${JSON.stringify(BINARY)}, process.argv.slice(2), { stdio: ['inherit', 'pipe', 'inherit'] });
 readline.createInterface({ input: engine.stdout }).on('line', (line) => {
-  process.stdout.write(line.replace(/^LACE_ENGINE_VERSION=.*$/, 'LACE_ENGINE_VERSION=v2.57.0') + '\\n');
+  process.stdout.write(line.replace(/^LACE_ENGINE_CONTRACT=[0-9a-f]+$/, 'LACE_ENGINE_CONTRACT=${'0'.repeat(64)}') + '\\n');
 });
 engine.on('exit', (code) => process.exit(code ?? 1));
 `,
     );
     const { engine } = realEngine({ binaryPath: binary });
-    await expect(engine.caller()).rejects.toThrow('Install Lace CLI v2.58.0 or newer');
+    const refused = await engine.caller().catch((error) => error);
+
+    expect(refused).toBeInstanceOf(EngineStartError);
+    expect(refused.message).toMatch(
+      new RegExp(
+        `^The Lace CLI at .+ \\(.+\\) serves another engine contract than this extension was built for, though both speak engine protocol ${ENGINE_PROTOCOL_VERSION}\\. Install the Lace CLI release that matches this extension, or update the Lace extension\\.$`,
+      ),
+    );
+    expect(engine.state()).toBe('error');
   });
 
   test('an engine below the protocol this extension speaks is reported as too old', async () => {

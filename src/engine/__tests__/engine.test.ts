@@ -1,6 +1,6 @@
 import type { BridgeEngineCaller } from '@lace-cloud/canvas/engine';
 import {
-  EngineProtocolMismatchError,
+  EngineIdentityMismatchError,
   EngineSpawnError,
   type EngineTransport,
   type ServerState,
@@ -38,7 +38,6 @@ function fakeManager() {
   const manager = {
     currentState: 'stopped' as ServerState,
     transport: null as EngineTransport | null,
-    handshake: { version: 'v2.58.0' },
     starts: 0,
     // What the next start does once `come` is called.
     failure: undefined as Error | undefined,
@@ -101,35 +100,6 @@ describe('the engine starts on demand', () => {
     expect(await version(await first)).toBe('engine1');
     expect(await engine.caller()).toBe(await first);
     expect(manager.starts).toBe(1);
-  });
-
-  test('an older CLI is refused before any caller can use it', async () => {
-    const manager = fakeManager();
-    manager.handshake.version = 'v2.57.0';
-    const engine = createEngine(manager, settings);
-    const asked = engine.caller();
-    await tick();
-    manager.come();
-    await expect(asked).rejects.toThrow('Install Lace CLI v2.58.0 or newer');
-    expect(manager.transport).toBeNull();
-  });
-
-  test('an automatic restart cannot expose an older CLI transport', async () => {
-    const manager = fakeManager();
-    const engine = createEngine(manager, settings);
-    const first = engine.caller();
-    await tick();
-    manager.come();
-    const previous = await first;
-    manager.enter('stopped');
-    manager.handshake.version = 'v2.57.0';
-    manager.run();
-    expect(manager.transport).toBeNull();
-    const retry = engine.caller();
-    await tick();
-    manager.handshake.version = 'v2.58.0';
-    manager.come();
-    expect(await retry).not.toBe(previous);
   });
 
   test('a start that fails rejects with where the binary was read from and why', async () => {
@@ -198,10 +168,13 @@ describe('the engine starts on demand', () => {
     );
   });
 
-  test('an engine of another protocol names the side that is behind', async () => {
-    const said = async (engineProtocol: string) => {
+  test('an engine of another protocol names the side that is behind, and one of another tree neither', async () => {
+    const said = async (engineProtocol: string, engineContract: string) => {
       const manager = fakeManager();
-      manager.failure = new EngineProtocolMismatchError('0.16.0', engineProtocol, '2');
+      manager.failure = new EngineIdentityMismatchError(
+        { version: 'v0.16.0', protocol: engineProtocol, contract: engineContract },
+        { protocol: '2', contract: 'c2' },
+      );
       const asked = createEngine(manager, settings)
         .caller()
         .catch((error) => error.message);
@@ -209,11 +182,14 @@ describe('the engine starts on demand', () => {
       manager.come();
       return asked;
     };
-    expect(await said('1')).toBe(
+    expect(await said('1', 'c1')).toBe(
       'The Lace CLI at /opt/lace is too old for this extension: it speaks engine protocol 1 and this extension needs 2. Update the Lace CLI, or point the setting lace.binaryPath at a newer one.',
     );
-    expect(await said('3')).toBe(
+    expect(await said('3', 'c3')).toBe(
       'The Lace CLI at /opt/lace is newer than this extension: it speaks engine protocol 3 and this extension speaks 2. Update the Lace extension.',
+    );
+    expect(await said('2', 'other')).toBe(
+      'The Lace CLI at /opt/lace (v0.16.0) serves another engine contract than this extension was built for, though both speak engine protocol 2. Install the Lace CLI release that matches this extension, or update the Lace extension.',
     );
   });
 

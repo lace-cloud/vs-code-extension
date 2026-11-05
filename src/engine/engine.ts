@@ -9,8 +9,7 @@
 // with it.
 import { type BridgeEngineCaller, bridgeCaller } from '@lace-cloud/canvas/engine';
 import {
-  type EngineHandshake,
-  EngineProtocolMismatchError,
+  EngineIdentityMismatchError,
   EngineSpawnError,
   type EngineTransport,
   ServerManager,
@@ -25,16 +24,23 @@ import { failureText } from './command-outcome';
 export type EngineState = ServerState;
 
 // What the developer is told about an engine that did not come up. One
-// whose handshake names another protocol is a Lace CLI of another release,
-// and which side to update follows from which side is behind. Every other
-// failure says where the engine is read from and what happened, and a spawn
-// that failed says how to get past it by its code and the binary it named
-// (`spawnRemedy`).
+// whose handshake names another protocol or another contract is a Lace CLI
+// of another release, and which side to update follows from which side is
+// behind; an engine of this protocol built from another tree has no older
+// side, so either side's release that matches the other's will do. Every
+// other failure says where the engine is read from and what happened, and a
+// spawn that failed says how to get past it by its code and the binary it
+// named (`spawnRemedy`).
 function startFailure(binaryPath: string, cause: unknown): string {
-  if (cause instanceof EngineProtocolMismatchError) {
-    return cause.engineTooOld
-      ? `The Lace CLI at ${binaryPath} is too old for this extension: it speaks engine protocol ${cause.engineProtocol} and this extension needs ${cause.requiredProtocol}. Update the Lace CLI, or point the setting lace.binaryPath at a newer one.`
-      : `The Lace CLI at ${binaryPath} is newer than this extension: it speaks engine protocol ${cause.engineProtocol} and this extension speaks ${cause.requiredProtocol}. Update the Lace extension.`;
+  if (cause instanceof EngineIdentityMismatchError) {
+    switch (cause.behind) {
+      case 'engine':
+        return `The Lace CLI at ${binaryPath} is too old for this extension: it speaks engine protocol ${cause.engineProtocol} and this extension needs ${cause.requiredProtocol}. Update the Lace CLI, or point the setting lace.binaryPath at a newer one.`;
+      case 'host':
+        return `The Lace CLI at ${binaryPath} is newer than this extension: it speaks engine protocol ${cause.engineProtocol} and this extension speaks ${cause.requiredProtocol}. Update the Lace extension.`;
+      case undefined:
+        return `The Lace CLI at ${binaryPath} (${cause.engineVersion}) serves another engine contract than this extension was built for, though both speak engine protocol ${cause.requiredProtocol}. Install the Lace CLI release that matches this extension, or update the Lace extension.`;
+    }
   }
   const happened = `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${failureText(cause)}.`;
   const remedy =
@@ -59,8 +65,8 @@ function spawnRemedy(code: string | undefined, binaryPath: string): string | und
 }
 
 // The engine did not come up: the binary is missing or not executable, it
-// exited before its handshake, its handshake named another protocol, or it
-// refused `Initialize`.
+// exited before its handshake, its handshake named another protocol or
+// another contract, or it refused `Initialize`.
 export class EngineStartError extends Error {
   constructor(
     readonly binaryPath: string,
@@ -98,20 +104,9 @@ export type Engine = {
   restart: () => Promise<void>;
 };
 
-// The Run JSON contract consumed by the current libraries first shipped in
-// v2.58.0. Protocol 8 alone cannot distinguish the earlier contract.
-function supportedCli(version: string): boolean {
-  if (version === 'dev') return true; // Locally built CLI, under the developer's control.
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if (!match) return false;
-  const [major, minor, patch] = match.slice(1).map(Number);
-  return major > 2 || (major === 2 && (minor > 58 || (minor === 58 && patch >= 0)));
-}
-
 // What the engine reads from its process manager; `ServerManager` is one.
 export type EngineManager = {
   readonly currentState: ServerState;
-  readonly handshake: Pick<EngineHandshake, 'version'> | null;
   readonly transport: EngineTransport | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
@@ -168,23 +163,7 @@ function bridgePair(): { host: MessageBridge; caller: MessageBridge } {
 
 export function createEngine(manager: EngineManager, settings: EngineSettings): Engine {
   const listeners = new Set<(state: EngineState) => void>();
-  let unsupported: Error | null = null;
-  let closing: Promise<void> | null = null;
   manager.on('state', (state) => {
-    if (state === 'running' && !supportedCli(manager.handshake?.version ?? '')) {
-      const version = manager.handshake?.version || 'unknown';
-      unsupported = new Error(
-        `Lace CLI ${version} is not supported. Install Lace CLI v2.58.0 or newer, then restart the engine.`,
-      );
-      // Refuse the transport before notifying consumers, including after an
-      // automatic restart. Stop asynchronously: state listeners are synchronous.
-      for (const listener of [...listeners]) listener('error');
-      closing = manager.stop().finally(() => {
-        closing = null;
-      });
-      closing.catch(() => {});
-      return;
-    }
     for (const listener of [...listeners]) listener(state);
   });
 
@@ -211,7 +190,7 @@ export function createEngine(manager: EngineManager, settings: EngineSettings): 
   }
 
   const running = (): EngineTransport | null =>
-    manager.currentState === 'running' && !unsupported ? manager.transport : null;
+    manager.currentState === 'running' ? manager.transport : null;
 
   // Resolves with the transport at the next `running`; with `orStopped`,
   // rejects at a state that says no start is under way.
@@ -232,16 +211,8 @@ export function createEngine(manager: EngineManager, settings: EngineSettings): 
 
   let starting: Promise<void> | null = null;
   function start(): Promise<void> {
-    starting ??= (async () => {
-      if (closing) await closing;
-      unsupported = null;
-      await manager.start();
-      if (unsupported) {
-        const failure = unsupported;
-        if (closing) await closing;
-        throw failure;
-      }
-    })()
+    starting ??= manager
+      .start()
       .catch((cause) => {
         throw new EngineStartError(settings.binaryPath(), cause);
       })

@@ -13,6 +13,7 @@ import { type BridgeEngineCaller, bridgeCaller, GENERATE_STAGES } from '@lace-cl
 import {
   type BridgeRequest,
   type BridgeResponse,
+  ENGINE_CONTRACT,
   ENGINE_PROTOCOL_VERSION,
 } from '@lace-cloud/proto';
 import { VALIDATED } from '../../tools/__tests__/fake-session';
@@ -76,6 +77,7 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
         response: {
           server_version: 'fake',
           protocol_version: ENGINE_PROTOCOL_VERSION,
+          contract: ENGINE_CONTRACT,
           command_paths: [],
         },
       };
