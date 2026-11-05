@@ -11,8 +11,8 @@ import {
   loaded,
   moduleKey,
   moduleLabel,
+  placement,
   type RegistryRow,
-  statusOf,
   type ToPage,
 } from '../protocol/registry-protocol';
 import { pageHtml } from '../vscode/webview-html';
@@ -65,12 +65,9 @@ export function createModuleDetailPanels(options: ModuleDetailOptions): ModuleDe
       if (message?.op === 'ready') post();
       if (message?.op === 'place') {
         const { version } = message;
-        const record = loaded(state.record);
-        place(
-          { author: row.author, name: row.name, version },
-          statusOf(row, record?.versions, version),
-          record?.latest,
-        ).catch((error) => report(`adding ${key} to a canvas`, error));
+        place(...placement(row, version, loaded(state.record))).catch((error) =>
+          report(`adding ${key} to a canvas`, error),
+        );
       }
     });
     panel.onDidDispose(() => {

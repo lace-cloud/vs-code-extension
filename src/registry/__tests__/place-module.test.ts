@@ -169,6 +169,7 @@ describe('placing a registry module', () => {
       const { place, api } = setup({ get: latest(version, status) });
       await place(OLD, 'deprecated');
       expect(bar(api)).toBe('Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod');
+      expect(bar(api)).not.toContain('could not read');
     });
 
     test('uses the latest the caller already read, and reads nothing', async () => {
@@ -178,25 +179,30 @@ describe('placing a registry module', () => {
       expect(reads()).toEqual([]);
     });
 
-    test('is placed with no suggestion when the read fails, and the failure is logged', async () => {
+    const UNREAD =
+      'Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod — could not read the newest published version; see the Lace Output channel.';
+
+    test('is placed and says the newest published version could not be read when the read fails, and the failure is logged', async () => {
       const { place, api, placed, log, sent } = setup({
         get: refused({ reason: 'unauthenticated', message: 'offline' }),
       });
       await place(OLD, 'deprecated');
-      expect(bar(api)).toBe('Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod');
+      expect(bar(api)).toBe(UNREAD);
       expect(sent('ApplyAction')).toHaveLength(1);
       expect(placed).toHaveBeenCalledWith(OLD);
       expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('offline'));
+      expect(log.appendLine).toHaveBeenCalledTimes(1);
     });
 
-    test('is placed with no suggestion when the read throws, and the error is logged', async () => {
+    test('is placed and says the newest published version could not be read when the read throws, and the error is logged', async () => {
       const { place, api, placed, log } = setup({
         get: { fails: new Error('the engine stopped') },
       });
       await place(OLD, 'deprecated');
-      expect(bar(api)).toBe('Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod');
+      expect(bar(api)).toBe(UNREAD);
       expect(placed).toHaveBeenCalledWith(OLD);
       expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('the engine stopped'));
+      expect(log.appendLine).toHaveBeenCalledTimes(1);
     });
 
     test.each([

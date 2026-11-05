@@ -20,13 +20,15 @@ import type * as vscode from 'vscode';
 import { type Account, SELECT_ORGANIZATION, SIGN_IN } from '../account/account';
 import { type CommandOutcome, failureText } from '../engine/command-outcome';
 import {
-  type Latest,
   loaded,
   moduleKey,
+  placement,
+  type Read,
+  type RegistryRecord,
   type RegistryRow,
+  type RegistryVersion,
   type SidebarState,
   sidebarMessageOf,
-  statusOf,
   type ToPage,
 } from '../protocol/registry-protocol';
 import { pageHtml } from '../vscode/webview-html';
@@ -73,10 +75,13 @@ type Listing = {
   truncated: boolean;
   organization: string | null;
   publishingGuideUrl: string;
-  versions: Extract<SidebarState, { kind: 'loaded' }>['versions'];
-  // The latest each versions' read found, kept for the placement; not drawn.
-  latest: Readonly<Record<string, Latest | undefined>>;
+  // The record each expanded module's read found: the sidebar draws its
+  // versions, and a placement is given its latest.
+  records: Readonly<Record<string, Read<RegistryRecord>>>;
 };
+
+const versionsOf = (read: Read<RegistryRecord>): Read<readonly RegistryVersion[]> =>
+  read.kind === 'loaded' ? { kind: 'loaded', value: read.value.versions } : read;
 
 const organizationOf = (outcome: CommandOutcome<'org current'>): string | null =>
   outcome.kind === 'result' ? outcome.document.slug : null;
@@ -92,13 +97,15 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
 
   function state(): SidebarState {
     if ('kind' in shown) return shown;
-    const { rows, truncated, organization, versions } = shown;
+    const { rows, truncated, organization, records } = shown;
     return {
       kind: 'loaded',
       rows,
       truncated,
       organization,
-      versions,
+      versions: Object.fromEntries(
+        Object.entries(records).map(([key, read]) => [key, versionsOf(read)]),
+      ),
       favourites: marks.favourites(),
       recents: marks.recents(),
     };
@@ -127,8 +134,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
           truncated: list.document.truncated,
           organization: organizationOf(organization),
           publishingGuideUrl: list.document.publishingGuideUrl,
-          versions: {},
-          latest: {},
+          records: {},
         };
       }
     } catch (error) {
@@ -145,24 +151,24 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
     return options.account.refreshWith(refresh);
   };
 
+  const listing = (): Listing | undefined => ('kind' in shown ? undefined : shown);
   const rowOf = (key: string): RegistryRow | undefined =>
-    'kind' in shown ? undefined : shown.rows.find((row) => moduleKey(row) === key);
+    listing()?.rows.find((row) => moduleKey(row) === key);
 
   async function readVersions(key: string): Promise<void> {
-    const listing = shown;
-    if ('kind' in listing) return;
-    const set = (read: Listing['versions'][string]) => {
-      listing.versions = { ...listing.versions, [key]: read };
-      if (shown === listing) post();
+    const current = listing();
+    if (!current) return;
+    const set = (read: Read<RegistryRecord>) => {
+      current.records = { ...current.records, [key]: read };
+      if (shown === current) post();
     };
     set({ kind: 'loading' });
-    const record = await asRead(
-      () => reads.get(key),
-      (error) => report(`reading the versions of ${key}`, error),
+    set(
+      await asRead(
+        () => reads.get(key),
+        (error) => report(`reading the versions of ${key}`, error),
+      ),
     );
-    if (record.kind === 'loaded')
-      listing.latest = { ...listing.latest, [key]: record.value.latest };
-    set(record.kind === 'loaded' ? { kind: 'loaded', value: record.value.versions } : record);
   }
 
   async function receive(raw: unknown): Promise<void> {
@@ -180,9 +186,11 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
       case 'selectOrganization':
         await api.commands.executeCommand(SELECT_ORGANIZATION);
         return;
-      case 'openPublishingGuide':
-        if (!('kind' in shown)) await api.env.openExternal(api.Uri.parse(shown.publishingGuideUrl));
+      case 'openPublishingGuide': {
+        const current = listing();
+        if (current) await api.env.openExternal(api.Uri.parse(current.publishingGuideUrl));
         return;
+      }
       case 'toggleFavourite':
         return marks.toggleFavourite(message.key);
       case 'versions':
@@ -195,14 +203,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
       case 'place': {
         const row = rowOf(message.key);
         if (row) {
-          const { version } = message;
-          const listed = loaded('kind' in shown ? undefined : shown.versions[message.key]);
-          const latest = 'kind' in shown ? undefined : shown.latest[message.key];
-          await place(
-            { author: row.author, name: row.name, version },
-            statusOf(row, listed, version),
-            latest,
-          );
+          await place(...placement(row, message.version, loaded(listing()?.records[message.key])));
         }
         return;
       }

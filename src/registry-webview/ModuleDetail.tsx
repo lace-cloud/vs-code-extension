@@ -354,7 +354,7 @@ export function Interface({ read }: { read: Read<ModuleInterface> }) {
 
 export function Versions({ read, current }: { read: Read<RegistryRecord>; current: string }) {
   if (read.kind === 'loading') return <Loading what="the module's versions" />;
-  const versions = read.kind === 'loaded' ? read.value.versions : [];
+  const versions = loaded(read)?.versions ?? [];
   return (
     <div className="tab-content active">
       <div className="section">

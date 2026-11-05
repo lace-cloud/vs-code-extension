@@ -71,6 +71,7 @@ export const PLACEMENT_API_REFUSALS: Readonly<Record<string, string>> = {
 
 const SHOW_DETAILS = 'Show Details';
 const SIGN_IN_ACTION = 'Sign In';
+const UNREAD_NEWEST = 'could not read the newest published version';
 
 export function placeModule(options: PlaceOptions): Place {
   const { api, sources, panels, rootSessions, reads, log, placed } = options;
@@ -99,7 +100,8 @@ export function placeModule(options: PlaceOptions): Place {
   }
 
   // What a deprecated placement adds: the newest published version, from the
-  // caller's latest or one `registry get`; a read that fails is logged.
+  // caller's latest or one `registry get`. A read that fails is logged once,
+  // and the message says so, so it is not taken for no newer version.
   async function suggestion(module: PlacedModule, known: Latest | undefined): Promise<string> {
     let latest = known;
     if (!latest) {
@@ -111,6 +113,7 @@ export function placeModule(options: PlaceOptions): Place {
       );
       if (read.kind === 'failed') {
         log.appendLine(`Reading the latest version of ${key}: ${read.message}`);
+        return ` — ${UNREAD_NEWEST}; see the Lace Output channel.`;
       }
       latest = loaded(read)?.latest;
     }

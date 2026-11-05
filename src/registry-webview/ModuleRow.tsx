@@ -12,7 +12,7 @@ import type {
   RegistryVersion,
   SendSidebarMessage,
 } from '../protocol/registry-protocol';
-import { moduleKey, moduleLabel, versionTitle } from '../protocol/registry-protocol';
+import { loaded, moduleKey, moduleLabel, versionTitle } from '../protocol/registry-protocol';
 import { ModuleIcon } from './ModuleIcon';
 import { VersionLabel } from './VersionLabel';
 
@@ -109,8 +109,7 @@ function OlderVersions({
       <span className="version-row-label">{text}</span>
     </div>
   );
-  const older =
-    versions?.kind === 'loaded' ? versions.value.filter((v) => v.version !== row.version) : [];
+  const older = (loaded(versions) ?? []).filter((v) => v.version !== row.version);
   return (
     <div className="version-children">
       {(versions === undefined || versions.kind === 'loading') && note('Loading versions…')}

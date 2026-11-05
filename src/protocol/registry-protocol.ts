@@ -55,6 +55,18 @@ export const statusOf = (
 ): string =>
   version === row.version ? row.status : (listed?.find((v) => v.version === version)?.status ?? '');
 
+// What placing one of a row's versions is given: the module at that version,
+// its status, and the module's latest when the caller has read the record.
+export const placement = (
+  row: RegistryRow,
+  version: string,
+  record: Pick<RegistryRecord, 'versions' | 'latest'> | undefined,
+): [module: { author: string; name: string; version: string }, status: string, latest?: Latest] => [
+  { author: row.author, name: row.name, version },
+  statusOf(row, record?.versions, version),
+  record?.latest,
+];
+
 // A read the host started for the page: under way, its document, or what
 // the command said instead.
 export type Read<T> =
