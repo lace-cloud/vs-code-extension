@@ -260,6 +260,22 @@ describe('the registry sidebar', () => {
     });
   });
 
+  test("a refused versions read is drawn by the failure's message and reported once", async () => {
+    const { page, reports } = setup({
+      'registry list': { documents: [list([VPC])] },
+      'registry get': refused({
+        reason: 'registry_unavailable',
+        message: 'the registry has no acme/vpc',
+      }),
+    });
+    await settled();
+    await page.send({ op: 'versions', key: 'acme/vpc' });
+    expect(page.last()).toMatchObject({
+      versions: { 'acme/vpc': { kind: 'failed', message: 'the registry has no acme/vpc' } },
+    });
+    expect(reports).toEqual([expect.objectContaining({ message: 'the registry has no acme/vpc' })]);
+  });
+
   test('places the row the page names, at the version it names, and nothing for an unknown key', async () => {
     const { page, place } = setup({ 'registry list': { documents: [list([VPC])] } });
     await settled();

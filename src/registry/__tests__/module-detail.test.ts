@@ -49,14 +49,15 @@ function setup(answers: Record<string, Script>) {
     ViewColumn: { Active: -1 },
   };
   const place = vi.fn(async () => {});
+  const report = vi.fn();
   const details = createModuleDetailPanels({
     api: api as never,
     extensionUri: uri('/ext'),
     reads: registryReads(commands),
     place,
-    report: () => {},
+    report,
   });
-  return { details, made, invoked, place, api };
+  return { details, made, invoked, place, api, report };
 }
 
 const VPC = row();
@@ -106,6 +107,26 @@ describe('module detail', () => {
       message: 'acme/vpc 2.0.0 is not in Lace form',
     });
     expect(last.record.kind).toBe('loaded');
+  });
+
+  test.each([
+    ['get', 'the details could not be loaded', 'reading acme/vpc from the registry'],
+    ['describe', 'acme/vpc 2.0.0 is not in Lace form', 'describing acme/vpc v2.0.0'],
+  ])('a refused %s is reported once, by what it read', async (path, message, what) => {
+    const { details, report } = setup({
+      'registry get':
+        path === 'get'
+          ? refused({ reason: 'registry_unavailable', message })
+          : { documents: [record()] },
+      'registry describe':
+        path === 'describe'
+          ? refused({ reason: 'not_lace_form', message })
+          : { documents: [described] },
+    });
+    details.show(VPC);
+    await settled();
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith(what, expect.objectContaining({ message }));
   });
 
   test('Add to Canvas places the version the page names, as the row lists it', async () => {

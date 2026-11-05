@@ -105,15 +105,11 @@ export function placeModule(options: PlaceOptions): Place {
     let latest = known;
     if (!latest) {
       const key = moduleKey(module);
-      // A thrown read comes back failed, so its message is logged once below.
       const read = await asRead(
         () => reads.get(key),
-        () => {},
+        (error) => log.appendLine(`Reading the latest version of ${key}: ${failureText(error)}`),
       );
-      if (read.kind === 'failed') {
-        log.appendLine(`Reading the latest version of ${key}: ${read.message}`);
-        return ` — ${UNREAD_NEWEST}; see the Lace Output channel.`;
-      }
+      if (read.kind === 'failed') return ` — ${UNREAD_NEWEST}; see the Lace Output channel.`;
       latest = loaded(read)?.latest;
     }
     const note = newestPublishedNote(latest, module.version);
