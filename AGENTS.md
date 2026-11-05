@@ -86,9 +86,11 @@ demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's 
 `lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
 default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
 with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
-and locks with it. The extension speaks engine protocol 8 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
-protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version decides compatibility: an
-engine of another protocol is refused with a message that names which side to update. A start the spawn refused (the
+and locks with it. The extension speaks engine protocol 9 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version and engine contract
+(`ENGINE_CONTRACT`) decide compatibility: `@lace-cloud/host` refuses an engine of another protocol or another contract
+with `EngineIdentityMismatchError`, and the message names which side to update, or, for an engine of this protocol built
+from another tree, to install the matching CLI release or update the extension. A start the spawn refused (the
 `EngineSpawnError` `@lace-cloud/host` rejects with) says where the binary was read from, what happened, and, by its
 `code`, how to get past it: a binary that is not found (`ENOENT`), to install the Lace CLI so `lace` is on `PATH` or to
 set `lace.binaryPath` to its executable's full path; a `.cmd` or `.bat` binary the spawn refused (`EINVAL`), that
