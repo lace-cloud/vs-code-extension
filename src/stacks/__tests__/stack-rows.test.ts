@@ -335,14 +335,16 @@ describe("a stack row's look", () => {
   test('names the slug beside a name that differs from it', () => {
     const look = stackLook(stack('stk_1', 'prod'), true, null);
     expect(look.label).toBe('Prod');
-    expect(look.description).toBe('prod · on the canvas');
+    expect(look.description).toBe('prod · picked for this module');
     expect(look.tooltip.split('\n')[0]).toBe('Stack: Prod (prod)');
   });
 
   test('names a name that is its slug once, in the row and in its tooltip', () => {
     expect(stackLook(named, false, null).description).toBe('');
-    expect(stackLook(named, true, null).description).toBe('on the canvas');
-    expect(stackLook(drifted, true, null).description).toBe('on the canvas · drift drifted (1)');
+    expect(stackLook(named, true, null).description).toBe('picked for this module');
+    expect(stackLook(drifted, true, null).description).toBe(
+      'picked for this module · drift drifted (1)',
+    );
     expect(stackLook(named, false, null).tooltip.split('\n')[0]).toBe('Stack: prod');
   });
 });

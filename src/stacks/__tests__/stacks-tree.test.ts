@@ -1303,7 +1303,7 @@ describe('a stack row', () => {
       slug: 'prod',
     });
     expect(t.item(row)).toMatchObject({
-      description: 'prod · on the canvas',
+      description: 'prod · picked for this module',
       iconPath: { id: 'layers-active' },
     });
   });
@@ -1330,7 +1330,7 @@ describe('a stack row', () => {
     expect(second[0]).toBe(prodRow);
     expect(second[1]).toBe(qaRow);
     expect(t.item(prodRow).description).toBe('prod');
-    expect(t.item(qaRow).description).toBe('qa · on the canvas');
+    expect(t.item(qaRow).description).toBe('qa · picked for this module');
   });
 
   // What may have changed the stacks of the view's root: the tree reads them

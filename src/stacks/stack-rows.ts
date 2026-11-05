@@ -73,13 +73,13 @@ export function sameLook(a: RowLook, b: RowLook | undefined): boolean {
   return b !== undefined && (Object.keys(a) as (keyof RowLook)[]).every((key) => a[key] === b[key]);
 }
 
-// What a stack's row or pick says beside its name: its slug where it differs, whether its badges
-// are on the canvas, then the `more` a row adds.
+// What a stack's row or pick says beside its name: its slug where it differs, whether it is the
+// stack picked for its module, then the `more` a row adds.
 export const stackDescription = (stack: Stack, picked: boolean, more: string[] = []): string =>
-  rowDescription(stack, [...(picked ? ['on the canvas'] : []), ...more]);
+  rowDescription(stack, [...(picked ? ['picked for this module'] : []), ...more]);
 
-// A stack row: its name, and its slug where it differs, whether its badges are on the canvas, its
-// last drift scan, and an apply of it under way.
+// A stack row: its name, and its slug where it differs, whether it is the stack picked for its
+// module, its last drift scan, and an apply of it under way.
 export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook {
   const applying =
     run !== null && run.outcome.kind === 'running' ? run.stages.at(-1)?.name : undefined;
