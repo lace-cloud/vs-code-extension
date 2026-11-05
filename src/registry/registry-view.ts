@@ -34,7 +34,7 @@ import {
 import { pageHtml } from '../vscode/webview-html';
 import type { Place } from './place-module';
 import type { RegistryMarks } from './registry-marks';
-import { asRead, type RegistryReads } from './registry-reads';
+import { asRead, type RegistryReads, reportFailure } from './registry-reads';
 
 export const REGISTRY_VIEW = 'laceRegistry';
 export const REFRESH_REGISTRY = 'lace.refreshRegistry';
@@ -124,21 +124,23 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
   async function refresh(): Promise<void> {
     const turn = ++reading;
     showLoading();
+    const toReport = (error: unknown) => report('reading the Lace registry', error);
     let next: Listing | Unlisted;
     try {
       const [list, organization] = await Promise.all([reads.list(), reads.organization()]);
+      reportFailure(list, toReport);
       if (list.kind === 'failure') next = failedListState(list.failure);
       else {
         next = {
           rows: list.document.items,
           truncated: list.document.truncated,
-          organization: organizationOf(organization),
+          organization: organizationOf(reportFailure(organization, toReport)),
           publishingGuideUrl: list.document.publishingGuideUrl,
           records: {},
         };
       }
     } catch (error) {
-      report('reading the Lace registry', error);
+      toReport(error);
       next = { kind: 'failed', message: failureText(error) };
     }
     if (turn !== reading) return;

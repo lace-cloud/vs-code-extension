@@ -43,13 +43,15 @@ function setup(
     openRecord: vi.fn(),
   };
   const place = vi.fn(async () => {});
+  const report = vi.fn();
   const run = addModuleToCanvas({
     api: api as unknown as AddModuleApi,
     reads: registryReads(commands.commands),
     place,
     offers,
+    report,
   });
-  return { run, api, place, offers, messages, commands, picks: quickPicks.picks };
+  return { run, api, place, offers, messages, commands, report, picks: quickPicks.picks };
 }
 
 describe('Lace: Add Module to Canvas', () => {
@@ -116,6 +118,18 @@ describe('Lace: Add Module to Canvas', () => {
     expect(offers.signIn).toHaveBeenCalledTimes(1);
     expect(picks[0]).toMatchObject({ visible: false, items: [] });
     expect(place).not.toHaveBeenCalled();
+  });
+
+  test('a refused list is reported once, beside its notice', async () => {
+    const { run, report } = setup(
+      refused({ reason: 'unspecified', message: 'the registry is down' }),
+    );
+    await run();
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ message: 'the registry is down' }),
+    );
   });
 
   test('an empty registry closes the pick and offers the guide the list carries', async () => {

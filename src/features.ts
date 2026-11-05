@@ -213,7 +213,7 @@ function registry(host: Host): vscode.Disposable {
     api.window.registerWebviewViewProvider(REGISTRY_VIEW, view),
     ...registerCommands(api, {
       [REFRESH_REGISTRY]: view.refresh,
-      [ADD_MODULE]: addModuleToCanvas({ api, reads, place, offers: host.offers }),
+      [ADD_MODULE]: addModuleToCanvas({ api, reads, place, offers: host.offers, report }),
     }),
     view,
     details,

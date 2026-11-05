@@ -7,6 +7,7 @@ import {
   type CommandOutcome,
   commandOutcome,
   documentOf,
+  failedWith,
   failureText,
 } from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
@@ -57,4 +58,14 @@ export async function asRead<P extends BoundPath>(
     report(error);
     return { kind: 'failed', message: failureText(error) };
   }
+}
+
+// An outcome that ended on its failure is reported once, as `asRead` reports a
+// read that threw; the outcome is returned as it was.
+export function reportFailure<P extends BoundPath>(
+  outcome: CommandOutcome<P>,
+  report: (error: unknown) => void,
+): CommandOutcome<P> {
+  if (outcome.kind === 'failure') report(failedWith(outcome.failure));
+  return outcome;
 }

@@ -236,8 +236,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   change that read finds is announced and the view reads the registry on the announcement, else it reads the registry
   itself. It also reads again at each change of the account, made in this window or found outside it.
 - The sidebar's states come from a failed list's `reason`: `unauthenticated` → Sign In, `no_organization` → Select
-  Organization, anything else its message with Retry. An empty registry shows "No modules are published yet" with the
-  publishing guide link the list itself carries.
+  Organization, anything else its message with Retry; a refused list or organization read is written once to the "Lace"
+  Output channel. An empty registry shows "No modules are published yet" with the publishing guide link the list itself
+  carries.
 - Module detail (`module-detail.ts`, one panel per module): `registry get` for the README and versions, `registry
   describe` of the shown version for the interface (it downloads and certifies the version, so it settles later and can
   be refused). Tabs: Details, Interface, Versions, Examples.
@@ -264,8 +265,9 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   version is deprecated." above its tabs, with the same note.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
 - Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
-  that cannot be read closes it and says why with the ways out its reason names, and an empty registry closes it and
-  offers the publishing guide the list carries. The module picked is placed as the sidebar's "+" places it.
+  that cannot be read closes it and says why with the ways out its reason names (and is written once to the "Lace"
+  Output channel), and an empty registry closes it and offers the publishing guide the list carries. The module
+  picked is placed as the sidebar's "+" places it.
 
 ## Stacks tree
 

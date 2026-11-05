@@ -197,6 +197,35 @@ describe('the registry sidebar', () => {
     expect(page.last()).toEqual(state);
   });
 
+  test('a refused list is reported once, whatever state it draws', async () => {
+    const { page, reports } = setup({
+      'registry list': refused({ reason: 'unauthenticated', message: 'Authentication required' }),
+    });
+    await settled();
+    expect(page.last()).toEqual({ kind: 'signedOut' });
+    expect(reports).toEqual([expect.objectContaining({ message: 'Authentication required' })]);
+  });
+
+  test('a refused organization read is reported once and draws no organization', async () => {
+    const { page, reports } = setup({
+      'registry list': { documents: [list([VPC])] },
+      'org current': refused({ reason: 'registry_unavailable', message: 'no organization read' }),
+    });
+    await settled();
+    expect(page.last()).toMatchObject({ kind: 'loaded', rows: [VPC], organization: null });
+    expect(reports).toEqual([expect.objectContaining({ message: 'no organization read' })]);
+  });
+
+  test('a refused list and a refused organization read are reported once', async () => {
+    const { page, reports } = setup({
+      'registry list': refused({ reason: 'unauthenticated', message: 'Authentication required' }),
+      'org current': refused({ reason: 'unauthenticated', message: 'Authentication required' }),
+    });
+    await settled();
+    expect(page.last()).toEqual({ kind: 'signedOut' });
+    expect(reports).toEqual([expect.objectContaining({ message: 'Authentication required' })]);
+  });
+
   test('a failure is named by its reason, never by its text', () => {
     expect(
       failedListState({

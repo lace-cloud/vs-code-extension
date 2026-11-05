@@ -36,8 +36,9 @@ export function addModuleToCanvas(options: {
   place: Place;
   // What a notice about a registry that cannot be read offers.
   offers: OfferActions;
+  report: (what: string, error: unknown) => void;
 }): () => Promise<void> {
-  const { api, reads, place, offers } = options;
+  const { api, reads, place, offers, report } = options;
   return async () => {
     const listed = reads.list().then(documentOf);
     let picked: (vscode.QuickPickItem & { row: RegistryRow }) | undefined;
@@ -63,6 +64,7 @@ export function addModuleToCanvas(options: {
         { placeholder: 'Which module?', matchOnDescription: true, matchOnDetail: true },
       );
     } catch (error) {
+      report('reading the Lace registry', error);
       await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
       return;
     }
