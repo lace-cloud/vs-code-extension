@@ -27,7 +27,7 @@ export const moduleLabel = (module: { displayName: string; name: string }): stri
 // pick marks a deprecated version with.
 export const DEPRECATED = 'Deprecated';
 export const isDeprecated = (status: string): boolean => status === 'deprecated';
-export const isPublished = (status: string): boolean => status === 'published';
+const isPublished = (status: string): boolean => status === 'published';
 
 // The version the registry names as a module's latest, and its status.
 export type Latest = Pick<RegistryVersion, 'version' | 'status'>;

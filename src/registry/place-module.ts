@@ -99,9 +99,8 @@ export function placeModule(options: PlaceOptions): Place {
     log.show(true);
   }
 
-  // What a deprecated placement adds: the newest published version, from the
-  // caller's latest or one `registry get`. A read that fails is logged once,
-  // and the message says so, so it is not taken for no newer version.
+  // What a deprecated placement adds: the newest published version, from the caller's latest or one
+  // `registry get`. A failed read is logged once, and the message says so.
   async function suggestion(module: PlacedModule, known: Latest | undefined): Promise<string> {
     let latest = known;
     if (!latest) {

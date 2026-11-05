@@ -3,8 +3,8 @@ import {
   DEPRECATED,
   detailMessageOf,
   isDeprecated,
-  isPublished,
   moduleKey,
+  newestPublishedNote,
   sidebarMessageOf,
   statusOf,
   versionTitle,
@@ -61,15 +61,32 @@ describe('the registry protocol', () => {
   });
 
   test.each([
-    ['deprecated', true, false],
-    ['published', false, true],
-    ['', false, false],
-    ['yanked', false, false],
-    ['Deprecated', false, false],
-    ['deprecated-soon', false, false],
-  ])('the status %j is deprecated: %s, published: %s', (status, deprecated, published) => {
+    ['deprecated', true],
+    ['published', false],
+    ['', false],
+    ['yanked', false],
+    ['Deprecated', false],
+    ['deprecated-soon', false],
+  ])('the status %j is deprecated: %s', (status, deprecated) => {
     expect(isDeprecated(status)).toBe(deprecated);
-    expect(isPublished(status)).toBe(published);
+  });
+
+  test.each([
+    ['published', 'v0.5.0 is the newest published version'],
+    ['deprecated', undefined],
+    ['', undefined],
+    ['yanked', undefined],
+    ['Published', undefined],
+    ['published-soon', undefined],
+  ])('the note of a latest version with status %j is %j', (status, note) => {
+    expect(newestPublishedNote({ version: 'v0.5.0', status }, 'v0.4.0')).toBe(note);
+  });
+
+  test('the note is none for a latest that is the version itself, or for no latest', () => {
+    expect(newestPublishedNote({ version: 'v0.4.0', status: 'published' }, 'v0.4.0')).toBe(
+      undefined,
+    );
+    expect(newestPublishedNote(undefined, 'v0.4.0')).toBe(undefined);
   });
 
   test.each([

@@ -41,7 +41,7 @@ function placeholder(noun: Noun, current: Current): string {
 // A row's description: the slug where it says more than the name, whether it
 // is the current one, then what else the row carries, on the row's one line.
 const described = (row: SluggedRow, current: Current, ...rest: string[]): string =>
-  rowDescription(row, [row.slug === current.slug ? 'current' : '', ...rest]);
+  rowDescription(row, [...(row.slug === current.slug ? ['current'] : []), ...rest]);
 
 // The teams `lace team list` lists in `scope`, and the one `lace team
 // current` reports there.

@@ -26,6 +26,8 @@ export function hostContributions(host: Pick<HostCaller, 'call'>): Contributions
         if (!diagnostic) return;
         const { file, line, column, message } = diagnostic;
         if (file === undefined) {
+          // The Diagnostics panel draws a where-line exactly when `instance_id` is set; the canvas
+          // package exports no predicate for it.
           const names =
             diagnostic.instance_id === undefined
               ? 'no file and no place on the canvas'

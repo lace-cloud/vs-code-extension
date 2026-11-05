@@ -1,7 +1,7 @@
 // The one pick of a stack deployed from an authoring root, for a stack
 // command that no stack row names (the palette's Preview, Apply and Scan,
 // Import Existing Resources): a pick among the stacks `lace stack list
-// --source <root>` lists, the one picked for the root's canvas marked, on
+// --source <root>` lists, the stack picked for its module marked, on
 // screen while the list is read (`vscode/pick.ts`). A list that cannot be
 // read closes the pick and says why, with the ways out its reason names. A
 // root with no stack closes it and says so and where one is created, the

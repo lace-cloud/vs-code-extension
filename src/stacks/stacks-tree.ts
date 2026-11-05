@@ -318,10 +318,8 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     return done;
   }
 
-  // The view's progress, while a read of the whole tree or of the account
-  // ahead of one is under way (the view shows the tree it holds until the
-  // read's answer is held) or the runner's store says a command is under
-  // way: the function that ends the one drawn, while one is.
+  // The view's progress, drawn while a read of the tree (or of the account ahead of it) or a command
+  // of the runner's store is under way; `endProgress` ends the one drawn.
   let endProgress: (() => void) | undefined;
   function drawProgress(): void {
     const busy =
@@ -572,6 +570,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     return run?.readOver.stack === id ? run : null;
   };
 
+  // The token of the settled slot whose Run was last held.
   let settledToken: object | undefined;
   // Holds the Run an apply of stack `id` settled with, once per settled slot, as
   // the newest read of its runs until a read started after answers; whether it did.

@@ -212,14 +212,16 @@ function Details({
 }) {
   const { row } = state;
   const latest = record?.latest;
+  const latestLabel = latest ? (
+    <VersionLabel version={latest.version} status={latest.status} />
+  ) : (
+    '—'
+  );
   const counted = (n: number | undefined) => (n === undefined ? '—' : `${n} defined`);
   const reference: [string, ReactNode][] = [
     ['System', row.system.toUpperCase()],
     ['Kind', KIND],
-    [
-      'Latest Version',
-      latest ? <VersionLabel key="latest" version={latest.version} status={latest.status} /> : '—',
-    ],
+    ['Latest Version', latestLabel],
     ['Author', latest?.vendor?.displayName ?? row.author],
     ['Source', row.sourceAddress || '—'],
     ['Inputs', counted(described?.interface.inputs.length)],
