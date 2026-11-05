@@ -343,7 +343,7 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
   ends. The runner's form asks for the slug, proposing the root's directory name, and the connection; the package's
   notice says "Created stack <slug>", and its tick reads the tree again, which lists the stack. A refusal is the CLI's,
-  by its reason, through the offers (`not_git_repository` and `no_origin_remote` say the CLI's message).
+  by its reason, through the offers (`not_git_repository`, `no_origin_remote` and `no_commit` say the CLI's message).
 - The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>` and is on screen while the list is
   read; a list that cannot be read closes it and is shown with the ways out its reason names, and a root with no stack
   closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.
