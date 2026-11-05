@@ -20,6 +20,7 @@ import type * as vscode from 'vscode';
 import { type Account, SELECT_ORGANIZATION, SIGN_IN } from '../account/account';
 import { type CommandOutcome, failureText } from '../engine/command-outcome';
 import {
+  type Latest,
   loaded,
   moduleKey,
   type RegistryRow,
@@ -73,6 +74,8 @@ type Listing = {
   organization: string | null;
   publishingGuideUrl: string;
   versions: Extract<SidebarState, { kind: 'loaded' }>['versions'];
+  // The latest each versions' read found, kept for the placement; not drawn.
+  latest: Readonly<Record<string, Latest | undefined>>;
 };
 
 const organizationOf = (outcome: CommandOutcome<'org current'>): string | null =>
@@ -125,6 +128,7 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
           organization: organizationOf(organization),
           publishingGuideUrl: list.document.publishingGuideUrl,
           versions: {},
+          latest: {},
         };
       }
     } catch (error) {
@@ -156,6 +160,8 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
       () => reads.get(key),
       (error) => report(`reading the versions of ${key}`, error),
     );
+    if (record.kind === 'loaded')
+      listing.latest = { ...listing.latest, [key]: record.value.latest };
     set(record.kind === 'loaded' ? { kind: 'loaded', value: record.value.versions } : record);
   }
 
@@ -191,9 +197,11 @@ export function createRegistryView(options: RegistryViewOptions): RegistryView {
         if (row) {
           const { version } = message;
           const listed = loaded('kind' in shown ? undefined : shown.versions[message.key]);
+          const latest = 'kind' in shown ? undefined : shown.latest[message.key];
           await place(
             { author: row.author, name: row.name, version },
             statusOf(row, listed, version),
+            latest,
           );
         }
         return;

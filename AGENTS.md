@@ -245,17 +245,18 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   engine's full message to the "Lace" Output channel.
 - A version's status is the registry's own (`registry list`'s row `status`, `registry get`'s `versions[].status` and
   `latest.status`), and only `deprecated` marks it. `VersionLabel` draws a version with the word **Deprecated** after it
-  (`DEPRECATED`, `isDeprecated`; one `deprecated-mark.css` rule in both pages' stylesheets) on a row, among its versions,
-  in module detail's header, Details (`Latest Version`: the page's own `registry get`'s `latest` once it has loaded, else
-  the row's) and Versions; a row's label shortens with an ellipsis and never the version beside it. Where a name is
-  read or picked, `versionTitle` says `v0.4.0 (Deprecated)`: the "+" titles, the Add Module to Canvas pick, the usage
-  example, the placement's progress and status-bar message. A deprecated version places as any other: the host takes
-  its status with `statusOf` (the row's, else the one of the versions its sidebar read or its detail's `registry get`
-  lists) and hands `place` that status, which names the version with `versionTitle`, while the engine is sent the
-  module and its version alone. After a deprecated placement the status-bar message adds the newest published version
-  (`newestPublishedNote`: the `latest` of module detail's own `registry get`, else one `registry get` read by the
-  placement; a failed read is logged and adds nothing). Module detail shows the `.error-banner` "This version is
-  deprecated." above its tabs, with the same note.
+  (`DEPRECATED`, `isDeprecated`; one `deprecated-mark.css` rule in both pages' stylesheets) on a row, among its
+  versions, in module detail's header, Details (`Latest Version`: the page's own `registry get`'s `latest` once it has
+  loaded, else a dash) and Versions; a row's label shortens with an ellipsis and never the version beside it. Where a
+  name is read or picked, `versionTitle` says `v0.4.0 (Deprecated)`: the "+" titles, the Add Module to Canvas pick, the
+  usage example, the placement's progress and status-bar message. A deprecated version places as any other: the host
+  takes its status with `statusOf` (the row's, else the one of the versions its sidebar read or its detail's `registry
+  get` lists) and hands `place` that status, which names the version with `versionTitle`, while the engine is sent the
+  module and its version alone. After a deprecated placement, once the module is added and the root's session released,
+  the status-bar message adds the newest published version (`newestPublishedNote`: the `latest` of the sidebar's
+  versions read or module detail's own `registry get`, else one `registry get` read by the placement; a failed read is
+  logged once and adds nothing, and the note never replaces a later placement's message). Module detail shows the
+  `.error-banner` "This version is deprecated." above its tabs, with the same note.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
 - Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
   that cannot be read closes it and says why with the ways out its reason names, and an empty registry closes it and
@@ -291,13 +292,14 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   whole tree only when it names another root or other stacks (which, in which order); else it redraws the rows VS Code
   holds whose look or runs it changed, each kept as the object VS Code holds with its stack as the read found it, and a
   read that changed nothing redraws nothing, so no row loses its element. Only what may change the list reads it whole:
-  a tick, a change of the account, the view shown again, a `lace` command that ended in an integrated terminal and that
-  the CLI declares more than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the
-  workspace's folders, a change of the root the view names, and Refresh Stacks, which has the account read itself
-  first (`refreshWith`): a change that read finds reads the tree through the announcement, else Refresh reads it
-  itself, and either way the tree is read and the canvas ticked once. A stack row whose look changes with the
-  runner's store (an apply of it started, reached a stage or settled) has its runs read again, then is redrawn; any
-  other change of the store redraws nothing. The tree and the root's canvas badges read the same facts, so one
+  a tick, a change of the account, a `lace` command that ended in an integrated terminal and that the CLI declares
+  more than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a
+  change of the root the view names, and the view shown again and Refresh Stacks, which draw the view's progress at
+  once and have the account read itself first (`refreshWith`, as the Registry does): a change that read finds reads
+  the tree through the announcement, else the view reads it itself, and either way the tree is read and the canvas
+  ticked once. A stack row whose look changes with the runner's store (an apply of it started, reached a stage or
+  settled) is redrawn at once, and again once its stack's runs are read; any other change of the store redraws
+  nothing. The tree and the root's canvas badges read the same facts, so one
   invalidation serves both: each read for what may have changed the stacks (all of these but a change of the folders or
   of the root, which change no stack) ticks the canvas of the view's root once, and each tick of the runner's store (a
   run started or settled, a scan or a cancel done) ticks the canvas of the root that run was about too, its
@@ -444,9 +446,10 @@ after each change made here, when the window regains focus (a terminal or anothe
 line running `lace` ends in an integrated terminal with shell integration (`window.onDidEndTerminalShellExecution`,
 read by `vscode/lace-command-lines.ts`), which changes no focus, and when a view's refresh asks: `refreshWith(refresh)`
 reads the account and, when the read found a change, announces it and leaves the redraw to the listeners, else runs
-`refresh` (the Registry's first showing, showing again, Refresh and Retry; Refresh Stacks). The status bar, the registry
-view and the Stacks tree read again on the event, each by its plain refresh, never by `refreshWith`. Nothing is cached
-but the last read. A failed account command offers the way out its reason names (`vscode/offers.ts`).
+`refresh` (the Registry's first showing, showing again, Refresh and Retry; the Stacks view's showing again and Refresh
+Stacks). The status bar, the registry view and the Stacks tree read again on the event, each by its plain refresh,
+never by `refreshWith`. Nothing is cached but the last read. A failed account command offers the way out its reason
+names (`vscode/offers.ts`).
 
 ## The chat tools
 

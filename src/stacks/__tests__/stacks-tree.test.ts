@@ -2393,6 +2393,69 @@ describe("the view's progress", () => {
     expect(t.redrawn).toEqual([undefined]);
   });
 
+  // The Registry draws its loading before the account is read; so does this view.
+  test.each([
+    ['Refresh Stacks', (t: ReturnType<typeof setup>) => t.command(STACK_COMMANDS.refresh)],
+    [
+      'the view shown again',
+      (t: ReturnType<typeof setup>) => t.view.visibility.fire({ visible: true }),
+    ],
+  ])('%s draws it once, before the account is read, and ends it with the tree read', async (_, ask) => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    const before = overView(t).length;
+    let readAccount = () => {};
+    t.standIn.refreshWith.mockImplementation(async (refresh) => {
+      await new Promise<void>((resolve) => {
+        readAccount = resolve;
+      });
+      await refresh();
+    });
+
+    void ask(t);
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: false }]);
+
+    readAccount();
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: true }]);
+  });
+
+  test('the view shown again has the account read itself first, and hidden does not', async () => {
+    const t = setup({ root: prod, scripts: { ...listed } });
+    await t.children();
+    t.standIn.refreshWith.mockClear();
+
+    t.view.visibility.fire({ visible: false });
+    await settled();
+    expect(t.standIn.refreshWith).not.toHaveBeenCalled();
+
+    t.view.visibility.fire({ visible: true });
+    await settled();
+    expect(t.standIn.refreshWith).toHaveBeenCalledTimes(1);
+  });
+
+  test('a change the account read finds is read by the tree under the one progress it drew first', async () => {
+    const account = { team: 'platform' };
+    const t = setup({
+      root: prod,
+      windowAccount: true,
+      scripts: {
+        ...listed,
+        'team current': () => ({ documents: [{ slug: account.team, source: 'config' }] }),
+      },
+    });
+    await t.children();
+    await settled();
+    const before = overView(t).length;
+
+    account.team = 'data';
+    await t.command(STACK_COMMANDS.refresh);
+    await settled();
+    expect(overView(t).slice(before)).toEqual([{ ended: true }]);
+    expect(t.view.description).toBe('infra/prod · data');
+  });
+
   test("is drawn from the store's running mark, from the moment it is set until it is cleared", async () => {
     const t = setup({ root: prod, scripts: { ...listed } });
     await t.children();

@@ -265,7 +265,9 @@ describe('the registry sidebar', () => {
     await settled();
     await page.send({ op: 'place', key: 'acme/vpc', version: '1.0.0' });
     await page.send({ op: 'place', key: 'evil/thing', version: '1.0.0' });
-    expect(place.mock.calls).toEqual([[{ author: 'acme', name: 'vpc', version: '1.0.0' }, '']]);
+    expect(place.mock.calls).toEqual([
+      [{ author: 'acme', name: 'vpc', version: '1.0.0' }, '', undefined],
+    ]);
   });
 
   test("names a placed version as deprecated by the status the host's own reads give it: the row's, or its versions' read", async () => {
@@ -291,6 +293,37 @@ describe('the registry sidebar', () => {
       ['v1.0.0', 'deprecated'],
     ]);
     expect(place.mock.calls.every(([module]) => !('status' in module))).toBe(true);
+  });
+
+  test("passes the latest its versions' read found to the placement, so placing reads nothing more", async () => {
+    const { page, place, invoked } = setup({
+      'registry list': { documents: [list([row({ status: 'deprecated' })])] },
+      'registry get': {
+        documents: [
+          record({
+            versions: ['v1.0.0'],
+            deprecated: ['v1.0.0'],
+            latest: { version: 'v3.0.0', status: 'published' },
+          }),
+        ],
+      },
+    });
+    await settled();
+    await page.send({ op: 'versions', key: 'acme/vpc' });
+    await settled();
+    const reads = timesRun(invoked, 'registry get');
+
+    await page.send({ op: 'place', key: 'acme/vpc', version: 'v1.0.0' });
+
+    expect(place.mock.calls[0][2]).toMatchObject({ version: 'v3.0.0', status: 'published' });
+    expect(timesRun(invoked, 'registry get')).toBe(reads);
+  });
+
+  test('passes no latest for a row whose versions were not read', async () => {
+    const { page, place } = setup({ 'registry list': { documents: [list([VPC])] } });
+    await settled();
+    await page.send({ op: 'place', key: 'acme/vpc', version: '1.0.0' });
+    expect(place.mock.calls[0][2]).toBeUndefined();
   });
 
   test('a favourite is keyed on author and name, so a new latest version keeps it', async () => {

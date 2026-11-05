@@ -636,11 +636,9 @@ describe('a deprecated version on the module detail page', () => {
     expect(deprecated).toContain(`<td>Latest Version</td><td>v0.5.0 ${MARK}</td>`);
   });
 
-  test("shows the row's version as the Latest Version until the record has loaded", () => {
+  test('shows a dash as the Latest Version until the record has loaded, and when it fails', () => {
     for (const record of [{ kind: 'loading' }, { kind: 'failed', message: 'offline' }] as const) {
-      expect(page(detail({ row: BLOCKS, record }))).toContain(
-        `<td>Latest Version</td><td>v0.4.0 ${MARK}</td>`,
-      );
+      expect(page(detail({ row: BLOCKS, record }))).toContain('<td>Latest Version</td><td>—</td>');
     }
   });
 

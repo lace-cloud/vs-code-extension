@@ -45,9 +45,10 @@
 // that changed nothing redraws nothing, so no row loses its element. Only
 // what may change the list reads it whole: a tick of the runner's
 // store, a change of the account (made in this window or found outside it),
-// the view shown again, a `lace` command that may change something (any the
-// CLI declares more than a read) ended in an integrated terminal, a change
-// of the workspace's folders, a change of the root it names, and Refresh. A
+// the view shown again and Refresh (each has the account read itself first),
+// a `lace` command that may change something (any the CLI declares more than
+// a read) ended in an integrated terminal, a change of the workspace's
+// folders, and a change of the root it names. A
 // stack row whose look changes with the store (an apply of it started,
 // reached a stage or settled) is redrawn at once, with its settled Run, when
 // its runs are held, drawn as the store says it ended; they are then read again.
@@ -69,7 +70,8 @@
 // (a run started or settled, a scan or a cancel done) names its run, whose
 // `RunCtx` names the root it was about. The view draws its progress while
 // a read of the whole tree is under way, since it shows the tree it holds
-// until the read's answer is held, and while the store says a command is
+// until the read's answer is held, while Refresh or the view shown again has
+// the account read itself first, and while the store says a command is
 // under way (the package's `commandUnderWay`); it ends it when neither is.
 //
 // With no root found, the view says why, by the reason finding one gave: no
@@ -295,8 +297,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // between. A read started later supersedes one still under way.
   let readsStarted = 0;
   let latest: Promise<Redraw | undefined> | undefined;
-  // Reads of the whole tree under way.
+  // Reads of the whole tree under way, and refreshes whose account read is.
   let readsUnderWay = 0;
+  let accountReadsUnderWay = 0;
   // Reads the tree and holds what it found, unless a read started later
   // meanwhile; resolves with what VS Code is to redraw of it (`hold`), or
   // undefined when it was superseded. The view draws its progress while it
@@ -315,13 +318,14 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     return done;
   }
 
-  // The view's progress, while a read of the whole tree is under way (the
-  // view shows the tree it holds until the read's answer is held) or the
-  // runner's store says a command is under way: the function that ends the
-  // one drawn, while one is.
+  // The view's progress, while a read of the whole tree or of the account
+  // ahead of one is under way (the view shows the tree it holds until the
+  // read's answer is held) or the runner's store says a command is under
+  // way: the function that ends the one drawn, while one is.
   let endProgress: (() => void) | undefined;
   function drawProgress(): void {
-    const busy = readsUnderWay > 0 || commandUnderWay(runner.store.getSnapshot());
+    const busy =
+      readsUnderWay > 0 || accountReadsUnderWay > 0 || commandUnderWay(runner.store.getSnapshot());
     if (busy && !endProgress) {
       const ended = new Promise<void>((resolve) => {
         endProgress = resolve;
@@ -351,6 +355,18 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (root) panels.tick(root);
     if (ran && !(root && sameRoot(root, ran))) panels.tick(ran);
   };
+  // Refresh and the view shown again: progress at once, then the account
+  // reads itself, then the tree is read.
+  async function reload(): Promise<void> {
+    accountReadsUnderWay += 1;
+    drawProgress();
+    try {
+      await options.account.refreshWith(async () => refresh());
+    } finally {
+      accountReadsUnderWay -= 1;
+      drawProgress();
+    }
+  }
   // Redraws the shown rows of the stacks `ids` names, each drawn with its
   // look as it is now; VS Code's ask of each one's runs is answered from
   // what the tree holds.
@@ -795,7 +811,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       );
     }),
     view.onDidChangeVisibility(({ visible }) => {
-      if (visible) refresh();
+      if (visible) void reload();
     }),
     onDidEndLaceCommand(api.window, ({ path }) => {
       if (path !== undefined && COMMANDS[path].effect !== 'read') refresh();
@@ -810,7 +826,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       reread();
     }),
     ...registerCommands(api, {
-      [STACK_COMMANDS.refresh]: () => options.account.refreshWith(async () => refresh()),
+      [STACK_COMMANDS.refresh]: reload,
       [STACK_COMMANDS.chooseModule]: async () => {
         const chosen = await rootToAct(picking, api.window, 'show the stacks of');
         if (chosen) show(chosen);

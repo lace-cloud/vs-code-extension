@@ -104,30 +104,35 @@ export function placeModule(options: PlaceOptions): Place {
     let latest = known;
     if (!latest) {
       const key = moduleKey(module);
-      const say = (what: string) => log.appendLine(`Reading the latest version of ${key}: ${what}`);
-      let thrown = false;
+      // A thrown read comes back failed, so its message is logged once below.
       const read = await asRead(
         () => reads.get(key),
-        (error) => {
-          thrown = true;
-          say(failureText(error));
-        },
+        () => {},
       );
-      if (read.kind === 'failed' && !thrown) say(read.message);
+      if (read.kind === 'failed') {
+        log.appendLine(`Reading the latest version of ${key}: ${read.message}`);
+      }
       latest = loaded(read)?.latest;
     }
     const note = newestPublishedNote(latest, module.version);
     return note ? ` — ${note}; place that one instead.` : '';
   }
 
+  // The status message this function set last; advice never replaces a later one.
+  let statusSet = 0;
+  function say(named: string, label: string, advice = ''): number {
+    api.window.setStatusBarMessage(`Lace: added ${named} to ${label}${advice}`, 5000);
+    return ++statusSet;
+  }
+
+  // The stamp of the added message, or undefined when the module was not added;
+  // the recents mark follows it, and the session is released before any advice.
   async function apply(
     editor: EditorPort,
     module: PlacedModule,
     named: string,
     label: string,
-    status: string,
-    latest: Latest | undefined,
-  ): Promise<void> {
+  ): Promise<number | undefined> {
     const action: Action = { place_module: module };
     const result = await api.window.withProgress(
       { location: api.ProgressLocation.Notification, title: `Lace: adding ${named} to ${label}` },
@@ -137,11 +142,11 @@ export function placeModule(options: PlaceOptions): Place {
       void api.window.showErrorMessage(
         `Lace could not add ${named} to ${label}: ${result.errors.map((e) => e.message).join('; ')}`,
       );
-      return;
+      return undefined;
     }
-    const advice = isDeprecated(status) ? await suggestion(module, latest) : '';
-    api.window.setStatusBarMessage(`Lace: added ${named} to ${label}${advice}`, 5000);
+    const stamp = say(named, label);
     await placed(module);
+    return stamp;
   }
 
   return async (module, status, latest) => {
@@ -152,10 +157,15 @@ export function placeModule(options: PlaceOptions): Place {
     try {
       await panels.ensure(root, { preserveFocus: true });
       const hold = await rootSessions.acquire(rootPath(root));
+      let added: number | undefined;
       try {
-        await apply(hold.ports.editor, module, named, label, status, latest);
+        added = await apply(hold.ports.editor, module, named, label);
       } finally {
         await hold.release();
+      }
+      if (added !== undefined && isDeprecated(status)) {
+        const advice = await suggestion(module, latest);
+        if (advice && added === statusSet) say(named, label, advice);
       }
     } catch (error) {
       if (error instanceof ConnectError) return refused(named, label, error);
