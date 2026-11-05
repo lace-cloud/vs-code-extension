@@ -9,20 +9,20 @@ importers:
   .:
     dependencies:
       '@lace-cloud/canvas':
-        specifier: 0.35.0
-        version: 0.35.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+        specifier: 0.36.0
+        version: 0.36.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
       '@lace-cloud/chat-core':
-        specifier: 0.35.0
-        version: 0.35.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+        specifier: 0.36.0
+        version: 0.36.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
       '@lace-cloud/design-tokens':
-        specifier: 0.35.0
-        version: 0.35.0
+        specifier: 0.36.0
+        version: 0.36.0
       '@lace-cloud/host':
-        specifier: 0.35.0
-        version: 0.35.0
+        specifier: 0.36.0
+        version: 0.36.0
       '@lace-cloud/proto':
-        specifier: 0.35.0
-        version: 0.35.0
+        specifier: 0.36.0
+        version: 0.36.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -41,7 +41,7 @@ importers:
         version: 2.4.12
       '@rspack/cli':
         specifier: ^1.1.8
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0))
+        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0))
       '@rspack/core':
         specifier: ^1.1.8
         version: 1.7.11(@swc/helpers@0.5.21)
@@ -74,7 +74,7 @@ importers:
     devDependencies:
       '@rspack/cli':
         specifier: ^1.1.8
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0))
+        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0))
       '@rspack/core':
         specifier: ^1.1.8
         version: 1.7.11(@swc/helpers@0.5.21)
@@ -558,23 +558,23 @@ packages:
     peerDependencies:
       tslib: '2'
 
-  '@lace-cloud/canvas@0.35.0':
-    resolution: {integrity: sha512-uDdfgO4wUioicFPz/el61DHY5lnvKmkVnch+vkiB5Z808rFclv2Dqn6YSkoOsfQRg4kcSur1OGVgKHDjKoBbfg==}
+  '@lace-cloud/canvas@0.36.0':
+    resolution: {integrity: sha512-ldGMNufOPRgEBHSXlirGvr0dhphDSj49nfEFJtpnXEuI0sbilmImssdjGbIUfLeoITnTs1YjN42e5iFMGZx+yA==}
 
-  '@lace-cloud/chat-core@0.35.0':
-    resolution: {integrity: sha512-Uca7GGl9D6NHhGh5Z0VSVvl+mVIrYNT3cTzXHCmTDcIIz503nQupeovJrM3ZfA9YBzhNIcJH/y6TWOzGEPdCIQ==}
+  '@lace-cloud/chat-core@0.36.0':
+    resolution: {integrity: sha512-RYA/3YGjlkqUHse7eUPdFfqcNrcHsisXc4J+HzdpotNfe8+oIZvtf344xGrww4gDIdkTj36W68feSV3d3jQxkg==}
 
-  '@lace-cloud/design-tokens@0.35.0':
-    resolution: {integrity: sha512-Dxnk5IeBo7XZhPwbNjvrP4Ogscyb7Fb2l5IMcR00cQFAtIbI5J95h3hPLbPOFaFeC2+HA0j7luKzkkBgXNXCRQ==}
+  '@lace-cloud/design-tokens@0.36.0':
+    resolution: {integrity: sha512-fGIeLEwrbhEGuRXhfFpLlUNkql2YwfuDGM3A1ENCOlzRt46YyV30wtB5LzXc1x2kAl+wxhHVcjUcNjj3usvszw==}
 
-  '@lace-cloud/host@0.35.0':
-    resolution: {integrity: sha512-xa9m38rqbtiIZ/zFSGmx8Lsk3GV97gtFIx2DAFL0RdNasI3/wxJqTHCFECpQEJ1s0q2jm4iG9HGUwLPcAfWzMg==}
+  '@lace-cloud/host@0.36.0':
+    resolution: {integrity: sha512-89xhV4OZTxocXKaui09m5q6fc560YUr1dLyzhNM2JcF9zoqK6YD/pRoRhVrLQcpJkTi+XeSVwCfcfweCcomefA==}
 
-  '@lace-cloud/proto@0.35.0':
-    resolution: {integrity: sha512-FJcLEOsBAe7ACIlQKBqo3J3DQ/gaI7Pk3iM5vpidycsQFmybCJ5MZONdXXuQl6uzSapDDcz6w3lm4UpbM6Ofmw==}
+  '@lace-cloud/proto@0.36.0':
+    resolution: {integrity: sha512-7/xOP9Nl9O9f0VanNDUa7OsINGVVe/4vNlI2CD/CL7Yebm3QwD6klDx4I4KiRMkN4LftIsmi0Ej+dAIBvKIrHw==}
 
-  '@lace-cloud/ui@0.35.0':
-    resolution: {integrity: sha512-6/5lJl+6Qi/ER1lxSibms71eNdQDx8rjN1uM+jONqKjey/+b253JHmYt1FLQkHJ1nt01PvRKOQMcqLddaOYnfQ==}
+  '@lace-cloud/ui@0.36.0':
+    resolution: {integrity: sha512-pSHd4CLCnP7lFCJdsDJuC5eA06GkM1qm+rxNPvrhxO3jYGy4V5ru8R0ERt99VFmZqlsb4jI2NSVQ0Ph5YUeRSw==}
     peerDependencies:
       framer-motion: ^12.38.0
       react-markdown: ^10.1.0
@@ -3683,138 +3683,138 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@jsonjoy.com/base64@1.1.2(tslib@2.8.1)':
+  '@jsonjoy.com/base64@1.1.2(tslib@2.9.1)':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
-  '@jsonjoy.com/base64@17.67.0(tslib@2.8.1)':
+  '@jsonjoy.com/base64@17.67.0(tslib@2.9.1)':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
-  '@jsonjoy.com/buffers@1.2.1(tslib@2.8.1)':
+  '@jsonjoy.com/buffers@1.2.1(tslib@2.9.1)':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
-  '@jsonjoy.com/buffers@17.67.0(tslib@2.8.1)':
+  '@jsonjoy.com/buffers@17.67.0(tslib@2.9.1)':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
-  '@jsonjoy.com/codegen@1.0.0(tslib@2.8.1)':
+  '@jsonjoy.com/codegen@1.0.0(tslib@2.9.1)':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
-  '@jsonjoy.com/codegen@17.67.0(tslib@2.8.1)':
+  '@jsonjoy.com/codegen@17.67.0(tslib@2.9.1)':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-core@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-core@4.57.1(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.9.1)
+      thingies: 2.6.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-fsa@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-fsa@4.57.1(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/fs-core': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/fs-core': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.9.1)
+      thingies: 2.6.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-node-builtins@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-node-builtins@4.57.1(tslib@2.9.1)':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-node-to-fsa@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-node-to-fsa@4.57.1(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/fs-fsa': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/fs-fsa': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-node-utils@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-node-utils@4.57.1(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-node@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-node@4.57.1(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/fs-core': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-print': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-snapshot': 4.57.1(tslib@2.8.1)
-      glob-to-regex.js: 1.2.0(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/fs-core': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-print': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-snapshot': 4.57.1(tslib@2.9.1)
+      glob-to-regex.js: 1.2.0(tslib@2.9.1)
+      thingies: 2.6.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-print@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-print@4.57.1(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.9.1)
+      tree-dump: 1.1.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/fs-snapshot@4.57.1(tslib@2.8.1)':
+  '@jsonjoy.com/fs-snapshot@4.57.1(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/json-pack': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 17.67.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/buffers': 17.67.0(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/json-pack': 17.67.0(tslib@2.9.1)
+      '@jsonjoy.com/util': 17.67.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/json-pack@1.21.0(tslib@2.8.1)':
+  '@jsonjoy.com/json-pack@1.21.0(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/base64': 1.1.2(tslib@2.8.1)
-      '@jsonjoy.com/buffers': 1.2.1(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 1.0.0(tslib@2.8.1)
-      '@jsonjoy.com/json-pointer': 1.0.2(tslib@2.8.1)
-      '@jsonjoy.com/util': 1.9.0(tslib@2.8.1)
+      '@jsonjoy.com/base64': 1.1.2(tslib@2.9.1)
+      '@jsonjoy.com/buffers': 1.2.1(tslib@2.9.1)
+      '@jsonjoy.com/codegen': 1.0.0(tslib@2.9.1)
+      '@jsonjoy.com/json-pointer': 1.0.2(tslib@2.9.1)
+      '@jsonjoy.com/util': 1.9.0(tslib@2.9.1)
       hyperdyperid: 1.2.0
-      thingies: 2.6.0(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
+      thingies: 2.6.0(tslib@2.9.1)
+      tree-dump: 1.1.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/json-pack@17.67.0(tslib@2.8.1)':
+  '@jsonjoy.com/json-pack@17.67.0(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/base64': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/json-pointer': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 17.67.0(tslib@2.8.1)
+      '@jsonjoy.com/base64': 17.67.0(tslib@2.9.1)
+      '@jsonjoy.com/buffers': 17.67.0(tslib@2.9.1)
+      '@jsonjoy.com/codegen': 17.67.0(tslib@2.9.1)
+      '@jsonjoy.com/json-pointer': 17.67.0(tslib@2.9.1)
+      '@jsonjoy.com/util': 17.67.0(tslib@2.9.1)
       hyperdyperid: 1.2.0
-      thingies: 2.6.0(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
+      thingies: 2.6.0(tslib@2.9.1)
+      tree-dump: 1.1.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/json-pointer@1.0.2(tslib@2.8.1)':
+  '@jsonjoy.com/json-pointer@1.0.2(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/codegen': 1.0.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 1.9.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/codegen': 1.0.0(tslib@2.9.1)
+      '@jsonjoy.com/util': 1.9.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/json-pointer@17.67.0(tslib@2.8.1)':
+  '@jsonjoy.com/json-pointer@17.67.0(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/util': 17.67.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/util': 17.67.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/util@1.9.0(tslib@2.8.1)':
+  '@jsonjoy.com/util@1.9.0(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/buffers': 1.2.1(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 1.0.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/buffers': 1.2.1(tslib@2.9.1)
+      '@jsonjoy.com/codegen': 1.0.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@jsonjoy.com/util@17.67.0(tslib@2.8.1)':
+  '@jsonjoy.com/util@17.67.0(tslib@2.9.1)':
     dependencies:
-      '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/buffers': 17.67.0(tslib@2.9.1)
+      '@jsonjoy.com/codegen': 17.67.0(tslib@2.9.1)
+      tslib: 2.9.1
 
-  '@lace-cloud/canvas@0.35.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
+  '@lace-cloud/canvas@0.36.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@lace-cloud/proto': 0.35.0
-      '@lace-cloud/ui': 0.35.0(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+      '@lace-cloud/proto': 0.36.0
+      '@lace-cloud/ui': 0.36.0(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
       '@xyflow/react': 12.12.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
@@ -3829,10 +3829,10 @@ snapshots:
       - rehype-sanitize
       - remark-gfm
 
-  '@lace-cloud/chat-core@0.35.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
+  '@lace-cloud/chat-core@0.36.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
     dependencies:
-      '@lace-cloud/canvas': 0.35.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
-      '@lace-cloud/proto': 0.35.0
+      '@lace-cloud/canvas': 0.36.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+      '@lace-cloud/proto': 0.36.0
     transitivePeerDependencies:
       - '@types/react'
       - '@types/react-dom'
@@ -3843,21 +3843,21 @@ snapshots:
       - rehype-sanitize
       - remark-gfm
 
-  '@lace-cloud/design-tokens@0.35.0': {}
+  '@lace-cloud/design-tokens@0.36.0': {}
 
-  '@lace-cloud/host@0.35.0':
+  '@lace-cloud/host@0.36.0':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
       '@grpc/grpc-js': 1.14.7
-      '@lace-cloud/proto': 0.35.0
+      '@lace-cloud/proto': 0.36.0
 
-  '@lace-cloud/proto@0.35.0':
+  '@lace-cloud/proto@0.36.0':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
 
-  '@lace-cloud/ui@0.35.0(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
+  '@lace-cloud/ui@0.36.0(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
     dependencies:
-      '@lace-cloud/design-tokens': 0.35.0
+      '@lace-cloud/design-tokens': 0.36.0
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
     optionalDependencies:
@@ -4043,11 +4043,11 @@ snapshots:
       '@rspack/binding-win32-ia32-msvc': 1.7.11
       '@rspack/binding-win32-x64-msvc': 1.7.11
 
-  '@rspack/cli@1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0))':
+  '@rspack/cli@1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0))':
     dependencies:
       '@discoveryjs/json-ext': 0.5.7
       '@rspack/core': 1.7.11(@swc/helpers@0.5.21)
-      '@rspack/dev-server': 1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0))
+      '@rspack/dev-server': 1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0))
       exit-hook: 4.0.0
       webpack-bundle-analyzer: 4.10.2
     transitivePeerDependencies:
@@ -4068,13 +4068,13 @@ snapshots:
     optionalDependencies:
       '@swc/helpers': 0.5.21
 
-  '@rspack/dev-server@1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0))':
+  '@rspack/dev-server@1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0))':
     dependencies:
       '@rspack/core': 1.7.11(@swc/helpers@0.5.21)
       chokidar: 3.6.0
       http-proxy-middleware: 2.0.9(@types/express@4.17.25)
       p-retry: 6.2.1
-      webpack-dev-server: 5.2.2(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0))
+      webpack-dev-server: 5.2.2(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0))
       ws: 8.20.0
     transitivePeerDependencies:
       - '@types/express'
@@ -4218,7 +4218,6 @@ snapshots:
   '@types/node@20.19.43':
     dependencies:
       undici-types: 6.21.0
-    optional: true
 
   '@types/prop-types@15.7.15': {}
 
@@ -5143,9 +5142,9 @@ snapshots:
     dependencies:
       is-glob: 4.0.3
 
-  glob-to-regex.js@1.2.0(tslib@2.8.1):
+  glob-to-regex.js@1.2.0(tslib@2.9.1):
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   glob-to-regexp@0.4.1:
     optional: true
@@ -5748,22 +5747,22 @@ snapshots:
 
   media-typer@0.3.0: {}
 
-  memfs@4.57.1(tslib@2.8.1):
+  memfs@4.57.1(tslib@2.9.1):
     dependencies:
-      '@jsonjoy.com/fs-core': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-fsa': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-to-fsa': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-print': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/fs-snapshot': 4.57.1(tslib@2.8.1)
-      '@jsonjoy.com/json-pack': 1.21.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 1.9.0(tslib@2.8.1)
-      glob-to-regex.js: 1.2.0(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
+      '@jsonjoy.com/fs-core': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-fsa': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-builtins': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-to-fsa': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-node-utils': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-print': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/fs-snapshot': 4.57.1(tslib@2.9.1)
+      '@jsonjoy.com/json-pack': 1.21.0(tslib@2.9.1)
+      '@jsonjoy.com/util': 1.9.0(tslib@2.9.1)
+      glob-to-regex.js: 1.2.0(tslib@2.9.1)
+      thingies: 2.6.0(tslib@2.9.1)
+      tree-dump: 1.1.0(tslib@2.9.1)
+      tslib: 2.9.1
 
   merge-descriptors@1.0.3: {}
 
@@ -6189,7 +6188,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 20.19.39
+      '@types/node': 20.19.43
       long: 5.3.2
 
   proxy-addr@2.0.7:
@@ -6657,9 +6656,9 @@ snapshots:
       glob: 13.0.6
       minimatch: 10.2.6
 
-  thingies@2.6.0(tslib@2.8.1):
+  thingies@2.6.0(tslib@2.9.1):
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   thunky@1.1.0: {}
 
@@ -6706,18 +6705,18 @@ snapshots:
       punycode: 2.3.1
     optional: true
 
-  tree-dump@1.1.0(tslib@2.8.1):
+  tree-dump@1.1.0(tslib@2.9.1):
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   trim-lines@3.0.1: {}
 
   trough@2.2.0: {}
 
-  tslib@2.8.1: {}
-
-  tslib@2.9.1:
+  tslib@2.8.1:
     optional: true
+
+  tslib@2.9.1: {}
 
   type-is@1.6.18:
     dependencies:
@@ -6917,10 +6916,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  webpack-dev-middleware@7.4.5(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0)):
+  webpack-dev-middleware@7.4.5(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0)):
     dependencies:
       colorette: 2.0.20
-      memfs: 4.57.1(tslib@2.8.1)
+      memfs: 4.57.1(tslib@2.9.1)
       mime-types: 3.0.2
       on-finished: 2.4.1
       range-parser: 1.2.1
@@ -6930,7 +6929,7 @@ snapshots:
     transitivePeerDependencies:
       - tslib
 
-  webpack-dev-server@5.2.2(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0)):
+  webpack-dev-server@5.2.2(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0)):
     dependencies:
       '@types/bonjour': 3.5.13
       '@types/connect-history-api-fallback': 1.5.4
@@ -6958,7 +6957,7 @@ snapshots:
       serve-index: 1.9.2
       sockjs: 0.3.24
       spdy: 4.0.2
-      webpack-dev-middleware: 7.4.5(tslib@2.8.1)(webpack@5.106.2(lightningcss@1.32.0))
+      webpack-dev-middleware: 7.4.5(tslib@2.9.1)(webpack@5.106.2(lightningcss@1.32.0))
       ws: 8.20.0
     optionalDependencies:
       webpack: 5.106.2(lightningcss@1.32.0)
