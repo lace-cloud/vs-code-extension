@@ -88,7 +88,7 @@ demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's 
 `lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
 default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
 with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
-and locks with it. The extension speaks engine protocol 9 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+and locks with it. The extension speaks engine protocol 10 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
 protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version and engine contract
 (`ENGINE_CONTRACT`) decide compatibility: `@lace-cloud/host` refuses an engine of another protocol or another contract
 with `EngineIdentityMismatchError`, and the message names which side to update, or, for an engine of this protocol built
@@ -346,9 +346,11 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
 - `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
   run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
-  ends. The runner's form asks for the slug, proposing the root's directory name, and the connection; the package's
-  notice says "Created stack <slug>", and its tick reads the tree again, which lists the stack. A refusal is the CLI's,
-  by its reason, through the offers (`not_git_repository` and `no_origin_remote` say the CLI's message).
+  ends. The binding reads `stack validate` over the root first, and only a root the CLI accepts raises the runner's form,
+  which asks for the slug, proposing the root's directory name, and the connection; the package's notice says "Created
+  stack <slug>", and its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason,
+  through the offers (`not_git_repository`, `no_origin_remote` and `no_commit` say the CLI's message), and comes before
+  the form asks anything.
 - The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>` and is on screen while the list is
   read; a list that cannot be read closes it and is shown with the ways out its reason names, and a root with no stack
   closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.

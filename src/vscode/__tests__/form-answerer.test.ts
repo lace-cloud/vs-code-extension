@@ -6,7 +6,7 @@ import {
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
-import { fakeCommands, refused } from '../../engine/__tests__/fake-commands';
+import { fakeCommands, refused, VALID_SOURCE } from '../../engine/__tests__/fake-commands';
 import { binding, createRunnerHost, type Form } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import { formAnswerer } from '../form-answerer';
@@ -427,6 +427,7 @@ describe("the answerer of the window's runner", () => {
     const t = setup({
       scripts: {
         'connection list': { documents: [connections(connection('conn_1', 'AWS'))] },
+        'stack validate': { documents: [VALID_SOURCE] },
         'stack create': { documents: [] },
       },
       inputs: [new Promise((resolve) => (typeFirst = resolve)), 'b'],
@@ -439,12 +440,17 @@ describe("the answerer of the window's runner", () => {
     typeFirst('a');
     await settled();
 
-    expect(t.commands.invoked.filter(({ path }) => path === 'stack create')).toEqual([
+    expect(t.commands.invoked).toEqual([
+      { cwd: '/work/repo/a', path: 'stack validate', args: { source: '/work/repo/a' } },
+      { cwd: '/work/repo/b', path: 'stack validate', args: { source: '/work/repo/b' } },
+      { cwd: '/home/dev', path: 'connection list', args: {} },
       {
         cwd: '/work/repo/b',
         path: 'stack create',
         args: { source: '/work/repo/b', slug: 'b', connection: 'conn_1' },
       },
+      // The superseded form's own connection read, after the newer run started: no create follows.
+      { cwd: '/home/dev', path: 'connection list', args: {} },
     ]);
   });
 });

@@ -19,7 +19,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.59.0. It speaks engine protocol 9, which Lace CLI v2.59.0 speaks, and reads the engine
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.60.0. It speaks engine protocol 10, which Lace CLI v2.60.0 speaks, and reads the engine
   contract that release serves; a CLI of another protocol or another contract is refused when the engine starts, and the
   extension says what to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
@@ -184,7 +184,9 @@ its ten most recent runs. The view's description names the module; it follows th
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
   portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.
-- **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it asks
+- **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it first
+  has the CLI read the module's git repository (`lace stack validate`), and a repository the CLI refuses (not a git
+  repository, no `origin` remote, no commit yet) is told in the CLI's words before anything is asked; otherwise it asks
   for the new stack's slug, proposing the module directory's name, then for the cloud connection it deploys through,
   picked from your team's connections as `lace connection list` lists them, and creates it under a progress
   notification. The stack is bound to the module's place in its git repository, and the view lists it. A team
