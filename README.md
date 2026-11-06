@@ -19,7 +19,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.59.0. It speaks engine protocol 9, which Lace CLI v2.59.0 speaks, and reads the engine
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.60.0. It speaks engine protocol 10, which Lace CLI v2.60.0 speaks, and reads the engine
   contract that release serves; a CLI of another protocol or another contract is refused when the engine starts, and the
   extension says what to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
@@ -48,7 +48,7 @@ lock.
 
 Each entry of the canvas's Diagnostics list has **Open source**, which opens the file the diagnostic names at its line
 and column, beside the canvas. For one located on the canvas alone, such as a required input not set, it says the
-diagnostic names no file.
+diagnostic names no file; for one with no place either, it says it names no place on the canvas.
 
 A directory with no `.tf` file opens an empty canvas you can edit: the module starts there, as it would in a new `.tf`
 file, and Generate writes its first `.tf` files. In a workspace with no `.tf` file and no canvas open, **Lace: Open
@@ -135,9 +135,18 @@ it runs **Lace: Select Organization** to switch it.
 
 - **+** on a row places that version on the canvas of the module you are working in. The canvas tab opens beside the
   file you are editing, or comes forward, without taking focus, so you see the edit land.
-- Clicking a row opens **module detail**: **Details** renders the module's README, **Interface** lists its inputs and
-  outputs as Lace certified them (describing a version downloads and certifies it, so it loads after the rest),
-  **Versions** and **Examples**, with **Add to Canvas** in the header.
+- A version the registry has deprecated is marked **Deprecated**, in your theme's warning colour, wherever it is
+  listed: on its row, among a row's versions, and in module detail's header, **Details** and **Versions**; a tooltip,
+  the Add Module to Canvas pick, the version line of the **Examples** tab, and the progress notification and the
+  message of a placement say `(Deprecated)` after it. **+** and **Add to Canvas** still place it, and the message that
+  follows names the newest published version to use instead, when there is another; when Lace could not read it, the
+  message says "could not read the newest published version; see the Lace Output channel", where the read's failure is
+  logged. Module detail shows "This version is deprecated." above its tabs with that version, and its **Latest
+  Version** is the one the registry names.
+- Clicking a row opens **module detail**: **Details** renders the module's README above a Quick Reference table of
+  System, Kind, Latest Version, Author, Source, Inputs, Outputs and, when the registry has a date, Published;
+  **Interface** lists its inputs and outputs as Lace certified them (describing a version downloads and certifies
+  it, so it loads after the rest), **Versions** and **Examples**, with **Add to Canvas** in the header.
 - Signed out, the view lists the public registry's modules, and the **Organization** dropdown reads **Public
   Registry**; sign in to see your organization's. A session Lace no longer accepts offers **Sign In**; with no
   organization selected, the view offers **Select Organization**; with no module published, it says so and links to
@@ -175,7 +184,9 @@ its ten most recent runs. The view's description names the module; it follows th
 - When the stacks cannot be listed, the view says why with the one action that gets past it: **Sign In**,
   **Select Organization**, **Select Team**, **Open Portal** (an organization with no team; teams are created in the
   portal), **Create Stack** (no stack deployed from the module yet), or **Retry**.
-- **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it asks
+- **Create Stack** (`lace.stacks.create`) creates a stack of the module the view lists (`lace stack create`): it first
+  has the CLI read the module's git repository (`lace stack validate`), and a repository the CLI refuses (not a git
+  repository, no `origin` remote, no commit yet) is told in the CLI's words before anything is asked; otherwise it asks
   for the new stack's slug, proposing the module directory's name, then for the cloud connection it deploys through,
   picked from your team's connections as `lace connection list` lists them, and creates it under a progress
   notification. The stack is bound to the module's place in its git repository, and the view lists it. A team
@@ -207,7 +218,10 @@ pick says so.
 
 A `lace login`, `lace logout`, `lace org use` or `lace team use` run in VS Code's integrated terminal reaches the status
 bar, the Registry view and the Stacks view when the command ends (the terminal's shell integration, on by default,
-tells VS Code it ended); one run in a terminal outside VS Code, when the window regains focus.
+tells VS Code it ended); one run in a terminal outside VS Code, when the window regains focus. **Lace: Refresh
+Registry** and **Lace: Refresh Stacks** read the account first, so a change they find reaches the status bar, the
+Registry view's organization and the Stacks view's description together, and a `lace org use` that focus did not
+catch is picked up by either.
 
 ## Lace in VS Code's chat
 
@@ -309,12 +323,12 @@ full path of its executable.
 | Lace: Scan Module                    | `lace.scanModule`              | Runs `lace module scan` (tfsec) and names the tfsec version that ran.                                            |
 | Lace: Generate Docs                  | `lace.generateDocs`            | Runs `lace module docs` (terraform-docs) and opens the markdown in an untitled editor; your save is the write. Also on the Explorer folder menu. |
 | Lace: Add Module to Canvas           | `lace.addModuleToCanvas`       | Picks a registry module and places it on the module's canvas; in a workspace with no module, on the canvas of the workspace folder, where the module starts. |
-| Lace: Refresh Registry               | `lace.refreshRegistry`         | Reads the registry again.                                                                                        |
+| Lace: Refresh Registry               | `lace.refreshRegistry`         | Reads the account, then the registry again: the status bar, the Registry's organization and the Stacks view's description move together. |
 | Lace: Sign In                        | `lace.signIn`                  | Signs in to Lace.                                                                                                |
 | Lace: Sign Out                       | `lace.signOut`                 | Signs out of Lace.                                                                                               |
 | Lace: Select Organization            | `lace.selectOrganization`      | Selects the organization, then its team.                                                                         |
 | Lace: Select Team                    | `lace.selectTeam`              | Selects a team of the current organization.                                                                      |
-| Lace: Refresh Stacks                 | `lace.refreshStacks`           | Lists the stacks again, and the module's canvas reads its stack badges again.                                    |
+| Lace: Refresh Stacks                 | `lace.refreshStacks`           | Reads the account, then lists the stacks again (the status bar, the Registry's organization and the Stacks view's description move together), and the module's canvas reads its stack badges again. |
 | Lace: Show Stacks of a Module        | `lace.stacks.chooseModule`     | Picks the module whose stacks the Stacks view lists.                                                             |
 | Lace: Preview Stack                  | `lace.previewStack`            | Previews a stack of the module: its row's, or one you pick.                                                      |
 | Lace: Apply Stack                    | `lace.applyStack`              | Applies a stack of the module: its row's, or one you pick.                                                       |

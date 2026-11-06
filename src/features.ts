@@ -188,6 +188,7 @@ function registry(host: Host): vscode.Disposable {
     sources: startingSources(api.window, host.sources),
     panels: host.panels,
     rootSessions: host.rootSessions,
+    reads,
     log: host.log,
     placed: (module) => marks.placed(moduleKey(module)),
   });
@@ -212,7 +213,7 @@ function registry(host: Host): vscode.Disposable {
     api.window.registerWebviewViewProvider(REGISTRY_VIEW, view),
     ...registerCommands(api, {
       [REFRESH_REGISTRY]: view.refresh,
-      [ADD_MODULE]: addModuleToCanvas({ api, reads, place, offers: host.offers }),
+      [ADD_MODULE]: addModuleToCanvas({ api, reads, place, offers: host.offers, report }),
     }),
     view,
     details,

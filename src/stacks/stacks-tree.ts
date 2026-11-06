@@ -45,11 +45,13 @@
 // that changed nothing redraws nothing, so no row loses its element. Only
 // what may change the list reads it whole: a tick of the runner's
 // store, a change of the account (made in this window or found outside it),
-// the view shown again, a `lace` command that may change something (any the
-// CLI declares more than a read) ended in an integrated terminal, a change
-// of the workspace's folders, a change of the root it names, and Refresh. A
+// the view shown again and Refresh (each has the account read itself first),
+// a `lace` command that may change something (any the CLI declares more than
+// a read) ended in an integrated terminal, a change of the workspace's
+// folders, and a change of the root it names. A
 // stack row whose look changes with the store (an apply of it started,
-// reached a stage or settled) has its runs read again, then is redrawn.
+// reached a stage or settled) is redrawn at once, with its settled Run, when
+// its runs are held, drawn as the store says it ended; they are then read again.
 //
 // The tree and the root's canvas, whose badges are the picked stack's, read
 // the same facts, so one invalidation serves both: each read of the tree
@@ -68,7 +70,8 @@
 // (a run started or settled, a scan or a cancel done) names its run, whose
 // `RunCtx` names the root it was about. The view draws its progress while
 // a read of the whole tree is under way, since it shows the tree it holds
-// until the read's answer is held, and while the store says a command is
+// until the read's answer is held, while Refresh or the view shown again has
+// the account read itself first, and while the store says a command is
 // under way (the package's `commandUnderWay`); it ends it when neither is.
 //
 // With no root found, the view says why, by the reason finding one gave: no
@@ -192,7 +195,7 @@ export type StacksTreeOptions = {
   commands: CommandsMapping;
   runner: RunnerHost;
   runOutput: RunOutput;
-  account: Pick<Account, 'onDidChange'>;
+  account: Pick<Account, 'onDidChange' | 'refreshWith'>;
   offers: OfferActions;
   rootState: RootState;
   panels: Pick<CanvasPanels, 'tick' | 'onDidChangeActive'>;
@@ -202,6 +205,15 @@ export type StacksTreeOptions = {
   validate: (root: AuthoringRoot) => Promise<void>;
   report: (what: string, error: unknown) => void;
 };
+
+// The rows with the Run `ended` drawn in place of its row, or undefined when
+// they list none: an apply's result says how it ended before a read does.
+function settledRows(rows: readonly Row[], ended: Run): Row[] | undefined {
+  if (!rows.some((row) => row.kind === 'run' && row.run.id === ended.id)) return undefined;
+  return rows.map((row) =>
+    row.kind === 'run' && row.run.id === ended.id ? { ...row, run: ended } : row,
+  );
+}
 
 export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   const { api, commands, runner, runOutput, rootState, panels, sources, pickStack, report } =
@@ -239,6 +251,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   type HeldRuns = { at: number; asked: Promise<Row[]>; read?: Row[] };
   const heldRuns = new Map<string, HeldRuns>();
   let runReadsStarted = 0;
+  const nextReadAt = () => ++runReadsStarted;
   // A read of a stack's runs: when it started among them, and its rows.
   type RunsRead = { at: number; rows: Row[] };
 
@@ -256,7 +269,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
 
   // Reads the runs of a stack row's stack.
   async function readRuns(row: StackRow): Promise<RunsRead> {
-    const at = ++runReadsStarted;
+    const at = nextReadAt();
     return { at, rows: await runRows(row) };
   }
 
@@ -265,7 +278,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   function askRuns(row: StackRow): Promise<Row[]> {
     const held = heldRuns.get(row.stack.id);
     if (held) return held.asked;
-    const asking: HeldRuns = { at: ++runReadsStarted, asked: runRows(row) };
+    const asking: HeldRuns = { at: nextReadAt(), asked: runRows(row) };
     heldRuns.set(row.stack.id, asking);
     void asking.asked.then((rows) => holdRuns(row.stack.id, { at: asking.at, rows }));
     return asking.asked;
@@ -284,8 +297,9 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   // between. A read started later supersedes one still under way.
   let readsStarted = 0;
   let latest: Promise<Redraw | undefined> | undefined;
-  // Reads of the whole tree under way.
+  // Reads of the whole tree under way, and refreshes whose account read is.
   let readsUnderWay = 0;
+  let accountReadsUnderWay = 0;
   // Reads the tree and holds what it found, unless a read started later
   // meanwhile; resolves with what VS Code is to redraw of it (`hold`), or
   // undefined when it was superseded. The view draws its progress while it
@@ -304,13 +318,12 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     return done;
   }
 
-  // The view's progress, while a read of the whole tree is under way (the
-  // view shows the tree it holds until the read's answer is held) or the
-  // runner's store says a command is under way: the function that ends the
-  // one drawn, while one is.
+  // The view's progress, drawn while a read of the tree (or of the account ahead of it) or a command
+  // of the runner's store is under way; `endProgress` ends the one drawn.
   let endProgress: (() => void) | undefined;
   function drawProgress(): void {
-    const busy = readsUnderWay > 0 || commandUnderWay(runner.store.getSnapshot());
+    const busy =
+      readsUnderWay > 0 || accountReadsUnderWay > 0 || commandUnderWay(runner.store.getSnapshot());
     if (busy && !endProgress) {
       const ended = new Promise<void>((resolve) => {
         endProgress = resolve;
@@ -340,6 +353,18 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     if (root) panels.tick(root);
     if (ran && !(root && sameRoot(root, ran))) panels.tick(ran);
   };
+  // Refresh and the view shown again: progress at once, then the account
+  // reads itself, then the tree is read.
+  async function reload(): Promise<void> {
+    accountReadsUnderWay += 1;
+    drawProgress();
+    try {
+      await options.account.refreshWith(async () => refresh());
+    } finally {
+      accountReadsUnderWay -= 1;
+      drawProgress();
+    }
+  }
   // Redraws the shown rows of the stacks `ids` names, each drawn with its
   // look as it is now; VS Code's ask of each one's runs is answered from
   // what the tree holds.
@@ -539,20 +564,46 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
     }
   }
 
-  // A stack row whose look changed with the store (an apply of it started,
-  // reached a stage or settled): its run may have changed with it, so its
-  // runs, when held, are read again, and the row is redrawn once they are.
-  // One read per row at a time; the row is drawn with its look as it is
-  // when that read is done.
+  // The run slot, when it is about the stack `id`.
+  const slotOf = (id: string) => {
+    const { run } = runner.store.getSnapshot();
+    return run?.readOver.stack === id ? run : null;
+  };
+
+  // The token of the settled slot whose Run was last held.
+  let settledToken: object | undefined;
+  // Holds the Run an apply of stack `id` settled with, once per settled slot, as
+  // the newest read of its runs until a read started after answers; whether it did.
+  function holdSettledRun(id: string): boolean {
+    const slot = slotOf(id);
+    if (!slot?.run || slot.outcome.kind === 'running' || slot.token === settledToken) return false;
+    settledToken = slot.token;
+    const read = heldRuns.get(id)?.read;
+    const rows = read && settledRows(read, slot.run);
+    return rows !== undefined && holdRuns(id, { at: nextReadAt(), rows });
+  }
+
+  // A stack row whose look changed with the store, or whose settled Run was drawn,
+  // is redrawn at once; its held runs are read again, one read at a time.
   const restacking = new Set<string>();
+  const restackAgain = new Set<string>();
   async function restack(id: string | undefined): Promise<void> {
     const row = id === undefined ? undefined : shown.get(id);
-    if (!row || restacking.has(row.stack.id) || sameLook(look(row), drawn.get(row.stack.id))) {
+    if (!row) return;
+    const settled = holdSettledRun(row.stack.id);
+    if (!settled && sameLook(look(row), drawn.get(row.stack.id))) return;
+    redraw([row.stack.id]);
+    if (!heldRuns.has(row.stack.id)) return;
+    if (restacking.has(row.stack.id)) {
+      restackAgain.add(row.stack.id);
       return;
     }
     restacking.add(row.stack.id);
     try {
-      if (heldRuns.has(row.stack.id)) holdRuns(row.stack.id, await readRuns(row));
+      do {
+        restackAgain.delete(row.stack.id);
+        holdRuns(row.stack.id, await readRuns(row));
+      } while (restackAgain.has(row.stack.id));
     } finally {
       restacking.delete(row.stack.id);
     }
@@ -562,9 +613,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
   const look = (row: Row): RowLook => {
     if (row.kind === 'stack') {
       const picked = rootState.stack(row.root)?.id === row.stack.id;
-      const { run } = runner.store.getSnapshot();
-      const ours = run?.readOver.stack === row.stack.id ? run : null;
-      return stackLook(row.stack, picked, ours);
+      return stackLook(row.stack, picked, slotOf(row.stack.id));
     }
     if (row.kind === 'run') return runLook(row.run);
     return {
@@ -761,7 +810,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       );
     }),
     view.onDidChangeVisibility(({ visible }) => {
-      if (visible) refresh();
+      if (visible) void reload();
     }),
     onDidEndLaceCommand(api.window, ({ path }) => {
       if (path !== undefined && COMMANDS[path].effect !== 'read') refresh();
@@ -776,7 +825,7 @@ export function stacksTree(options: StacksTreeOptions): vscode.Disposable {
       reread();
     }),
     ...registerCommands(api, {
-      [STACK_COMMANDS.refresh]: async () => refresh(),
+      [STACK_COMMANDS.refresh]: reload,
       [STACK_COMMANDS.chooseModule]: async () => {
         const chosen = await rootToAct(picking, api.window, 'show the stacks of');
         if (chosen) show(chosen);

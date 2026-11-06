@@ -1,16 +1,19 @@
 import { CommandExitError, CommandUnobservedError } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import {
+  failsWith,
   fakeCommands,
   type Invoked,
   refused,
   type Script,
+  timesRun,
 } from '../../engine/__tests__/fake-commands';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
 import { type Account, accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
 import { selectionStatus } from '../scope';
 import { outsideSignals, signedInAs } from './fake-outside';
+import { statusBarOver } from './fake-status-bar';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -44,6 +47,15 @@ const current = (slug: string | null, source: 'config' | 'env' = 'config'): Curr
   slug === null ? { slug: null, source: null } : { slug, source };
 
 const SIGNED_OUT = refused({ reason: 'unauthenticated', message: 'no credentials found' });
+
+// The account a developer signed in as `usr_1` with `acme` selected has:
+// scripts the test changes as a terminal would.
+const signedIn = (): Record<string, Script> => ({
+  whoami: { documents: [signedInAs('usr_1')] },
+  'org current': { documents: [current('acme')] },
+  'team current': { documents: [current('platform')] },
+});
+const reads = (invoked: readonly Invoked[]) => timesRun(invoked, 'whoami');
 
 // What a command of the account ran: the invocations it made, up to the
 // account's own read that follows a change, which begins with `whoami`.
@@ -583,33 +595,7 @@ describe('the status bar', () => {
       'team current': { documents: [current(null)] },
     };
     const { account, commands, outside } = await setup(scripts as never, ['globex']);
-    const status = {
-      text: '',
-      tooltip: '',
-      command: '',
-      show: vi.fn(),
-      hide: vi.fn(),
-      dispose: vi.fn(),
-    };
-    const registered: string[] = [];
-    const controls = accountControls(
-      {
-        commands: {
-          registerCommand: (id: string) => {
-            registered.push(id);
-            return { dispose: () => {} };
-          },
-        },
-        window: {
-          createStatusBarItem: () => status,
-          showErrorMessage: vi.fn(),
-        },
-      } as never,
-      account,
-      commands.commands,
-      {} as never,
-      vi.fn(),
-    );
+    const { status, controls, registered } = statusBarOver(account, commands.commands);
     await settled();
     expect(status.text).toBe('$(organization) acme');
     expect(status.command).toBe(SELECT_ORGANIZATION);
@@ -634,16 +620,6 @@ describe('the status bar', () => {
 });
 
 describe('the account changed outside this window', () => {
-  // The account a developer signed in as `usr_1` with `acme` selected has:
-  // scripts the test changes as a terminal would.
-  const signedIn = (): Record<string, Script> => ({
-    whoami: { documents: [signedInAs('usr_1')] },
-    'org current': { documents: [current('acme')] },
-    'team current': { documents: [current('platform')] },
-  });
-  const reads = (invoked: readonly Invoked[]) =>
-    invoked.filter((call) => call.path === 'whoami').length;
-
   test('the window regaining focus reads the account, and announces nothing while it is as it was', async () => {
     const { commands, changed, outside } = await setup(signedIn() as never);
     expect(reads(commands.invoked)).toBe(1);
@@ -721,7 +697,7 @@ describe('the account changed outside this window', () => {
   test('a read that fails is reported and announces nothing; once disposed, the window is not listened to', async () => {
     const { account, changed, outside, report, commands } = await setup({
       ...signedIn(),
-      whoami: { fails: new Error('the engine stopped') },
+      whoami: failsWith('the engine stopped'),
     } as never);
     outside.focus();
     await settled();
@@ -733,6 +709,128 @@ describe('the account changed outside this window', () => {
     outside.ended('lace logout');
     await settled();
     expect(reads(commands.invoked)).toBe(2);
+  });
+});
+
+describe('a view refreshing asks the account to read itself first', () => {
+  test('an organization switched outside is announced, the status bar follows, and the view is not refreshed itself', async () => {
+    const scripts = signedIn();
+    const { account, commands, changed } = await setup(scripts as never);
+    const { status } = statusBarOver(account, commands.commands);
+    await settled();
+    expect(status.text).toBe('$(organization) acme · platform');
+
+    scripts['org current'] = { documents: [current('globex')] };
+    scripts['team current'] = { documents: [current(null)] };
+    const refresh = vi.fn(async () => {});
+    await account.refreshWith(refresh);
+    await settled();
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(status.text).toBe('$(organization) globex');
+  });
+
+  test('a team switched outside is announced the same way', async () => {
+    const scripts = signedIn();
+    const { account, changed } = await setup(scripts as never);
+    scripts['team current'] = { documents: [current('data')] };
+    const refresh = vi.fn(async () => {});
+    await account.refreshWith(refresh);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test('an account as it was announces nothing, and the view is refreshed after one read', async () => {
+    const { account, commands, changed } = await setup(signedIn() as never);
+    const refresh = vi.fn(async () => {});
+    await account.refreshWith(refresh);
+    expect(changed).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(reads(commands.invoked)).toBe(2);
+  });
+
+  test('a change found is announced once, and the focus after it finds the account as it is now', async () => {
+    const scripts = signedIn();
+    const { account, changed, outside } = await setup(scripts as never);
+    scripts['org current'] = { documents: [current('globex')] };
+    await account.refreshWith(async () => {});
+    outside.focus();
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a read that fails is reported, and the view is refreshed', async () => {
+    const { account, changed, report } = await setup({
+      ...signedIn(),
+      whoami: failsWith('the engine stopped'),
+    } as never);
+    const refresh = vi.fn(async () => {});
+    await expect(account.refreshWith(refresh)).resolves.toBeUndefined();
+    expect(report).toHaveBeenCalledWith('reading the Lace account', expect.any(Error));
+    expect(changed).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  test('the first read after one that failed is announced, since what the views drew may predate the failure', async () => {
+    let reading = 0;
+    const scripts = {
+      ...signedIn(),
+      whoami: () =>
+        reading++ === 0 ? failsWith('the engine was not up') : { documents: [signedInAs('usr_1')] },
+    };
+    const { account, changed, report } = await setup(scripts as never);
+    expect(report).toHaveBeenCalledWith('reading the Lace account', expect.any(Error));
+
+    const refresh = vi.fn(async () => {});
+    await account.refreshWith(refresh);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+
+    await account.refreshWith(refresh);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  test('a read that fails after a good one leaves the next read announced', async () => {
+    let failing = false;
+    const { account, changed, outside } = await setup({
+      ...signedIn(),
+      whoami: () =>
+        failing ? failsWith('the engine stopped') : { documents: [signedInAs('usr_1')] },
+    } as never);
+    failing = true;
+    outside.focus();
+    await settled();
+    failing = false;
+    await account.refreshWith(async () => {});
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  test('an older read that settles after a newer one announces nothing, and the account ends as the newest read found it', async () => {
+    let organization = 'acme';
+    let holding = false;
+    const { account, commands, changed, outside } = await setup({
+      ...signedIn(),
+      'org current': () => ({ documents: [current(organization)] }),
+      whoami: () => (holding ? { held: true } : { documents: [signedInAs('usr_1')] }),
+    } as never);
+
+    holding = true;
+    outside.focus();
+    await settled();
+    holding = false;
+    organization = 'globex';
+    const refresh = vi.fn(async () => {});
+    await account.refreshWith(refresh);
+    commands.held[0].finish([signedInAs('usr_1')]);
+    await settled();
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    outside.focus();
+    await settled();
+    expect(changed).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,7 +1,7 @@
 // The one pick of a stack deployed from an authoring root, for a stack
 // command that no stack row names (the palette's Preview, Apply and Scan,
 // Import Existing Resources): a pick among the stacks `lace stack list
-// --source <root>` lists, the one picked for the root's canvas marked, on
+// --source <root>` lists, the stack picked for its module marked, on
 // screen while the list is read (`vscode/pick.ts`). A list that cannot be
 // read closes the pick and says why, with the ways out its reason names. A
 // root with no stack closes it and says so and where one is created, the
@@ -19,7 +19,7 @@ import {
 import type { RootState } from '../state/root-state';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import { pickFrom } from '../vscode/pick';
-import { stackRef } from './stack-rows';
+import { stackDescription, stackRef } from './stack-rows';
 
 // A stack of `root` the developer picks to `verb`; undefined when there is
 // none to pick, or the pick was dismissed.
@@ -54,7 +54,7 @@ export function stackPick(options: StackPickOptions): PickStack {
           return {
             items: items.map((stack) => ({
               label: stack.name,
-              description: stack.id === picked ? `${stack.slug} · on the canvas` : stack.slug,
+              description: stackDescription(stack, stack.id === picked),
               stack,
             })),
             none: () =>

@@ -36,7 +36,18 @@ export function refused(failure: CommandFailure, code = 1): Script {
   return { fails: new CommandExitError(code, `Error: ${failure.message}\n`, failure) };
 }
 
+// What `stack validate` writes for a root the CLI accepts as a stack's source: Create Stack
+// reads it before it asks for a slug.
+export const VALID_SOURCE = { kind: 'git', repoUrl: 'https://github.com/acme/infra.git' };
+
+// A command that could not run at all: the engine failed under it.
+export const failsWith = (message: string): Script => ({ fails: new Error(message) });
+
 export type Invoked = { cwd: string; path: BoundPath; args: Record<string, unknown> };
+
+// How many times a command was invoked.
+export const timesRun = (invoked: readonly Invoked[], path: BoundPath): number =>
+  invoked.filter((call) => call.path === path).length;
 
 // A held command: it writes nothing until the test finishes it.
 export type Held = {

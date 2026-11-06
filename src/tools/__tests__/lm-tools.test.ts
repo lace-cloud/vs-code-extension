@@ -10,7 +10,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import type { CanvasPanels } from '../../canvas/canvas-panels';
 import { canvasOperations } from '../../commands/canvas-operations';
-import { fakeCommands, HOME, type Scripts } from '../../engine/__tests__/fake-commands';
+import { failsWith, fakeCommands, HOME, type Scripts } from '../../engine/__tests__/fake-commands';
 import type { RootHold } from '../../engine/root-sessions';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot } from '../../roots/authoring-roots';
@@ -956,7 +956,7 @@ describe('registration', () => {
     const { tools, registerTool } = registered();
     const { ports } = setUp();
     const failing = fakeCommands({
-      'registry describe': { fails: new Error('the registry is unreachable') },
+      'registry describe': failsWith('the registry is unreachable'),
     });
     ports.commands.anywhere = async () => failing.port;
     registerLaceTools(language({ registerTool } as LanguageModelApi['lm']), ports, sources);

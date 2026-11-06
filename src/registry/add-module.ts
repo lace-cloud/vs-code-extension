@@ -6,10 +6,15 @@
 // carries.
 import type * as vscode from 'vscode';
 import { documentOf, failureOf, failureText } from '../engine/command-outcome';
-import { moduleKey, moduleLabel, type RegistryRow } from '../protocol/registry-protocol';
+import {
+  moduleKey,
+  moduleLabel,
+  type RegistryRow,
+  versionTitle,
+} from '../protocol/registry-protocol';
 import { notice, type OfferActions, offersFor } from '../vscode/offers';
 import { pickFrom } from '../vscode/pick';
-import type { PlacedModule } from './place-module';
+import type { Place } from './place-module';
 import type { RegistryReads } from './registry-reads';
 
 export const ADD_MODULE = 'lace.addModuleToCanvas';
@@ -28,11 +33,12 @@ const PUBLISHING_GUIDE = 'How to publish a module';
 export function addModuleToCanvas(options: {
   api: AddModuleApi;
   reads: Pick<RegistryReads, 'list'>;
-  place: (module: PlacedModule) => Promise<void>;
+  place: Place;
   // What a notice about a registry that cannot be read offers.
   offers: OfferActions;
+  report: (what: string, error: unknown) => void;
 }): () => Promise<void> {
-  const { api, reads, place, offers } = options;
+  const { api, reads, place, offers, report } = options;
   return async () => {
     const listed = reads.list().then(documentOf);
     let picked: (vscode.QuickPickItem & { row: RegistryRow }) | undefined;
@@ -42,7 +48,7 @@ export function addModuleToCanvas(options: {
         listed.then(({ items, publishingGuideUrl }) => ({
           items: items.map((row: RegistryRow) => ({
             label: moduleLabel(row),
-            description: `${moduleKey(row)} ${row.version}`,
+            description: `${moduleKey(row)} ${versionTitle(row.version, row.status)}`,
             detail: row.description,
             row,
           })),
@@ -58,11 +64,12 @@ export function addModuleToCanvas(options: {
         { placeholder: 'Which module?', matchOnDescription: true, matchOnDetail: true },
       );
     } catch (error) {
+      report('reading the Lace registry', error);
       await notice(api, offers, 'error', failureText(error), offersFor(failureOf(error)));
       return;
     }
     if (!picked) return;
-    const { author, name, version } = picked.row;
-    await place({ author, name, version });
+    const { author, name, version, status } = picked.row;
+    await place({ author, name, version }, status);
   };
 }

@@ -16,6 +16,7 @@ import type * as vscode from 'vscode';
 import { commandDocument } from '../engine/command-outcome';
 import { OFFER_LABELS } from '../vscode/offers';
 import { pickFrom } from '../vscode/pick';
+import { rowDescription, type SluggedRow } from '../vscode/slug-beside';
 
 export type ScopeApi = {
   window: Pick<typeof vscode.window, 'createQuickPick' | 'showInformationMessage'>;
@@ -39,14 +40,8 @@ function placeholder(noun: Noun, current: Current): string {
 
 // A row's description: the slug where it says more than the name, whether it
 // is the current one, then what else the row carries, on the row's one line.
-const described = (
-  row: { name: string; slug: string },
-  current: Current,
-  ...rest: string[]
-): string =>
-  [row.slug === row.name ? '' : row.slug, row.slug === current.slug ? 'current' : '', ...rest]
-    .filter((part) => part !== '')
-    .join(' · ');
+const described = (row: SluggedRow, current: Current, ...rest: string[]): string =>
+  rowDescription(row, [...(row.slug === current.slug ? ['current'] : []), ...rest]);
 
 // The teams `lace team list` lists in `scope`, and the one `lace team
 // current` reports there.

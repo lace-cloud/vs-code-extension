@@ -42,8 +42,27 @@ export const list = (items: RegistryRow[], truncated = false) => ({
   publishingGuideUrl: GUIDE,
 });
 
-export function record(over: { readme?: string | null; versions?: string[] } = {}): RegistryRecord {
-  const latest = row();
+// A version as `registry get` lists it.
+export const versionEntry = (
+  version: string,
+  status: string,
+): RegistryRecord['versions'][number] => ({
+  version,
+  status,
+  publishedAt: '2026-09-30T10:00:00Z',
+});
+
+export function record(
+  over: {
+    readme?: string | null;
+    versions?: string[];
+    // The versions of `versions` the registry has deprecated.
+    deprecated?: string[];
+    // The version the registry names as latest, and its status.
+    latest?: { version: string; status: string };
+  } = {},
+): RegistryRecord {
+  const latest = row(over.latest);
   return {
     axis: 'module',
     author: latest.author,
@@ -66,8 +85,7 @@ export function record(over: { readme?: string | null; versions?: string[] } = {
       categories: latest.categories,
       readme: over.readme ?? null,
       vendor: null,
-      status: 'published',
-      installCount: 12,
+      status: latest.status,
       publishedAt: '2026-09-30T10:00:00Z',
       publishedBy: null,
       createdAt: '2026-09-30T10:00:00Z',
@@ -82,11 +100,9 @@ export function record(over: { readme?: string | null; versions?: string[] } = {
       repository: null,
       commit: null,
     },
-    versions: (over.versions ?? ['v2.0.0', 'v1.1.0', 'v1.0.0']).map((version) => ({
-      version,
-      status: 'published',
-      publishedAt: '2026-09-30T10:00:00Z',
-    })),
+    versions: (over.versions ?? ['v2.0.0', 'v1.1.0', 'v1.0.0']).map((version) =>
+      versionEntry(version, over.deprecated?.includes(version) ? 'deprecated' : 'published'),
+    ),
   };
 }
 

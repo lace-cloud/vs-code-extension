@@ -9,7 +9,7 @@ import { registryReads } from '../registry-reads';
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-type Item = { label: string; row: { name: string } };
+type Item = { label: string; description: string; row: { name: string } };
 
 function setup(
   answer: Script,
@@ -43,13 +43,15 @@ function setup(
     openRecord: vi.fn(),
   };
   const place = vi.fn(async () => {});
+  const report = vi.fn();
   const run = addModuleToCanvas({
     api: api as unknown as AddModuleApi,
     reads: registryReads(commands.commands),
     place,
     offers,
+    report,
   });
-  return { run, api, place, offers, messages, commands, picks: quickPicks.picks };
+  return { run, api, place, offers, messages, commands, report, picks: quickPicks.picks };
 }
 
 describe('Lace: Add Module to Canvas', () => {
@@ -63,7 +65,29 @@ describe('Lace: Add Module to Canvas', () => {
       matchOnDetail: true,
     });
     expect(picks[0].items).toHaveLength(2);
-    expect(place).toHaveBeenCalledWith({ author: 'acme', name: 'db', version: '1.4.0' });
+    expect(place).toHaveBeenCalledWith(
+      { author: 'acme', name: 'db', version: '1.4.0' },
+      'published',
+    );
+  });
+
+  test('describes each module by its key and its version, and a deprecated version says so', async () => {
+    const old = row({
+      name: 'db',
+      displayName: 'ACME DB',
+      version: 'v1.0.0',
+      status: 'deprecated',
+    });
+    const { run, place, picks } = setup({ documents: [list([row(), old])] }, (items) => items[1]);
+    await run();
+    expect(picks[0].items.map((item) => item.description)).toEqual([
+      'acme/vpc v2.0.0',
+      'acme/db v1.0.0 (Deprecated)',
+    ]);
+    expect(place).toHaveBeenCalledWith(
+      { author: 'acme', name: 'db', version: 'v1.0.0' },
+      'deprecated',
+    );
   });
 
   test('the pick is on screen, busy, while the registry is read', async () => {
@@ -75,7 +99,10 @@ describe('Lace: Add Module to Canvas', () => {
 
     commands.held[0].finish([list([row()])]);
     await adding;
-    expect(place).toHaveBeenCalledWith({ author: 'acme', name: 'vpc', version: 'v2.0.0' });
+    expect(place).toHaveBeenCalledWith(
+      { author: 'acme', name: 'vpc', version: 'v2.0.0' },
+      'published',
+    );
   });
 
   test('a registry that cannot be read closes the pick and says why, with the ways out its reason names', async () => {
@@ -91,6 +118,18 @@ describe('Lace: Add Module to Canvas', () => {
     expect(offers.signIn).toHaveBeenCalledTimes(1);
     expect(picks[0]).toMatchObject({ visible: false, items: [] });
     expect(place).not.toHaveBeenCalled();
+  });
+
+  test('a refused list is reported once, beside its notice', async () => {
+    const { run, report } = setup(
+      refused({ reason: 'unspecified', message: 'the registry is down' }),
+    );
+    await run();
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ message: 'the registry is down' }),
+    );
   });
 
   test('an empty registry closes the pick and offers the guide the list carries', async () => {

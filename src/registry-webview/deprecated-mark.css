@@ -1,0 +1,6 @@
+/* The word beside a deprecated version, in both pages' stylesheets. */
+.deprecated-mark {
+  color: var(--vscode-editorWarning-foreground);
+  font-weight: 600;
+  white-space: nowrap;
+}

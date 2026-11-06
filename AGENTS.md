@@ -67,12 +67,14 @@ each other: every contributed command, view and tool is one a feature registers,
 | Whether this window holds a root's session, root compared with root | `commands/canvas-operations.ts` (`held`) | Save, where a module command's report lands |
 | The picked stack and the canvas arrangement per root | `state/root-state.ts` (`workspaceState`) | the Stacks tree, the canvas page |
 | Favourites and recently used modules | `registry/registry-marks.ts` (`globalState`) | the registry sidebar |
+| A version's deprecated mark, and its name where read or picked | `protocol/registry-protocol.ts` (`isDeprecated`, `DEPRECATED`, `versionTitle`, `statusOf`, `newestPublishedNote`), `registry-webview/VersionLabel.tsx` | the sidebar, module detail, Add Module to Canvas, placement |
 | When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
-| When the account changed: a change this window makes, or a read that differs from the last one | `account/account.ts` (`createAccount`, `onDidChange`) | the status bar, the registry view, the Stacks tree |
+| When the account changed: a change this window makes, or a read that differs from the last one, whoever asked for the read (a focus, an ended `lace` command line, a view's refresh) | `account/account.ts` (`createAccount`, `onDidChange`, `refreshWith`) | the status bar, the registry view, the Stacks tree |
 | Which CLI command a `lace` command line that ended in an integrated terminal ran | `vscode/lace-command-lines.ts` (`onDidEndLaceCommand`) | the account, the Stacks tree |
 | The way out a failure names | `vscode/offers.ts`, by the failure's `reason`; the package actions that answer it, by their `answers` (`engine/runner-host.ts`) | every notice of a failed command |
+| A slug-bearing row's slug beside its name: the slug only where it differs from the name, in its one-line description (then its markers, joined with ' · ') and in a tooltip's name (`Name (slug)`) | `vscode/slug-beside.ts` (`rowDescription`, `nameWithSlug`) | the organization, team and stack picks, the Stacks tree's stack rows |
 | What a settled apply says and offers | `stacks/stack-rows.ts` (`outcomeNotice`) | the Stacks tree's apply |
 | Which stack of a root a stack command no row names acts on | `stacks/stack-pick.ts` (`pickStack`) | the palette's Preview, Apply and Scan; Import Existing Resources |
 | Import Existing Resources on a root | `stacks/import-resources.ts` (`resourceImporter`) | the canvas's source-refused banner, the palette |
@@ -86,7 +88,7 @@ demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's 
 `lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
 default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
 with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
-and locks with it. The extension speaks engine protocol 9 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+and locks with it. The extension speaks engine protocol 10 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
 protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version and engine contract
 (`ENGINE_CONTRACT`) decide compatibility: `@lace-cloud/host` refuses an engine of another protocol or another contract
 with `EngineIdentityMismatchError`, and the message names which side to update, or, for an engine of this protocol built
@@ -179,12 +181,13 @@ over a restarted engine tells its ticks the same way. The host runs each binding
   mapping, `viewState` from what the host kept, and a `presenter` whose notices and confirmations are VS Code's dialogs
   (`vscode/dialogs.ts`: a modal question, or one input box that returns only the exact typed value). It passes the
   host's two contributions (`canvas-webview/contributions.ts`). **Open source**, a host action on each row of the
-  canvas's Diagnostics list, sends the host the row's file, line and column (`openSource`), and says so for a diagnostic
-  that names no file; the host opens the root's file at that place in the editor beside the canvas, and a file it cannot
-  open fails the call with the reason. **Import existing resources**, a host action on the source-refused banner's row
-  while the tree is out of lace shape (`requiredContext: ['root', 'needsConversion']`), after the package's Convert,
-  with its own `choice` sentence, asks the host to run Import Existing Resources on the panel's root
-  (`importResources`), which answers once the import's run has ended.
+  canvas's Diagnostics list, sends the host the row's file, line and column (`openSource`); for a diagnostic that
+  names no file, only its place on the canvas, it says so, and for one with no file and no place on the canvas it says
+  it names no place on the canvas; the host opens the root's file at that place in the editor beside the canvas, and a
+  file it cannot open fails the call with the reason. **Import existing resources**, a host action on the
+  source-refused banner's row while the tree is out of lace shape (`requiredContext: ['root', 'needsConversion']`),
+  after the package's Convert, with its own `choice` sentence, asks the host to run Import Existing Resources on the
+  panel's root (`importResources`), which answers once the import's run has ended.
 - A notice from the page is the shared notice of `vscode/offers.ts`: a failure the canvas's own commands hit (its toolbar's
   Convert stopped at Terraform it cannot represent) offers the ways out its reason names, and Validate validates the
   panel's root with the palette's Validate.
@@ -206,8 +209,10 @@ over a restarted engine tells its ticks the same way. The host runs each binding
 - The page reports its focus, which `onFocusChange` autosave reads. The canvas package's keymap handles its own keys;
   the extension contributes no keybinding.
 - The page follows VS Code's theme (`webview/theme.ts`): `data-theme` on `<html>`, which the canvas's design tokens
-  read, is `light` while `<body>` carries `vscode-light` or `vscode-high-contrast-light` and `dark` otherwise, and a
-  theme switch, a change of that class, sets it again. The registry pages are drawn from VS Code's own `--vscode-*`
+  read, is `high-contrast-light` while `<body>` carries `vscode-high-contrast-light`, `high-contrast` while it carries
+  `vscode-high-contrast`, `light` under `vscode-light` and `dark` otherwise, and a theme switch, a change of that class,
+  sets it again. Each mapped theme is one the pinned `@lace-cloud/design-tokens` `THEMES` declares (held by
+  `theme.test.ts`). The registry pages are drawn from VS Code's own `--vscode-*`
   variables and read no `data-theme`.
 
 ## Protocols
@@ -228,11 +233,14 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
 
 - `registry-reads.ts`: `registry list --axis module --limit 500`, `registry get`, `registry describe`, `org current`, each
   in the home. The sidebar reads once, unfiltered, and the page filters as the developer searches and picks categories; a
-  row's versions are read on expand. The view reads again when it becomes visible and at each change of the account,
-  made in this window or found outside it (see Account).
+  row's versions are read on expand. The view shows loading at once, and has the account read itself first
+  (`refreshWith`, see Account), when it is first shown, becomes visible again, or Refresh Registry or Retry runs: a
+  change that read finds is announced and the view reads the registry on the announcement, else it reads the registry
+  itself. It also reads again at each change of the account, made in this window or found outside it.
 - The sidebar's states come from a failed list's `reason`: `unauthenticated` → Sign In, `no_organization` → Select
-  Organization, anything else its message with Retry. An empty registry shows "No modules are published yet" with the
-  publishing guide link the list itself carries.
+  Organization, anything else its message with Retry; a refused list or organization read is written once to the "Lace"
+  Output channel. An empty registry shows "No modules are published yet" with the publishing guide link the list itself
+  carries.
 - Module detail (`module-detail.ts`, one panel per module): `registry get` for the README and versions, `registry
   describe` of the shown version for the interface (it downloads and certifies the version, so it settles later and can
   be refused). Tabs: Details, Interface, Versions, Examples.
@@ -241,10 +249,27 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   offers Sign In; `not_lace_form`, `hash_mismatch`, `registry_unavailable`, `not_found`, `version_not_found`,
   `forbidden` are named with the module (any other reason as "the engine refused it"), and **Show Details** writes the
   engine's full message to the "Lace" Output channel.
+- A version's status is the registry's own (`registry list`'s row `status`, `registry get`'s `versions[].status` and
+  `latest.status`), and only `deprecated` marks it. `VersionLabel` draws a version with the word **Deprecated** after
+  it (`DEPRECATED`, `isDeprecated`; one `deprecated-mark.css` rule in both pages' stylesheets) on a row, among its
+  versions, in module detail's header, Details (`Latest Version`: the page's own `registry get`'s `latest` once it has
+  loaded, else a dash) and Versions; a row's label shortens with an ellipsis and never the version beside it. Where a
+  name is read or picked, `versionTitle` says `v0.4.0 (Deprecated)`: the "+" titles, the Add Module to Canvas pick,
+  the usage example, the placement's progress and status-bar message. A deprecated version places as any other: the
+  host takes its status with `statusOf`, in the one `placement` read of the row (the row's, else the one of the
+  versions its sidebar read or its detail's `registry get` lists) and hands `place` that status, which names the
+  version with `versionTitle`, while the engine is sent the module and its version alone. After a deprecated
+  placement, once the module is added and the root's session released, the status-bar message adds the newest
+  published version (`newestPublishedNote`: the `latest` of the sidebar's versions read or module detail's own
+  `registry get`, else one `registry get` read by the placement; a failed read is logged once and the message says the
+  newest published version could not be read, pointing at the Lace Output channel, so it is not taken for no newer
+  version, and the note never replaces a later placement's message). Module detail shows the `.error-banner` "This
+  version is deprecated." above its tabs, with the same note.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
 - Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
-  that cannot be read closes it and says why with the ways out its reason names, and an empty registry closes it and
-  offers the publishing guide the list carries. The module picked is placed as the sidebar's "+" places it.
+  that cannot be read closes it and says why with the ways out its reason names (and is written once to the "Lace"
+  Output channel), and an empty registry closes it and offers the publishing guide the list carries. The module
+  picked is placed as the sidebar's "+" places it.
 
 ## Stacks tree
 
@@ -276,11 +301,14 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   whole tree only when it names another root or other stacks (which, in which order); else it redraws the rows VS Code
   holds whose look or runs it changed, each kept as the object VS Code holds with its stack as the read found it, and a
   read that changed nothing redraws nothing, so no row loses its element. Only what may change the list reads it whole:
-  a tick, a change of the account, the view shown again, a `lace` command that ended in an integrated terminal and that
-  the CLI declares more than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the
-  workspace's folders, a change of the root the view names, and Refresh Stacks. A stack row whose look changes with the
-  runner's store (an apply of it started, reached a stage or settled) has its runs read again, then is redrawn; any
-  other change of the store redraws nothing. The tree and the root's canvas badges read the same facts, so one
+  a tick, a change of the account, a `lace` command that ended in an integrated terminal and that the CLI declares
+  more than a read (`COMMANDS[path].effect`; `lace stack destroy` among them), a change of the workspace's folders, a
+  change of the root the view names, and the view shown again and Refresh Stacks, which draw the view's progress at
+  once and have the account read itself first (`refreshWith`, as the Registry does): a change that read finds reads
+  the tree through the announcement, else the view reads it itself, and either way the tree is read and the canvas
+  ticked once. A stack row whose look changes with the runner's store (an apply of it started, reached a stage or
+  settled) is redrawn at once, and again once its stack's runs are read; any other change of the store redraws
+  nothing. The tree and the root's canvas badges read the same facts, so one
   invalidation serves both: each read for what may have changed the stacks (all of these but a change of the folders or
   of the root, which change no stack) ticks the canvas of the view's root once, and each tick of the runner's store (a
   run started or settled, a scan or a cancel done) ticks the canvas of the root that run was about too, its
@@ -320,9 +348,11 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   backticks. The tree does not offer `lace stack destroy`; it is a terminal command.
 - `noStack`'s action is **Create Stack** (`lace.stacks.create`, not in the palette): the package's `create` binding
   run through the runner over the view's root, under a progress notification ("Create stack: <root>") until its run
-  ends. The runner's form asks for the slug, proposing the root's directory name, and the connection; the package's
-  notice says "Created stack <slug>", and its tick reads the tree again, which lists the stack. A refusal is the CLI's,
-  by its reason, through the offers (`not_git_repository` and `no_origin_remote` say the CLI's message).
+  ends. The binding reads `stack validate` over the root first, and only a root the CLI accepts raises the runner's form,
+  which asks for the slug, proposing the root's directory name, and the connection; the package's notice says "Created
+  stack <slug>", and its tick reads the tree again, which lists the stack. A refusal is the CLI's, by its reason,
+  through the offers (`not_git_repository`, `no_origin_remote` and `no_commit` say the CLI's message), and comes before
+  the form asks anything.
 - The one stack pick (`stacks/stack-pick.ts`) lists `stack list --source <root>` and is on screen while the list is
   read; a list that cannot be read closes it and is shown with the ways out its reason names, and a root with no stack
   closes it and says "No stack is deployed from <root> yet. Create one in the Stacks view." No pick is shown empty.
@@ -420,13 +450,17 @@ listed and saved with `--org` naming the organization just picked, so the saved 
 with Open Portal on the page `team list` names (`createUrl`). A team pick dismissed while the organization is saved
 still announces the saved organization. The status bar item shows the selection and runs Select Organization. The
 account's one change event (`onDidChange`) fires after each sign-in, sign-out or saved selection this window makes, and
-when a read of the account differs from the last one. A read is who is signed in (`whoami`'s user, or the reason its
-failure gives) and the selection (`org current`, `team current`); `lace logout` clears only the credentials, so the
-selection alone cannot see it. The account is read when the window starts, after each change made here, when the window
-regains focus (a terminal or another window outside it) and when a command line running `lace` ends in an integrated
-terminal with shell integration (`window.onDidEndTerminalShellExecution`, read by `vscode/lace-command-lines.ts`), which
-changes no focus. The status bar, the registry view and the Stacks tree read again on the event. Nothing is cached but
-the last read. A failed account command offers the way out its reason names (`vscode/offers.ts`).
+when a read of the account differs from the last one, the first read after a failed one included. A read is who is
+signed in (`whoami`'s user, or the reason its failure gives) and the selection (`org current`, `team current`); `lace
+logout` clears only the credentials, so the selection alone cannot see it. The account is read when the window starts,
+after each change made here, when the window regains focus (a terminal or another window outside it), when a command
+line running `lace` ends in an integrated terminal with shell integration (`window.onDidEndTerminalShellExecution`,
+read by `vscode/lace-command-lines.ts`), which changes no focus, and when a view's refresh asks: `refreshWith(refresh)`
+reads the account and, when the read found a change, announces it and leaves the redraw to the listeners, else runs
+`refresh` (the Registry's first showing, showing again, Refresh and Retry; the Stacks view's showing again and Refresh
+Stacks). The status bar, the registry view and the Stacks tree read again on the event, each by its plain refresh,
+never by `refreshWith`. Nothing is cached but the last read. A failed account command offers the way out its reason
+names (`vscode/offers.ts`).
 
 ## The chat tools
 
@@ -513,7 +547,7 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   screen from `show()` until hidden, each hiding firing `onDidHide` once, with whether it was busy when it came on
   screen; a test's developer answers each pick once its items are in), `account/__tests__/fake-outside.ts` (what tells
   the window that what the CLI reports may have changed outside it: focus, and a command line ending in an integrated
-  terminal).
+  terminal), `account/__tests__/fake-status-bar.ts` (the status bar item the account's controls draw).
 - **The real engine**: `engine/__tests__/real-engine.ts` is the one helper every engine test builds on: a git repository
   with module directories; a developer of each test's own, signed out, with no saved selection and no tool of their own,
   in a home of the test's own, which every process the test starts inherits, whatever the shell that runs the tests

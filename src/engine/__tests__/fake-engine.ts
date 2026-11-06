@@ -45,6 +45,8 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
   >();
   let opened = 0;
   let dead = false;
+  // The messages an ApplyAction answers with as unsuccessful, while any.
+  let applyErrors: string[] = [];
 
   const post = (frame: BridgeResponse): void => {
     for (const listener of [...listeners]) listener(frame);
@@ -108,7 +110,13 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
       return {
         kind: 'result',
         id,
-        response: { success: true, errors: [], created: [], ties: [], revision },
+        response: {
+          success: applyErrors.length === 0,
+          errors: applyErrors.map((message) => ({ message })),
+          created: [],
+          ties: [],
+          revision,
+        },
       };
     }
     if (method === 'SessionGenerate') {
@@ -213,6 +221,10 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
     // API decided the refusal.
     refuse(method: string, reason: string, message = 'refused', apiCode?: string): void {
       refusals.set(method, { code: 'failed_precondition', message, reason, apiCode });
+    },
+    // ApplyAction answers unsuccessful with these error messages.
+    rejectApply(...messages: string[]): void {
+      applyErrors = messages;
     },
     edit: (sessionId: string) => moved(sessionId, { unsaved: true }),
     // The session's tf turns refused: a frame says so, and a save is refused

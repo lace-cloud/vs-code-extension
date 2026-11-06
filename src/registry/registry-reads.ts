@@ -3,7 +3,13 @@
 // reads a directory. The module axis only, and up to the most rows one
 // `registry list` returns.
 import type { BoundPath, JsonOf } from '@lace-cloud/canvas/engine';
-import { type CommandOutcome, commandOutcome, failureText } from '../engine/command-outcome';
+import {
+  type CommandOutcome,
+  commandOutcome,
+  documentOf,
+  failedWith,
+  failureText,
+} from '../engine/command-outcome';
 import type { CommandsMapping } from '../engine/commands-mapping';
 import type { Read } from '../protocol/registry-protocol';
 
@@ -41,18 +47,25 @@ export function registryReads(commands: Pick<CommandsMapping, 'anywhere'>): Regi
 }
 
 // What a read's outcome draws: its document, or the message of the failure
-// it ended with. A read that threw is reported and drawn by its message.
+// it ended with. A read that threw or ended on its failure is reported once.
 export async function asRead<P extends BoundPath>(
   read: () => Promise<CommandOutcome<P>>,
   report: (error: unknown) => void,
 ): Promise<Read<JsonOf<P>>> {
   try {
-    const outcome = await read();
-    return outcome.kind === 'result'
-      ? { kind: 'loaded', value: outcome.document }
-      : { kind: 'failed', message: outcome.failure.message };
+    return { kind: 'loaded', value: documentOf(await read()) };
   } catch (error) {
     report(error);
     return { kind: 'failed', message: failureText(error) };
   }
+}
+
+// An outcome that ended on its failure is reported once, as `asRead` reports a
+// read that threw; the outcome is returned as it was.
+export function reportFailure<P extends BoundPath>(
+  outcome: CommandOutcome<P>,
+  report: (error: unknown) => void,
+): CommandOutcome<P> {
+  if (outcome.kind === 'failure') report(failedWith(outcome.failure));
+  return outcome;
 }
