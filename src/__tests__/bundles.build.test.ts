@@ -40,6 +40,28 @@ describe('the canvas webview bundle', () => {
   });
 });
 
+// The canvas page's built stylesheet carries the design tokens' blocks for VS Code's high-contrast
+// themes, the ones `data-theme` names there: the theme's own edge, active, focus and surface
+// values, and the colours both draw with.
+describe("the canvas webview's stylesheet", () => {
+  const rules = builtRules('canvas-webview.css');
+  // Whether a rule for `theme` declares `declaration`; the minifier may drop the selector's quotes.
+  const declaring = (theme: string, declaration: string) =>
+    rules.some(
+      ({ selectors, declarations }) =>
+        selectors.replace(/"/g, '').split(',').includes(`[data-theme=${theme}]`) &&
+        declarations.includes(declaration),
+    );
+
+  test.each(['high-contrast', 'high-contrast-light'])('carries the %s theme', (theme) => {
+    expect(declaring(theme, '--lace-hc-edge:'), 'its edge').toBe(true);
+    expect(declaring(theme, '--lace-hc-active:'), 'its active').toBe(true);
+    expect(declaring(theme, '--lace-hc-focus:'), 'its focus').toBe(true);
+    expect(declaring(theme, '--lace-hc-surface:'), 'its surface').toBe(true);
+    expect(declaring(theme, '--lace-color-focus-ring:'), 'its focus ring').toBe(true);
+  });
+});
+
 describe.each([
   'registry-sidebar.js',
   'module-detail.js',

@@ -1,3 +1,4 @@
+import { THEMES } from '@lace-cloud/design-tokens';
 import { describe, expect, test } from 'vitest';
 import { followTheme } from '../theme';
 
@@ -42,14 +43,18 @@ describe("the canvas page's theme", () => {
   test.each([
     [['vscode-light'], 'light'],
     [['vscode-dark'], 'dark'],
-    [['vscode-high-contrast'], 'dark'],
+    [[], 'dark'],
+    [['vscode-high-contrast'], 'high-contrast'],
     // VS Code puts the high-contrast class beside the light one.
-    [['vscode-high-contrast', 'vscode-high-contrast-light'], 'light'],
-    [['vscode-high-contrast-light'], 'light'],
+    [['vscode-high-contrast', 'vscode-high-contrast-light'], 'high-contrast-light'],
+    [['vscode-high-contrast-light'], 'high-contrast-light'],
   ])("under %j is %s, set on <html> as data-theme from VS Code's class on <body>", (classes, theme) => {
     const shown = page(...classes);
     followTheme(shown.document, shown.watch);
     expect(shown.theme()).toBe(theme);
+    // The extension and the tokens ship apart: a theme the pinned tokens do not declare would
+    // leave the canvas unthemed.
+    expect(THEMES).toContain(shown.theme());
   });
 
   test('follows each theme switch until it is stopped', () => {
@@ -59,13 +64,17 @@ describe("the canvas page's theme", () => {
     shown.switchTo('vscode-light');
     expect(shown.theme()).toBe('light');
     shown.switchTo('vscode-high-contrast');
+    expect(shown.theme()).toBe('high-contrast');
+    shown.switchTo('vscode-high-contrast', 'vscode-high-contrast-light');
+    expect(shown.theme()).toBe('high-contrast-light');
+    shown.switchTo('vscode-dark');
     expect(shown.theme()).toBe('dark');
     shown.switchTo('vscode-high-contrast', 'vscode-high-contrast-light');
-    expect(shown.theme()).toBe('light');
+    expect(shown.theme()).toBe('high-contrast-light');
 
     stop();
     expect(shown.watching()).toBe(0);
     shown.switchTo('vscode-dark');
-    expect(shown.theme()).toBe('light');
+    expect(shown.theme()).toBe('high-contrast-light');
   });
 });

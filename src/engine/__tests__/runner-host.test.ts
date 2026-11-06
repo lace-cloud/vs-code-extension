@@ -10,7 +10,7 @@ import {
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import { createRunnerHost, type FailureAnswer, type Form } from '../runner-host';
-import { fakeCommands, refused } from './fake-commands';
+import { fakeCommands, type Invoked, refused, VALID_SOURCE } from './fake-commands';
 
 const action = (id: string) => {
   const found = CORE_COMMAND_ACTIONS.find((a) => a.id === id);
@@ -321,9 +321,22 @@ const CREATED = {
   lastApply: null,
 };
 
+// Create Stack's read of the root, and the stack create the form's submit starts.
+const validating = (root: string): Invoked => ({
+  cwd: root,
+  path: 'stack validate',
+  args: { source: root },
+});
+const creating = (root: string, slug: string): Invoked => ({
+  cwd: root,
+  path: 'stack create',
+  args: { source: root, slug, connection: 'conn_1' },
+});
+
 describe("a run's form", () => {
   test('is handed to the answerer with the run it is for; its submit starts the command with the values, as part of that run', async () => {
     const { window, runners, forms, presenter } = host({
+      'stack validate': { documents: [VALID_SOURCE] },
       'stack create': { documents: [CREATED] },
     });
     const ticked: RunCtx[] = [];
@@ -334,31 +347,34 @@ describe("a run's form", () => {
     expect(forms.map(({ action, ctx, form }) => [action, ctx, form.missing])).toEqual([
       ['create', ctx, ['slug', 'connection']],
     ]);
-    expect(window.commands.invoked).toEqual([]);
+    expect(window.commands.invoked).toEqual([validating('/repo/infra')]);
 
     forms[0].form.submit({ slug: 'prod', connection: 'conn_1' });
     await settled();
     expect(window.commands.invoked).toEqual([
-      {
-        cwd: '/repo/infra',
-        path: 'stack create',
-        args: { source: '/repo/infra', slug: 'prod', connection: 'conn_1' },
-      },
+      validating('/repo/infra'),
+      creating('/repo/infra', 'prod'),
     ]);
     expect(presenter.notify).toHaveBeenCalledWith('info', 'Created stack prod');
     expect(ticked).toEqual([ctx]);
   });
 
-  test('cancelled, runs nothing', async () => {
-    const { window, runners, forms } = host({ 'stack create': { documents: [CREATED] } });
+  test('cancelled, creates nothing', async () => {
+    const { window, runners, forms } = host({
+      'stack validate': { documents: [VALID_SOURCE] },
+      'stack create': { documents: [CREATED] },
+    });
     await runners.run(action('create'), { root: '/repo/infra' });
     forms[0].form.cancel();
     await settled();
-    expect(window.commands.invoked).toEqual([]);
+    expect(window.commands.invoked).toEqual([validating('/repo/infra')]);
   });
 
   test('superseded by a newer form, submits and cancels nothing when its prompts settle', async () => {
-    const { window, runners, forms } = host({ 'stack create': { documents: [CREATED] } });
+    const { window, runners, forms } = host({
+      'stack validate': { documents: [VALID_SOURCE] },
+      'stack create': { documents: [CREATED] },
+    });
     await runners.run(action('create'), { root: '/repo/a' });
     await runners.run(action('create'), { root: '/repo/b' });
     const [first, second] = forms;
@@ -367,8 +383,10 @@ describe("a run's form", () => {
     first.form.cancel();
     second.form.submit({ slug: 'b', connection: 'conn_1' });
     await settled();
-    expect(window.commands.invoked.map((call) => call.args)).toEqual([
-      { source: '/repo/b', slug: 'b', connection: 'conn_1' },
+    expect(window.commands.invoked).toEqual([
+      validating('/repo/a'),
+      validating('/repo/b'),
+      creating('/repo/b', 'b'),
     ]);
   });
 });
@@ -395,7 +413,10 @@ describe("a run's end", () => {
   });
 
   test('comes when its form is cancelled', async () => {
-    const { runners, forms } = host({ 'stack create': { documents: [CREATED] } });
+    const { runners, forms } = host({
+      'stack validate': { documents: [VALID_SOURCE] },
+      'stack create': { documents: [CREATED] },
+    });
     const { ended } = await runners.run(action('create'), { root: '/repo/infra' });
     expect(await hasEnded(ended)).toBe(false);
 
@@ -404,7 +425,10 @@ describe("a run's end", () => {
   });
 
   test('comes when its form is superseded by a newer one', async () => {
-    const { runners } = host({ 'stack create': { documents: [CREATED] } });
+    const { runners } = host({
+      'stack validate': { documents: [VALID_SOURCE] },
+      'stack create': { documents: [CREATED] },
+    });
     const first = await runners.run(action('create'), { root: '/repo/a' });
     const second = await runners.run(action('create'), { root: '/repo/b' });
     expect(await hasEnded(first.ended)).toBe(true);
@@ -412,7 +436,10 @@ describe("a run's end", () => {
   });
 
   test('after a submit, comes once the command it started has ended', async () => {
-    const { window, runners, forms } = host({ 'stack create': { held: true } });
+    const { window, runners, forms } = host({
+      'stack validate': { documents: [VALID_SOURCE] },
+      'stack create': { held: true },
+    });
     const { ended } = await runners.run(action('create'), { root: '/repo/infra' });
     forms[0].form.submit({ slug: 'prod', connection: 'conn_1' });
     expect(await hasEnded(ended)).toBe(false);

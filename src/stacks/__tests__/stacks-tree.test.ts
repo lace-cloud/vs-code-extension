@@ -19,9 +19,11 @@ import { authoringCommands } from '../../commands/authoring-commands';
 import {
   failsWith,
   fakeCommands,
+  HOME,
   refused,
   type Script,
   timesRun,
+  VALID_SOURCE,
 } from '../../engine/__tests__/fake-commands';
 import { createRunnerHost } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
@@ -1226,6 +1228,7 @@ describe('Create Stack', () => {
       scripts: {
         'stack list': () => ({ documents: [created ? stacks(stack('stk_9', 'prod')) : stacks()] }),
         'connection list': { documents: [connections] },
+        'stack validate': { documents: [VALID_SOURCE] },
         'stack create': { held: true },
       },
       inputs: ['prod'],
@@ -1238,11 +1241,17 @@ describe('Create Stack', () => {
     });
     await settled();
 
-    expect(t.commands.invoked.filter((c) => c.path === 'stack create')).toEqual([
+    // The view lists its stacks, then Create Stack reads the root before it asks for the slug.
+    const root = fsPath('/work/repo/infra/prod');
+    expect(t.commands.invoked).toEqual([
+      { cwd: HOME, path: 'stack list', args: { source: root } },
+      { cwd: HOME, path: 'team current', args: {} },
+      { cwd: root, path: 'stack validate', args: { source: root } },
+      { cwd: HOME, path: 'connection list', args: {} },
       {
-        cwd: fsPath('/work/repo/infra/prod'),
+        cwd: root,
         path: 'stack create',
-        args: { source: fsPath('/work/repo/infra/prod'), slug: 'prod', connection: 'conn_1' },
+        args: { source: root, slug: 'prod', connection: 'conn_1' },
       },
     ]);
     // The view's own progress, drawn while the store marks a command running, has no title.
@@ -1260,25 +1269,31 @@ describe('Create Stack', () => {
     expect(t.panels.tick).toHaveBeenCalledWith(prod);
   });
 
-  test("a refusal of stack create says its failure document's message", async () => {
+  test("a refusal of stack validate says its failure document's message, before the form asks anything", async () => {
+    const inputs = ['prod'];
+    const picks = ['conn_1'];
     const t = setup({
       root: prod,
       scripts: {
         'stack list': { documents: [stacks()] },
         'connection list': { documents: [connections] },
-        'stack create': refusal('not_git_repository'),
+        'stack validate': refusal('no_commit'),
+        'stack create': { documents: [] },
       },
-      inputs: ['prod'],
-      picks: ['conn_1'],
+      inputs,
+      picks,
     });
     await t.children();
     await t.command(STACK_COMMANDS.create);
     await settled();
     expect(t.messages).toContainEqual({
       level: 'error',
-      text: 'not_git_repository',
+      text: 'no_commit',
       buttons: [],
     });
+    expect(inputs).toEqual(['prod']);
+    expect(picks).toEqual(['conn_1']);
+    expect(t.commands.paths()).toEqual(['stack list', 'team current', 'stack validate']);
   });
 
   test('a dismissed slug creates nothing, and the progress ends', async () => {
