@@ -36,6 +36,61 @@ function sources(over: Partial<RootSources> = {}): RootSources {
 }
 
 describe('a root is a directory under a workspace folder', () => {
+  test('finds modules when VS Code spells the workspace drive differently from found files', async () => {
+    vi.stubGlobal(
+      'process',
+      new Proxy(process, {
+        get: (target, key) => (key === 'platform' ? 'win32' : Reflect.get(target, key)),
+      }),
+    );
+    try {
+      const workspace = folder('/C:/code/Lace');
+      const read = sources({
+        folders: () => [workspace],
+        terraformFiles: async () => [uri('/c:/code/Lace/main.tf')],
+      });
+      const root = { folder: workspace, relative: '' };
+      expect(await findRoot(read, () => candidates(read))).toEqual({ kind: 'root', root });
+      expect(rootUri(root).path).toBe('/C:/code/Lace');
+      expect(rootAt([workspace], uri('/c:/code/Lace/infra/prod'))).toEqual({
+        folder: workspace,
+        relative: 'infra/prod',
+      });
+      expect(rootAt([workspace], uri('/c:/code/Lace/.terraform/modules'))).toBeUndefined();
+      expect(rootAt([workspace], uri('/c:/code/Lace-other'))).toBeUndefined();
+      const inner = folder('/C:/code/Lace/infra', 1);
+      expect(rootAt([workspace, inner], uri('/c:/code/Lace/infra/prod'))).toEqual({
+        folder: inner,
+        relative: 'prod',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('keeps differently cased drive-like directory names distinct on Linux', () => {
+    vi.stubGlobal(
+      'process',
+      new Proxy(process, {
+        get: (target, key) => (key === 'platform' ? 'linux' : Reflect.get(target, key)),
+      }),
+    );
+    try {
+      expect(rootAt([folder('/C:/code/Lace')], uri('/c:/code/Lace'))).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('does not fold ordinary path segments, schemes or authorities', () => {
+    const workspace = folder('/C:/code/Lace');
+    expect(rootAt([workspace], uri('/c:/code/lace'))).toBeUndefined();
+    expect(rootAt([workspace], uri('/c:/code/Lace', 'vscode-vfs'))).toBeUndefined();
+    expect(rootAt([workspace], uri('/c:/code/Lace', 'file', 'other'))).toBeUndefined();
+    const remote = { ...workspace, uri: uri('/C:/code/Lace', 'vscode-vfs', 'host') };
+    expect(rootAt([remote], uri('/c:/code/Lace', 'vscode-vfs', 'host'))).toBeUndefined();
+  });
+
   test('a module in infra/prod has its root there, not at the workspace folder', () => {
     const root = rootAt([repo], uri('/work/repo/infra/prod'));
     expect(root).toEqual({ folder: repo, relative: 'infra/prod' });
