@@ -209,8 +209,10 @@ over a restarted engine tells its ticks the same way. The host runs each binding
 - The page reports its focus, which `onFocusChange` autosave reads. The canvas package's keymap handles its own keys;
   the extension contributes no keybinding.
 - The page follows VS Code's theme (`webview/theme.ts`): `data-theme` on `<html>`, which the canvas's design tokens
-  read, is `light` while `<body>` carries `vscode-light` or `vscode-high-contrast-light` and `dark` otherwise, and a
-  theme switch, a change of that class, sets it again. The registry pages are drawn from VS Code's own `--vscode-*`
+  read, is `high-contrast-light` while `<body>` carries `vscode-high-contrast-light`, `high-contrast` while it carries
+  `vscode-high-contrast`, `light` under `vscode-light` and `dark` otherwise, and a theme switch, a change of that class,
+  sets it again. Each mapped theme is one the pinned `@lace-cloud/design-tokens` `THEMES` declares (held by
+  `theme.test.ts`). The registry pages are drawn from VS Code's own `--vscode-*`
   variables and read no `data-theme`.
 
 ## Protocols
