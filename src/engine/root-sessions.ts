@@ -87,6 +87,7 @@ export type RootSessionsOptions = {
     whenRunning: (other?: BridgeEngineCaller) => Promise<BridgeEngineCaller>;
   };
   report: (what: string, error: unknown) => void;
+  prepare?: (session: RootSession) => Promise<void>;
 };
 
 type Hold = { entry: Entry; listeners: Set<() => void> };
@@ -137,6 +138,26 @@ export function createRootSessions(options: RootSessionsOptions): RootSessions {
     if (mapping.ports.context.sessionId === undefined) {
       mapping.close();
       throw new Error(`the engine named no session for ${root}`);
+    }
+    try {
+      await options.prepare?.({
+        root,
+        sessionId: mapping.ports.context.sessionId,
+        ports: mapping.ports,
+      });
+    } catch (error) {
+      mapping.close();
+      const sessionId = mapping.ports.context.sessionId;
+      // SessionOpen may have joined a session already held in this window.
+      // Close only a session this failed preparation left without a holder.
+      if (!entries.has(sessionId)) {
+        try {
+          await caller.unary('SessionClose', { session_id: sessionId });
+        } catch (closeError) {
+          report(`closing the unheld session of ${root}`, closeError);
+        }
+      }
+      throw error;
     }
     return mapping;
   }

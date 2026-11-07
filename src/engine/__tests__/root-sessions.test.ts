@@ -6,7 +6,11 @@ import { type FakeEngine, fakeEngine, settled } from './fake-engine';
 // `flush` is what an observer's attachment to each session does when it is
 // flushed, as the autosave keeper's does.
 function setup(
-  options: { engine?: FakeEngine; flush?: (session: RootSession) => Promise<void> } = {},
+  options: {
+    engine?: FakeEngine;
+    flush?: (session: RootSession) => Promise<void>;
+    prepare?: (session: RootSession) => Promise<void>;
+  } = {},
 ) {
   const reports: { what: string; error: unknown }[] = [];
   const window = {
@@ -24,6 +28,7 @@ function setup(
       },
     },
     report: (what, error) => reports.push({ what, error }),
+    prepare: options.prepare,
   });
   rootSessions.observe((session) => ({
     flush: () => options.flush?.(session) ?? Promise.resolve(),
@@ -34,6 +39,35 @@ function setup(
 
 const closes = (engine: FakeEngine) =>
   engine.sent.filter((s) => s.method === 'SessionClose').map((s) => s.request.sessionId);
+
+describe('session preparation failures', () => {
+  test('closes an unheld session when preparation fails', async () => {
+    const failure = new Error('deferred');
+    const { window, rootSessions } = setup({
+      prepare: async () => {
+        throw failure;
+      },
+    });
+    await expect(rootSessions.acquire('/repo/infra')).rejects.toBe(failure);
+    expect(window.engine.open()).toEqual([]);
+    expect(closes(window.engine)).toHaveLength(1);
+  });
+
+  test('does not close a session already held if another preparation fails', async () => {
+    let attempts = 0;
+    const failure = new Error('deferred');
+    const { window, rootSessions } = setup({
+      prepare: async () => {
+        if (++attempts === 2) throw failure;
+      },
+    });
+    const hold = await rootSessions.acquire('/repo/infra');
+    await expect(rootSessions.acquire('/repo/infra')).rejects.toBe(failure);
+    expect(window.engine.open()).toEqual([hold.sessionId]);
+    expect(closes(window.engine)).toEqual([]);
+    await hold.release();
+  });
+});
 
 describe('holders of one root', () => {
   test('two acquires share one session', async () => {

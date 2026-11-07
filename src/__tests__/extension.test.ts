@@ -73,7 +73,11 @@ vi.mock('../features', () => ({ FEATURES: [], windowHost: () => ({}) }));
 
 describe('deactivation', () => {
   test('the Lace channel takes every line its owners log while the window closes, and is disposed once, after the engine stopped', async () => {
-    const context = { subscriptions: [] as { dispose: () => unknown }[] };
+    const context = {
+      subscriptions: [] as { dispose: () => unknown }[],
+      globalStorageUri: { fsPath: '/storage' },
+      secrets: {},
+    };
     activate(context as never);
 
     const closing = deactivate();
