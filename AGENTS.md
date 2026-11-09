@@ -448,19 +448,19 @@ organization goes on to its team: the team pick opens as the organization is sav
 listed and saved with `--org` naming the organization just picked, so the saved team is that organization's even while
 `LACE_ORGANIZATION` sets another; an organization with no team closes the pick and says teams are created in the portal,
 with Open Portal on the page `team list` names (`createUrl`). A team pick dismissed while the organization is saved
-still announces the saved organization. The status bar item shows the selection and runs Select Organization. The
-account's one change event (`onDidChange`) fires after each sign-in, sign-out or saved selection this window makes, and
-when a read of the account differs from the last one, the first read after a failed one included. A read is who is
-signed in (`whoami`'s user, or the reason its failure gives) and the selection (`org current`, `team current`); `lace
-logout` clears only the credentials, so the selection alone cannot see it. The account is read when the window starts,
-after each change made here, when the window regains focus (a terminal or another window outside it), when a command
-line running `lace` ends in an integrated terminal with shell integration (`window.onDidEndTerminalShellExecution`,
-read by `vscode/lace-command-lines.ts`), which changes no focus, and when a view's refresh asks: `refreshWith(refresh)`
-reads the account and, when the read found a change, announces it and leaves the redraw to the listeners, else runs
-`refresh` (the Registry's first showing, showing again, Refresh and Retry; the Stacks view's showing again and Refresh
-Stacks). The status bar, the registry view and the Stacks tree read again on the event, each by its plain refresh,
-never by `refreshWith`. Nothing is cached but the last read. A failed account command offers the way out its reason
-names (`vscode/offers.ts`).
+still announces the saved organization. The status bar item shows the selection and runs Select Team, or Select
+Organization while no organization is selected. The account's one change event (`onDidChange`) fires after each sign-in,
+sign-out or saved selection this window makes, and when a read of the account differs from the last one, the first read
+after a failed one included. A read is who is signed in (`whoami`'s user, or the reason its failure gives) and the
+selection (`org current`, `team current`); `lace logout` clears only the credentials, so the selection alone cannot see
+it. The account is read when the window starts, after each change made here, when the window regains focus (a terminal
+or another window outside it), when a command line running `lace` ends in an integrated terminal with shell integration
+(`window.onDidEndTerminalShellExecution`, read by `vscode/lace-command-lines.ts`), which changes no focus, and when a
+view's refresh asks: `refreshWith(refresh)` reads the account and, when the read found a change, announces it and leaves
+the redraw to the listeners, else runs `refresh` (the Registry's first showing, showing again, Refresh and Retry; the
+Stacks view's showing again and Refresh Stacks). The status bar, the registry view and the Stacks tree read again on the
+event, each by its plain refresh, never by `refreshWith`. Nothing is cached but the last read. A failed account command
+offers the way out its reason names (`vscode/offers.ts`).
 
 ## The chat tools
 

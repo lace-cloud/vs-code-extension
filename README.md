@@ -212,9 +212,9 @@ extension keeps no credentials; the CLI reads them for every command.
 The organization and team every scoped command runs in are the CLI's own selection, saved by `lace org use` and
 `lace team use`, so a terminal and VS Code always agree. **Lace: Select Organization** picks an organization and goes on
 to its team; **Lace: Select Team** picks a team of the current organization, and for an organization with no team
-offers **Open Portal** on the page that makes one. The status bar shows the selection, and clicking it selects an
-organization. When `LACE_ORGANIZATION` or `LACE_TEAM` is set in the engine's environment, that variable decides, and the
-pick says so.
+offers **Open Portal** on the page that makes one. The status bar shows the selection, and clicking it selects a team,
+or an organization while none is selected. When `LACE_ORGANIZATION` or `LACE_TEAM` is set in the engine's environment,
+that variable decides, and the pick says so.
 
 A `lace login`, `lace logout`, `lace org use` or `lace team use` run in VS Code's integrated terminal reaches the status
 bar, the Registry view and the Stacks view when the command ends (the terminal's shell integration, on by default,

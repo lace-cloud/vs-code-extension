@@ -6,11 +6,18 @@ import {
   type Invoked,
   refused,
   type Script,
+  type Scripts,
   timesRun,
 } from '../../engine/__tests__/fake-commands';
 import { type Button, clicked, shownBy } from '../../vscode/__tests__/fake-messages';
 import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
-import { type Account, accountControls, createAccount, SELECT_ORGANIZATION } from '../account';
+import {
+  type Account,
+  accountControls,
+  createAccount,
+  SELECT_ORGANIZATION,
+  SELECT_TEAM,
+} from '../account';
 import { selectionStatus } from '../scope';
 import { outsideSignals, signedInAs } from './fake-outside';
 import { statusBarOver } from './fake-status-bar';
@@ -598,7 +605,7 @@ describe('the status bar', () => {
     const { status, controls, registered } = statusBarOver(account, commands.commands);
     await settled();
     expect(status.text).toBe('$(organization) acme');
-    expect(status.command).toBe(SELECT_ORGANIZATION);
+    expect(status.command).toBe(SELECT_TEAM);
 
     scripts['org current'] = { documents: [current('globex')] };
     await account.selectOrganization();
@@ -615,6 +622,73 @@ describe('the status bar', () => {
       'lace.selectOrganization',
       'lace.selectTeam',
     ]);
+    controls.dispose();
+  });
+});
+
+describe('the status bar click', () => {
+  const scriptsWith = (organization: unknown): Scripts => ({
+    whoami: { documents: [signedInAs('usr_1')] },
+    'org list': { documents: [ORGS] },
+    'org current': { documents: [organization] },
+    'org use': { documents: [{ organization: 'acme', team: null }] },
+    'team list': { documents: [teams()] },
+    'team current': { documents: [current(null)] },
+  });
+
+  test('selects the team when an organization is selected', async () => {
+    const { account, commands } = await setup(scriptsWith(current('acme')) as never, ['acme']);
+    const { status, controls } = statusBarOver(account, commands.commands);
+    await settled();
+    expect(status.command).toBe(SELECT_TEAM);
+    controls.dispose();
+  });
+
+  test('selects the organization when none is selected', async () => {
+    const { account, commands } = await setup(scriptsWith(current(null)) as never, ['acme']);
+    const { status, controls } = statusBarOver(account, commands.commands);
+    await settled();
+    expect(status.text).toBe('$(organization) No Lace organization');
+    expect(status.command).toBe(SELECT_ORGANIZATION);
+    controls.dispose();
+  });
+
+  test('follows the selection when an organization is selected after none was', async () => {
+    const scripts = scriptsWith(current(null));
+    const { account, commands, outside } = await setup(scripts as never);
+    const { status, controls } = statusBarOver(account, commands.commands);
+    await settled();
+    expect(status.command).toBe(SELECT_ORGANIZATION);
+
+    scripts['org current'] = { documents: [current('acme')] };
+    outside.focus();
+    await settled();
+    expect(status.command).toBe(SELECT_TEAM);
+
+    scripts['org current'] = { documents: [current(null)] };
+    outside.focus();
+    await settled();
+    expect(status.command).toBe(SELECT_ORGANIZATION);
+    controls.dispose();
+  });
+
+  test('hides the item when a read of the selection fails', async () => {
+    const scripts = scriptsWith(current('acme'));
+    const { account, commands, outside } = await setup(scripts as never);
+    const { status, controls } = statusBarOver(account, commands.commands);
+    await settled();
+    expect(status.visible).toBe(true);
+
+    let reading = 0;
+    scripts['org current'] = () =>
+      reading++ === 0 ? { documents: [current('globex')] } : failsWith('the engine stopped');
+    const hide = vi.spyOn(status, 'hide');
+    const show = vi.spyOn(status, 'show');
+    outside.focus();
+    await settled();
+    expect(hide).toHaveBeenCalledTimes(1);
+    expect(show).not.toHaveBeenCalled();
+    expect(status.visible).toBe(false);
     controls.dispose();
   });
 });

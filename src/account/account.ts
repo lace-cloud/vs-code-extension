@@ -158,7 +158,8 @@ type ControlsApi = Parameters<typeof registerCommands>[0] & {
 
 // The account's palette commands, and the status bar item showing the
 // selection: read when the feature starts and at each change of the
-// account, made in this window or found outside it. A command that fails
+// account, made in this window or found outside it. Its click is Select Team,
+// or Select Organization while no organization is selected. A command that fails
 // says why with the ways out its failure names: Sign In for a command that
 // needs credentials, Select Organization for a team pick with none selected.
 export function accountControls(
@@ -169,12 +170,13 @@ export function accountControls(
   report: (what: string, error: unknown) => void,
 ): vscode.Disposable {
   const status = api.window.createStatusBarItem();
-  status.command = SELECT_ORGANIZATION;
   const refresh = async () => {
     try {
-      const { text, tooltip } = selectionStatus(await currentSelection(await commands.anywhere()));
+      const selection = await currentSelection(await commands.anywhere());
+      const { text, tooltip } = selectionStatus(selection);
       status.text = text;
       status.tooltip = tooltip;
+      status.command = selection.organization.slug === null ? SELECT_ORGANIZATION : SELECT_TEAM;
       status.show();
     } catch (error) {
       status.hide();
