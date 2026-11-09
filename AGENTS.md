@@ -255,16 +255,16 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   versions, in module detail's header, Details (`Latest Version`: the page's own `registry get`'s `latest` once it has
   loaded, else a dash) and Versions; a row's label shortens with an ellipsis and never the version beside it. Where a
   name is read or picked, `versionTitle` says `v0.4.0 (Deprecated)`: the "+" titles, the Add Module to Canvas pick,
-  the usage example, the placement's progress and status-bar message. A deprecated version places as any other: the
-  host takes its status with `statusOf`, in the one `placement` read of the row (the row's, else the one of the
-  versions its sidebar read or its detail's `registry get` lists) and hands `place` that status, which names the
-  version with `versionTitle`, while the engine is sent the module and its version alone. After a deprecated
-  placement, once the module is added and the root's session released, the status-bar message adds the newest
-  published version (`newestPublishedNote`: the `latest` of the sidebar's versions read or module detail's own
-  `registry get`, else one `registry get` read by the placement; a failed read is logged once and the message says the
-  newest published version could not be read, pointing at the Lace Output channel, so it is not taken for no newer
-  version, and the note never replaces a later placement's message). Module detail shows the `.error-banner` "This
-  version is deprecated." above its tabs, with the same note.
+  the usage example, the placement's progress, status-bar message and warning notification. A deprecated version places
+  as any other: the host takes its status with `statusOf`, in the one `placement` read of the row (the row's, else the
+  one of the versions its sidebar read or its detail's `registry get` lists) and hands `place` that status, which names
+  the version with `versionTitle`, while the engine is sent the module and its version alone. After a deprecated
+  placement, once the module is added and the root's session released, a warning notification names the newest published
+  version (`newestPublishedNote`: the `latest` of the sidebar's versions read or module detail's own `registry get`,
+  else one `registry get` read by the placement; a failed read is logged once and the notification says the newest
+  published version could not be read, pointing at the Lace Output channel, so it is not taken for no newer version);
+  the status bar says only that the module was added. Module detail shows the `.error-banner` "This version is
+  deprecated." above its tabs, with the same note.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
 - Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
   that cannot be read closes it and says why with the ways out its reason names (and is written once to the "Lace"

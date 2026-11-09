@@ -37,7 +37,11 @@ export type Place = (module: PlacedModule, status: string, latest?: Latest) => P
 export type PlaceApi = {
   window: Pick<
     typeof vscode.window,
-    'showInformationMessage' | 'showErrorMessage' | 'withProgress' | 'setStatusBarMessage'
+    | 'showInformationMessage'
+    | 'showErrorMessage'
+    | 'showWarningMessage'
+    | 'withProgress'
+    | 'setStatusBarMessage'
   >;
   commands: Pick<typeof vscode.commands, 'executeCommand'>;
   ProgressLocation: Pick<typeof vscode.ProgressLocation, 'Notification'>;
@@ -71,7 +75,7 @@ export const PLACEMENT_API_REFUSALS: Readonly<Record<string, string>> = {
 
 const SHOW_DETAILS = 'Show Details';
 const SIGN_IN_ACTION = 'Sign In';
-const UNREAD_NEWEST = 'could not read the newest published version';
+const UNREAD_NEWEST = 'Lace could not read the newest published version';
 
 export function placeModule(options: PlaceOptions): Place {
   const { api, sources, panels, rootSessions, reads, log, placed } = options;
@@ -99,8 +103,8 @@ export function placeModule(options: PlaceOptions): Place {
     log.show(true);
   }
 
-  // What a deprecated placement adds: the newest published version, from the caller's latest or one
-  // `registry get`. A failed read is logged once, and the message says so.
+  // The advice a deprecated placement's warning adds after the added line: the newest published version,
+  // from the caller's latest or one `registry get`. A failed read is logged once, and the advice says so.
   async function suggestion(module: PlacedModule, known: Latest | undefined): Promise<string> {
     let latest = known;
     if (!latest) {
@@ -109,28 +113,21 @@ export function placeModule(options: PlaceOptions): Place {
         () => reads.get(key),
         (error) => log.appendLine(`Reading the latest version of ${key}: ${failureText(error)}`),
       );
-      if (read.kind === 'failed') return ` — ${UNREAD_NEWEST}; see the Lace Output channel.`;
+      if (read.kind === 'failed') return `, but ${UNREAD_NEWEST}; see the Lace Output channel.`;
       latest = loaded(read)?.latest;
     }
     const note = newestPublishedNote(latest, module.version);
-    return note ? ` — ${note}; place that one instead.` : '';
+    return note ? `. ${note}; place that one instead.` : '';
   }
 
-  // The status message this function set last; advice never replaces a later one.
-  let statusSet = 0;
-  function say(named: string, label: string, advice = ''): number {
-    api.window.setStatusBarMessage(`Lace: added ${named} to ${label}${advice}`, 5000);
-    return ++statusSet;
-  }
-
-  // The stamp of the added message, or undefined when the module was not added;
-  // the recents mark follows it, and the session is released before any advice.
+  // Whether the module was added; the recents mark follows it, and the session is released before
+  // any advice.
   async function apply(
     editor: EditorPort,
     module: PlacedModule,
     named: string,
     label: string,
-  ): Promise<number | undefined> {
+  ): Promise<boolean> {
     const action: Action = { place_module: module };
     const result = await api.window.withProgress(
       { location: api.ProgressLocation.Notification, title: `Lace: adding ${named} to ${label}` },
@@ -140,11 +137,11 @@ export function placeModule(options: PlaceOptions): Place {
       void api.window.showErrorMessage(
         `Lace could not add ${named} to ${label}: ${result.errors.map((e) => e.message).join('; ')}`,
       );
-      return undefined;
+      return false;
     }
-    const stamp = say(named, label);
+    api.window.setStatusBarMessage(`Lace: added ${named} to ${label}`, 5000);
     await placed(module);
-    return stamp;
+    return true;
   }
 
   return async (module, status, latest) => {
@@ -155,15 +152,15 @@ export function placeModule(options: PlaceOptions): Place {
     try {
       await panels.ensure(root, { preserveFocus: true });
       const hold = await rootSessions.acquire(rootPath(root));
-      let added: number | undefined;
+      let added = false;
       try {
         added = await apply(hold.ports.editor, module, named, label);
       } finally {
         await hold.release();
       }
-      if (added !== undefined && isDeprecated(status)) {
+      if (added && isDeprecated(status)) {
         const advice = await suggestion(module, latest);
-        if (advice && added === statusSet) say(named, label, advice);
+        if (advice) void api.window.showWarningMessage(`Lace: added ${named} to ${label}${advice}`);
       }
     } catch (error) {
       if (error instanceof ConnectError) return refused(named, label, error);

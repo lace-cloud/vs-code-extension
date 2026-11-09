@@ -67,6 +67,7 @@ function setup(
     window: {
       showInformationMessage: vi.fn(async () => undefined),
       showErrorMessage: vi.fn(async () => options.answer),
+      showWarningMessage: vi.fn(async (_text: string): Promise<undefined> => undefined),
       withProgress: vi.fn((_o: unknown, task: () => Promise<unknown>) => task()),
       setStatusBarMessage: vi.fn(),
     },
@@ -151,13 +152,18 @@ describe('placing a registry module', () => {
     });
     const bar = (api: ReturnType<typeof setup>['api']) =>
       api.window.setStatusBarMessage.mock.lastCall?.[0];
+    const warned = (api: ReturnType<typeof setup>['api']) =>
+      api.window.showWarningMessage.mock.calls.map(([text]) => text);
+    const ADDED = 'Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod';
 
-    test('names the newest published version in the placement message, and still places it', async () => {
+    test('names the newest published version in a warning notice, keeps the status bar to the added line, and still places it', async () => {
       const { place, api, sent, reads } = setup({ get: latest('v2.0.0', 'published') });
       await place(OLD, 'deprecated');
-      expect(bar(api)).toBe(
-        'Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod — v2.0.0 is the newest published version; place that one instead.',
-      );
+      expect(warned(api)).toEqual([
+        `${ADDED}. v2.0.0 is the newest published version; place that one instead.`,
+      ]);
+      expect(api.window.showWarningMessage.mock.calls[0]).toHaveLength(1);
+      expect(api.window.setStatusBarMessage.mock.calls).toEqual([[ADDED, 5000]]);
       expect(sent('ApplyAction').map((s) => s.request.actions)).toEqual([[{ placeModule: OLD }]]);
       expect(reads()).toHaveLength(1);
     });
@@ -168,26 +174,28 @@ describe('placing a registry module', () => {
     ])('suggests nothing when %s', async (_case, version, status) => {
       const { place, api } = setup({ get: latest(version, status) });
       await place(OLD, 'deprecated');
-      expect(bar(api)).toBe('Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod');
-      expect(bar(api)).not.toContain('could not read');
+      expect(bar(api)).toBe(ADDED);
+      expect(warned(api)).toEqual([]);
     });
 
     test('uses the latest the caller already read, and reads nothing', async () => {
       const { place, api, reads } = setup();
       await place(OLD, 'deprecated', { version: 'v3.0.0', status: 'published' });
-      expect(bar(api)).toContain('v3.0.0 is the newest published version');
+      expect(warned(api)).toEqual([
+        `${ADDED}. v3.0.0 is the newest published version; place that one instead.`,
+      ]);
       expect(reads()).toEqual([]);
     });
 
-    const UNREAD =
-      'Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod — could not read the newest published version; see the Lace Output channel.';
+    const UNREAD = `${ADDED}, but Lace could not read the newest published version; see the Lace Output channel.`;
 
     test('is placed and says the newest published version could not be read when the read fails, and the failure is logged', async () => {
       const { place, api, placed, log, sent } = setup({
         get: refused({ reason: 'unauthenticated', message: 'offline' }),
       });
       await place(OLD, 'deprecated');
-      expect(bar(api)).toBe(UNREAD);
+      expect(warned(api)).toEqual([UNREAD]);
+      expect(api.window.setStatusBarMessage.mock.calls).toEqual([[ADDED, 5000]]);
       expect(sent('ApplyAction')).toHaveLength(1);
       expect(placed).toHaveBeenCalledWith(OLD);
       expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('offline'));
@@ -199,7 +207,8 @@ describe('placing a registry module', () => {
         get: { fails: new Error('the engine stopped') },
       });
       await place(OLD, 'deprecated');
-      expect(bar(api)).toBe(UNREAD);
+      expect(warned(api)).toEqual([UNREAD]);
+      expect(api.window.setStatusBarMessage.mock.calls).toEqual([[ADDED, 5000]]);
       expect(placed).toHaveBeenCalledWith(OLD);
       expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('the engine stopped'));
       expect(log.appendLine).toHaveBeenCalledTimes(1);
@@ -227,10 +236,13 @@ describe('placing a registry module', () => {
       expect(api.window.setStatusBarMessage.mock.calls).toEqual([
         ['Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod', 5000],
       ]);
+      expect(api.window.showWarningMessage).not.toHaveBeenCalled();
 
       held[0].finish([record({ latest: { version: 'v2.0.0', status: 'published' } })]);
       await done;
-      expect(bar(api)).toContain('v2.0.0 is the newest published version');
+      expect(warned(api)).toEqual([
+        `${ADDED}. v2.0.0 is the newest published version; place that one instead.`,
+      ]);
     });
 
     test('is not added when the engine answers the placement unsuccessful: the error alone is shown, and nothing more is read', async () => {
@@ -242,6 +254,7 @@ describe('placing a registry module', () => {
         'Lace could not add acme/vpc v1.0.0 (Deprecated) to infra/prod: no such input',
       );
       expect(api.window.setStatusBarMessage).not.toHaveBeenCalled();
+      expect(api.window.showWarningMessage).not.toHaveBeenCalled();
       expect(placed).not.toHaveBeenCalled();
       expect(reads()).toEqual([]);
     });
@@ -254,7 +267,7 @@ describe('placing a registry module', () => {
       ]);
     });
 
-    test('leaves the advice unsaid when a later placement has set its own message meanwhile', async () => {
+    test('warns for each deprecated placement, and a later placement does not replace the notice', async () => {
       const { place, api, held } = setup({ get: { held: true } });
       const first = place(OLD, 'deprecated');
       await settled();
@@ -263,9 +276,18 @@ describe('placing a registry module', () => {
       await first;
 
       expect(api.window.setStatusBarMessage.mock.calls.map(([text]) => text)).toEqual([
-        'Lace: added acme/vpc v1.0.0 (Deprecated) to infra/prod',
+        ADDED,
         'Lace: added acme/vpc v2.0.0 to infra/prod',
       ]);
+      expect(warned(api)).toEqual([
+        `${ADDED}. v2.0.0 is the newest published version; place that one instead.`,
+      ]);
+    });
+
+    test('a published version is placed with no notice', async () => {
+      const { place, api } = setup();
+      await place(VPC, 'published');
+      expect(api.window.showWarningMessage).not.toHaveBeenCalled();
     });
 
     test('is a published version that is placed with no extra read', async () => {
@@ -336,6 +358,7 @@ describe('placing a registry module', () => {
       `Lace could not add acme/vpc v2.0.0 to infra/prod: ${why}.`,
       'Show Details',
     );
+    expect(api.window.showWarningMessage).not.toHaveBeenCalled();
     expect(placed).not.toHaveBeenCalled();
   });
 

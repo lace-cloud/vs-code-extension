@@ -138,11 +138,11 @@ it runs **Lace: Select Organization** to switch it.
 - A version the registry has deprecated is marked **Deprecated**, in your theme's warning colour, wherever it is
   listed: on its row, among a row's versions, and in module detail's header, **Details** and **Versions**; a tooltip,
   the Add Module to Canvas pick, the version line of the **Examples** tab, and the progress notification and the
-  message of a placement say `(Deprecated)` after it. **+** and **Add to Canvas** still place it, and the message that
-  follows names the newest published version to use instead, when there is another; when Lace could not read it, the
-  message says "could not read the newest published version; see the Lace Output channel", where the read's failure is
-  logged. Module detail shows "This version is deprecated." above its tabs with that version, and its **Latest
-  Version** is the one the registry names.
+  message of a placement say `(Deprecated)` after it. **+** and **Add to Canvas** still place it, and a warning
+  notification names the newest published version to use instead, when there is another; when Lace could not read it,
+  the notification says "Lace could not read the newest published version; see the Lace Output channel", where the
+  read's failure is logged. Module detail shows "This version is deprecated." above its tabs with that version, and its
+  **Latest Version** is the one the registry names.
 - Clicking a row opens **module detail**: **Details** renders the module's README above a Quick Reference table of
   System, Kind, Latest Version, Author, Source, Inputs, Outputs and, when the registry has a date, Published;
   **Interface** lists its inputs and outputs as Lace certified them (describing a version downloads and certifies
