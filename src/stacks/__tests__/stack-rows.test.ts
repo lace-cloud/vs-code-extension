@@ -243,6 +243,18 @@ describe("a preview's policy verdict", () => {
 // An Advisory of `agent` at `confidence` whose output is `output`.
 const advisory = (agent: string, confidence: number, output: unknown = {}) => ({
   id: `adv_${agent}`,
+  orgId: 'org_test',
+  contextRunId: null,
+  contextInstallId: null,
+  contextStackId: 'stack-a',
+  contextTreeHash: 'th1',
+  actedOn: null,
+  actedAt: null,
+  actedByUserId: null,
+  feedbackThumbs: null,
+  feedbackText: null,
+  emitterKind: 'external',
+  emitterHeededRate: 1,
   manifestation: 'preview',
   emittedByInstallId: `inst_${agent}`,
   emittedByDisplayName: agent,

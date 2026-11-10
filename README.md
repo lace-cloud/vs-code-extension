@@ -19,7 +19,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.60.0. It speaks engine protocol 10, which Lace CLI v2.60.0 speaks, and reads the engine
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.60.1. It speaks engine protocol 11, which Lace CLI v2.60.1 speaks, and reads the engine
   contract that release serves; a CLI of another protocol or another contract is refused when the engine starts, and the
   extension says what to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
