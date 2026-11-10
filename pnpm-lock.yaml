@@ -9,20 +9,20 @@ importers:
   .:
     dependencies:
       '@lace-cloud/canvas':
-        specifier: 0.37.0
-        version: 0.37.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+        specifier: 0.37.1
+        version: 0.37.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
       '@lace-cloud/chat-core':
-        specifier: 0.37.0
-        version: 0.37.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+        specifier: 0.37.1
+        version: 0.37.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
       '@lace-cloud/design-tokens':
-        specifier: 0.37.0
-        version: 0.37.0
+        specifier: 0.37.1
+        version: 0.37.1
       '@lace-cloud/host':
-        specifier: 0.37.0
-        version: 0.37.0
+        specifier: 0.37.1
+        version: 0.37.1
       '@lace-cloud/proto':
-        specifier: 0.37.0
-        version: 0.37.0
+        specifier: 0.37.1
+        version: 0.37.1
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -558,23 +558,23 @@ packages:
     peerDependencies:
       tslib: '2'
 
-  '@lace-cloud/canvas@0.37.0':
-    resolution: {integrity: sha512-VqraJdPGBjsF7CBsJDeidkR3JKLSPancf6vRtJ0ygvJvJ32a4Zrp/Ziw7Jc4LmnVzwtV19t7ki8NQLlD2x5J2A==}
+  '@lace-cloud/canvas@0.37.1':
+    resolution: {integrity: sha512-AALib4pI+iLIi24+dw1nEyJkWiBDH3rBhQckG8zXFf8Ar6bZRX4A5Q+OZurFSGpXuJEdlizSrBSmxQkOgPr8mw==}
 
-  '@lace-cloud/chat-core@0.37.0':
-    resolution: {integrity: sha512-0rASswqIDAD8C5kmoz4DX0RzA0EPMUJT2BcQQ2UD8jHekED2hI0099z7TIxxuoHQqMlzTa74L8ZMLJBDZqrn9Q==}
+  '@lace-cloud/chat-core@0.37.1':
+    resolution: {integrity: sha512-FuG7OTQcvU3C/l94hI0QVIV13Ci1dLeAV4cK9TyjkcD32oyHwYM6bZ50QYKEE95pL/KhE857gsUNNWy2dw7m1A==}
 
-  '@lace-cloud/design-tokens@0.37.0':
-    resolution: {integrity: sha512-pfim56j4m0+ITR+jw1qrI2fe58XcAt8EHHHxTtcDLGS7lN3ybtk0QZ5cd/5JlUc0HZ0XZrHSuDMX9SBeykJddA==}
+  '@lace-cloud/design-tokens@0.37.1':
+    resolution: {integrity: sha512-YbPf/xqJriRatyTd7VR4hFMynfma/IHAJRoAJDcDv4n1bZxjxJn3z4sX5lLEGU8oi3IlEsvk2DJymY4AbnFH/A==}
 
-  '@lace-cloud/host@0.37.0':
-    resolution: {integrity: sha512-8VMHg06OZ78SeGZimwx33gWG2KzpIvwByA6CsNUjOaWv8NPQg9majt0tPOl2rtVDqzLZheEEWvyuPvBuwMwusg==}
+  '@lace-cloud/host@0.37.1':
+    resolution: {integrity: sha512-sOEojDFflyNdRtbWr1WJYT+GOdO5L5yuNoUTLugNyignu3uL8/6H84ncp/xUXqiok/M1hjMNauj8Tmlo6OSiUw==}
 
-  '@lace-cloud/proto@0.37.0':
-    resolution: {integrity: sha512-tam92CFZ4owx06P8n6pPeBJD0yrjou0DfMG3H5l17Pg7y6ZNDHBhKLMJ8YFk0NsuB3tsLIQrEjiBGEOs7cXBmA==}
+  '@lace-cloud/proto@0.37.1':
+    resolution: {integrity: sha512-0Uja+DJNwBlQ7zsIYTHS0KG3V/N2AlDg/ewGaJQS+uMIN7k1U19qQ2EcqLpOGkYOhvEa2y4hVwpgPgHtLi6rsw==}
 
-  '@lace-cloud/ui@0.37.0':
-    resolution: {integrity: sha512-FF3cvAvYtJRGbKGU4GOjsZ935B3YkKK/h+KUFekk/DAG6jrTT/8E5AyvGsYKTFX0u4wm9E9oK2vTOwZkkkeGjQ==}
+  '@lace-cloud/ui@0.37.1':
+    resolution: {integrity: sha512-FUXgiCV07nkozX61/9v6ry0ozKtcKH3pEl3B6U1bgoTpUCv2Rd/kPywZQlUnsiUzUHH4uJZvSbliQr+bzVN+LA==}
     peerDependencies:
       framer-motion: ^12.38.0
       react-markdown: ^10.1.0
@@ -3810,11 +3810,11 @@ snapshots:
       '@jsonjoy.com/codegen': 17.67.0(tslib@2.9.1)
       tslib: 2.9.1
 
-  '@lace-cloud/canvas@0.37.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
+  '@lace-cloud/canvas@0.37.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@lace-cloud/proto': 0.37.0
-      '@lace-cloud/ui': 0.37.0(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+      '@lace-cloud/proto': 0.37.1
+      '@lace-cloud/ui': 0.37.1(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
       '@xyflow/react': 12.12.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
@@ -3829,10 +3829,10 @@ snapshots:
       - rehype-sanitize
       - remark-gfm
 
-  '@lace-cloud/chat-core@0.37.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
+  '@lace-cloud/chat-core@0.37.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
     dependencies:
-      '@lace-cloud/canvas': 0.37.0(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
-      '@lace-cloud/proto': 0.37.0
+      '@lace-cloud/canvas': 0.37.1(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)
+      '@lace-cloud/proto': 0.37.1
     transitivePeerDependencies:
       - '@types/react'
       - '@types/react-dom'
@@ -3843,21 +3843,21 @@ snapshots:
       - rehype-sanitize
       - remark-gfm
 
-  '@lace-cloud/design-tokens@0.37.0': {}
+  '@lace-cloud/design-tokens@0.37.1': {}
 
-  '@lace-cloud/host@0.37.0':
+  '@lace-cloud/host@0.37.1':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
       '@grpc/grpc-js': 1.14.7
-      '@lace-cloud/proto': 0.37.0
+      '@lace-cloud/proto': 0.37.1
 
-  '@lace-cloud/proto@0.37.0':
+  '@lace-cloud/proto@0.37.1':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
 
-  '@lace-cloud/ui@0.37.0(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
+  '@lace-cloud/ui@0.37.1(react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1))(remark-gfm@4.0.1)':
     dependencies:
-      '@lace-cloud/design-tokens': 0.37.0
+      '@lace-cloud/design-tokens': 0.37.1
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
     optionalDependencies:

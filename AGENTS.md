@@ -88,7 +88,7 @@ demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's 
 `lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
 default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
 with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
-and locks with it. The extension speaks engine protocol 10 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+and locks with it. The extension speaks engine protocol 11 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
 protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version and engine contract
 (`ENGINE_CONTRACT`) decide compatibility: `@lace-cloud/host` refuses an engine of another protocol or another contract
 with `EngineIdentityMismatchError`, and the message names which side to update, or, for an engine of this protocol built
