@@ -9,6 +9,7 @@ import { basename, dirname, join } from 'node:path';
 import type { BoundPath, CommandsPort } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { customEditors, macrotask } from '../../canvas/__tests__/fake-custom-editor';
 import { createCanvasPanels } from '../../canvas/canvas-panels';
 import { canvasOperations } from '../../commands/canvas-operations';
 import { afterTest, moduleDirectory, realEngine, until } from '../../engine/__tests__/real-engine';
@@ -43,30 +44,6 @@ const terraformFiles = (directory: string): vscode.Uri[] =>
   readdirSync(directory, { recursive: true, encoding: 'utf8' })
     .filter((name) => name.endsWith('.tf'))
     .map((name) => file(join(directory, name)));
-
-// A stand-in for VS Code's webview panel: what the canvas panels call.
-function webviewPanel() {
-  let disposed = () => {};
-  return {
-    title: '',
-    active: false,
-    visible: true,
-    reveal: vi.fn(),
-    dispose: () => disposed(),
-    onDidDispose: (listener: () => void) => {
-      disposed = listener;
-      return { dispose: () => {} };
-    },
-    onDidChangeViewState: () => ({ dispose: () => {} }),
-    webview: {
-      html: '',
-      cspSource: 'vscode-webview://csp',
-      asWebviewUri: (at: vscode.Uri) => at,
-      postMessage: async () => true,
-      onDidReceiveMessage: () => ({ dispose: () => {} }),
-    },
-  };
-}
 
 // The window's workspaceState.
 function memento(): vscode.Memento {
@@ -137,14 +114,14 @@ function toolsWindow(module: Record<string, string> = MODULE) {
   const { engine, rootSessions, commands, home } = realEngine();
   const lace = recording(commands, home);
 
-  const opened: { title: string; preserveFocus: boolean }[] = [];
+  const shows: boolean[] = [];
+  const editors = customEditors((show) => {
+    shows.push(show.preserveFocus);
+  });
   const panels = createCanvasPanels({
     api: {
       window: {
-        createWebviewPanel: (_type: string, title: string, show: { preserveFocus: boolean }) => {
-          opened.push({ title, preserveFocus: show.preserveFocus });
-          return webviewPanel();
-        },
+        ...editors.window,
         showInformationMessage: async () => undefined,
         showWarningMessage: async () => undefined,
         showErrorMessage: async () => undefined,
@@ -152,12 +129,21 @@ function toolsWindow(module: Record<string, string> = MODULE) {
       } as never,
       workspace: {
         workspaceFolders: [folder(repository)],
+        // VS Code saves the document it is asked to save.
+        save: async (at: vscode.Uri) => {
+          const document = editors.documents.find((each) => each.uri.toString() === at.toString());
+          if (document) await editors.save(document);
+          return at;
+        },
         fs: { readDirectory: async () => [] },
         openTextDocument: async () => ({}),
         onDidChangeWorkspaceFolders: () => ({ dispose: () => {} }),
       } as never,
+      commands: editors.commands as never,
+      EventEmitter: editors.EventEmitter as never,
       ViewColumn: { Active: -1, Beside: -2 },
       Range: class {} as never,
+      TabInputCustom: editors.TabInputCustom as never,
     },
     extensionUri: uri('/extension'),
     engine,
@@ -165,6 +151,7 @@ function toolsWindow(module: Record<string, string> = MODULE) {
     rootState: createRootState(memento()),
     confirm: async () => false,
     pageFocus: () => {},
+    claimSaving: () => () => {},
     offers: {} as never,
     validate: async () => {},
     importResources: async () => {},
@@ -238,7 +225,14 @@ function toolsWindow(module: Record<string, string> = MODULE) {
     engine,
     rootSessions,
     panels,
-    opened,
+    editors,
+    // The canvases opened, each with the title the panel took.
+    get opened() {
+      return editors.panels.map((made, at) => ({
+        title: made.panel.title,
+        preserveFocus: shows[at],
+      }));
+    },
     invoked: lace.invoked,
     reports,
     registered,
@@ -270,6 +264,73 @@ const instanceNames = (frame: { bundle: { entry: string; modules: Record<string,
   (frame.bundle.modules[frame.bundle.entry] as { modules: { id: string }[] }).modules
     .map((call) => call.id)
     .sort();
+
+// What a canvas document's Save and Don't Save do to the files, on the real
+// engine: a tool's edit through the root's session makes the document dirty.
+describe('the canvas document on the real engine', () => {
+  const stateOf = (root: string) => join(root, '.lace', '.canvas', 'state.lace');
+
+  test('Save writes the session’s state and leaves the Terraform', async () => {
+    const window = toolsWindow();
+    await window.invoke(CHANGE, { root: ROOT, ...RENAME_NET });
+    const [document] = window.editors.documents;
+    await until('the document to be dirty', () => window.editors.isDirty(document));
+    const state = readFileSync(stateOf(window.root));
+    const terraform = readFileSync(join(window.root, 'main.tf'));
+
+    await window.editors.save(document);
+
+    await until('the saved frame', () => !window.frame().unsaved);
+    expect(readFileSync(stateOf(window.root)).equals(state)).toBe(false);
+    expect(state.toString('utf8')).not.toContain('network');
+    // The saved state holds the edit: the instance `net` is now `network`.
+    expect(readFileSync(stateOf(window.root), 'utf8')).toContain('network');
+    expect(readFileSync(join(window.root, 'main.tf')).equals(terraform)).toBe(true);
+    expect(window.editors.isDirty(document)).toBe(false);
+  });
+
+  test('Don’t Save discards what the page drew and writes neither the state nor the Terraform', async () => {
+    const window = toolsWindow();
+    await window.invoke(CHANGE, { root: ROOT, ...RENAME_NET });
+    const [document] = window.editors.documents;
+    await until('the document to be dirty', () => window.editors.isDirty(document));
+    const state = readFileSync(stateOf(window.root));
+    const terraform = readFileSync(join(window.root, 'main.tf'));
+    // The page reports what it drew.
+    window.editors.panels[0].receive({
+      ch: 'host',
+      frame: { kind: 'notice', notice: { op: 'digest', value: window.frame().workingDigest } },
+    });
+    await macrotask();
+
+    await window.editors.revert(document);
+
+    await until('the discarded frame', () => !window.frame().unsaved);
+    expect(window.frame().workingDigest).toBe(window.frame().savedDigest);
+    expect(JSON.stringify(window.frame().bundle)).not.toContain('network');
+    expect(readFileSync(stateOf(window.root)).equals(state)).toBe(true);
+    expect(readFileSync(join(window.root, 'main.tf')).equals(terraform)).toBe(true);
+    expect(window.editors.isDirty(document)).toBe(false);
+  });
+});
+
+describe('a canvas closed with nothing unsaved', () => {
+  test('writes neither the state nor the Terraform', async () => {
+    const window = toolsWindow();
+    await window.invoke(DESCRIBE, { root: ROOT });
+    await window.panels.ensure({ folder: folder(window.repository), relative: ROOT });
+    const state = readFileSync(join(window.root, '.lace', '.canvas', 'state.lace'));
+    const terraform = readFileSync(join(window.root, 'main.tf'));
+
+    window.editors.panels[0].panel.dispose();
+    await until('the session to end', () => window.rootSessions.held().length === 0);
+
+    expect(readFileSync(join(window.root, '.lace', '.canvas', 'state.lace')).equals(state)).toBe(
+      true,
+    );
+    expect(readFileSync(join(window.root, 'main.tf')).equals(terraform)).toBe(true);
+  });
+});
 
 describe('the chat tools on the real engine', () => {
   test('every tool registerLaceTools registers answers a call naming its root', async () => {

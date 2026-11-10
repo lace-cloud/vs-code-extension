@@ -10,6 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
+import { CANVAS_SCHEME } from '../canvas/canvas-panels';
 import { engineSettings } from '../engine/engine';
 import { FEATURES, type WindowBase, windowHost } from '../features';
 import { run } from '../stacks/__tests__/stack-fixtures';
@@ -30,6 +31,7 @@ function registered() {
   const webviewViews: string[] = [];
   const treeViews: string[] = [];
   const tools: string[] = [];
+  const customEditors: string[] = [];
   const disposable = { dispose: () => {} };
   const base = {
     api: {
@@ -54,6 +56,10 @@ function registered() {
           webviewViews.push(id);
           return disposable;
         },
+        registerCustomEditorProvider: (viewType: string) => {
+          customEditors.push(viewType);
+          return disposable;
+        },
         onDidChangeWindowState: () => disposable,
         onDidEndTerminalShellExecution: () => disposable,
         onDidChangeActiveTextEditor: () => disposable,
@@ -62,6 +68,7 @@ function registered() {
       workspace: {
         registerTextDocumentContentProvider: () => disposable,
         onDidChangeWorkspaceFolders: () => disposable,
+        save: vi.fn(),
       },
       lm: {
         registerTool: (name: string) => {
@@ -86,7 +93,7 @@ function registered() {
       caller: () => Promise.reject(new Error('no engine in this test')),
     },
     rootSessions: { observe: () => ({ of: () => undefined, dispose: () => {} }), held: () => [] },
-    autosave: { pageFocus: vi.fn() },
+    autosave: { pageFocus: vi.fn(), claimSaving: vi.fn() },
     log: { show: vi.fn() },
     report: vi.fn(),
   } as unknown as WindowBase;
@@ -97,6 +104,7 @@ function registered() {
     webviewViews: webviewViews.sort(),
     treeViews: treeViews.sort(),
     tools: tools.sort(),
+    customEditors: customEditors.sort(),
   };
 }
 
@@ -173,6 +181,17 @@ describe('the manifest', () => {
   test('declares exactly the Language Model Tools the features register', () => {
     const declared = contributes.languageModelTools.map((tool: { name: string }) => tool.name);
     expect(registered().tools).toEqual([...declared].sort());
+  });
+
+  test('declares exactly the custom editors the features register, each opened only by choice', () => {
+    const declared = contributes.customEditors.map(
+      (editor: { viewType: string }) => editor.viewType,
+    );
+    expect(registered().customEditors).toEqual([...declared].sort());
+    for (const editor of contributes.customEditors) {
+      expect(editor.priority).toBe('option');
+      expect(editor.selector).toEqual([{ filenamePattern: `${CANVAS_SCHEME}:/**` }]);
+    }
   });
 
   test("names in its menus and welcome links only a contributed command or one of VS Code's own", () => {

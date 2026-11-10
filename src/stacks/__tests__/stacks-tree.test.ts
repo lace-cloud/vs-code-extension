@@ -29,6 +29,7 @@ import { createRunnerHost } from '../../engine/runner-host';
 import { folder, fsPath, uri } from '../../roots/__tests__/fake-uri';
 import type { AuthoringRoot, RootSources } from '../../roots/authoring-roots';
 import { createRootState } from '../../state/root-state';
+import { Emitter } from '../../vscode/__tests__/fake-emitter';
 import { type Button, clicked, titleOf } from '../../vscode/__tests__/fake-messages';
 import { fakeQuickPicks } from '../../vscode/__tests__/fake-quick-pick';
 import { formAnswerer } from '../../vscode/form-answerer';
@@ -124,18 +125,6 @@ const applyResult = (error: string | null = null) => ({
 // A failure document whose message is its reason.
 const refusal = (reason: LaceReason, extra: Partial<CommandFailure> = {}) =>
   refused({ reason, message: reason, ...extra });
-
-class Emitter<T> {
-  listeners = new Set<(value: T) => void>();
-  event = (listener: (value: T) => void) => {
-    this.listeners.add(listener);
-    return { dispose: () => this.listeners.delete(listener) };
-  };
-  fire(value: T) {
-    for (const listener of [...this.listeners]) listener(value);
-  }
-  dispose() {}
-}
 
 type Options = {
   scripts: Parameters<typeof fakeCommands>[0];

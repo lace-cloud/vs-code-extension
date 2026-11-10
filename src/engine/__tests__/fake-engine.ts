@@ -28,6 +28,8 @@ type Session = {
   unsaved: boolean;
   sourceRefused: boolean;
   revision: number;
+  // The edits the session has taken: its working digest.
+  edits: number;
 };
 
 let engines = 0;
@@ -53,6 +55,8 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
   };
   const stateOf = (session: Session) => ({
     unsaved: session.unsaved,
+    working_digest: session.unsaved ? `working-${session.edits}` : 'saved',
+    saved_digest: 'saved',
     source_refused: session.sourceRefused,
     tree_hash: 'tree',
     revision: session.revision,
@@ -94,6 +98,7 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
           unsaved: false,
           sourceRefused: false,
           revision: 0,
+          edits: 0,
         };
         sessions.set(session.id, session);
       }
@@ -106,6 +111,22 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
       return { kind: 'result', id, response: { status: 'ok' } };
     }
     if (method === 'ApplyAction') {
+      const discard = (request.actions as { discard?: { expectedWorkingDigest: string } }[])?.find(
+        (action) => action.discard,
+      )?.discard;
+      const target = sessions.get(request.sessionId as string);
+      if (discard && target) {
+        if (stateOf(target).working_digest !== discard.expectedWorkingDigest) {
+          return {
+            kind: 'error',
+            id,
+            code: 'failed_precondition',
+            message: 'the working state changed since it was shown',
+            reason: 'REASON_STALE_WORKING_STATE',
+          };
+        }
+        moved(target.id, { unsaved: false });
+      }
       const revision = sessions.get(request.sessionId as string)?.revision ?? 0;
       return {
         kind: 'result',
@@ -226,7 +247,11 @@ export function fakeEngine(options: { sameDirectory?: (path: string) => string }
     rejectApply(...messages: string[]): void {
       applyErrors = messages;
     },
-    edit: (sessionId: string) => moved(sessionId, { unsaved: true }),
+    edit: (sessionId: string) => {
+      const session = sessions.get(sessionId);
+      if (session) session.edits += 1;
+      moved(sessionId, { unsaved: true });
+    },
     // The session's tf turns refused: a frame says so, and a save is refused
     // with REASON_SOURCE_REFUSED, as the engine refuses every save under it.
     refuseSource: (sessionId: string) => moved(sessionId, { sourceRefused: true }),

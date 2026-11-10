@@ -69,7 +69,10 @@ vi.mock('../autosave/autosave-policy', () => ({
   },
 }));
 
-vi.mock('../features', () => ({ FEATURES: [], windowHost: () => ({}) }));
+vi.mock('../features', () => ({
+  FEATURES: [],
+  windowHost: () => ({ panels: { drawnDigest: () => undefined } }),
+}));
 
 describe('deactivation', () => {
   test('the Lace channel takes every line its owners log while the window closes, and is disposed once, after the engine stopped', async () => {

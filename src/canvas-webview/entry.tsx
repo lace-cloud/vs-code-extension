@@ -10,7 +10,7 @@ import { pagePort } from '../webview/page-port';
 import { followTheme } from '../webview/theme';
 import { hostContributions } from './contributions';
 import { canvasPage, reportFocus } from './page';
-import { canvasPorts, forwardUnsaved } from './ports';
+import { canvasPorts, forwardWorkingDigest } from './ports';
 import '@lace-cloud/design-tokens/tokens.css';
 import './entry.css';
 
@@ -29,7 +29,7 @@ async function boot(): Promise<void> {
     );
     const booted = await host.call('boot', {});
     const ports = await canvasPorts(bridgeCaller(engine), host, booted);
-    forwardUnsaved(ports, host);
+    forwardWorkingDigest(ports, host);
     page.mount(ports, booted.stack);
     reportFocus(window, () => document.hasFocus(), host);
   } catch (error) {
