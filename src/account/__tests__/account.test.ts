@@ -577,6 +577,15 @@ describe('signing in', () => {
   });
 });
 
+const scriptsWith = (organization: unknown): Scripts => ({
+  whoami: { documents: [signedInAs('usr_1')] },
+  'org list': { documents: [ORGS] },
+  'org current': { documents: [organization] },
+  'org use': { documents: [{ organization: 'acme', team: null }] },
+  'team list': { documents: [teams()] },
+  'team current': { documents: [current(null)] },
+});
+
 describe('the status bar', () => {
   test('names the selection and where it came from', () => {
     expect(
@@ -585,22 +594,17 @@ describe('the status bar', () => {
       text: '$(organization) acme · platform',
       tooltip:
         "Organization: acme (saved by lace org use or lace team use)\nTeam: platform (set by the Lace engine's environment)",
+      selects: 'team',
     });
     expect(selectionStatus({ organization: current(null), team: current(null) })).toEqual({
       text: '$(organization) No Lace organization',
       tooltip: 'No organization selected\nNo team selected',
+      selects: 'organization',
     });
   });
 
   test('reads the selection at start, after a change, and when the account changed outside this window', async () => {
-    const scripts: Record<string, Script> = {
-      whoami: { documents: [signedInAs('usr_1')] },
-      'org list': { documents: [ORGS] },
-      'org current': { documents: [current('acme')] },
-      'org use': { documents: [{ organization: 'globex', team: null }] },
-      'team list': { documents: [teams()] },
-      'team current': { documents: [current(null)] },
-    };
+    const scripts = scriptsWith(current('acme'));
     const { account, commands, outside } = await setup(scripts as never, ['globex']);
     const { status, controls, registered } = statusBarOver(account, commands.commands);
     await settled();
@@ -624,53 +628,6 @@ describe('the status bar', () => {
     ]);
     controls.dispose();
   });
-});
-
-describe('the status bar click', () => {
-  const scriptsWith = (organization: unknown): Scripts => ({
-    whoami: { documents: [signedInAs('usr_1')] },
-    'org list': { documents: [ORGS] },
-    'org current': { documents: [organization] },
-    'org use': { documents: [{ organization: 'acme', team: null }] },
-    'team list': { documents: [teams()] },
-    'team current': { documents: [current(null)] },
-  });
-
-  test('selects the team when an organization is selected', async () => {
-    const { account, commands } = await setup(scriptsWith(current('acme')) as never, ['acme']);
-    const { status, controls } = statusBarOver(account, commands.commands);
-    await settled();
-    expect(status.command).toBe(SELECT_TEAM);
-    controls.dispose();
-  });
-
-  test('selects the organization when none is selected', async () => {
-    const { account, commands } = await setup(scriptsWith(current(null)) as never, ['acme']);
-    const { status, controls } = statusBarOver(account, commands.commands);
-    await settled();
-    expect(status.text).toBe('$(organization) No Lace organization');
-    expect(status.command).toBe(SELECT_ORGANIZATION);
-    controls.dispose();
-  });
-
-  test('follows the selection when an organization is selected after none was', async () => {
-    const scripts = scriptsWith(current(null));
-    const { account, commands, outside } = await setup(scripts as never);
-    const { status, controls } = statusBarOver(account, commands.commands);
-    await settled();
-    expect(status.command).toBe(SELECT_ORGANIZATION);
-
-    scripts['org current'] = { documents: [current('acme')] };
-    outside.focus();
-    await settled();
-    expect(status.command).toBe(SELECT_TEAM);
-
-    scripts['org current'] = { documents: [current(null)] };
-    outside.focus();
-    await settled();
-    expect(status.command).toBe(SELECT_ORGANIZATION);
-    controls.dispose();
-  });
 
   test('hides the item when a read of the selection fails', async () => {
     const scripts = scriptsWith(current('acme'));
@@ -689,6 +646,27 @@ describe('the status bar click', () => {
     expect(hide).toHaveBeenCalledTimes(1);
     expect(show).not.toHaveBeenCalled();
     expect(status.visible).toBe(false);
+    controls.dispose();
+  });
+});
+
+describe('the status bar click', () => {
+  test('follows the selection when an organization is selected after none was', async () => {
+    const scripts = scriptsWith(current(null));
+    const { account, commands, outside } = await setup(scripts as never);
+    const { status, controls } = statusBarOver(account, commands.commands);
+    await settled();
+    expect(status.command).toBe(SELECT_ORGANIZATION);
+
+    scripts['org current'] = { documents: [current('acme')] };
+    outside.focus();
+    await settled();
+    expect(status.command).toBe(SELECT_TEAM);
+
+    scripts['org current'] = { documents: [current(null)] };
+    outside.focus();
+    await settled();
+    expect(status.command).toBe(SELECT_ORGANIZATION);
     controls.dispose();
   });
 });

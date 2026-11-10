@@ -173,10 +173,10 @@ export function accountControls(
   const refresh = async () => {
     try {
       const selection = await currentSelection(await commands.anywhere());
-      const { text, tooltip } = selectionStatus(selection);
+      const { text, tooltip, selects } = selectionStatus(selection);
       status.text = text;
       status.tooltip = tooltip;
-      status.command = selection.organization.slug === null ? SELECT_ORGANIZATION : SELECT_TEAM;
+      status.command = selects === 'organization' ? SELECT_ORGANIZATION : SELECT_TEAM;
       status.show();
     } catch (error) {
       status.hide();

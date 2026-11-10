@@ -145,16 +145,26 @@ const SOURCES: Readonly<Record<NonNullable<Current['source']>, string>> = {
   flag: 'set by a flag',
 };
 
-// The status bar's text and tooltip for a selection.
-export function selectionStatus(selection: Selection): { text: string; tooltip: string } {
+// The status bar's text and tooltip for a selection, and what a click on it selects: the organization
+// while none is, else the team.
+export function selectionStatus(selection: Selection): {
+  text: string;
+  tooltip: string;
+  selects: Noun;
+} {
   const { organization, team } = selection;
   const line = (noun: string, current: Current) =>
     current.slug === null
       ? `No ${noun} selected`
       : `${noun[0].toUpperCase()}${noun.slice(1)}: ${current.slug} (${SOURCES[current.source]})`;
+  const selects: Noun = organization.slug === null ? 'organization' : 'team';
   const text =
-    organization.slug === null
+    selects === 'organization'
       ? '$(organization) No Lace organization'
       : `$(organization) ${organization.slug}${team.slug === null ? '' : ` · ${team.slug}`}`;
-  return { text, tooltip: [line('organization', organization), line('team', team)].join('\n') };
+  return {
+    text,
+    tooltip: [line('organization', organization), line('team', team)].join('\n'),
+    selects,
+  };
 }
