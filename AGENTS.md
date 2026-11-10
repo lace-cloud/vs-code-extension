@@ -255,16 +255,17 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   versions, in module detail's header, Details (`Latest Version`: the page's own `registry get`'s `latest` once it has
   loaded, else a dash) and Versions; a row's label shortens with an ellipsis and never the version beside it. Where a
   name is read or picked, `versionTitle` says `v0.4.0 (Deprecated)`: the "+" titles, the Add Module to Canvas pick,
-  the usage example, the placement's progress and status-bar message. A deprecated version places as any other: the
-  host takes its status with `statusOf`, in the one `placement` read of the row (the row's, else the one of the
-  versions its sidebar read or its detail's `registry get` lists) and hands `place` that status, which names the
-  version with `versionTitle`, while the engine is sent the module and its version alone. After a deprecated
-  placement, once the module is added and the root's session released, the status-bar message adds the newest
-  published version (`newestPublishedNote`: the `latest` of the sidebar's versions read or module detail's own
-  `registry get`, else one `registry get` read by the placement; a failed read is logged once and the message says the
-  newest published version could not be read, pointing at the Lace Output channel, so it is not taken for no newer
-  version, and the note never replaces a later placement's message). Module detail shows the `.error-banner` "This
-  version is deprecated." above its tabs, with the same note.
+  the usage example, the placement's progress notification, status-bar message and warning. A deprecated version places
+  as any other: the host takes its status with `statusOf`, in the one `placement` read of the row (the row's, else the
+  one of the versions its sidebar read or its detail's `registry get` lists) and hands `place` that status, which names
+  the version with `versionTitle`, while the engine is sent the module and its version alone. After a deprecated
+  placement, once the module is added and the root's session released, a warning follows the added line (`addedLine`,
+  the status bar's too) with one sentence: `newestPublishedNote` from the `latest` of the sidebar's versions read or
+  module detail's own `registry get`, else one `registry get` read by the placement, then "place that one instead."; "No
+  newer version is published." when there is none; or "Lace could not read the newest published version." when the read
+  failed, which is logged once and offers Show Details on the "Lace" Output channel as a refusal does. The status bar
+  says only that the module was added. Module detail shows the `.error-banner` "This version is deprecated." above its
+  tabs, with the same note.
 - Favourites and recently used (five) are keyed on `author/name`, so a new version keeps its star.
 - Add Module to Canvas (`add-module.ts`) is a pick of the module axis, on screen while `registry list` is read; a list
   that cannot be read closes it and says why with the ways out its reason names (and is written once to the "Lace"
@@ -448,19 +449,19 @@ organization goes on to its team: the team pick opens as the organization is sav
 listed and saved with `--org` naming the organization just picked, so the saved team is that organization's even while
 `LACE_ORGANIZATION` sets another; an organization with no team closes the pick and says teams are created in the portal,
 with Open Portal on the page `team list` names (`createUrl`). A team pick dismissed while the organization is saved
-still announces the saved organization. The status bar item shows the selection and runs Select Organization. The
-account's one change event (`onDidChange`) fires after each sign-in, sign-out or saved selection this window makes, and
-when a read of the account differs from the last one, the first read after a failed one included. A read is who is
-signed in (`whoami`'s user, or the reason its failure gives) and the selection (`org current`, `team current`); `lace
-logout` clears only the credentials, so the selection alone cannot see it. The account is read when the window starts,
-after each change made here, when the window regains focus (a terminal or another window outside it), when a command
-line running `lace` ends in an integrated terminal with shell integration (`window.onDidEndTerminalShellExecution`,
-read by `vscode/lace-command-lines.ts`), which changes no focus, and when a view's refresh asks: `refreshWith(refresh)`
-reads the account and, when the read found a change, announces it and leaves the redraw to the listeners, else runs
-`refresh` (the Registry's first showing, showing again, Refresh and Retry; the Stacks view's showing again and Refresh
-Stacks). The status bar, the registry view and the Stacks tree read again on the event, each by its plain refresh,
-never by `refreshWith`. Nothing is cached but the last read. A failed account command offers the way out its reason
-names (`vscode/offers.ts`).
+still announces the saved organization. The status bar item shows the selection and runs Select Team, or Select
+Organization while no organization is selected. The account's one change event (`onDidChange`) fires after each sign-in,
+sign-out or saved selection this window makes, and when a read of the account differs from the last one, the first read
+after a failed one included. A read is who is signed in (`whoami`'s user, or the reason its failure gives) and the
+selection (`org current`, `team current`); `lace logout` clears only the credentials, so the selection alone cannot see
+it. The account is read when the window starts, after each change made here, when the window regains focus (a terminal
+or another window outside it), when a command line running `lace` ends in an integrated terminal with shell integration
+(`window.onDidEndTerminalShellExecution`, read by `vscode/lace-command-lines.ts`), which changes no focus, and when a
+view's refresh asks: `refreshWith(refresh)` reads the account and, when the read found a change, announces it and leaves
+the redraw to the listeners, else runs `refresh` (the Registry's first showing, showing again, Refresh and Retry; the
+Stacks view's showing again and Refresh Stacks). The status bar, the registry view and the Stacks tree read again on the
+event, each by its plain refresh, never by `refreshWith`. Nothing is cached but the last read. A failed account command
+offers the way out its reason names (`vscode/offers.ts`).
 
 ## The chat tools
 
