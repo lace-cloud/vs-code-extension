@@ -67,7 +67,7 @@ function setup(
     window: {
       showInformationMessage: vi.fn(async () => undefined),
       showErrorMessage: vi.fn(async () => options.answer),
-      showWarningMessage: vi.fn(async (_text: string): Promise<undefined> => undefined),
+      showWarningMessage: vi.fn(async (_text: string, ..._buttons: string[]) => options.answer),
       withProgress: vi.fn((_o: unknown, task: () => Promise<unknown>) => task()),
       setStatusBarMessage: vi.fn(),
     },
@@ -171,11 +171,12 @@ describe('placing a registry module', () => {
     test.each([
       ['nothing is published', 'v2.0.0', 'deprecated'],
       ['the newest published is the version placed', 'v1.0.0', 'published'],
-    ])('suggests nothing when %s', async (_case, version, status) => {
+    ])('says no newer version is published when %s', async (_case, version, status) => {
       const { place, api } = setup({ get: latest(version, status) });
       await place(OLD, 'deprecated');
       expect(bar(api)).toBe(ADDED);
-      expect(warned(api)).toEqual([]);
+      expect(warned(api)).toEqual([`${ADDED}. No newer version is published.`]);
+      expect(api.window.showWarningMessage.mock.calls[0]).toHaveLength(1);
     });
 
     test('uses the latest the caller already read, and reads nothing', async () => {
@@ -187,7 +188,7 @@ describe('placing a registry module', () => {
       expect(reads()).toEqual([]);
     });
 
-    const UNREAD = `${ADDED}, but Lace could not read the newest published version; see the Lace Output channel.`;
+    const UNREAD = `${ADDED}. Lace could not read the newest published version.`;
 
     test('is placed and says the newest published version could not be read when the read fails, and the failure is logged', async () => {
       const { place, api, placed, log, sent } = setup({
@@ -195,6 +196,7 @@ describe('placing a registry module', () => {
       });
       await place(OLD, 'deprecated');
       expect(warned(api)).toEqual([UNREAD]);
+      expect(api.window.showWarningMessage.mock.calls).toEqual([[UNREAD, 'Show Details']]);
       expect(api.window.setStatusBarMessage.mock.calls).toEqual([[ADDED, 5000]]);
       expect(sent('ApplyAction')).toHaveLength(1);
       expect(placed).toHaveBeenCalledWith(OLD);
@@ -212,6 +214,19 @@ describe('placing a registry module', () => {
       expect(placed).toHaveBeenCalledWith(OLD);
       expect(log.appendLine).toHaveBeenCalledWith(expect.stringContaining('the engine stopped'));
       expect(log.appendLine).toHaveBeenCalledTimes(1);
+    });
+
+    test('Show Details on the unread-newest warning shows the Output channel, and dismissing it does not', async () => {
+      const get = refused({ reason: 'unauthenticated', message: 'offline' });
+      const shown = setup({ get, answer: 'Show Details' });
+      await shown.place(OLD, 'deprecated');
+      await settled();
+      expect(shown.log.show).toHaveBeenCalledWith(true);
+
+      const dismissed = setup({ get });
+      await dismissed.place(OLD, 'deprecated');
+      await settled();
+      expect(dismissed.log.show).not.toHaveBeenCalled();
     });
 
     test.each([
@@ -259,7 +274,7 @@ describe('placing a registry module', () => {
       expect(reads()).toEqual([]);
     });
 
-    test('sets one status message when there is nothing to suggest', async () => {
+    test('sets one status message when there is no newer version', async () => {
       const { place, api } = setup({ get: latest('v2.0.0', 'deprecated') });
       await place(OLD, 'deprecated');
       expect(api.window.setStatusBarMessage.mock.calls).toEqual([

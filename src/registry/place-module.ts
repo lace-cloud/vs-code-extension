@@ -75,7 +75,11 @@ export const PLACEMENT_API_REFUSALS: Readonly<Record<string, string>> = {
 
 const SHOW_DETAILS = 'Show Details';
 const SIGN_IN_ACTION = 'Sign In';
-const UNREAD_NEWEST = 'Lace could not read the newest published version';
+const UNREAD_NEWEST = 'Lace could not read the newest published version.';
+const NO_NEWER = 'No newer version is published.';
+
+// The one wording of "the module was added", for the status bar and the warning.
+const addedLine = (named: string, label: string): string => `Lace: added ${named} to ${label}`;
 
 export function placeModule(options: PlaceOptions): Place {
   const { api, sources, panels, rootSessions, reads, log, placed } = options;
@@ -103,9 +107,12 @@ export function placeModule(options: PlaceOptions): Place {
     log.show(true);
   }
 
-  // The advice a deprecated placement's warning adds after the added line: the newest published version,
-  // from the caller's latest or one `registry get`. A failed read is logged once, and the advice says so.
-  async function suggestion(module: PlacedModule, known: Latest | undefined): Promise<string> {
+  // The sentence a deprecated placement's warning adds after the added line, from the caller's latest or
+  // one `registry get`. A failed read is logged once; `unread` offers the log beside the warning.
+  async function suggestion(
+    module: PlacedModule,
+    known: Latest | undefined,
+  ): Promise<{ advice: string; unread: boolean }> {
     let latest = known;
     if (!latest) {
       const key = moduleKey(module);
@@ -113,11 +120,11 @@ export function placeModule(options: PlaceOptions): Place {
         () => reads.get(key),
         (error) => log.appendLine(`Reading the latest version of ${key}: ${failureText(error)}`),
       );
-      if (read.kind === 'failed') return `, but ${UNREAD_NEWEST}; see the Lace Output channel.`;
+      if (read.kind === 'failed') return { advice: UNREAD_NEWEST, unread: true };
       latest = loaded(read)?.latest;
     }
     const note = newestPublishedNote(latest, module.version);
-    return note ? `. ${note}; place that one instead.` : '';
+    return { advice: note ? `${note}; place that one instead.` : NO_NEWER, unread: false };
   }
 
   // Whether the module was added; the recents mark follows it, and the session is released before
@@ -139,7 +146,7 @@ export function placeModule(options: PlaceOptions): Place {
       );
       return false;
     }
-    api.window.setStatusBarMessage(`Lace: added ${named} to ${label}`, 5000);
+    api.window.setStatusBarMessage(addedLine(named, label), 5000);
     await placed(module);
     return true;
   }
@@ -159,8 +166,15 @@ export function placeModule(options: PlaceOptions): Place {
         await hold.release();
       }
       if (added && isDeprecated(status)) {
-        const advice = await suggestion(module, latest);
-        if (advice) void api.window.showWarningMessage(`Lace: added ${named} to ${label}${advice}`);
+        const { advice, unread } = await suggestion(module, latest);
+        const text = `${addedLine(named, label)}. ${advice}`;
+        if (unread) {
+          void api.window.showWarningMessage(text, SHOW_DETAILS).then((answer) => {
+            if (answer === SHOW_DETAILS) log.show(true);
+          });
+        } else {
+          void api.window.showWarningMessage(text);
+        }
       }
     } catch (error) {
       if (error instanceof ConnectError) return refused(named, label, error);
