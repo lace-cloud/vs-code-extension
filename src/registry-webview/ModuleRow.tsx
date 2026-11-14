@@ -44,7 +44,7 @@ export function ModuleRow({
           aria-describedby={row.categories.length > 0 ? `${id}-categories` : undefined}
           onClick={() => send({ op: 'showDetail', key })}
         >
-          <ModuleIcon vendor={row.vendor} className="module-icon" />
+          <ModuleIcon author={row.authorProfile} className="module-icon" />
           <span className="module-info">
             <span className="module-name" id={`${id}-name`}>
               <span className="module-title">{label}</span>{' '}

@@ -266,77 +266,56 @@ export function outcomeNotice(slug: string, { outcome, run }: SettledRun): Notic
 
 // The provider versions a settled apply's Run ran under an organization's
 // admission, one line each as `lace run get` prints them: the admitter by
-// name, else by id. A Run its result never named ran none.
+// name, else by id, else by kind. A Run its result never named ran none.
 export function admittedLines({ run }: Pick<SettledRun, 'run'>): string[] {
-  return (run?.providers ?? []).flatMap(({ address, version, admission }) =>
-    admission === undefined
-      ? []
-      : [
-          `Admitted:   ${address} ${version} (admitted by ${admission.admittedByName || admission.admittedBy}, ${admission.admittedAt})`,
-        ],
-  );
+  return (run?.providers ?? []).flatMap(({ address, version, admission }) => {
+    if (admission === undefined) return [];
+    const { name, id, kind } = admission.admittedBy;
+    return [
+      `Admitted:   ${address} ${version} (admitted by ${name ?? id ?? kind}, ${admission.admittedAt})`,
+    ];
+  });
 }
 
 type Preview = JsonOf<'stack preview'>;
-type PreviewPolicy = NonNullable<Preview['policy']>;
-type PreviewBinding = PreviewPolicy['bindings'][number];
+type Resolution = NonNullable<Preview['resolution']>;
+type GateBinding = Resolution['bindings'][number];
+type Decider = Resolution['decidedBy'][number];
 type PreviewEntry = Preview['advisories']['queue']['entries'][number];
 
-// What a policy answers that reads what only a run carries.
-const DECIDED_AT_APPLY = 'decided_at_apply';
-
-// The decisions a policy answers that read as words rather than as a
-// resolution kind.
-const DECISION_WORDS: Readonly<Record<string, string>> = {
-  [DECIDED_AT_APPLY]: 'decided at apply',
-  abstain: 'no opinion',
-};
-
-// One policy's own answer: its decision, that an observing policy's block
-// never blocks the Run, and the reason it gives.
-function bindingAnswer(binding: PreviewBinding): string {
-  const reason = binding.reason.trim();
-  const observed =
-    binding.mode === 'observing' && binding.decision === 'policy_blocked'
-      ? ' (observing: an observing policy never blocks the Run)'
-      : '';
-  return `${DECISION_WORDS[binding.decision] ?? binding.decision}${observed}${reason === '' ? '' : ` — ${reason}`}`;
-}
-
-// Why the Run-level verdict is what it is: the rule that decided it and the
+// What decided a resolution for one Binding: the rule that decided and the
 // conditions that fired, or that no rule decided.
-function decidedBy({ ruleId, rulesFired }: PreviewPolicy): string {
+function decisionWhy({ ruleId, rulesFired }: Decider): string {
   const why = [
-    ...(ruleId === '' ? [] : [`rule ${ruleId} decided`]),
-    ...(rulesFired.length === 0
-      ? []
-      : [`${rulesFired.length === 1 ? 'condition' : 'conditions'} ${rulesFired.join(', ')} fired`]),
+    ...(ruleId ? [`rule ${ruleId} decided`] : []),
+    ...(rulesFired.length === 0 ? [] : [`condition(s) ${rulesFired.join(', ')} fired`]),
   ];
   return why.length === 0 ? 'no rule decided' : why.join(', ');
 }
 
-// The Run-level verdict: decided at apply, with why and the policy that
-// decides it; else its mode, the rule that decided it and the conditions
-// that fired, the deciding policy when the result names one, and a block's
-// reason.
-function verdictText(policy: PreviewPolicy): string {
-  const reason = policy.reason.trim();
-  if (policy.mode === DECIDED_AT_APPLY)
-    return `${DECISION_WORDS[DECIDED_AT_APPLY]} — ${reason} (policy ${policy.policyId})`;
-  const deciding = policy.policyId === '' ? '' : ` (policy ${policy.policyId})`;
-  const blocked = policy.mode === 'policy_blocked' && reason !== '' ? `: ${reason}` : '';
-  return `${policy.mode} — ${decidedBy(policy)}${deciding}${blocked}`;
+// One Binding's own answer: its decision, that an observing Binding's block
+// never blocks the Run, and the reason it gives.
+function bindingAnswer({ mode, decision, reason }: GateBinding): string {
+  const observed =
+    mode === 'observing' && decision === 'blocked'
+      ? ' (observing: an observing binding never blocks the Run)'
+      : '';
+  return `${decision}${observed}${reason === '' ? '' : ` — ${reason}`}`;
 }
 
-// A preview's policy verdict: the Run-level verdict, then, when several
-// policies answer, one line per policy with its own answer.
-function policyText(policy: PreviewPolicy): string {
+// The gate's resolution as `lace stack preview` states it: its mode, that no
+// Binding decided when none did, the reason of a block or of an answer
+// decided at apply, then one line per Binding that decided it; when several
+// Bindings answer, one line per Binding with its own answer.
+function gateText({ mode, reason, decidedBy, bindings }: Resolution): string {
+  const why = mode === 'blocked' || mode === 'decided_at_apply' ? (reason ?? '') : '';
   return [
-    `Policy: ${verdictText(policy)}`,
-    ...(policy.bindings.length > 1
-      ? policy.bindings.map(
+    `Gate: ${mode}${decidedBy.length === 0 ? ' — no binding decided' : ''}${why === '' ? '' : `: ${why}`}`,
+    ...decidedBy.map((decider) => `      binding ${decider.bindingId} — ${decisionWhy(decider)}`),
+    ...(bindings.length > 1
+      ? bindings.map(
           (binding) =>
-            `  ${binding.policyId}  ${binding.name} (${binding.handler}, ${binding.mode}): ${bindingAnswer(binding)}`,
+            `  ${binding.bindingId}  ${binding.name} (${binding.handler}, ${binding.mode}): ${bindingAnswer(binding)}`,
         )
       : []),
   ].join('\n');
@@ -384,16 +363,16 @@ function advisoriesText({ queue, pending, bound }: Preview['advisories']): strin
 }
 
 // A preview as a read-only document: the plan as terraform shows it, which
-// ends with terraform's own summary of it, the policy verdict and the
+// ends with terraform's own summary of it, the gate's resolution and the
 // Advisories.
 export function previewText(preview: Preview): string {
-  const { policy } = preview;
+  const { resolution } = preview;
   return [
     `Preview of ${preview.stack.slug} (tree ${preview.treeHash})`,
     '',
     preview.plan.human,
     '',
-    policy === null ? 'Policy: none applies' : policyText(policy),
+    resolution === null ? 'Gate: none applies' : gateText(resolution),
     '',
     advisoriesText(preview.advisories),
     '',

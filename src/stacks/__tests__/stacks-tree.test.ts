@@ -94,7 +94,14 @@ const NO_AGENT = {
   pending: 0,
   bound: 0,
 };
-// A preview of prod: one bucket to add, no policy, no Agent bound.
+// A gate no Binding decided, which applies the Run as it is.
+const NO_GATE = {
+  mode: 'auto_apply',
+  decidedBy: [],
+  isAuthoringTimePreview: true,
+  bindings: [],
+};
+// A preview of prod: one bucket to add, an auto-applying gate, no Agent bound.
 const PROD_PREVIEW = {
   stack: { id: 'stk_1', slug: 'prod' },
   treeHash: 'h1',
@@ -102,11 +109,11 @@ const PROD_PREVIEW = {
     summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
     human: '+ aws_s3_bucket.b',
   },
-  policy: null,
+  resolution: NO_GATE,
   advisories: NO_AGENT,
 };
 const PROD_PREVIEW_TEXT =
-  'Preview of prod (tree h1)\n\n+ aws_s3_bucket.b\n\nPolicy: none applies\n\nAdvisories: no Agent is installed and bound at Preview\n';
+  'Preview of prod (tree h1)\n\n+ aws_s3_bucket.b\n\nGate: auto_apply — no binding decided\n\nAdvisories: no Agent is installed and bound at Preview\n';
 const COMPLETED = '2026-09-01T01:00:00Z';
 const applyResult = (error: string | null = null) => ({
   type: 'result',
@@ -1759,8 +1766,7 @@ describe('an apply', () => {
             version: '3.7.1',
             admission: {
               id: 'adm_1',
-              admittedBy: 'usr_1',
-              admittedByName: 'Dev Lead',
+              admittedBy: { kind: 'user', id: 'usr_1', name: 'Dev Lead' },
               admittedAt: '2026-10-16T09:00:00Z',
             },
           },
@@ -1769,8 +1775,7 @@ describe('an apply', () => {
             version: '3.2.4',
             admission: {
               id: 'adm_2',
-              admittedBy: 'usr_2',
-              admittedByName: null,
+              admittedBy: { kind: 'user', id: 'usr_2', name: null },
               admittedAt: '2026-10-17T10:00:00Z',
             },
           },
@@ -1813,7 +1818,7 @@ describe('an apply', () => {
                 summary: { resourceAdd: 0, resourceChange: 0, resourceDestroy: 0 },
                 human: '',
               },
-              policy: null,
+              resolution: NO_GATE,
               advisories: NO_AGENT,
             },
           ],
@@ -1973,7 +1978,7 @@ describe('an apply', () => {
                 summary: { resourceAdd: 0, resourceChange: 0, resourceDestroy: 0 },
                 human: '',
               },
-              policy: null,
+              resolution: NO_GATE,
               advisories: NO_AGENT,
             },
           ],
@@ -2046,7 +2051,7 @@ describe('an apply', () => {
                 records: [
                   {
                     id: 'crec_jsm',
-                    externalSystemId: 'esys_jsm',
+                    changeManagementSystemId: 'cms_jsm',
                     kind: 'jsm',
                     externalRef: 'CHG-42',
                     externalUrl: page,

@@ -4,11 +4,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { coloursOf, rulesOf } from '../../__tests__/css-rules';
 import {
+  authorProfile,
   described,
   LOGO,
   record,
   row,
-  vendor,
   versionEntry,
 } from '../../protocol/__tests__/registry-fixtures';
 import type { DetailState, SidebarState } from '../../protocol/registry-protocol';
@@ -34,7 +34,7 @@ const loaded = (over: Partial<Extract<SidebarState, { kind: 'loaded' }>> = {}): 
 const sidebar = (state: SidebarState) =>
   renderToStaticMarkup(<Sidebar state={state} send={nothing} />);
 
-const VPC = row({ vendor: vendor(LOGO) });
+const VPC = row({ authorProfile: authorProfile(LOGO) });
 const DB = row({ name: 'db', displayName: 'ACME DB', system: 'gcp', categories: ['data'] });
 const PRIVATE = row({ name: 'net', displayName: 'Org Net', visibility: 'org_private' });
 
@@ -87,7 +87,7 @@ describe('the registry sidebar page', () => {
     expect(html).not.toContain('vv2.0.0');
   });
 
-  test("shows the vendor's logo, and the glyph for a vendor with none", () => {
+  test("shows the author's logo, and the glyph for an author with none", () => {
     const html = sidebar(loaded({ rows: [VPC, DB] }));
     expect(html).toContain(`<img src="${LOGO}"`);
     expect(html).toContain(FALLBACK_GLYPH);
