@@ -131,6 +131,8 @@ export function fakeSession(sessionId = 'session-1', commands = fakeCommands({})
     generating: false,
     diagnostics: [],
     treeHash: 'tree-0',
+    workingDigest: 'working-0',
+    savedDigest: 'saved-0',
   };
   const listeners = new Set<(frame: CanvasSource) => void>();
   const publish = (next: CanvasSource): void => {

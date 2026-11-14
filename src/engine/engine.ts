@@ -42,7 +42,8 @@ function startFailure(binaryPath: string, cause: unknown): string {
         return `The Lace CLI at ${binaryPath} (${cause.engineVersion}) serves another engine contract than this extension was built for, though both speak engine protocol ${cause.requiredProtocol}. Install the Lace CLI release that matches this extension, or update the Lace extension.`;
     }
   }
-  const happened = `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${failureText(cause)}.`;
+  const detail = failureText(cause);
+  const happened = `The Lace engine did not start from ${binaryPath} (the setting lace.binaryPath): ${detail}${detail.endsWith('.') ? '' : '.'}`;
   const remedy =
     cause instanceof EngineSpawnError ? spawnRemedy(cause.code, binaryPath) : undefined;
   return remedy === undefined ? happened : `${happened} ${remedy}`;

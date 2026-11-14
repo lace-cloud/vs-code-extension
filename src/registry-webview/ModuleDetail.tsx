@@ -115,7 +115,10 @@ export function ModuleDetail({ state, send }: { state: DetailState; send: SendDe
   return (
     <>
       <div className="header">
-        <ModuleIcon vendor={record?.latest.vendor ?? row.vendor} className="header-icon" />
+        <ModuleIcon
+          author={record?.latest.authorProfile ?? row.authorProfile}
+          className="header-icon"
+        />
         <div className="header-main">
           <div className="header-info">
             <h1>{moduleLabel(row)}</h1>
@@ -222,7 +225,7 @@ function Details({
     ['System', row.system.toUpperCase()],
     ['Kind', KIND],
     ['Latest Version', latestLabel],
-    ['Author', latest?.vendor?.displayName ?? row.author],
+    ['Author', latest?.authorProfile?.displayName ?? row.author],
     ['Source', row.sourceAddress || '—'],
     ['Inputs', counted(described?.interface.inputs.length)],
     ['Outputs', counted(described?.interface.outputs.length)],

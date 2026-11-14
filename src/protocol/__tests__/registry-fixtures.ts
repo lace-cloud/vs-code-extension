@@ -14,7 +14,7 @@ export function row(over: Partial<RegistryRow> = {}): RegistryRow {
     visibility: 'public',
     description: 'A VPC module',
     categories: ['networking'],
-    vendor: null,
+    authorProfile: null,
     system: 'aws',
     sourceAddress: 'lace.cloud/acme/vpc/aws',
     publisherVerdict: 'lace',
@@ -24,7 +24,7 @@ export function row(over: Partial<RegistryRow> = {}): RegistryRow {
 
 export const LOGO = 'https://acme.example/logo.svg';
 
-export const vendor = (logoUrl: string | null): RegistryRow['vendor'] => ({
+export const authorProfile = (logoUrl: string | null): RegistryRow['authorProfile'] => ({
   author: 'acme',
   displayName: 'ACME Corp',
   logoUrl,
@@ -84,7 +84,7 @@ export function record(
       description: latest.description,
       categories: latest.categories,
       readme: over.readme ?? null,
-      vendor: null,
+      authorProfile: null,
       status: latest.status,
       publishedAt: '2026-09-30T10:00:00Z',
       publishedBy: null,

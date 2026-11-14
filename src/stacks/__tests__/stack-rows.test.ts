@@ -1,4 +1,9 @@
-import { type CommandFailure, type LaceReason, parseBound } from '@lace-cloud/canvas/engine';
+import {
+  type CommandFailure,
+  type LaceReason,
+  parseBound,
+  type RunOutcome,
+} from '@lace-cloud/canvas/engine';
 import { describe, expect, test } from 'vitest';
 import {
   outcomeNotice,
@@ -10,14 +15,16 @@ import {
 } from '../stack-rows';
 import { run, stack } from './stack-fixtures';
 
+// One Binding's own answer at the gate, and one Binding that decided it.
 type Binding = {
-  policyId: string;
+  bindingId: string;
   name: string;
   handler: string;
   mode: string;
   decision: string;
   reason: string;
 };
+type Decider = { bindingId: string; ruleId?: string; rulesFired: string[] };
 
 // The Advisories of a preview: none, from one bound Agent that answered.
 const NO_ADVISORIES = {
@@ -40,15 +47,14 @@ const HUMAN = [
   'Plan: 1 to add, 0 to change, 0 to destroy.',
 ].join('\n');
 
-// A preview whose policy verdict gives `reason`.
+// A preview whose gate resolution gives `reason`: awaiting approval, decided
+// by one Binding's rule, unless `more` says otherwise.
 const preview = (
   reason: string,
   more: {
     mode?: string;
-    policyId?: string;
-    ruleId?: string;
-    rulesFired?: string[];
-    approvalMode?: string | null;
+    decidedBy?: Decider[];
+    approvalMode?: string;
     bindings?: Binding[];
   } = {},
   advisories: object = NO_ADVISORIES,
@@ -60,14 +66,11 @@ const preview = (
       summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
       human: HUMAN,
     },
-    policy: {
-      mode: 'require_approval',
-      policyId: 'pol_1',
-      ruleId: 'rule_1',
-      rulesFired: [],
+    resolution: {
+      mode: 'awaiting_approval',
       reason,
-      approvalMode: null,
-      isAuthoringTimePreview: false,
+      decidedBy: [{ bindingId: 'hbnd_prod', ruleId: 'prod-apply', rulesFired: [] }],
+      isAuthoringTimePreview: true,
       ...more,
       bindings: (more.bindings ?? []).map((binding) => ({
         ...binding,
@@ -78,10 +81,6 @@ const preview = (
     advisories,
   });
 
-// The policy line of a preview's document.
-const policyLine = (text: string): string | undefined =>
-  text.split('\n').find((line) => line.startsWith('Policy:'));
-
 // The lines of a preview's document from its first line starting with
 // `heading` to the blank line that ends that part.
 const part = (text: string, heading: string): string[] => {
@@ -91,118 +90,124 @@ const part = (text: string, heading: string): string[] => {
   return lines.slice(from, to);
 };
 
+// The gate's part of a preview's document.
+const gate = (text: string): string[] => part(text, 'Gate:');
+
 describe("a preview's document", () => {
-  test("holds the plan as terraform shows it, whose summary is the document's one Plan line, then the verdict", () => {
+  test("holds the plan as terraform shows it, whose summary is the document's one Plan line, then the gate's resolution", () => {
     const text = previewText(preview(''));
     const lines = text.split('\n');
     expect(lines.filter((line) => line.startsWith('Plan:'))).toEqual([
       'Plan: 1 to add, 0 to change, 0 to destroy.',
     ]);
     expect(lines.slice(0, 11)).toEqual(['Preview of prod (tree h1)', '', ...HUMAN.split('\n'), '']);
-    expect(policyLine(text)).toBe('Policy: require_approval — rule rule_1 decided (policy pol_1)');
+    expect(gate(text)).toEqual([
+      'Gate: awaiting_approval',
+      '      binding hbnd_prod — rule prod-apply decided',
+    ]);
   });
 });
 
-// The verdict states the policy result's mode, the rule that decided it,
-// the conditions that fired, the deciding policy, and a block's reason or
-// why it is decided at apply, then, when several policies answer, one
-// answer per policy.
-describe("a preview's policy verdict", () => {
-  test('names its mode, the rule that decided it and the deciding policy', () => {
-    expect(policyLine(previewText(preview('')))).toBe(
-      'Policy: require_approval — rule rule_1 decided (policy pol_1)',
+// The gate's resolution as `lace stack preview` states it: its mode, the
+// reason of a block or of an answer decided at apply, one line per Binding
+// that decided it, then, when several Bindings answer, one answer per
+// Binding.
+describe("a preview's gate resolution", () => {
+  test('names each Binding that decided it, with the rule that decided and the conditions that fired', () => {
+    const text = previewText(
+      preview('', {
+        decidedBy: [
+          { bindingId: 'hbnd_prod', ruleId: 'prod', rulesFired: ['no-deletes', 'big-change'] },
+          { bindingId: 'hbnd_security', rulesFired: ['changes-iam'] },
+        ],
+      }),
     );
+    expect(gate(text)).toEqual([
+      'Gate: awaiting_approval',
+      '      binding hbnd_prod — rule prod decided, condition(s) no-deletes, big-change fired',
+      '      binding hbnd_security — condition(s) changes-iam fired',
+    ]);
   });
 
-  test('names the conditions that fired beside the rule that decided', () => {
-    expect(policyLine(previewText(preview('', { rulesFired: ['r1', 'r2'] })))).toBe(
-      'Policy: require_approval — rule rule_1 decided, conditions r1, r2 fired (policy pol_1)',
-    );
-    expect(policyLine(previewText(preview('', { rulesFired: ['r1'], policyId: '' })))).toBe(
-      'Policy: require_approval — rule rule_1 decided, condition r1 fired',
-    );
-  });
-
-  test('says when no rule decided, and the conditions that fired when some did', () => {
-    expect(policyLine(previewText(preview('', { ruleId: '' })))).toBe(
-      'Policy: require_approval — no rule decided (policy pol_1)',
-    );
-    expect(policyLine(previewText(preview('', { ruleId: '', rulesFired: ['r1'] })))).toBe(
-      'Policy: require_approval — condition r1 fired (policy pol_1)',
-    );
+  test('says when no Binding decided it, and when a Binding decided it by no rule', () => {
+    expect(gate(previewText(preview('', { mode: 'auto_apply', decidedBy: [] })))).toEqual([
+      'Gate: auto_apply — no binding decided',
+    ]);
+    expect(
+      gate(previewText(preview('', { decidedBy: [{ bindingId: 'hbnd_drift', rulesFired: [] }] }))),
+    ).toEqual(['Gate: awaiting_approval', '      binding hbnd_drift — no rule decided']);
   });
 
   test('gives the reason of a block, with no dangling colon when it gives none', () => {
     const blocked = (reason: string) =>
-      policyLine(
-        previewText(preview(reason, { mode: 'policy_blocked', rulesFired: ['block-adds'] })),
-      );
-    const decided =
-      'Policy: policy_blocked — rule rule_1 decided, condition block-adds fired (policy pol_1)';
-    expect(blocked('Freeze: adds are blocked')).toBe(`${decided}: Freeze: adds are blocked`);
-    expect(blocked('')).toBe(decided);
-    expect(blocked('  ')).toBe(decided);
+      gate(
+        previewText(
+          preview(reason, {
+            mode: 'blocked',
+            decidedBy: [
+              { bindingId: 'hbnd_freeze', ruleId: 'r_freeze', rulesFired: ['block-adds'] },
+            ],
+          }),
+        ),
+      )[0];
+    expect(blocked('Freeze: adds are blocked')).toBe('Gate: blocked: Freeze: adds are blocked');
+    expect(blocked('')).toBe('Gate: blocked');
   });
 
-  test('gives no reason for an answer that is not a block', () => {
-    expect(policyLine(previewText(preview('a change to prod needs approval')))).toBe(
-      'Policy: require_approval — rule rule_1 decided (policy pol_1)',
-    );
-  });
-
-  test('decided at apply, says why and names the policy that decides it', () => {
+  test('says why an answer is decided at apply', () => {
     expect(
-      policyLine(
+      gate(
         previewText(
           preview('it reads the stack’s drift when the run reaches the gate', {
             mode: 'decided_at_apply',
           }),
         ),
+      )[0],
+    ).toBe('Gate: decided_at_apply: it reads the stack’s drift when the run reaches the gate');
+  });
+
+  test('gives no reason for an answer that is neither a block nor decided at apply, whatever approval it asks for', () => {
+    expect(
+      gate(
+        previewText(
+          preview('a change to prod needs approval', { approvalMode: 'single_approver' }),
+        ),
       ),
-    ).toBe(
-      'Policy: decided at apply — it reads the stack’s drift when the run reaches the gate (policy pol_1)',
-    );
+    ).toEqual(['Gate: awaiting_approval', '      binding hbnd_prod — rule prod-apply decided']);
   });
 
-  test('is one line, whatever conditions fired and whatever approval it asks for', () => {
-    const text = previewText(preview('', { rulesFired: ['r1', 'r2'], approvalMode: 'any_one' }));
-    expect(part(text, 'Policy:')).toEqual([
-      'Policy: require_approval — rule rule_1 decided, conditions r1, r2 fired (policy pol_1)',
-    ]);
-  });
-
-  test('when several policies answer, is followed by one line per policy with its own answer', () => {
+  test('when several Bindings answer, is followed by one line per Binding with its own answer', () => {
     const text = previewText(
       preview('', {
         bindings: [
           {
-            policyId: 'pol_1',
+            bindingId: 'hbnd_prod',
             name: 'prod-gate',
-            handler: 'opa',
+            handler: 'lace/approval-policy',
             mode: 'gating',
-            decision: 'require_approval',
+            decision: 'awaiting_approval',
             reason: 'a change to prod needs approval',
           },
           {
-            policyId: 'pol_2',
+            bindingId: 'hbnd_cost',
             name: 'cost',
-            handler: 'builtin',
+            handler: 'acme/cost',
             mode: 'observing',
-            decision: 'policy_blocked',
+            decision: 'blocked',
             reason: 'over budget',
           },
           {
-            policyId: 'pol_3',
+            bindingId: 'hbnd_tags',
             name: 'tags',
-            handler: 'builtin',
+            handler: 'acme/tags',
             mode: 'gating',
             decision: 'abstain',
             reason: '',
           },
           {
-            policyId: 'pol_4',
+            bindingId: 'hbnd_actor',
             name: 'actor',
-            handler: 'external',
+            handler: 'acme/actor',
             mode: 'gating',
             decision: 'decided_at_apply',
             reason: 'reads the submitting actor',
@@ -210,32 +215,34 @@ describe("a preview's policy verdict", () => {
         ],
       }),
     );
-    expect(part(text, 'Policy:')).toEqual([
-      'Policy: require_approval — rule rule_1 decided (policy pol_1)',
-      '  pol_1  prod-gate (opa, gating): require_approval — a change to prod needs approval',
-      '  pol_2  cost (builtin, observing): policy_blocked (observing: an observing policy never blocks the Run) — over budget',
-      '  pol_3  tags (builtin, gating): no opinion',
-      '  pol_4  actor (external, gating): decided at apply — reads the submitting actor',
+    expect(gate(text)).toEqual([
+      'Gate: awaiting_approval',
+      '      binding hbnd_prod — rule prod-apply decided',
+      '  hbnd_prod  prod-gate (lace/approval-policy, gating): awaiting_approval — a change to prod needs approval',
+      '  hbnd_cost  cost (acme/cost, observing): blocked (observing: an observing binding never blocks the Run) — over budget',
+      '  hbnd_tags  tags (acme/tags, gating): abstain',
+      '  hbnd_actor  actor (acme/actor, gating): decided_at_apply — reads the submitting actor',
     ]);
   });
 
-  test('when one policy answers, the verdict is its answer and it is not listed again', () => {
+  test('when one Binding answers, the resolution is its answer and it is not listed again', () => {
     const text = previewText(
       preview('', {
         bindings: [
           {
-            policyId: 'pol_1',
+            bindingId: 'hbnd_prod',
             name: 'prod-gate',
-            handler: 'opa',
+            handler: 'lace/approval-policy',
             mode: 'gating',
-            decision: 'require_approval',
+            decision: 'awaiting_approval',
             reason: '',
           },
         ],
       }),
     );
-    expect(part(text, 'Policy:')).toEqual([
-      'Policy: require_approval — rule rule_1 decided (policy pol_1)',
+    expect(gate(text)).toEqual([
+      'Gate: awaiting_approval',
+      '      binding hbnd_prod — rule prod-apply decided',
     ]);
   });
 });
@@ -243,6 +250,22 @@ describe("a preview's policy verdict", () => {
 // An Advisory of `agent` at `confidence` whose output is `output`.
 const advisory = (agent: string, confidence: number, output: unknown = {}) => ({
   id: `adv_${agent}`,
+  orgId: 'org_test',
+  contextRunId: null,
+  contextInstallId: null,
+  contextStackId: 'stack-a',
+  contextTreeHash: 'th1',
+  contextIncidentId: null,
+  contextFormOpeningId: null,
+  consumerActorKind: null,
+  consumerActorId: null,
+  actedOn: null,
+  actedAt: null,
+  actedBy: null,
+  feedbackThumbs: null,
+  feedbackText: null,
+  emitterKind: 'external',
+  emitterHeededRate: 1,
   manifestation: 'preview',
   emittedByInstallId: `inst_${agent}`,
   emittedByDisplayName: agent,
@@ -323,7 +346,7 @@ describe("a preview's Advisories", () => {
     ]);
   });
 
-  test('end the document, after the policy verdict', () => {
+  test("end the document, after the gate's resolution", () => {
     expect(previewText(preview('')).endsWith('\n\nAdvisories: none\n')).toBe(true);
   });
 });
@@ -434,21 +457,9 @@ describe('what a settled apply says', () => {
 });
 
 describe('what an apply held for approval says', () => {
-  type Requirement = {
-    id: string;
-    state: string;
-    decidedBy: 'lace' | 'ecm';
-    recordId: string | null;
-  };
-  type Record = {
-    id: string;
-    externalSystemId: string;
-    kind: string;
-    externalRef: string | null;
-    externalUrl: string | null;
-    state: string | null;
-    decision: 'approved' | 'rejected' | null;
-  };
+  type ChangeRequest = Extract<RunOutcome, { kind: 'awaiting-approval' }>['changeRequest'];
+  type Requirement = ChangeRequest['requirements'][number];
+  type Record = ChangeRequest['records'][number];
   const awaiting = (requirements: Requirement[], records: Record[], url?: string) =>
     outcomeNotice('prod', {
       outcome: {
@@ -459,7 +470,7 @@ describe('what an apply held for approval says', () => {
     });
   const jsm = (fields: Partial<Record>): Record => ({
     id: 'crec_jsm',
-    externalSystemId: 'esys_jsm',
+    changeManagementSystemId: 'cms_jsm',
     kind: 'jsm',
     externalRef: 'CHG-42',
     externalUrl: 'https://acme.atlassian.net/browse/CHG-42',

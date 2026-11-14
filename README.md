@@ -19,7 +19,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.60.0. It speaks engine protocol 10, which Lace CLI v2.60.0 speaks, and reads the engine
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.61.0. It speaks engine protocol 12, which Lace CLI v2.61.0 speaks, and reads the engine
   contract that release serves; a CLI of another protocol or another contract is refused when the engine starts, and the
   extension says what to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
@@ -137,12 +137,13 @@ it runs **Lace: Select Organization** to switch it.
   file you are editing, or comes forward, without taking focus, so you see the edit land.
 - A version the registry has deprecated is marked **Deprecated**, in your theme's warning colour, wherever it is
   listed: on its row, among a row's versions, and in module detail's header, **Details** and **Versions**; a tooltip,
-  the Add Module to Canvas pick, the version line of the **Examples** tab, and the progress notification and the
-  message of a placement say `(Deprecated)` after it. **+** and **Add to Canvas** still place it, and the message that
-  follows names the newest published version to use instead, when there is another; when Lace could not read it, the
-  message says "could not read the newest published version; see the Lace Output channel", where the read's failure is
-  logged. Module detail shows "This version is deprecated." above its tabs with that version, and its **Latest
-  Version** is the one the registry names.
+  the Add Module to Canvas pick, the version line of the **Examples** tab, the progress notification
+  ("Lace: adding … to …") and the status-bar message ("Lace: added … to …") of a placement say `(Deprecated)` after
+  it. **+** and **Add to Canvas** still place it, and a warning notification repeats the added line, then says
+  "<version> is the newest published version; place that one instead." when there is a newer one, "No newer version
+  is published." when there is none, or "Lace could not read the newest published version." with a **Show Details**
+  button that opens the Output channel, where the read's failure is logged. Module detail shows "This version is
+  deprecated." above its tabs with that version, and its **Latest Version** is the one the registry names.
 - Clicking a row opens **module detail**: **Details** renders the module's README above a Quick Reference table of
   System, Kind, Latest Version, Author, Source, Inputs, Outputs and, when the registry has a date, Published;
   **Interface** lists its inputs and outputs as Lace certified them (describing a version downloads and certifies
@@ -169,7 +170,7 @@ its ten most recent runs. The view's description names the module; it follows th
   version its run ran under your organization's admission is written there too, as `lace run get` prints it. An apply held for approval
   names the change request the run waits on: each requirement with its state and whether Lace or a change-management
   system decides it, and each record that system keeps, with its state and **Open** on the record's page.
-- **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
+- **Preview** opens the plan, the gate's resolution and the Advisories of the Agents bound at Preview as a read-only
   Lace Plan document, whose lines wrap.
 - A stack command refused because the module has no current certification offers **Validate**, which validates that
   module. One refused because the module keeps no `.terraform.lock.hcl` offers **Lock providers**, which runs
@@ -212,9 +213,9 @@ extension keeps no credentials; the CLI reads them for every command.
 The organization and team every scoped command runs in are the CLI's own selection, saved by `lace org use` and
 `lace team use`, so a terminal and VS Code always agree. **Lace: Select Organization** picks an organization and goes on
 to its team; **Lace: Select Team** picks a team of the current organization, and for an organization with no team
-offers **Open Portal** on the page that makes one. The status bar shows the selection, and clicking it selects an
-organization. When `LACE_ORGANIZATION` or `LACE_TEAM` is set in the engine's environment, that variable decides, and the
-pick says so.
+offers **Open Portal** on the page that makes one. The status bar shows the selection, and clicking it selects a team,
+or an organization while none is selected. When `LACE_ORGANIZATION` or `LACE_TEAM` is set in the engine's environment,
+that variable decides, and the pick says so.
 
 A `lace login`, `lace logout`, `lace org use` or `lace team use` run in VS Code's integrated terminal reaches the status
 bar, the Registry view and the Stacks view when the command ends (the terminal's shell integration, on by default,
