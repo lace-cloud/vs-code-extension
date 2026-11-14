@@ -36,7 +36,7 @@ const team = (slug: string) => ({
   name: slug[0].toUpperCase() + slug.slice(1),
   slug,
   description: '',
-  createdBy: 'usr_1',
+  createdBy: { kind: 'user' as const, id: 'usr_1', name: null },
   createdAt: '2026-09-01T00:00:00Z',
   updatedAt: '2026-09-01T00:00:00Z',
   role: 'member',

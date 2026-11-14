@@ -19,7 +19,7 @@ diagnostics in the Problems panel, and adds palette commands for everything that
   the executable whose full path the setting `lace.binaryPath` names. On Windows that executable is `lace.exe`, and
   `where.exe lace` prints its path; the extension runs no `.cmd` or `.bat` shim, so name the `.exe`. In a remote window
   (Remote - SSH, WSL, a dev container, Codespaces) or `code serve-web`, the setting is the machine's: set it under the
-  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.60.1. It speaks engine protocol 11, which Lace CLI v2.60.1 speaks, and reads the engine
+  **Remote** tab of Settings, to the CLI's path on that machine. The extension runs Lace CLI v2.61.0. It speaks engine protocol 12, which Lace CLI v2.61.0 speaks, and reads the engine
   contract that release serves; a CLI of another protocol or another contract is refused when the engine starts, and the
   extension says what to update.
 - The module's directory inside a git repository: Generate writes Terraform only there, and git is how you review what it
@@ -170,7 +170,7 @@ its ten most recent runs. The view's description names the module; it follows th
   version its run ran under your organization's admission is written there too, as `lace run get` prints it. An apply held for approval
   names the change request the run waits on: each requirement with its state and whether Lace or a change-management
   system decides it, and each record that system keeps, with its state and **Open** on the record's page.
-- **Preview** opens the plan, the policy verdict and the Advisories of the Agents bound at Preview as a read-only
+- **Preview** opens the plan, the gate's resolution and the Advisories of the Agents bound at Preview as a read-only
   Lace Plan document, whose lines wrap.
 - A stack command refused because the module has no current certification offers **Validate**, which validates that
   module. One refused because the module keeps no `.terraform.lock.hcl` offers **Lock providers**, which runs

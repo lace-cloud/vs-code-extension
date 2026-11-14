@@ -88,7 +88,7 @@ demand by the first caller. The binary is the `lace` on `PATH`, where the CLI's 
 `lace.exe` (Node runs no `.cmd` or `.bat` without a shell). VS Code answers an unset setting with the manifest's
 default, never the code's fallback, so the two are one value (`src/__tests__/manifest.test.ts`). The engine is spawned
 with a stdin pipe the manager holds and exits when it closes, so an extension host that dies takes its engine, sessions
-and locks with it. The extension speaks engine protocol 11 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
+and locks with it. The extension speaks engine protocol 12 (`@lace-cloud/proto`'s `ENGINE_PROTOCOL_VERSION`), the
 protocol of the CLI release `LACE_CLI_VERSION` names, and the handshake's protocol version and engine contract
 (`ENGINE_CONTRACT`) decide compatibility: `@lace-cloud/host` refuses an engine of another protocol or another contract
 with `EngineIdentityMismatchError`, and the message names which side to update, or, for an engine of this protocol built
@@ -333,9 +333,10 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   change-management system keeps, by the system's kind and the record's reference, with the state Lace last read and
   its page, or that it is not opened yet; each record with a page is offered as **Open <kind> <reference>**, which
   opens that page. A preview opens as a read-only `lace-preview:` document once its plan lands: the plan as terraform
-  shows it, ending with terraform's own summary; the policy verdict, which states the result's mode, the rule that
-  decided it, the conditions that fired, the deciding policy, and a block's reason or why it is decided at apply, then
-  one line per policy with its own answer when several answer; and the Advisories. The
+  shows it, ending with terraform's own summary; the gate's resolution as `lace stack preview` states it, its mode
+  and a block's reason or why it is decided at apply, one line per Binding that decided it with the rule that decided
+  and the conditions that fired, then one line per Binding with its own answer when several answer; and the
+  Advisories. The
   document is set to the language `lace-plan` as it opens; the manifest contributes that language with no file of its
   own and with `editor.wordWrap` on, so its lines wrap.
 - When the view names no root, the context key `lace.stacks.state` selects the welcome view by the reason `findRoot`

@@ -9,6 +9,7 @@ import {
   type RunCtx,
 } from '@lace-cloud/canvas/engine';
 import { describe, expect, test, vi } from 'vitest';
+import { run, stack } from '../../stacks/__tests__/stack-fixtures';
 import { createRunnerHost, type FailureAnswer, type Form } from '../runner-host';
 import { fakeCommands, type Invoked, refused, VALID_SOURCE } from './fake-commands';
 
@@ -24,43 +25,7 @@ const STACK = { id: 'stk_1', slug: 'prod' };
 const SCAN_TRIGGERED = { stack: STACK, triggered: true, reason: null, settled: null };
 const RESULT = {
   type: 'result',
-  run: {
-    id: 'run_1',
-    stackId: 'stk_1',
-    orgId: 'org_1',
-    teamId: 'team_1',
-    kind: 'apply',
-    status: 'apply_succeeded',
-    initiatedByUserId: null,
-    initiatedVia: 'cli',
-    runnerIdentity: null,
-    runnerLocation: null,
-    bundleSnapshotId: null,
-    sourceCommitSha: null,
-    sourceRef: null,
-    sourcePrUrl: null,
-    sourceOverride: false,
-    planResourceAdd: 1,
-    planResourceChange: 0,
-    planResourceDestroy: 0,
-    planLocation: null,
-    planHumanLocation: null,
-    applyLogLocation: null,
-    policyResultsLocation: null,
-    policyEvaluatedWithoutBlock: null,
-    policyResolution: null,
-    changeRequestId: null,
-    cancelReason: null,
-    startedAt: null,
-    completedAt: null,
-    errorMessage: null,
-    sourceTreeHash: null,
-    attestationStatus: null,
-    attestedAt: null,
-    attestation: null,
-    createdAt: '2026-09-01T00:00:00Z',
-    updatedAt: '2026-09-01T00:00:00Z',
-  },
+  run: run('run_1', 'apply_succeeded'),
   summary: { resourceAdd: 1, resourceChange: 0, resourceDestroy: 0 },
   error: null,
 };
@@ -291,34 +256,9 @@ describe('the runner host', () => {
 
 // The stack `stack create` renders.
 const CREATED = {
-  id: 'stk_9',
-  orgId: 'org_1',
-  teamId: 'team_1',
-  connectionId: 'conn_1',
-  slug: 'prod',
-  name: 'Prod',
-  description: null,
+  ...stack('stk_9', 'prod'),
   source: { kind: 'git' as const, repoUrl: 'https://github.com/acme/repo', path: 'infra' },
   stateSerial: 0,
-  stateLineage: null,
-  stateVersion: null,
-  stateLastWrittenAt: null,
-  lastAppliedRunId: null,
-  lastDriftScanAt: null,
-  lastDriftStatus: null,
-  lastDriftCount: 0,
-  lastDriftStale: false,
-  lastDriftConfirmedAt: null,
-  lastDriftUndeterminedReason: null,
-  chaosLockedByRunId: null,
-  chaosLockedAt: null,
-  createdBy: 'usr_1',
-  createdAt: '2026-09-01T00:00:00Z',
-  updatedAt: '2026-09-01T00:00:00Z',
-  archivedAt: null,
-  connection: null,
-  createdByName: null,
-  lastApply: null,
 };
 
 // Create Stack's read of the root, and the stack create the form's submit starts.
