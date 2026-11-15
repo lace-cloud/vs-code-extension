@@ -30,6 +30,18 @@
     }
   },
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "lace.canvas",
+        "displayName": "Lace Canvas",
+        "priority": "option",
+        "selector": [
+          {
+            "filenamePattern": "lace-canvas:/**"
+          }
+        ]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {

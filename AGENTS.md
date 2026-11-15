@@ -39,7 +39,7 @@ pick, and Import Existing Resources on a root) and hands the same `Host` to ever
 | stacks | the `laceStacks` tree and its commands, Import Existing Resources; the runner's and the run channels' lifetime |
 | tools | the chat tools, where the Language Model Tools API exists |
 
-`activate` returns `{engine, rootSessions}`. `deactivate` flushes every held session's autosave, then stops the engine,
+`activate` returns `{engine, rootSessions, drawnDigest}`; the last is the window e2e's read of the working digest a canvas page reported drawing. `deactivate` flushes every held session's autosave, then stops the engine,
 which closes every session and frees every lock, and disposes the "Lace" Output channel last, once every owner that logs
 to it has stopped; VS Code disposes the context's subscriptions without waiting for `deactivate`, so the channel is not
 one of them (`src/__tests__/extension.test.ts`). `src/__tests__/manifest.test.ts` holds the manifest and the features to
@@ -62,13 +62,14 @@ each other: every contributed command, view and tool is one a feature registers,
 | What a failed command says: its failure document's message when it wrote one, the CLI's stderr when it wrote none, its exit code when it wrote nothing at all, and for a stream that ended under it, by the command's effect, that a read is to be run again or that a write or a rewrite ran and may have made changes | the package's `failureSays`, which `commandOutcome` reads into its `CommandFailedError`, and sign-in for `lace login`'s own stream; `failureText` says a failure | every notice of a failed command, the Stacks view's message and rows |
 | What is under way | the package's result store, the runner host's `store`, asked through the package's `commandUnderWay` | the Stacks view's progress (`stacks/stacks-tree.ts`) |
 | Which authoring root a surface acts on, or why none (`Named`), and what the developer is told then; what the module commands, the canvas tab, the Stacks view and the tools' results call a root (`rootLabel`; a root whose folder has left the workspace is called by its directory's full path). A tool's `root` input has its own grammar (`rootName`), which keeps `.` for the folder of a workspace of one folder: a tool call's invocation message echoes the `root` the model gave, and the unknown-root error lists its candidates in that grammar, `.` among them, since the model passes them back as `root` | `roots/authoring-roots.ts` (`nameRoot`, `findRoot`, `rootToAct`, `rootLabel`) | every surface that acts on a module |
-| A root's canvas panel, and the long-lived hold | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree |
+| A root's canvas panel, and the long-lived hold; the canvas document's dirty state, its Save and its Revert (the Discard of the digest the page drew), as the custom editor provider | `canvas/canvas-panels.ts` (`ensure`) | Open Canvas, tools, placement, the Stacks tree, VS Code |
 | Save's rule and Generate's rule | `commands/canvas-operations.ts` | the palette, the tools |
 | Whether this window holds a root's session, root compared with root | `commands/canvas-operations.ts` (`held`) | Save, where a module command's report lands |
 | The picked stack and the canvas arrangement per root | `state/root-state.ts` (`workspaceState`) | the Stacks tree, the canvas page |
 | Favourites and recently used modules | `registry/registry-marks.ts` (`globalState`) | the registry sidebar |
 | A version's deprecated mark, and its name where read or picked | `protocol/registry-protocol.ts` (`isDeprecated`, `DEPRECATED`, `versionTitle`, `statusOf`, `newestPublishedNote`), `registry-webview/VersionLabel.tsx` | the sidebar, module detail, Add Module to Canvas, placement |
-| When a canvas saves | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close) |
+| When a canvas saves, the canvas's saving claim (`claimSaving`) and the rule for edits a closed tab declined (by working digest) | `autosave/autosave-policy.ts`, from `files.autoSave` | the root sessions (flush before close), the canvas panels |
+| How an engine refusal and an unsuccessful apply are worded in a notice | `engine/refusal.ts` | save, discard and placement failures |
 | What reaches Problems | the package's report fold, read by `diagnostics/problems.ts` | the Problems panel |
 | Whether the developer is signed in, organization, team | the CLI (`whoami`, `org current`, `team current`) | the account, the views |
 | When the account changed: a change this window makes, or a read that differs from the last one, whoever asked for the read (a focus, an ended `lace` command line, a view's refresh) | `account/account.ts` (`createAccount`, `onDidChange`, `refreshWith`) | the status bar, the registry view, the Stacks tree |
@@ -166,15 +167,33 @@ over a restarted engine tells its ticks the same way. The host runs each binding
 
 ## The canvas tab
 
-- `canvas-panels.ts`: one webview panel per root, created only by `ensure(root, {preserveFocus?})`; two `ensure` calls in
-  flight make one panel. A panel opened without focus (a chat tool, a registry add) is created beside the text
-  editor the active group holds (`window.activeTextEditor`), so the developer's place stays in view, and in the active
-  group when it holds none, where a split would leave an empty group; one opened with focus (**Lace: Open Canvas**) is
-  created in the active group, as any editor opens. A panel already open is revealed in its own column.
-  The title is the root's name (`rootLabel`: its path in the workspace, the folder's name first
-  in a workspace of several folders), with ● while the session is unsaved, and a change of the workspace's folders
-  titles it again; a tab whose folder left the workspace stays open on its session, titled by its directory's full
-  path. `roots` lists every open panel's root, focused or not: each is a candidate when a surface names its root.
+- `canvas-panels.ts`: one custom editor (`lace.canvas`, a `CustomEditorProvider`) per root, on a `lace-canvas:` document
+  named by the root. `ensure(root, {preserveFocus?})` opens it with `vscode.openWith` and resolves once the editor holds
+  the session; VS Code also resolves it on its own (a tab restored on reload, Reopen With), and that panel is taken as
+  any other. Two `ensure` calls in flight make one panel. A panel opened without focus (a chat tool, a registry add) is
+  created beside the text editor the active group holds (`window.activeTextEditor`), so the developer's place stays in
+  view, and in the active group when it holds none, where a split would leave an empty group; one opened with focus
+  (**Lace: Open Canvas**) is created in the active group, as any editor opens. A panel already open is revealed in its
+  own column. The title is the root's name (`rootLabel`: its path in the workspace, the folder's name first in a
+  workspace of several folders), and a change of the workspace's folders titles it again; the tab's unsaved marker is VS
+  Code's own, from the document, which is dirty exactly while the engine's frames say the session is unsaved, and
+  closing a dirty tab asks Save / Don't Save / Cancel. Save is the session's own save (`editor.save`) and returns at
+  once on a saved session; Save As is refused. Don't Save (and Revert File) is the engine's Discard:
+  `editor.apply([{discard: {expected_working_digest}}])`, naming the working digest the page last reported over the host
+  protocol (`digest`), so an edit another holder made since is refused by the engine and never discarded unseen; a
+  Discard writes neither `state.lace` nor the Terraform. A session saved another way (the canvas's Save button, a tool)
+  clears the tab by `workspace.save` of the document, which writes only the edits the saved frame had: a save that finds
+  another working digest writes nothing. VS Code clears a document a macrotask after the save or revert it asked for
+  resolves, so the panel also listens to `tabGroups.onDidChangeTabs` and, when the canvas's tab shows clean while the
+  last frame says unsaved, tells VS Code the document changed again. No clear is asked for while a save or a revert is
+  in flight. A tab closed with unsaved edits ends the autosave claim naming the digest it declined. There is no backup:
+  `backupCustomDocument` rejects, so quitting or reloading the window with a dirty canvas shows VS Code's
+  backup-failed dialog, and going on discards the edits (the engine holds them, not VS Code). A canvas tab open when the
+  window reloads is restored as any editor is, and takes the root's session again; one whose folder left the workspace
+  is closed when VS Code resolves it, with no message. A tab whose folder left the workspace while the window runs stays
+  open on its session, titled by its directory's full path. The document's URI keeps its drive letter lowercase, as
+  VS Code keys a resource, and the panels key a document by the directory it names. `roots` lists every open panel's root,
+  focused or not: each is a candidate when a surface names its root.
 - The page (`canvas-webview/`) shares one postMessage pair between the engine bridge and the host protocol. It boots with
   the host's `boot` call (the root, the kept arrangement, the picked stack), opens the root's session over the bridge,
   and mounts the canvas package's `App` with its ports: `source`, `editor`, `commands`, `context` from the engine
@@ -224,7 +243,8 @@ the other side is untrusted and parsed out of `unknown` before a field is read.
   each protocol a port of its own over the one pair. The engine frames are `@lace-cloud/proto`'s bridge frames.
 - **The host protocol** (`host-protocol.ts`): calls from the page `boot`, `confirm`, `openSource` and
   `importResources`; notices from the page `arrangement`, `notify` (with the failure document of the command it is
-  about, when there is one), `unsaved`, `focus`, `generated` (what the package reads of the tree the canvas's own
+  about, when there is one), `focus`, `digest` (the working digest of the frame the page last drew, which a Discard
+  names), `generated` (what the package reads of the tree the canvas's own
   Generate wrote, `generatedTree`); events from the host `stack` and `tick`.
 - **The registry protocol** (`registry-protocol.ts`): the host sends the page its whole state (`{op: 'state', state}`);
   the page says what the developer did. The registry pages reach no engine.
@@ -434,7 +454,12 @@ Entries clear when the session ends.
 attached once per held session: `off` attaches nothing; `afterDelay` saves `files.autoSaveDelay` after the latest edit;
 `onFocusChange` flushes on the page's blur, the window's blur, and an edit applied while the page has no focus;
 `onWindowChange` flushes on the window's blur. Under every mode but `off`, the last release and `deactivate` flush
-before the session closes. A change to the setting re-arms every attachment. There is no `lace.autoSave` setting.
+before the session closes, with the session's own save. A root with a canvas open (`claimSaving(root, save)`) keeps its
+folder's policy, and its timer and triggers save through `workspace.save` of the canvas's document, so VS Code clears
+the tab and a session saved once is not saved again by VS Code's own `files.autoSave`. A tab closed with unsaved edits
+ends the claim, before it releases its hold, naming the working digest the session holds (the edits the tab declined, and any another holder made since): the keeper attaches no autosave to
+that session until a frame carries another digest, so neither the last release nor, in a session another holder (a chat
+tool) keeps, a timer saves them. A change to the setting re-arms every attachment. There is no `lace.autoSave` setting.
 
 ## Account
 
@@ -561,8 +586,10 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   CLI reads a developer's state from (`DEVELOPER_STATE_ENV`: the home, the Lace config directory, the key, the Lace
   server, the organization and team, the cache directory, and a binary for each tool the CLI pins) but the home's.
 - **The chat tools end to end**: `tools/__tests__/lm-tools.engine.test.ts` invokes every tool `registerLaceTools`
-  registers with a `root`, over the real engine, the window's canvas panels (with a stand-in webview panel) and
-  commands mapping, signed out; a delete makes no request of the extension's own beyond the engine.
+  registers with a `root`, over the real engine, the window's canvas panels (with stand-in custom editors) and
+  commands mapping, signed out; a delete makes no request of the extension's own beyond the engine. The same file
+  holds the canvas document's Save (writes `state.lace`, not the Terraform) and Don't Save (writes neither) on the real
+  engine. The Save / Don't Save / Cancel prompt is VS Code's and no test drives it: it is checked by hand.
 - **The window e2e** (`packages/host-e2e/`, `pnpm --filter @lace-cloud/host-e2e test` after `pnpm build`): Mocha suites,
   bundled by the package's rspack config, that `@vscode/test-cli` runs in a real VS Code against the engine the engine
   tests run (or the binary `LACE_E2E_ENGINE` names, held to the same version). Each run opens two windows, each on a
@@ -570,8 +597,8 @@ It names no tool, so it is true wherever the tools are absent (`src/__tests__/in
   own, so every case is signed out; on macOS, where that home holds no keychain, each window uses Chromium's mock
   keychain. `window/` runs in a repository whose tests make their module directories: activation (every manifest command
   registered, an engine of the extension's protocol), the palette's module commands (Validate, Generate with no tab,
-  Convert in place), the canvas tab over one session per root (another client's edit, a hand edit, the lock,
-  `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that holds no
+  Convert in place), the canvas tab over one session per root (another client's edit, Save by the document's URI, a
+  close that discards, a hand edit, the lock, `files.autoSave`, the engine's restart), and an engine that cannot start. `empty/` runs in one that holds no
   Terraform: Open Canvas from the palette starts the module in the workspace's folder.
 - **CI** (`.github/workflows/ci.yml`, every PR to `develop`) runs lint, typecheck, the `unit` tests, the build, the
   `build` tests and the `engine` tests on Linux and on Windows, and the window e2e on Linux alone, under `xvfb-run`.

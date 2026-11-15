@@ -96,6 +96,7 @@ export function windowHost(base: WindowBase): Host {
     rootState,
     confirm: createConfirm(api.window),
     pageFocus: autosave.pageFocus,
+    claimSaving: autosave.claimSaving,
     offers,
     // The module commands and Import Existing Resources name roots through
     // the panels, so they are built after them; a page's notice or banner

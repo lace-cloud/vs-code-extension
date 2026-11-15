@@ -73,7 +73,7 @@ folders, and the folder's name for a workspace folder itself. The module command
 results, and the canvas tab, the Stacks view's description and the chat tools' results name the module by it;
 **Preview**, **Apply** and **Scan for Drift** name the stack they act on instead.
 
-**One canvas tab per module directory.** Its title is the directory's name, with ● while the canvas holds unsaved edits.
+**One canvas tab per module directory.** Its title is the directory's name. While the canvas holds unsaved edits VS Code marks the tab unsaved, and closing it asks Save / Don't Save / Cancel; Don't Save drops the edits the canvas showed. Quitting or reloading the window with unsaved canvas edits shows VS Code's "could not be saved to the backup location" dialog, because Lace holds those edits in its engine, not in VS Code's backup; going on discards them.
 A tab whose folder you remove from the workspace stays open, titled by the directory's full path; its own toolbar
 still works, and no other surface names it as a module directory.
 
@@ -110,8 +110,9 @@ Lace setting for it.
 | `onFocusChange`    | When the canvas loses focus, when the window does, and as soon as an edit lands while the canvas does not have focus (an edit from a tool or the registry). |
 | `onWindowChange`   | When the window loses focus.                                                                                                                           |
 
-With any mode but `off`, closing the canvas tab or the window saves unsaved edits first. A save cannot run while the
-module's Terraform does not parse, and the save at window close has the few seconds VS Code gives an extension to stop.
+With any mode but `off`, closing the window saves unsaved edits first. Closing the canvas tab saves or drops them as VS
+Code's own handling of an unsaved editor says. A save cannot run while the module's
+Terraform does not parse, and the save at window close has the few seconds VS Code gives an extension to stop.
 
 ## Diagnostics in the Problems panel
 

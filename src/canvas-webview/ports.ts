@@ -48,14 +48,15 @@ async function* announced(
   }
 }
 
-// Tells the host whether the session has unsaved edits, as each frame says.
-export function forwardUnsaved(ports: CanvasPorts, host: HostCaller): () => void {
-  let last: boolean | undefined;
+// Tells the host the working digest of each frame the page draws, which a
+// Discard of what the page shows names.
+export function forwardWorkingDigest(ports: CanvasPorts, host: HostCaller): () => void {
+  let last: string | undefined;
   return ports.source.subscribe(
     (frame) => {
-      if (frame.unsaved === last) return;
-      last = frame.unsaved;
-      host.notify({ op: 'unsaved', value: frame.unsaved });
+      if (frame.workingDigest === last) return;
+      last = frame.workingDigest;
+      host.notify({ op: 'digest', value: frame.workingDigest });
     },
     () => {},
   );

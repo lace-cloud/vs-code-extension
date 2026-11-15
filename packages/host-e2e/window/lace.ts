@@ -113,9 +113,9 @@ export function canvasTabs(module?: Module): vscode.Tab[] {
     .flatMap((group) => group.tabs)
     .filter(
       (tab) =>
-        tab.input instanceof vscode.TabInputWebview &&
-        tab.input.viewType.endsWith('lace.canvas') &&
-        (module === undefined || tab.label.replace(/ ●$/, '') === module.name),
+        tab.input instanceof vscode.TabInputCustom &&
+        tab.input.viewType === 'lace.canvas' &&
+        (module === undefined || tab.label === module.name),
     );
 }
 
