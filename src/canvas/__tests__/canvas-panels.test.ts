@@ -1,4 +1,10 @@
-import { type CanvasSource, ConnectError, Reason, type SourceEnd } from '@lace-cloud/canvas/engine';
+import {
+  ApplyUnobservedError,
+  type CanvasSource,
+  ConnectError,
+  Reason,
+  type SourceEnd,
+} from '@lace-cloud/canvas/engine';
 import type { MessageBridge } from '@lace-cloud/proto';
 import { describe, expect, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
@@ -1394,6 +1400,34 @@ describe('a save that meets new edits', () => {
     await macrotask();
 
     expect(made.save).not.toHaveBeenCalled();
+  });
+
+  test('a Don’t Save whose Discard the tab closing cut off is not a failure: no toast, nothing rejects', async () => {
+    const canvas = setup();
+    await canvas.canvasPanels.ensure(prod);
+    unsaved(canvas, true);
+    draws(canvas, 'working');
+    canvas.holds.get(PROD)?.apply.mockImplementationOnce(async () => {
+      canvas.panels[0].panel.dispose();
+      throw new ApplyUnobservedError({ kind: 'closed' });
+    });
+
+    await canvas.editors.revert(canvas.documents[0]);
+
+    expect(canvas.api.window.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  test('a Discard whose outcome is unknown while the tab is open is still shown', async () => {
+    const canvas = setup();
+    await canvas.canvasPanels.ensure(prod);
+    unsaved(canvas, true);
+    draws(canvas, 'working');
+    canvas.holds
+      .get(PROD)
+      ?.apply.mockRejectedValueOnce(new ApplyUnobservedError({ kind: 'closed' }));
+
+    await expect(canvas.editors.revert(canvas.documents[0])).rejects.toThrow(/not discard/);
+    expect(canvas.api.window.showErrorMessage).toHaveBeenCalledOnce();
   });
 
   test('a Don’t Save whose Discard the engine refuses tells the developer, and declines the digest the session holds', async () => {

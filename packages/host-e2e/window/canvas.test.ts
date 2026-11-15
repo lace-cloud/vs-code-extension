@@ -148,6 +148,7 @@ describe('the canvas tab', () => {
     const module = moduleDirectory(COMPOSED);
     await openCanvas(module);
     await setName(module, 'kept');
+    await until('the tab to be dirty', () => canvasTabs(module)[0]?.isDirty);
     await until('the autosave to clear the tab', () => canvasTabs(module)[0]?.isDirty === false);
     await closeCanvas(module);
     await until('the session to end', async () => (await heldSession(module)) === undefined);

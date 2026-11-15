@@ -64,7 +64,12 @@
 // source-refused banner asks the host to run Import Existing Resources on
 // the panel's root.
 
-import { type CanvasSource, ConnectError, type GeneratedTree } from '@lace-cloud/canvas/engine';
+import {
+  ApplyUnobservedError,
+  type CanvasSource,
+  ConnectError,
+  type GeneratedTree,
+} from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { type AutosaveKeeper, saveFailureText } from '../autosave/autosave-policy';
 import { positionOf } from '../diagnostics/problems';
@@ -476,6 +481,11 @@ export function createCanvasPanels(options: CanvasPanelsOptions): CanvasPanels {
           ]);
           if (!result.success) throw new Error(applyErrorsText(result));
         } catch (error) {
+          // A tab closed by Don't Save ends the session's source under the
+          // Discard: the engine took the request, and the last holder's close
+          // drops what it left, so a Discard whose outcome the close cut off
+          // is not a failure.
+          if (error instanceof ApplyUnobservedError && isClosed()) return;
           // A tab closed by Don't Save only logs a failed revert, so the
           // developer is told here as well.
           const said = discardFailureText(label(), error);
