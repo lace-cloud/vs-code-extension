@@ -35,7 +35,7 @@ src/
   features.ts             the window's shared owners (windowHost) and the list of features activation registers
   engine/                 the engine, the root sessions, the commands mapping, the runner host, a command's outcome
   roots/                  authoring roots: which module directory a surface acts on, and how one is chosen
-  canvas/                 the canvas panels (one webview panel per root) and Lace: Open Canvas
+  canvas/                 the canvas panels (one custom editor per root) and Lace: Open Canvas
   canvas-webview/         the canvas page (browser bundle)
   registry/               the registry sidebar, module detail, placement, Add Module to Canvas (host side)
   registry-webview/       the registry sidebar and module detail pages (browser bundles)

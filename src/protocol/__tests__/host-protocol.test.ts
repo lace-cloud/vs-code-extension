@@ -48,12 +48,12 @@ describe('one pair, two channels', () => {
     panel.host.onMessage(host);
 
     page.engine.post({ kind: 'abort', id: '1' });
-    page.host.post({ kind: 'notice', notice: { op: 'unsaved', value: true } });
+    page.host.post({ kind: 'notice', notice: { op: 'focus', value: true } });
 
     expect(engine).toHaveBeenCalledTimes(1);
     expect(engine).toHaveBeenCalledWith({ kind: 'abort', id: '1' });
     expect(host).toHaveBeenCalledTimes(1);
-    expect(host).toHaveBeenCalledWith({ kind: 'notice', notice: { op: 'unsaved', value: true } });
+    expect(host).toHaveBeenCalledWith({ kind: 'notice', notice: { op: 'focus', value: true } });
   });
 
   test('a message with no envelope, or an unknown channel, reaches neither listener', () => {
@@ -154,14 +154,17 @@ describe('the host protocol', () => {
     serveHost(b, handlers({ notice }));
     const host = hostCaller(a);
 
-    host.notify({ op: 'unsaved', value: true });
+    host.notify({ op: 'focus', value: true });
+    host.notify({ op: 'digest', value: 'working-3' });
     host.notify({ op: 'notify', level: 'warn', text: 'careful' });
-    a.post({ ch: 'host', frame: { kind: 'notice', notice: { op: 'unsaved', value: 'yes' } } });
+    a.post({ ch: 'host', frame: { kind: 'notice', notice: { op: 'focus', value: 'yes' } } });
+    a.post({ ch: 'host', frame: { kind: 'notice', notice: { op: 'digest', value: 3 } } });
     a.post({ ch: 'host', frame: { kind: 'notice', notice: { op: 'open-anything', value: 1 } } });
     a.post({ ch: 'host', frame: { kind: 'call', id: 1, name: 'boot' } });
 
     expect(notice.mock.calls).toEqual([
-      [{ op: 'unsaved', value: true }],
+      [{ op: 'focus', value: true }],
+      [{ op: 'digest', value: 'working-3' }],
       [{ op: 'notify', level: 'warn', text: 'careful' }],
     ]);
   });

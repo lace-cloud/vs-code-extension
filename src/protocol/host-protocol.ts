@@ -74,7 +74,9 @@ export type HostCalls = {
 };
 
 // Webview → host, one way. `focus` is the page's own window gaining or
-// losing focus, which fires wherever focus goes next. `notify` carries the
+// losing focus, which fires wherever focus goes next. `digest` is the
+// working digest of the frame the page last drew, which a Discard of the
+// edits it shows names. `notify` carries the
 // failure document of the command it is about, when that command wrote
 // one, so the host offers the ways out its reason names. `generated` is
 // what the package reads of the tree the canvas's own Generate that
@@ -82,8 +84,8 @@ export type HostCalls = {
 export type HostNotice =
   | { op: 'arrangement'; value: CanvasArrangement }
   | { op: 'notify'; level: 'info' | 'warn' | 'error'; text: string; failure?: CommandFailure }
-  | { op: 'unsaved'; value: boolean }
   | { op: 'focus'; value: boolean }
+  | { op: 'digest'; value: string }
   | { op: 'generated'; tree: GeneratedTree };
 
 // Host → webview, one way: the root's picked stack changed, or a run the
@@ -104,8 +106,8 @@ const CALLS: readonly (keyof HostCalls)[] = ['boot', 'confirm', 'openSource', 'i
 const NOTICES: readonly HostNotice['op'][] = [
   'arrangement',
   'notify',
-  'unsaved',
   'focus',
+  'digest',
   'generated',
 ];
 const LEVELS = ['info', 'warn', 'error'];
@@ -158,8 +160,11 @@ export function noticeOf(value: unknown): HostNotice | null {
   if (!record(value) || typeof value.op !== 'string' || !(NOTICES as string[]).includes(value.op)) {
     return null;
   }
-  if (value.op === 'unsaved' || value.op === 'focus') {
+  if (value.op === 'focus') {
     return typeof value.value === 'boolean' ? { op: value.op, value: value.value } : null;
+  }
+  if (value.op === 'digest') {
+    return typeof value.value === 'string' ? { op: 'digest', value: value.value } : null;
   }
   if (value.op === 'generated') {
     const tree = generatedTreeOf(value.tree);

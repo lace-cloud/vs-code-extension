@@ -113,7 +113,7 @@ export function sameRoot(a: AuthoringRoot, b: AuthoringRoot): boolean {
 
 // VS Code's file URI fsPath folds a drive letter even when its URI path does
 // not. Fold only that letter for comparisons, keeping the folder's URI intact.
-function comparablePath(uri: vscode.Uri): string {
+export function comparablePath(uri: vscode.Uri): string {
   return process.platform === 'win32' && uri.scheme === 'file'
     ? uri.path.replace(/^\/([A-Z]):(?=\/|$)/, (_, drive: string) => `/${drive.toLowerCase()}:`)
     : uri.path;

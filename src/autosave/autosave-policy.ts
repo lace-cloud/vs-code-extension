@@ -12,22 +12,33 @@
 //                   the registry's "+") has already been left
 //   onWindowChange  saved when the window loses focus
 //
-// Under every mode but `off` the last release of a root's session saves
+// A root with a canvas open (`claimSaving`) is saved under the same policy,
+// through the canvas's document (`save`), so VS Code clears the tab and a
+// session saved by the timer is not saved again by VS Code's own autosave:
+// saves of one document go one after another and a save of a saved session
+// does nothing. A tab closed with unsaved edits declines them: the canvas ends
+// its claim, before it releases its hold, with the working digest it
+// declined, and the keeper attaches no autosave to that session until a frame
+// carries another digest (a later edit, a save or a discard), so neither the
+// last release's flush nor, when another holder (a chat tool) keeps the
+// session, a timer saves them; only that holder's own explicit save does.
+//
+// Under every mode but `off`, the last release of a root's session saves
 // before the session is closed (root sessions flush it), and so does the
-// window closing. The keeper observes the root sessions: each session they
-// hold has one autosave, re-armed under the new mode when the setting
-// changes.
+// window closing, with the session's own save even when a canvas is open. The
+// keeper observes the root sessions: each session they hold has one autosave,
+// re-armed under the new mode when the setting changes.
 import {
   ApplyUnobservedError,
   type Autosave,
   type AutosavePolicy,
   autosave,
   ConnectError,
-  reasonWire,
   type SourcePort,
 } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { failureText } from '../engine/command-outcome';
+import { refusedText } from '../engine/refusal';
 import type { RootSession, SessionObserver } from '../engine/root-sessions';
 
 export const AUTOSAVE_MODES = ['off', 'afterDelay', 'onFocusChange', 'onWindowChange'] as const;
@@ -79,7 +90,7 @@ export function saveFailureText(named: string, error: unknown): string {
     return `Lace could not confirm the save of the canvas of ${named}: its session ended before the engine reported the canvas saved.`;
   }
   if (error instanceof ConnectError) {
-    return `The canvas of ${named} was not saved (${error.apiCode ?? reasonWire(error.reason)}): ${error.message}`;
+    return refusedText(`The canvas of ${named} was not saved`, error);
   }
   return `Lace could not save the canvas of ${named}: ${failureText(error)}`;
 }
@@ -100,6 +111,13 @@ export type AutosaveKeeper = {
   attach: SessionObserver;
   // The canvas page open on `sessionId` gained or lost focus.
   pageFocus: (sessionId: string, focused: boolean) => void;
+  // A canvas is open on the session of `root` (as the session spells it): its
+  // autosave saves through `save`, the canvas document's own, until the
+  // returned function is called. Called with `declined`, the working digest of
+  // the edits the canvas closed over, those edits were declined (Don't Save)
+  // and stay unsaved by the keeper, in a session another holder keeps, until a
+  // frame carries another digest.
+  claimSaving: (root: string, save: () => Promise<void>) => (declined?: string) => void;
   dispose: () => void;
 };
 
@@ -108,11 +126,19 @@ type Kept = {
   saver: Autosave | null;
   triggers: readonly FlushTrigger[];
   unwatch: () => void;
+  // The working digest of declined edits: no autosave attached until a frame
+  // carries another.
+  declined: string | null;
 };
 
 export function createAutosaveKeeper(api: PolicyApi, log: (line: string) => void): AutosaveKeeper {
   const kept = new Set<Kept>();
   const focused = new Set<string>();
+  // What saves a root a canvas has open: the canvas document's own save.
+  const claimed = new Map<string, () => Promise<void>>();
+  const withheld = (k: Kept) => k.declined !== null;
+  const saveOf = (k: Kept): Promise<void> =>
+    claimed.get(k.session.root)?.() ?? k.session.ports.editor.save();
 
   function report(session: RootSession, error: unknown): void {
     log(saveFailureText(session.root, error));
@@ -121,8 +147,8 @@ export function createAutosaveKeeper(api: PolicyApi, log: (line: string) => void
     );
   }
 
-  const flush = (k: Kept): Promise<void> =>
-    (k.saver?.flush() ?? Promise.resolve()).catch((error) => report(k.session, error));
+  const flush = (k: Kept, saver: Autosave | null = k.saver): Promise<void> =>
+    (saver?.flush() ?? Promise.resolve()).catch((error) => report(k.session, error));
 
   // A frame that reports unsaved edits while the root's page has no focus.
   // Subscribed after the primitive, so the primitive has the frame first.
@@ -137,16 +163,18 @@ export function createAutosaveKeeper(api: PolicyApi, log: (line: string) => void
   function arm(k: Kept): void {
     k.saver?.dispose();
     k.unwatch();
-    const { source, editor } = k.session.ports;
+    const { source } = k.session.ports;
     const setting = readAutoSave(
       api.workspace.getConfiguration('files', api.Uri.file(k.session.root)),
     );
-    const policy = autosavePolicyOf(setting);
-    k.triggers = FLUSH_TRIGGERS[setting.mode];
+    // Declined edits are saved by no autosave, as under `off`.
+    const effective: AutoSaveSetting = withheld(k) ? { ...setting, mode: 'off' } : setting;
+    const policy = autosavePolicyOf(effective);
+    k.triggers = FLUSH_TRIGGERS[effective.mode];
     k.saver = policy
       ? autosave(
           source,
-          () => editor.save(),
+          () => saveOf(k),
           policy,
           (error) => report(k.session, error),
         )
@@ -174,16 +202,63 @@ export function createAutosaveKeeper(api: PolicyApi, log: (line: string) => void
 
   return {
     attach(session) {
-      const k: Kept = { session, saver: null, triggers: [], unwatch: () => {} };
+      const k: Kept = {
+        session,
+        saver: null,
+        triggers: [],
+        unwatch: () => {},
+        declined: null,
+      };
       arm(k);
       kept.add(k);
+      const unwatchSaved = session.ports.source.subscribe(
+        (frame) => {
+          if (!withheld(k) || frame.workingDigest === k.declined) return;
+          k.declined = null;
+          arm(k);
+        },
+        () => {},
+      );
       return {
-        flush: () => flush(k),
+        // A flush at a close or the window's end saves with the session's own
+        // save: the canvas's document is not there to be saved then. What it
+        // saves is what the armed autosave would: nothing under `off` or for
+        // declined edits.
+        async flush() {
+          if (k.saver === null) return;
+          const once = autosave(
+            session.ports.source,
+            () => session.ports.editor.save(),
+            { kind: 'onFlush' },
+            (error) => report(session, error),
+          );
+          try {
+            await flush(k, once);
+          } finally {
+            once.dispose();
+          }
+        },
         dispose() {
+          unwatchSaved();
           kept.delete(k);
           k.unwatch();
           k.saver?.dispose();
         },
+      };
+    },
+    claimSaving(root, save) {
+      claimed.set(root, save);
+      let released = false;
+      return (declined) => {
+        if (released) return;
+        released = true;
+        if (claimed.get(root) === save) claimed.delete(root);
+        if (declined === undefined) return;
+        for (const k of kept) {
+          if (k.session.root !== root) continue;
+          k.declined = declined;
+          arm(k);
+        }
       };
     },
     pageFocus(sessionId, isFocused) {

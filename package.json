@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.28.0",
+  "version": "0.30.0",
   "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
@@ -30,6 +30,18 @@
     }
   },
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "lace.canvas",
+        "displayName": "Lace Canvas",
+        "priority": "option",
+        "selector": [
+          {
+            "filenamePattern": "lace-canvas:/**"
+          }
+        ]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -663,11 +675,11 @@
     ]
   },
   "dependencies": {
-    "@lace-cloud/canvas": "0.38.0",
-    "@lace-cloud/chat-core": "0.38.0",
-    "@lace-cloud/design-tokens": "0.38.0",
-    "@lace-cloud/host": "0.38.0",
-    "@lace-cloud/proto": "0.38.0",
+    "@lace-cloud/canvas": "0.39.0",
+    "@lace-cloud/chat-core": "0.39.0",
+    "@lace-cloud/design-tokens": "0.39.0",
+    "@lace-cloud/host": "0.39.0",
+    "@lace-cloud/proto": "0.39.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",

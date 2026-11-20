@@ -342,9 +342,10 @@ function entryText(entry: PreviewEntry): string {
 
 // What the preview shows of the Agents bound at Preview: one line per
 // subject of its queue and how many are under the Preview's floor, or that
-// it shows none, then how many bound Agents have not answered. A preview
-// no Agent is bound at says so.
-function advisoriesText({ queue, pending, bound }: Preview['advisories']): string {
+// it shows none, then, where the plan cut how far back its Agents read the
+// stack's runs, the line the API words for it, then how many bound Agents
+// have not answered. A preview no Agent is bound at says so.
+function advisoriesText({ queue, window, pending, bound }: Preview['advisories']): string {
   if (bound === 0) return 'Advisories: no Agent is installed and bound at Preview';
   const listed =
     queue.entries.length > 0
@@ -358,6 +359,7 @@ function advisoriesText({ queue, pending, bound }: Preview['advisories']): strin
         ];
   return [
     ...listed,
+    ...(window === null ? [] : [`  ${window.line}`]),
     ...(pending > 0 ? [`  ${pending} bound Agent(s) have not answered`] : []),
   ].join('\n');
 }

@@ -11,11 +11,12 @@
 // Sign In; any other names the module and the reason, with Show Details on
 // the engine's full message in the Output channel. Every failure is shown
 // where the developer acted; the returned function never rejects.
-import { type Action, ConnectError, type EditorPort, reasonWire } from '@lace-cloud/canvas/engine';
+import { type Action, ConnectError, type EditorPort } from '@lace-cloud/canvas/engine';
 import type * as vscode from 'vscode';
 import { SIGN_IN } from '../account/account';
 import type { CanvasPanels } from '../canvas/canvas-panels';
 import { type ByReason, byReason, failureText } from '../engine/command-outcome';
+import { applyErrorsText, refusalCode } from '../engine/refusal';
 import type { RootSessions } from '../engine/root-sessions';
 import {
   isDeprecated,
@@ -85,7 +86,7 @@ export function placeModule(options: PlaceOptions): Place {
   const { api, sources, panels, rootSessions, reads, log, placed } = options;
 
   async function refused(named: string, label: string, error: ConnectError): Promise<void> {
-    const reason = error.apiCode ?? reasonWire(error.reason);
+    const reason = refusalCode(error);
     if (reason === 'unauthenticated') {
       const answer = await api.window.showErrorMessage(
         `Sign in to add ${named} from the Lace registry.`,
@@ -142,7 +143,7 @@ export function placeModule(options: PlaceOptions): Place {
     );
     if (!result.success) {
       void api.window.showErrorMessage(
-        `Lace could not add ${named} to ${label}: ${result.errors.map((e) => e.message).join('; ')}`,
+        `Lace could not add ${named} to ${label}: ${applyErrorsText(result)}`,
       );
       return false;
     }

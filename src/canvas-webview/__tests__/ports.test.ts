@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { fakeEngine, settled } from '../../engine/__tests__/fake-engine';
 import type { HostCaller } from '../../protocol/host-protocol';
-import { canvasPorts, forwardUnsaved } from '../ports';
+import { canvasPorts, forwardWorkingDigest } from '../ports';
 
 function fakeHost(): HostCaller & { notices: unknown[] } {
   const notices: unknown[] = [];
@@ -65,11 +65,11 @@ describe('the ports the page builds', () => {
     ]);
   });
 
-  test('unsaved is forwarded when it changes', async () => {
+  test('the working digest of each frame the page draws is forwarded when it changes', async () => {
     const engine = fakeEngine();
     const host = fakeHost();
     const ports = await canvasPorts(engine.caller, host, { root: '/repo/infra', arrangement: {} });
-    forwardUnsaved(ports, host);
+    forwardWorkingDigest(ports, host);
     const [id] = engine.open();
 
     engine.edit(id);
@@ -78,9 +78,10 @@ describe('the ports the page builds', () => {
     await settled();
 
     expect(host.notices).toEqual([
-      { op: 'unsaved', value: false },
-      { op: 'unsaved', value: true },
-      { op: 'unsaved', value: false },
+      { op: 'digest', value: 'saved' },
+      { op: 'digest', value: 'working-1' },
+      { op: 'digest', value: 'working-2' },
+      { op: 'digest', value: 'saved' },
     ]);
   });
 });

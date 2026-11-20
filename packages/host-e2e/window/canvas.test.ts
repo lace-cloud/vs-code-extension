@@ -14,6 +14,7 @@ import {
   changedTerraform,
   closeCanvas,
   ENGINE,
+  frameOf,
   heldSession,
   lace,
   moduleDirectory,
@@ -30,6 +31,7 @@ describe('the canvas tab', () => {
   afterEach(async () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
     await setting('files', 'autoSave', 'off');
+    await setting('files', 'autoSaveDelay', undefined);
   });
 
   it('holds its root’s session from opening to closing, and writes no Terraform', async () => {
@@ -47,14 +49,29 @@ describe('the canvas tab', () => {
     const module = moduleDirectory(COMPOSED);
     await openCanvas(module);
     await setName(module, 'second');
-    await until('the tab to say it is unsaved', () => canvasTabs(module)[0]?.label.endsWith(' ●'));
+    await until('the tab to be dirty', () => canvasTabs(module)[0]?.isDirty);
 
     await settle('lace.save', module.uri);
-    await until('the tab to say it is saved', () => canvasTabs(module)[0]?.label === module.name);
+    await until('the tab to be clean', () => canvasTabs(module)[0]?.isDirty === false);
     assert.deepEqual(changedTerraform(module), []);
 
     await settle('lace.generate', module.uri);
     assert.match(readFileSync(module.file('main.tf'), 'utf8'), /name\s*=\s*"second"/);
+  });
+
+  it('saves the document by its URI: the session’s state is written, the tab clears and the Terraform stays', async () => {
+    const module = moduleDirectory(COMPOSED);
+    const tab = await openCanvas(module);
+    const before = readFileSync(module.file('.lace/.canvas/state.lace'));
+    await setName(module, 'by-uri');
+    await until('the tab to be dirty', () => canvasTabs(module)[0]?.isDirty);
+
+    assert.ok(tab.input instanceof vscode.TabInputCustom);
+    await vscode.workspace.save(tab.input.uri);
+
+    await until('the tab to be clean', () => canvasTabs(module)[0]?.isDirty === false);
+    assert.equal(readFileSync(module.file('.lace/.canvas/state.lace')).equals(before), false);
+    assert.deepEqual(changedTerraform(module), []);
   });
 
   it('reads a hand edit of its Terraform with no conflict', async () => {
@@ -95,10 +112,35 @@ describe('the canvas tab', () => {
     const module = moduleDirectory(COMPOSED);
     await openCanvas(module);
     await setName(module, 'discarded');
+    await until('the tab to be dirty', () => canvasTabs(module)[0]?.isDirty);
     await closeCanvas(module);
     await until('the session to end', async () => (await heldSession(module)) === undefined);
     assert.equal(await sessionHolds(module, 'discarded'), false);
     assert.equal(await sessionHolds(module, 'first'), true);
+  });
+
+  it('with a second holder keeping the session, closing the tab discards what the page drew', async () => {
+    const module = moduleDirectory(COMPOSED);
+    await openCanvas(module);
+    const { rootSessions } = await lace();
+    const holder = await rootSessions.acquire(module.path);
+    try {
+      await setName(module, 'declined');
+      await until('the tab to be dirty', () => canvasTabs(module)[0]?.isDirty);
+      const { drawnDigest } = await lace();
+      await until(
+        'the page to report the frame it drew',
+        () => drawnDigest(module.path) === frameOf(holder).workingDigest,
+      );
+      await closeCanvas(module);
+
+      await until('the discard', () => !frameOf(holder).unsaved);
+      const frame = frameOf(holder);
+      assert.equal(frame.workingDigest, frame.savedDigest);
+      assert.equal(await sessionHolds(module, 'declined'), false);
+    } finally {
+      await holder.release();
+    }
   });
 
   it('with files.autoSave afterDelay, closing the tab saves an unsaved edit', async () => {
@@ -106,10 +148,25 @@ describe('the canvas tab', () => {
     const module = moduleDirectory(COMPOSED);
     await openCanvas(module);
     await setName(module, 'kept');
+    await until('the tab to be dirty', () => canvasTabs(module)[0]?.isDirty);
+    await until('the autosave to clear the tab', () => canvasTabs(module)[0]?.isDirty === false);
     await closeCanvas(module);
     await until('the session to end', async () => (await heldSession(module)) === undefined);
     assert.equal(await sessionHolds(module, 'kept'), true);
     assert.equal(await sessionHolds(module, 'first'), false);
+  });
+
+  it('with files.autoSave afterDelay, closing the tab inside the delay discards an unsaved edit', async () => {
+    await setting('files', 'autoSave', 'afterDelay');
+    await setting('files', 'autoSaveDelay', 60_000);
+    const module = moduleDirectory(COMPOSED);
+    await openCanvas(module);
+    await setName(module, 'inside');
+    await until('the tab to be dirty', () => canvasTabs(module)[0]?.isDirty);
+    await closeCanvas(module);
+    await until('the session to end', async () => (await heldSession(module)) === undefined);
+    assert.equal(await sessionHolds(module, 'inside'), false);
+    assert.equal(await sessionHolds(module, 'first'), true);
   });
 
   it('opens again on its session after the engine restarts', async () => {

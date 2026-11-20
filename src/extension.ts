@@ -1,16 +1,23 @@
 import * as vscode from 'vscode';
 import { createAutosaveKeeper } from './autosave/autosave-policy';
+import type { CanvasPanels } from './canvas/canvas-panels';
 import { failureText } from './engine/command-outcome';
 import { createEngine, type Engine, engineManager, engineSettings } from './engine/engine';
 import { createRootSessions, type RootSessions } from './engine/root-sessions';
 import { FEATURES, windowHost } from './features';
 
-// What activation hands back: the window's engine and its root sessions.
-export type LaceExtension = { engine: Engine; rootSessions: RootSessions };
+// What activation hands back: the window's engine and its root sessions, and
+// what the window e2e reads of a canvas page it cannot see (`drawnDigest`).
+export type LaceExtension = Pick<CanvasPanels, 'drawnDigest'> & {
+  engine: Engine;
+  rootSessions: RootSessions;
+};
 
 // The window activation built: what it hands back, and the "Lace" Output
 // channel every owner of it logs to.
-let active: (LaceExtension & { log: vscode.OutputChannel }) | null = null;
+let active:
+  | (Pick<LaceExtension, 'engine' | 'rootSessions'> & { log: vscode.OutputChannel })
+  | null = null;
 
 export function activate(context: vscode.ExtensionContext): LaceExtension {
   const log = vscode.window.createOutputChannel('Lace');
@@ -28,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): LaceExtension {
   const host = windowHost({ api: vscode, context, engine, rootSessions, autosave, log, report });
   context.subscriptions.push(autosave, ...FEATURES.map((feature) => feature(host)));
   active = { engine, rootSessions, log };
-  return { engine, rootSessions };
+  return { engine, rootSessions, drawnDigest: host.panels.drawnDigest };
 }
 
 // The window is closing, and VS Code ends the extension host a few seconds
