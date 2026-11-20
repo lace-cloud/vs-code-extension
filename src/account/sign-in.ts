@@ -89,9 +89,7 @@ export async function signIn(
             progress.report({ message: 'waiting for you to finish in the browser' });
           } else if (event.type === 'url') {
             open(event.url);
-          } else if (event.type === 'email_sent') {
-            progress.report({ message: `open the link sent to ${event.email}` });
-          } else {
+          } else if (event.type === 'result') {
             user = { signedIn: event.user, replacedKey: event.replacedKey };
           }
         }

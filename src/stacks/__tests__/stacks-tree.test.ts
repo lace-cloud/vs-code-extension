@@ -92,6 +92,7 @@ const teams = (...slugs: string[]) => ({
 const NO_AGENT = {
   queue: { manifestation: 'preview', floor: 0.5, entries: [], belowFloor: 0 },
   truncated: false,
+  window: null,
   pending: 0,
   bound: 0,
 };
