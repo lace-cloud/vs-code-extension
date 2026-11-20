@@ -30,6 +30,7 @@ type Decider = { bindingId: string; ruleId?: string; rulesFired: string[] };
 const NO_ADVISORIES = {
   queue: { manifestation: 'preview', floor: 0.5, entries: [] as object[], belowFloor: 0 },
   truncated: false,
+  window: null,
   pending: 0,
   bound: 1,
 };
@@ -344,6 +345,17 @@ describe("a preview's Advisories", () => {
       '  1 more under the Preview floor',
       '  2 bound Agent(s) have not answered',
     ]);
+  });
+
+  test('name how far back their Agents read where the plan cut it, in the line the API words', () => {
+    const line = "Lace's Agents read this Stack's Runs from Oct 20. 9 older Runs not read on Free.";
+    expect(
+      advisoriesOf({
+        ...NO_ADVISORIES,
+        window: { plan: 'free', since: '2026-10-20T00:00:00.000Z', notRead: 9, line },
+        pending: 1,
+      }),
+    ).toEqual(['Advisories: none', `  ${line}`, '  1 bound Agent(s) have not answered']);
   });
 
   test("end the document, after the gate's resolution", () => {
