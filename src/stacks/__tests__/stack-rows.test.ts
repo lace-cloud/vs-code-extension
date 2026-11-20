@@ -273,6 +273,7 @@ const advisory = (agent: string, confidence: number, output: unknown = {}) => ({
   confidenceScore: confidence,
   producedAt: '2026-10-13T00:00:00Z',
   outputJson: output,
+  read: { plan: 'team', since: null, cites: [] },
 });
 
 const SUBJECT = {
