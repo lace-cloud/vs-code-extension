@@ -11,6 +11,7 @@ import {
   refusedState,
   rootlessState,
   runLook,
+  type Stack,
   stackLook,
 } from '../stack-rows';
 import { run, stack } from './stack-fixtures';
@@ -382,6 +383,22 @@ describe("a stack row's look", () => {
       'picked for this module · drift drifted (1)',
     );
     expect(stackLook(named, false, null).tooltip.split('\n')[0]).toBe('Stack: prod');
+  });
+
+  test('says what a stack is bound to: a directory of a repository, a release of a module, or none', () => {
+    const sourceOf = (source: Stack['source']) =>
+      stackLook({ ...named, source }, false, null).tooltip.split('\n')[1];
+    expect(sourceOf(named.source)).toBe('Source: https://github.com/acme/repo infra/prod');
+    expect(
+      sourceOf({
+        kind: 'module_version',
+        author: 'lace',
+        name: 'aws-role',
+        system: 'aws',
+        version: '1.4.0',
+      }),
+    ).toBe('Source: lace/aws-role 1.4.0');
+    expect(sourceOf(null)).toBe('Source: none');
   });
 });
 
