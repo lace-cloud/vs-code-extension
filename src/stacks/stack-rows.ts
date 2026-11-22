@@ -11,6 +11,7 @@ import type {
   StackRef,
 } from '@lace-cloud/canvas/engine';
 import { type ByReason, byReason } from '../engine/command-outcome';
+import { moduleKey } from '../protocol/registry-protocol';
 import type { Found } from '../roots/authoring-roots';
 import { type Offer, offersFor } from '../vscode/offers';
 import { nameWithSlug, rowDescription } from '../vscode/slug-beside';
@@ -78,6 +79,15 @@ export function sameLook(a: RowLook, b: RowLook | undefined): boolean {
 export const stackDescription = (stack: Stack, picked: boolean, more: string[] = []): string =>
   rowDescription(stack, [...(picked ? ['picked for this module'] : []), ...more]);
 
+// What a stack is bound to, as its tooltip says it: a directory of a git repository, one release of
+// a Registry module, or none.
+const sourceWords = (source: Stack['source']): string =>
+  source === null
+    ? 'none'
+    : source.kind === 'git'
+      ? `${source.repoUrl}${source.path ? ` ${source.path}` : ''}`
+      : `${moduleKey(source)} ${source.version}`;
+
 // A stack row: its name, and its slug where it differs, whether it is the stack picked for its
 // module, its last drift scan, and an apply of it under way.
 export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook {
@@ -97,7 +107,7 @@ export function stackLook(stack: Stack, picked: boolean, run: RunSlot): RowLook 
     ]),
     tooltip: [
       `Stack: ${nameWithSlug(stack)}`,
-      `Source: ${stack.source ? `${stack.source.repoUrl}${stack.source.path ? ` ${stack.source.path}` : ''}` : 'none'}`,
+      `Source: ${sourceWords(stack.source)}`,
       `Last applied: ${stack.lastApply?.completedAt ?? 'never'}`,
       `Last drift scan: ${stack.lastDriftScanAt ?? 'never'}`,
     ].join('\n'),
