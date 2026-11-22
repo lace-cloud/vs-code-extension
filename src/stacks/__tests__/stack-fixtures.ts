@@ -13,6 +13,7 @@ export const stack = (id: string, slug: string): Stack => ({
   name: slug[0].toUpperCase() + slug.slice(1),
   description: null,
   source: { kind: 'git' as const, repoUrl: 'https://github.com/acme/repo', path: 'infra/prod' },
+  variables: null,
   stateSerial: 1,
   stateLineage: null,
   stateVersion: null,
