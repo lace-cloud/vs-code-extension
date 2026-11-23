@@ -2,7 +2,7 @@
   "name": "lace-cloud",
   "displayName": "Lace Cloud",
   "description": "",
-  "version": "0.32.0",
+  "version": "0.34.0",
   "packageManager": "pnpm@10.29.3",
   "publisher": "LaceCloudInc",
   "repository": {
@@ -675,11 +675,11 @@
     ]
   },
   "dependencies": {
-    "@lace-cloud/canvas": "0.42.0",
-    "@lace-cloud/chat-core": "0.42.0",
-    "@lace-cloud/design-tokens": "0.42.0",
-    "@lace-cloud/host": "0.42.0",
-    "@lace-cloud/proto": "0.42.0",
+    "@lace-cloud/canvas": "0.43.0",
+    "@lace-cloud/chat-core": "0.43.0",
+    "@lace-cloud/design-tokens": "0.43.0",
+    "@lace-cloud/host": "0.43.0",
+    "@lace-cloud/proto": "0.43.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
